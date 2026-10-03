@@ -86,6 +86,15 @@ export function getWorkspaceSettingsHref(role?: UserRole | null): string {
   return '/settings';
 }
 
+// Where an exit from a distraction-free screen lands. Learners live on `/`
+// (the dashboard, also aliased at `/dashboard`), staff on their own workspace
+// index — never the learner home, which would bounce a tutor out of /expert.
+export function getWorkspaceHomeHref(role?: UserRole | null): string {
+  if (role === 'expert') return '/expert';
+  if (role === 'admin') return '/admin';
+  return '/';
+}
+
 export const mainNavItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
   { href: '/study-plan', label: 'Study Plan', icon: <CalendarCheck className="w-5 h-5" />, matchPrefix: '/study-plan' },

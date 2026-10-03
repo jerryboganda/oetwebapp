@@ -9,6 +9,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { useFocusExitGuard } from '@/components/layout/focus-exit';
 import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
@@ -208,6 +209,13 @@ export default function WritingPracticeSessionPage() {
     heartbeatMs: submitted || phase === 'completed' ? null : CLOCK_HEARTBEAT_MS,
   });
   const { flush: flushDraft, update: updateDraft } = sync;
+
+  // The focus header's Back/Dashboard confirm until the attempt is over; once
+  // it is submitted or the window closes, leaving costs nothing.
+  useFocusExitGuard({
+    live: !submitted && phase !== 'completed',
+    description: 'Your draft is saved and your practice timer keeps running. You can come back and continue where you left off.',
+  });
 
   // ── Load: draft first, then (only for a new attempt) eligibility ───────────
   // 1. Strict draft GET: only a 404 means "no draft" — a 5xx or a dropped

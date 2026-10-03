@@ -54,6 +54,10 @@ interface TopNavProps {
   /** Opens the Ctrl/⌘K palette AppShell mounts. Search triggers render only
    *  when set (signed in, not distraction-free, not an exam/live route). */
   onOpenSearch?: () => void;
+  /** Exit affordance for distraction-free headers, which have no brand, no
+   *  sidebar and no bottom nav. Supplied by AppShell's `distractionFree`
+   *  branch so every focus screen keeps a way back to the workspace. */
+  exitControl?: ReactNode;
   /** Desktop sidebar collapse. Supplying this reveals the menu button at lg+,
    *  where it would otherwise be a mobile-only control. */
   onToggleSidebar?: () => void;
@@ -113,6 +117,7 @@ export function TopNav({
   userSummary,
   workspaceRole,
   showBrand = false,
+  exitControl,
   onToggleSidebar,
   sidebarCollapsed = false,
   onOpenSearch,
@@ -266,6 +271,8 @@ export function TopNav({
                 <Menu className="h-6 w-6" aria-hidden="true" />
               </button>
             ) : null}
+
+            {exitControl}
 
             {showBrand ? (
               <Link

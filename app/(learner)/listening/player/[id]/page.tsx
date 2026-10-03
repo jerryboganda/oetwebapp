@@ -7,6 +7,7 @@ import { motion, useReducedMotionConfig } from 'motion/react';
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Loader2, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppShell } from '@/components/layout/app-shell';
+import { useFocusExitGuard } from '@/components/layout/focus-exit';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -382,6 +383,14 @@ function PlayerContent() {
     disabled: !annotationsSupported,
   });
   const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
+
+  // The focus header's Back/Dashboard confirm once the paper is running: the
+  // audio position and the attempt clock are the things a stray exit costs.
+  useFocusExitGuard({
+    live: hasStarted && !isSubmitting,
+    description: 'This listening paper is timed and the audio does not restart from the beginning. Your answers are saved, and the attempt clock keeps running.',
+    confirmLabel: 'Leave paper',
+  });
   const sectionMotion = getSurfaceMotion('section', reducedMotion);
   const listMotion = getSurfaceMotion('list', reducedMotion);
 

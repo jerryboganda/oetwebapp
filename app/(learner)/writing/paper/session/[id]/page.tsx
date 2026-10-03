@@ -11,6 +11,7 @@ import {
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
 import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { Button } from '@/components/ui/button';
+import { useFocusExitGuard } from '@/components/layout/focus-exit';
 import { useWritingDraftSync, type DraftClockSnapshot, type DraftSyncBaseline } from '@/hooks/use-writing-draft-sync';
 import { loadStoredSession } from '@/lib/auth-storage';
 import {
@@ -400,6 +401,13 @@ export default function WritingPaperSessionPage() {
     heartbeatMs: ownClock && !submitted ? 10_000 : null,
   });
   const { update: updateDraft, flush: flushDraft, discard: discardDraft } = sync;
+
+  // The focus header's Back/Dashboard confirm while the letter is being written
+  // (same window as the beforeunload guard below).
+  useFocusExitGuard({
+    live: phase === 'writing' && !submitted,
+    description: 'Your letter is saved as you go and your writing time keeps running. You can come back and continue where you left off.',
+  });
 
   // ── beforeunload guard while actively writing (strict) ────────────────────
   useEffect(() => {

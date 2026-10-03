@@ -8,6 +8,7 @@ import { Award, Lock } from 'lucide-react';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useFocusExitGuard } from '@/components/layout/focus-exit';
 import { WritingEditorV2 } from '@/components/domain/writing/WritingEditorV2';
 import { WritingTimerV2 } from '@/components/domain/writing/WritingTimerV2';
 import { WordCounter } from '@/components/domain/writing/WordCounter';
@@ -154,6 +155,13 @@ function WritingMockSessionInner() {
       cancelled = true;
     };
   }, [sessionId, router, t]);
+
+  // The focus header's Back/Dashboard confirm for the whole writing phase —
+  // leaving a strict mock mid-letter abandons the attempt.
+  useFocusExitGuard({
+    live: phase === 'writing',
+    description: 'This is a timed mock letter. Your draft is saved and the clock keeps running, but the attempt only counts when you submit it.',
+  });
 
   // Confirm on browser close/back while in writing phase (strict mode).
   useEffect(() => {

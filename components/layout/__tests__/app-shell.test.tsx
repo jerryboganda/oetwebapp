@@ -11,6 +11,11 @@ const useAuthSpy = vi.fn(() => ({
   isAuthenticated: false,
   loading: false,
 }));
+const focusExitProviderSpy = vi.fn(({ homeHref, children }: { homeHref: string; children?: React.ReactNode }) => (
+  <div data-testid="focus-exit-provider" data-home={homeHref}>
+    {children}
+  </div>
+));
 
 vi.mock('@/contexts/auth-context', () => ({
   AuthContext: createContext(null),
@@ -28,6 +33,12 @@ vi.mock('@/components/layout/top-nav', () => ({
 
 vi.mock('@/components/layout/sidebar', () => ({
   Sidebar: () => <div data-testid="sidebar" />,
+  getWorkspaceHomeHref: (role?: string) => (role === 'expert' ? '/expert' : role === 'admin' ? '/admin' : '/'),
+}));
+
+vi.mock('@/components/layout/focus-exit', () => ({
+  FocusExitProvider: (props: { homeHref: string; children?: React.ReactNode }) => focusExitProviderSpy(props),
+  FocusExitControl: () => <div data-testid="focus-exit-control" />,
 }));
 
 vi.mock('@/components/layout/bottom-nav', () => ({
@@ -200,6 +211,39 @@ describe('AppShell', () => {
 
       navigate('/listening');
       expect(screen.getByTestId('global-search')).toHaveAttribute('data-open', 'false');
+    });
+  });
+
+  // Focus chrome has no brand, sidebar or bottom nav, and its only other menu
+  // trigger is the hamburger, which is `lg:hidden`. Without an exit the header
+  // was a dead end on a desktop-width exam.
+  describe('focus chrome exit', () => {
+    /** The exitControl AppShell handed the header on the latest render. */
+    const lastTopNavExit = () =>
+      (topNavSpy.mock.lastCall?.[0] as Record<string, unknown> | undefined)?.exitControl;
+
+    beforeEach(() => {
+      topNavSpy.mockClear();
+      focusExitProviderSpy.mockClear();
+    });
+
+    it.each([
+      ['learner', { requiredRole: 'learner', workspaceRole: 'learner' }, '/'],
+      ['expert', { requiredRole: 'expert', workspaceRole: 'expert' }, '/expert'],
+      ['admin', { requiredRole: 'admin', workspaceRole: 'admin' }, '/admin'],
+    ] as const)('gives the %s distraction-free header a way out, scoped to its own workspace', (role, roleProps, home) => {
+      renderShellAt(`/${role}`, { ...roleProps, distractionFree: true }, SIGNED_IN);
+
+      expect(lastTopNavExit()).toBeTruthy();
+      expect(focusExitProviderSpy.mock.lastCall?.[0]).toEqual(expect.objectContaining({ homeHref: home }));
+    });
+
+    it('keeps the workspace shell as it was', () => {
+      renderShellAt('/reading', { requiredRole: 'learner', workspaceRole: 'learner' }, SIGNED_IN);
+
+      expect(screen.queryByTestId('focus-exit-provider')).not.toBeInTheDocument();
+      expect(lastTopNavExit()).toBeUndefined();
+      expect(screen.getByTestId('sidebar')).toBeInTheDocument();
     });
   });
 });

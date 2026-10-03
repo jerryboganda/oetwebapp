@@ -8,8 +8,9 @@ import { AuthContext, AuthProvider } from '@/contexts/auth-context';
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
-import { type NavGroup, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
+import { type NavGroup, type NavItem, type ShellUserSummary, Sidebar, getWorkspaceHomeHref } from './sidebar';
 import { BottomNav } from './bottom-nav';
+import { FocusExitControl, FocusExitProvider } from './focus-exit';
 import { GlobalSearch } from './global-search';
 import { isExamOrLiveRoute } from './learner-dashboard-route-policy';
 import { TopNav, type MobileMenuSection } from './top-nav';
@@ -107,34 +108,41 @@ export function AppShell({
   );
 
   const shell = distractionFree ? (
-    <div className="relative isolate flex h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy">
-      {shellBackdrop}
-      <a
-        href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-2xl focus:bg-primary focus:px-4 focus:py-2 focus:text-white focus:shadow-lg"
-      >
-        Skip to content
-      </a>
-      <TopNav
-        pageTitle={pageTitle}
-        actions={navActions}
-        items={mobileNavItems ?? navItems}
-        sectionedItems={mobileMenuSections}
-        userSummary={userSummary}
-        workspaceRole={workspaceRole}
-      />
-      {/* No route animation here: exam players and focus workspaces (DESIGN.md §5). */}
-      <motion.main
-        id="main-content"
-        tabIndex={-1}
-        key={pathname}
-        layout="position"
-        className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
-      >
-        <ScrollReset />
-        {children}
-      </motion.main>
-    </div>
+    // Focus chrome has no brand, sidebar or bottom nav, so the header owns the
+    // only way out: `FocusExitControl` (Back + Dashboard) with a confirmation
+    // for a page whose attempt is live. The provider must wrap the header and
+    // the page alike, since the page registers the guard.
+    <FocusExitProvider homeHref={getWorkspaceHomeHref(workspaceRole ?? requiredRole)}>
+      <div className="relative isolate flex h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy">
+        {shellBackdrop}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-2xl focus:bg-primary focus:px-4 focus:py-2 focus:text-white focus:shadow-lg"
+        >
+          Skip to content
+        </a>
+        <TopNav
+          pageTitle={pageTitle}
+          actions={navActions}
+          items={mobileNavItems ?? navItems}
+          sectionedItems={mobileMenuSections}
+          userSummary={userSummary}
+          workspaceRole={workspaceRole}
+          exitControl={<FocusExitControl />}
+        />
+        {/* No route animation here: exam players and focus workspaces (DESIGN.md §5). */}
+        <motion.main
+          id="main-content"
+          tabIndex={-1}
+          key={pathname}
+          layout="position"
+          className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
+        >
+          <ScrollReset />
+          {children}
+        </motion.main>
+      </div>
+    </FocusExitProvider>
   ) : isLearnerWorkspace ? (
     // Learner workspace: one full-width header across the top, sidebar beneath
     // it. Admin/expert keep the original sidebar-beside-header arrangement.

@@ -231,3 +231,35 @@ describe('TopNav native-shell app controls', () => {
     expect(screen.getByTestId('update-dialog')).toBeInTheDocument();
   });
 });
+
+// Focus chrome is the one header with no brand lockup, no sidebar and no bottom
+// nav, so the shell hands it its own exit; the workspace headers keep none.
+describe('TopNav focus exit slot', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({ user: { avatarUrl: null }, signOut: mockSignOut });
+  });
+
+  it('renders the exit control beside the page title when the shell supplies one', () => {
+    renderWithRouter(
+      <TopNav
+        pageTitle="Practice Session"
+        exitControl={<a href="/" data-testid="focus-exit">Dashboard</a>}
+        userSummary={{ displayName: 'Learner', email: 'l@example.com' }}
+      />,
+      { pathname: '/writing/practice/session/s1' },
+    );
+
+    const exit = screen.getByTestId('focus-exit');
+    expect(exit).toBeInTheDocument();
+    // Same left cluster as the title it sits next to, so a desktop-width exam
+    // is never a dead end.
+    expect(exit.parentElement?.textContent).toContain('Practice Session');
+  });
+
+  it('renders no exit control without one', () => {
+    renderWithRouter(<TopNav showBrand userSummary={{ displayName: 'Learner', email: 'l@example.com' }} />, { pathname: '/' });
+
+    expect(screen.queryByRole('link', { name: /dashboard/i })).not.toBeInTheDocument();
+  });
+});

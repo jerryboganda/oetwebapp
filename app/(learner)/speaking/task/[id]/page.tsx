@@ -10,6 +10,7 @@ import {
   Scissors,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
+import { useFocusExitGuard } from '@/components/layout/focus-exit';
 import { Button } from '@/components/ui/button';
 import { Timer } from '@/components/ui/timer';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
@@ -127,6 +128,14 @@ function LiveSpeakingTaskContent() {
   const paperRuleRequired = mode === 'exam';
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // The focus header's Back/Dashboard confirm while a recording is live: the
+  // take is discarded if the candidate leaves mid-task.
+  useFocusExitGuard({
+    live: recordingState === 'recording' || recordingState === 'paused',
+    description: 'Your recording so far will be discarded and this task will have to be started again from the beginning.',
+    confirmLabel: 'Leave task',
+  });
 
   useEffect(() => {
     fetchSpeakingCompliance()

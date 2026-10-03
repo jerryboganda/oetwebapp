@@ -13,6 +13,7 @@ import { WordCounter } from '@/components/domain/writing/WordCounter';
 import { SubmitBar } from '@/components/domain/writing/SubmitBar';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
 import { DraftConflictNotice, DraftSaveStatus } from '@/components/domain/writing/DraftSaveStatus';
+import { useFocusExitGuard } from '@/components/layout/focus-exit';
 import { useWritingDraftSync, type DraftSyncBaseline } from '@/hooks/use-writing-draft-sync';
 import { loadStoredSession } from '@/lib/auth-storage';
 import {
@@ -54,6 +55,12 @@ export default function WritingReviseSubmissionPage() {
     mode: 'revision',
     userId,
     baseline,
+  });
+
+  // The focus header's Back/Dashboard confirm once a revision is being written.
+  useFocusExitGuard({
+    live: !submitting && editorText.trim().length > 0,
+    description: 'Your revision is saved as you go and the original letter is untouched. You can come back and continue where you left off.',
   });
 
   // The revision draft is restored before the editor mounts (it reads its text
