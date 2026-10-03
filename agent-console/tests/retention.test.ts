@@ -56,7 +56,7 @@ describe('engine-native transcript retention', () => {
     };
 
     await expect(pruneOpenCodeSessions(run, config, 90)).resolves.toBe(1);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
     expect(calls[0]!.args).toEqual([config.worktreeRoot, '-xdev', '-mindepth', '1', '-maxdepth', '1', '-type', 'd', '-print']);
     expect(calls[1]!.args).toEqual(['--pure', 'session', 'list', '--format', 'json']);
     expect(calls[2]!.args).toEqual(['--pure', 'session', 'delete', 'ses_old123456']);

@@ -15,7 +15,7 @@ describe('OpenCode permission mapping', () => {
     }, cwd)).toEqual({
       toolCallId: 'call_1',
       name: 'Bash',
-      input: { command: 'git status' },
+      input: { command: 'git status', cwd },
       command: 'git status',
       cwd,
     });
@@ -32,7 +32,7 @@ describe('OpenCode permission mapping', () => {
     }, cwd)).toEqual({
       toolCallId: 'call_2',
       name: 'Edit',
-      input: { file_path: 'src/example.ts' },
+      input: { filePath: 'src/example.ts', file_path: 'src/example.ts' },
       cwd,
       writePaths: ['src/example.ts'],
     });

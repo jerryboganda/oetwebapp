@@ -252,7 +252,7 @@ describe('OpenCode adapter', () => {
 
       expect(turn).toEqual({ status: 'ok', resumeId: NATIVE_SESSION });
       expect(permissionRequest).toHaveBeenCalledTimes(1);
-      expect(events.map((item) => item.type)).toEqual(['tool_call', 'tool_result', 'text_delta', 'text', 'usage']);
+      expect(events.map((item) => item.type)).toEqual(['tool_call', 'tool_output_delta', 'tool_result', 'text_delta', 'text', 'usage']);
       expect(events.find((item) => item.type === 'usage')).toMatchObject({ data: { inputTokens: 10, outputTokens: 5, costUsd: 0.01 } });
       const sessionServer = spawned.find(({ args }) => args.includes('serve'));
       expect(sessionServer?.args).toContain('--pure');
