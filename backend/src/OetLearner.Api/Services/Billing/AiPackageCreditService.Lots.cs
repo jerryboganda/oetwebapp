@@ -9,14 +9,80 @@ namespace OetLearner.Api.Services.Billing;
 
 public sealed partial class AiPackageCreditService
 {
-    private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
+    internal const int MaxLedgerAttempts = 4;
+
+    /// <summary>
+    /// Runs one ledger unit of work in its own SERIALIZABLE transaction and re-runs the
+    /// WHOLE unit on a PostgreSQL serialization failure (40001) or deadlock (40P01) —
+    /// production saw concurrent learners get HTTP 500 "likely due to a transient failure"
+    /// from task-open debits and admin adjusts because nothing retried. Each attempt
+    /// re-reads the ledger from scratch (tracked ledger rows are detached between attempts)
+    /// and the per-reference idempotency checks run again inside the new transaction, so a
+    /// retry can never double-debit: the failed attempt rolled back completely.
+    /// Not retried here: a caller-owned ambient transaction (that caller owns atomicity and
+    /// retry) or a context that already had unsaved changes on entry (a rollback could not
+    /// restore them faithfully) — both keep the old single-attempt behaviour.
+    /// </summary>
+    private async Task<T> InLedgerTransactionAsync<T>(Func<Task<T>> unit, CancellationToken ct)
     {
         if (db.Database.CurrentTransaction is not null || db.Database.IsInMemory())
         {
-            return null;
+            return await unit();
         }
 
-        return await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var retryable = !db.ChangeTracker.HasChanges();
+        var trackedBefore = new HashSet<object>(
+            db.ChangeTracker.Entries().Select(entry => entry.Entity), ReferenceEqualityComparer.Instance);
+        for (var attempt = 1; ; attempt++)
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            try
+            {
+                if (db.Database.IsNpgsql())
+                {
+                    // SSI takes a RELATION-level predicate lock for every sequential scan, so on
+                    // the small ledger tables (where the planner prefers seq scans) any two
+                    // learners' debits conflicted. Index scans lock only the rows/pages read.
+                    await db.Database.ExecuteSqlRawAsync("SET LOCAL enable_seqscan = off", ct);
+                }
+
+                var result = await unit();
+                await tx.CommitAsync(ct);
+                return result;
+            }
+            catch (Exception ex) when (retryable && attempt < MaxLedgerAttempts && IsSerializationConflict(ex))
+            {
+                try { await tx.RollbackAsync(CancellationToken.None); }
+                catch (Exception rollbackEx) { logger.LogDebug(rollbackEx, "Ledger rollback after serialization conflict failed."); }
+
+                foreach (var entry in db.ChangeTracker.Entries().ToList())
+                {
+                    if (!trackedBefore.Contains(entry.Entity)
+                        || entry.Entity is AiPackageCreditAccount or AiPackageCreditLot or AiPackageCreditTransaction)
+                    {
+                        entry.State = EntityState.Detached;
+                    }
+                }
+
+                logger.LogWarning(
+                    "AiPackageCreditService ledger serialization conflict (attempt {Attempt}/{Max}); retrying the unit of work.",
+                    attempt, MaxLedgerAttempts);
+                await Task.Delay(TimeSpan.FromMilliseconds(Random.Shared.Next(25, 100) * attempt), ct);
+            }
+        }
+    }
+
+    internal static bool IsSerializationConflict(Exception? ex)
+    {
+        for (; ex is not null; ex = ex.InnerException)
+        {
+            if (ex is Npgsql.PostgresException { SqlState: "40001" or "40P01" })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static DateTimeOffset? Later(DateTimeOffset? current, DateTimeOffset next)

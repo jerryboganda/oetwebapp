@@ -90,6 +90,39 @@ public class LearnerGoalExamDateTests : IClassFixture<TestWebApplicationFactory>
         Assert.False(json.RootElement.GetProperty("examDateRequired").GetBoolean());
     }
 
+    /// <summary>Production 3 Oct 2026: parallel first visits left learners with duplicate Goal
+    /// rows (no unique index on UserId) and onboarding state 500'd on SingleOrDefault.</summary>
+    [Fact]
+    public async Task OnboardingState_ToleratesLegacyDuplicateGoals()
+    {
+        var userId = "examdate-onboarding-duplicate-goals";
+        await SeedLearnerWithRegistrationProfileAsync(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(60)));
+        using var client = CreateDebugClient(userId);
+        (await client.GetAsync("/v1/settings")).EnsureSuccessStatusCode();
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.Goals.Add(new LearnerGoal
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                ProfessionId = "medicine",
+                WeakSubtestsJson = "[]",
+                StudyHoursPerWeek = 8,
+                UpdatedAt = DateTimeOffset.UtcNow,
+                ExamTypeCode = "OET",
+                ExamFamilyCode = "OET",
+            });
+            await db.SaveChangesAsync();
+            Assert.Equal(2, await db.Goals.CountAsync(g => g.UserId == userId));
+        }
+
+        var response = await client.GetAsync("/v1/learner/onboarding/state");
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.False(json.RootElement.GetProperty("examDateRequired").GetBoolean());
+    }
+
     [Fact]
     public async Task PatchGoals_SetsExamDateSetByUser_WhenTargetExamDateProvided()
     {

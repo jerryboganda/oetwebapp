@@ -408,10 +408,14 @@ export const putWritingDraftV2 = (
   payload: WritingDraftV2UpsertPayload,
   init?: { keepalive?: boolean },
 ) =>
-  apiClient.put<WritingDraftV2Dto>(
+  // maxRetries 0: a compare-and-set write is not idempotent. The transport's own
+  // retry re-sent the same expectedVersion after a lost response / timeout / 5xx
+  // whose write had already committed, so a single tab 409'd itself. The draft
+  // sync engine owns retry (backoff + re-read of the version after a 409).
+  apiClient.request<WritingDraftV2Dto>(
     path('/v1/writing/drafts/{scenarioId}/{mode}', { scenarioId, mode }),
-    payload,
-    init,
+    { ...init, method: 'PUT', body: JSON.stringify(payload) },
+    { maxRetries: 0 },
   );
 
 /**

@@ -524,7 +524,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
             canon = await canonEngine.DetectViolationsAsync(
                 new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
                     assessmentPreflightResult.LetterType,
-                    assessmentPreflightResult.Profession), ct);
+                    assessmentPreflightResult.Profession,
+                    // The grade ran as a credit-funded / free-sample grant (a reservation
+                    // exists exactly then); its canon detection belongs to the same paid grade,
+                    // so a free/starter plan must not silently drop the LLM canon violations.
+                    FreeSampleGrant: reservationId is not null), ct);
         }
         catch (Exception ex)
         {

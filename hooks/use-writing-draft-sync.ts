@@ -101,6 +101,8 @@ function createEngine(deps: { current: EngineDeps }) {
     again: false,
     failures: 0,
     rejected: false,
+    // A 409 made our expectedVersion unusable: the next request is a GET, never a PUT.
+    stale: false,
     conflicted: false,
     conflictText: '',
     conflictVersion: null as number | null,
@@ -157,9 +159,14 @@ function createEngine(deps: { current: EngineDeps }) {
   };
 
   // 409 = someone else saved since our version: same text means it was us.
+  // Until this GET succeeds the version is unknown (`stale`), so a failed GET is
+  // retried as a GET — re-sending the PUT with the same stale version was the
+  // production 409 loop (heartbeat every 10 s, never recovering).
   const onConflict = async (text: string) => {
+    s.stale = true;
     const { scenarioId, mode } = deps.current;
     const server = await getWritingDraftV2(scenarioId, mode);
+    s.stale = false;
     if (!server) {
       s.version = 0;
       s.again = true;
@@ -185,7 +192,7 @@ function createEngine(deps: { current: EngineDeps }) {
 
   const onFailed = async (text: string, err: unknown) => {
     let failure = err;
-    if (isApiError(err) && err.status === 409) {
+    if (s.stale || (isApiError(err) && err.status === 409)) {
       try {
         await onConflict(text);
         return;
@@ -196,6 +203,15 @@ function createEngine(deps: { current: EngineDeps }) {
     s.failures += 1;
     s.rejected = !isRetryable(failure);
     scheduleRetry();
+  };
+
+  const settle = () => {
+    s.inFlight = false;
+    if (s.again && !halted()) {
+      s.again = false;
+      save();
+    }
+    refresh();
   };
 
   function save(keepalive = false) {
@@ -213,6 +229,14 @@ function createEngine(deps: { current: EngineDeps }) {
     }
     clearTimeout(s.retry);
     s.retry = undefined;
+    if (s.stale) {
+      // Re-read the version first (single-flight like a save).
+      s.inFlight = true;
+      refresh();
+      const text = s.text;
+      void onFailed(text, undefined).finally(settle);
+      return;
+    }
     const text = s.text;
     const clock = deps.current.getClock?.();
     const payload: WritingDraftV2UpsertPayload = {
@@ -237,14 +261,7 @@ function createEngine(deps: { current: EngineDeps }) {
     void putWritingDraftV2(scenarioId, mode, payload, init)
       .then((dto) => onSaved(text, dto?.version))
       .catch((err: unknown) => onFailed(text, err))
-      .finally(() => {
-        s.inFlight = false;
-        if (s.again && !halted()) {
-          s.again = false;
-          save();
-        }
-        refresh();
-      });
+      .finally(settle);
   }
 
   return {
@@ -255,6 +272,7 @@ function createEngine(deps: { current: EngineDeps }) {
       s.words = baseline.wordCount;
       s.serverText = baseline.serverText;
       s.version = baseline.version;
+      s.stale = false;
       s.conflicted = Boolean(baseline.conflict) && baseline.serverText !== null;
       s.conflictText = baseline.serverText ?? '';
       s.conflictVersion = baseline.version;

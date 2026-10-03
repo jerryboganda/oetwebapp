@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -342,6 +343,51 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
         Assert.Equal("feature_not_in_plan", unfunded.ErrorCode);
     }
 
+    /// <summary>Production 3 Oct 2026: after a credit-funded grade, the canon LLM detection
+    /// (writing.canon.detect.v1) was refused by the plan gate ("Your plan does not include this AI
+    /// feature"), silently dropping the LLM canon violations. It belongs to the same paid grade, so it
+    /// carries the same grant the grade did.</summary>
+    [Fact]
+    public async Task TC9b_CreditFundedGrade_CanonDetectionCarriesTheSameGrant()
+    {
+        await GrantWritingCreditsAsync(2);
+        var canon = new RecordingCanonEngine();
+        var pipeline = Pipeline(new ScriptedGateway(failFirst: 0), canon: canon);
+        await OpenTaskAsync();
+        await pipeline.EvaluateAsync(await SubmitAsync(pipeline), default);
+
+        Assert.True(Assert.Single(canon.Requests).FreeSampleGrant);
+    }
+
+    /// <summary>The engine hands that grant to the gateway on every LLM canon rule call.</summary>
+    [Fact]
+    public async Task CanonEngine_PassesTheGrantToTheGatewayForLlmRules()
+    {
+        _db.WritingCanonRules.Add(new WritingCanonRule
+        {
+            Id = "C-LLM-T1",
+            Category = "tone",
+            RuleText = "Keep a professional tone.",
+            DetectionType = "llm",
+            Active = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+        await using var provider = new ServiceCollection().AddSingleton(_db).BuildServiceProvider();
+        var gateway = new ScriptedGateway(failFirst: 0);
+        var engine = new WritingCanonEngine(
+            provider.GetRequiredService<IServiceScopeFactory>(), gateway, NullLogger<WritingCanonEngine>.Instance, TimeProvider.System);
+
+        await engine.DetectViolationsAsync(
+            new WritingCanonDetectionRequest(UserId, Guid.NewGuid(), "Dear Dr Green, thanks.", "routine_referral", "medicine", FreeSampleGrant: true), default);
+        await engine.DetectViolationsAsync(
+            new WritingCanonDetectionRequest(UserId, Guid.NewGuid(), "Dear Dr Green, thanks.", "routine_referral", "medicine"), default);
+
+        Assert.Equal(new[] { true, false }, gateway.Requests.Select(r => r.FreeSampleGrant));
+        Assert.All(gateway.Requests, r => Assert.Equal(AiFeatureCodes.WritingCanonDetectV1, r.FeatureCode));
+    }
+
     /// <summary>Legacy (before 2 Oct 2026): the failed grade's own debit was refunded and its hold
     /// Released. Its retry adopts the start debit, which still stands — no new charge, no free grade
     /// on the refunded hold, which stays Released as history.</summary>
@@ -454,11 +500,12 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
 
     // ── Harness ────────────────────────────────────────────────────────────────
 
-    private WritingSubmissionEvaluationPipeline Pipeline(IAiGatewayService gateway, WritingGradeChainOptions? chain = null)
+    private WritingSubmissionEvaluationPipeline Pipeline(
+        IAiGatewayService gateway, WritingGradeChainOptions? chain = null, IWritingCanonEngine? canon = null)
         => new(
             _db,
             gateway,
-            new EmptyCanonEngine(),
+            canon ?? new EmptyCanonEngine(),
             mistakeService: null!,
             events: new NoopWritingEventBus(),
             TimeProvider.System,
@@ -618,6 +665,21 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
             if (Requests.Count <= failFirst) throw new InvalidOperationException("transient provider failure");
             return Task.FromResult(new AiGatewayResult { Completion = CanonicalCompletion, ResolvedModel = "claude-sonnet-5" });
         }
+    }
+
+    private sealed class RecordingCanonEngine : IWritingCanonEngine
+    {
+        public List<WritingCanonDetectionRequest> Requests { get; } = new();
+
+        public Task<WritingCanonDetectionResult> DetectViolationsAsync(WritingCanonDetectionRequest request, CancellationToken ct)
+        {
+            Requests.Add(request);
+            return Task.FromResult(new WritingCanonDetectionResult(request.SubmissionId, Array.Empty<WritingCanonViolation>()));
+        }
+
+        public Task<OetLearner.Api.Contracts.WritingCanonRuleTestResponse?> TestRuleAsync(
+            string adminUserId, string ruleId, OetLearner.Api.Contracts.WritingCanonRuleTestRequest request, CancellationToken ct)
+            => throw new NotImplementedException();
     }
 
     private sealed class PassThroughPreflight : IWritingAssessmentPreflightService

@@ -14,7 +14,10 @@ public sealed record WritingCanonDetectionRequest(
     Guid SubmissionId,
     string LetterContent,
     string LetterType,
-    string Profession);
+    string Profession,
+    // Same plan-gate rule as the grade itself: a credit-funded or free-sample grade
+    // is not refused by the learner's plan feature list (see the evaluation pipeline).
+    bool FreeSampleGrant = false);
 
 public sealed record WritingCanonDetectionResult(
     Guid SubmissionId,
@@ -159,6 +162,7 @@ public sealed class WritingCanonEngine(
                 FeatureCode = AiFeatureCodes.WritingCanonDetectV1,
                 PromptTemplateId = "writing.canon.detect.v1",
                 UserId = request.UserId,
+                FreeSampleGrant = request.FreeSampleGrant,
             }, ct);
             foreach (var match in ParseLlmResponse(result.Completion, request.LetterContent))
             {
