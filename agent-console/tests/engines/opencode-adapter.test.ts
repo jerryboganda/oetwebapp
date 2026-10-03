@@ -259,7 +259,7 @@ describe('OpenCode adapter', () => {
       expect(sessionServer?.args).toContain('127.0.0.1');
       expect(sessionServer?.args).not.toContain('--auto');
       expect(sessionServer?.env.HTTPS_PROXY).toBe('http://session-proxy');
-      expect(JSON.parse(sessionServer?.env.OPENCODE_PERMISSION ?? '{}')).toMatchObject({ '*': 'ask', bash: 'ask', write: 'ask' });
+      expect(JSON.parse(sessionServer?.env.OPENCODE_PERMISSION ?? '{}')).toMatchObject({ '*': 'ask', bash: 'ask', edit: 'ask' });
       const spawn = requests.find((request) => request.url.pathname === '/session');
       expect(spawn).toBeDefined();
       await session.close();
