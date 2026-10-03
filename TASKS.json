@@ -120,11 +120,15 @@
     {
       "id": "LDB-08",
       "title": "Ship: commit, public repo, pnpm run ship, qa-smoke green on SHA, deploy, live confirmation, ax:record",
-      "status": "in_progress",
+      "status": "done",
       "owner": "learner-dashboard-fixes",
       "blockedBy": [],
       "verify": "qa-smoke.yml",
-      "evidence": [],
+      "evidence": [
+        "Live SHA 58ba842eafb7d6de2d6b522285775e1e08a6f1ce (green slot healthy; VPS oet-web-green/oet-api-green on the SHA)",
+        "qa-smoke.yml run 37159346891 success (Frontend unit + 6 backend shards + QA gate, sha 58ba842e)",
+        "build-images.yml run 37159346852 success; production-deploy.yml run 37159617346 success"
+      ],
       "files": [
         "SESSION_STATE.md",
         "VERIFICATION.md"
