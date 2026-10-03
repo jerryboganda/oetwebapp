@@ -216,6 +216,16 @@ public static partial class SeedData
             });
         }
 
+        db.WritingMocks.Add(new WritingMock
+        {
+            Id = Guid.NewGuid(),
+            ScenarioId = writingMarkingScenarioId,
+            Title = "Discharge referral - Mrs Eleanor Vance",
+            Difficulty = 3,
+            Status = "published",
+            CreatedAt = now.AddDays(-30)
+        });
+
         db.WritingSubmissions.Add(new WritingSubmission
         {
             Id = writingMarkingSubmissionId,
