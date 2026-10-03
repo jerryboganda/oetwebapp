@@ -494,8 +494,7 @@ public sealed class JevExtractionVerifyTests
         };
 
         var result = await InvokeFlagsAsync(
-            PartBCService(jev, Flags()), answers, "25. B
-26. C", "admin-1", "p1", "B", CancellationToken.None);
+            PartBCService(jev, Flags()), answers, "25. B\n26. C", "admin-1", "p1", "B", CancellationToken.None);
 
         var flag = Assert.Single(result);
         Assert.StartsWith(JevExtractionVerify.FlagPrefix, flag);
@@ -505,9 +504,7 @@ public sealed class JevExtractionVerifyTests
 
         var item = jev.Calls.Single().Request.StateJson!.Value.GetProperty("items")[0];
         Assert.Equal("What is the speaker's main point?", item.GetProperty("item_text").GetString());
-        Assert.Equal("A: Alpha
-B: Beta
-C: Gamma", item.GetProperty("options").GetString());
+        Assert.Equal("A: Alpha\nB: Beta\nC: Gamma", item.GetProperty("options").GetString());
         Assert.Equal("p1:B", jev.Calls.Single().Call.ResourceId);
     }
 
