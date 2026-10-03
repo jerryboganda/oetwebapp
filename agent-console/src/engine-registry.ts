@@ -25,6 +25,9 @@ interface ClaudeModule {
 interface CodexModule {
   createCodexAdapter(config: AppConfig, context?: EngineFactoryContext): EngineAdapter | Promise<EngineAdapter>;
 }
+interface OpenCodeModule {
+  createOpenCodeAdapter(config: AppConfig, context?: EngineFactoryContext): EngineAdapter | Promise<EngineAdapter>;
+}
 
 export const defaultEngineLoaders: Record<Engine, EngineLoader> = {
   claude: async (config, context) => {
@@ -34,6 +37,10 @@ export const defaultEngineLoaders: Record<Engine, EngineLoader> = {
   codex: async (config, context) => {
     const mod = (await import('./engines/codex.js')) as unknown as CodexModule;
     return mod.createCodexAdapter(config, context);
+  },
+  opencode: async (config, context) => {
+    const mod = (await import('./engines/opencode.js')) as unknown as OpenCodeModule;
+    return mod.createOpenCodeAdapter(config, context);
   },
 };
 

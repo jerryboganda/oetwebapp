@@ -125,6 +125,26 @@ public sealed class OwnerAgentRelayTests
         Assert.Empty(factory.Sidecar.Requests);
     }
 
+    [Fact]
+    public async Task OpenCodeConnect_ForwardsOnlyTheProviderAndOAuthMethod()
+    {
+        var (factory, _, client, ticket) = await UnlockedAsync();
+        await using var __ = factory;
+        using var ___ = client;
+
+        using var request = OwnerAgentWebApplicationFactory.Unlocked(HttpMethod.Post,
+            "/v1/owner-agent/auth/opencode/connect", ticket, new { providerId = "github-copilot", methodIndex = 0 });
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var sidecarCall = Assert.Single(factory.Sidecar.Requests);
+        Assert.Equal("/v1/auth/opencode/connect", sidecarCall.PathAndQuery);
+        using var body = JsonDocument.Parse(sidecarCall.Body!);
+        Assert.Equal("github-copilot", body.RootElement.GetProperty("providerId").GetString());
+        Assert.Equal(0, body.RootElement.GetProperty("methodIndex").GetInt32());
+        Assert.False(body.RootElement.TryGetProperty("apiKey", out _));
+    }
+
     /// <summary>The six actions that used to demand a per-action TOTP step-up.</summary>
     public static IEnumerable<object?[]> FormerStepUpRoutes()
     {

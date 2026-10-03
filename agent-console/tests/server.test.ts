@@ -100,7 +100,24 @@ describe('control server', () => {
         systemSessionId: SYSTEM_SESSION_ID,
       });
       expect(body.engines.claude.auth.state).toBe('signed_in');
+      expect(body.engines.opencode.auth.state).toBe('signed_in');
       expect(body.lease.expiresAt).toEqual(expect.any(String));
+    });
+
+    it('validates OpenCode OAuth provider selection and drops credential fields', async () => {
+      const missing = await app.inject({ method: 'POST', url: '/v1/auth/opencode/connect', headers: authHeaders, payload: {} });
+      expect(missing.statusCode).toBe(400);
+      expect(h.adapters.opencode.connectOptions).toBeUndefined();
+
+      const connected = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/opencode/connect',
+        headers: authHeaders,
+        payload: { providerId: 'github-copilot', methodIndex: 1, apiKey: 'must-not-forward' },
+      });
+      expect(connected.statusCode).toBe(200);
+      expect(h.adapters.opencode.connectOptions).toEqual({ providerId: 'github-copilot', methodIndex: 1 });
+      expect(JSON.stringify(h.adapters.opencode.connectOptions)).not.toContain('must-not-forward');
     });
 
     it('clamps the lease to 3 minutes', async () => {
@@ -162,7 +179,7 @@ describe('control server', () => {
     });
 
     it('filters and pages GET /v1/sessions', async () => {
-      const make = async (title: string, engine: 'claude' | 'codex'): Promise<string> => {
+      const make = async (title: string, engine: 'claude' | 'codex' | 'opencode'): Promise<string> => {
         const res = await app.inject({ method: 'POST', url: '/v1/sessions', headers: authHeaders, payload: { engine, model: 'model-a', mode: 'guarded', title } });
         expect(res.statusCode).toBe(200);
         return res.json().id as string;
@@ -170,23 +187,26 @@ describe('control server', () => {
       const a = await make('Fix T3 login', 'claude');
       const b = await make('Docs tweak', 'codex');
       const c = await make('Another t3 thing', 'claude');
-      // Deterministic order: c newest, then b, then a.
+      const d = await make('OpenCode session', 'opencode');
+      // Deterministic order: d newest, then c, b, and a.
       h.store.updateSession(a, { updatedAt: '2026-09-01T10:00:00.000Z' });
       h.store.updateSession(b, { updatedAt: '2026-09-02T10:00:00.000Z' });
       h.store.updateSession(c, { updatedAt: '2026-09-03T10:00:00.000Z' });
+      h.store.updateSession(d, { updatedAt: '2026-09-04T10:00:00.000Z' });
 
       const get = async (qs: string): Promise<string[]> => {
         const res = await app.inject({ method: 'GET', url: `/v1/sessions${qs}`, headers: authHeaders });
         expect(res.statusCode).toBe(200);
         return (res.json() as { id: string }[]).map((s) => s.id);
       };
-      expect(await get('')).toEqual([c, b, a]);
+      expect(await get('')).toEqual([d, c, b, a]);
       expect(await get('?q=t3')).toEqual([c, a]);
       expect(await get('?engine=codex')).toEqual([b]);
+      expect(await get('?engine=opencode')).toEqual([d]);
       expect(await get('?status=idle&engine=claude')).toEqual([c, a]);
-      expect(await get('?limit=2')).toEqual([c, b]);
+      expect(await get('?limit=2')).toEqual([d, c]);
       expect(await get(`?limit=2&before=${encodeURIComponent('2026-09-02T10:00:00.000Z')}`)).toEqual([a]);
-      expect(await get('?unknown=1')).toEqual([c, b, a]);
+      expect(await get('?unknown=1')).toEqual([d, c, b, a]);
     });
 
     it('rejects invalid GET /v1/sessions query values with 400', async () => {

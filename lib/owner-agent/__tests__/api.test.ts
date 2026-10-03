@@ -74,6 +74,11 @@ describe('owner-agent REST client', () => {
 
     await connectEngine('claude');
     expect(lastCall().path).toBe('/v1/owner-agent/auth/claude/connect');
+    expect(lastCall().init.body).toBeUndefined();
+
+    await connectEngine('opencode', { providerId: 'github-copilot', methodIndex: 0 });
+    expect(lastCall().path).toBe('/v1/owner-agent/auth/opencode/connect');
+    expect(JSON.parse(String(lastCall().init.body))).toEqual({ providerId: 'github-copilot', methodIndex: 0 });
 
     await logoutEngine('codex');
     expect(lastCall().path).toBe('/v1/owner-agent/auth/codex/logout');
@@ -85,7 +90,7 @@ describe('owner-agent REST client', () => {
     await createSession({ engine: 'claude', model: 'opaque', mode: 'autopilot' });
     expect(lastCall().path).toBe('/v1/owner-agent/sessions');
 
-    expect(mockRequest).toHaveBeenCalledTimes(6);
+    expect(mockRequest).toHaveBeenCalledTimes(7);
     for (const call of mockRequest.mock.calls) {
       expect((call[1] as RequestInit).credentials).toBe('include');
       expect(String(call[0])).not.toContain('/step-up');

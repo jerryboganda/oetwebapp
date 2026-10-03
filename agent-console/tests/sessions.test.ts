@@ -38,6 +38,20 @@ describe('SessionManager', () => {
     h.cleanup();
   });
 
+  it('runs OpenCode through the shared worktree, lease, proxy attribution and resumeId flow', async () => {
+    activateLease(h);
+    const detail = await h.sessions.create({ engine: 'opencode', model: 'model-a', mode: 'guarded', title: 'OpenCode session' });
+    await h.sessions.sendMessage(detail.id, { text: 'Inspect the repository' });
+    await vi.waitFor(() => expect(h.adapters.opencode.sessions).toHaveLength(1));
+    const session = h.adapters.opencode.sessions[0]!;
+    expect(session.options.cwd).toContain('/workspace/sessions/');
+    expect(session.options.env.HTTPS_PROXY).toContain(detail.id);
+    expect(session.options.mode).toBe('guarded');
+
+    session.turns[0]!.release();
+    await vi.waitFor(() => expect(h.store.getSession(detail.id)?.resumeId).toBe(`resume-${detail.id}`));
+  });
+
   it('creates a session with a worktree branch and runs a turn end to end', async () => {
     activateLease(h);
     const detail = await h.sessions.create({ engine: 'claude', model: 'model-a', effort: 'high', mode: 'guarded', title: 'Docs tweak' });
@@ -65,7 +79,7 @@ describe('SessionManager', () => {
     expect(h.store.getSession(detail.id)?.resumeId).toBe(`resume-${detail.id}`);
   });
 
-  it.each(['claude', 'codex'] as const)('delivers Jev advice to %s without changing the recorded message or native settings', async (engine) => {
+  it.each(['claude', 'codex', 'opencode'] as const)('delivers Jev advice to %s without changing the recorded message or native settings', async (engine) => {
     activateLease(h);
     const session = await h.sessions.create({ engine, model: 'model-a', effort: 'high', mode: 'guarded' });
     const text = 'Diagnose the grading exception without changing official marks.';

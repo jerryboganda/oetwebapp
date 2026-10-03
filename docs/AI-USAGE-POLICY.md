@@ -457,12 +457,13 @@ one `AiUsageRecord`, preserving the audit invariant.
 
 ---
 
-## 20. Owner subscription agents
+## 20. Owner Agent Console
 
 The **Owner Agent Console** (`/admin/agent-console`, sidecar
-`oet-agent-console`) runs **Claude Code** and **OpenAI Codex** on the
-production VPS, signed in with the owner's **own** subscriptions (Claude Max,
-ChatGPT Business) through each vendor's own sign-in flow. It is an
+`oet-agent-console`) runs **Claude Code**, **OpenAI Codex**, and **OpenCode**
+on the production VPS. Claude and Codex use the owner's **own** subscriptions
+(Claude Max, ChatGPT Business); OpenCode connects only through provider OAuth
+methods selected in the console. Provider terms and costs vary. It is an
 engineering/operations tool for the owner, **not** an AI feature of the
 product. Runbook: [`docs/ops/OWNER-AGENT-CONSOLE.md`](ops/OWNER-AGENT-CONSOLE.md);
 wire contract: [`agent-console/CONTRACT.md`](../agent-console/CONTRACT.md);
@@ -501,9 +502,9 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
 
 **Metering and audit (carve-out from §0.4 / §12)**
 
-- **No `AiUsageRecord` is written** for subscription-engine turns. They carry
-  no platform per-token cost, are not quota/credit metered, and would
-  distort learner cost reporting.
+- **No `AiUsageRecord` is written** for owner console turns. Console usage is
+  shown per session where the engine reports it; platform learner metering
+  does not apply.
 - Evidence instead: hash-chained `AuditEvent` rows with
   `ResourceType = "OwnerAgent"` (unlock, connect/logout, token updates,
   session start, messages, approvals, mode changes, ship, kill switch,
@@ -516,15 +517,16 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
 
 **Credentials**
 
-- Sign-in completes inside the container through the vendor's own flow:
-  the unmodified, SDK-bundled `claude auth login` (Anthropic URL + paste-back
-  code) and Codex ChatGPT **device-code** login. The console relays only the
-  URL/code; it never reads, copies, stores or exports the engines'
-  credential files.
-- No API keys for either engine in the sidecar: `ANTHROPIC_*`,
+- Sign-in completes inside the container through native OAuth: the
+  SDK-bundled `claude auth login`, Codex ChatGPT device-code login, and
+  OpenCode provider OAuth. The console relays only safe authorization URLs,
+  method labels and callback codes; it never reads, copies, logs or returns
+  provider credentials.
+- Provider API-key entry is not exposed. `ANTHROPIC_*`,
   `CLAUDE_CODE_USE_*`, `OPENAI_API_KEY` and `CODEX_API_KEY` are stripped from
-  engine environments, and Codex is pinned to `forced_login_method =
-  "chatgpt"` plus the Business workspace id.
+  engine environments; Codex is pinned to `forced_login_method = "chatgpt"`
+  plus the Business workspace id. OpenCode provider records are projected to
+  safe metadata and its OAuth credentials remain in its native auth store.
 - One credential store per machine: never copy `auth.json` or
   `.credentials.json` between machines (stricter than the vendors require).
 - GitHub access uses two fine-grained, repo-scoped PATs (agent PAT, Ship
@@ -532,8 +534,9 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
 
 **Data protection**
 
-- **Model training is off** on both subscriptions. The owner re-checks after
-  any plan, workspace or vendor-policy change.
+- The owner verifies data-use and training settings for every connected
+  provider account before use, and re-checks after a plan, workspace or
+  vendor-policy change.
 - Anything a session reads (DB rows, logs, files) is sent to the vendor as
   prompt context under the owner's subscription terms. Keep reads of
   learner data minimal and purpose-bound (support, debugging, data repair);
@@ -570,8 +573,9 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
   credentials, and sizes Pro/Max limits for ordinary individual use.
   Anthropic's announced move of Agent SDK usage to a separate credit pool
   is **paused, not cancelled** — "$0 marginal cost" holds only while it
-  stays paused. Codex is the fallback engine. Sources and quotes: runbook →
-  "Vendor terms".
+  stays paused. OpenCode may connect to third-party OAuth providers; check
+  the selected provider's terms and billing before use. Sources and quotes:
+  runbook → "Vendor terms".
 
 ### Owner directive 2026-09-30 — subscription route extended to `speaking.grade`
 
