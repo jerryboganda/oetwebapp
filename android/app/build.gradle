@@ -19,15 +19,16 @@ android {
         applicationId "com.oetwithdrhesham.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Bumped from versionCode 9 / "1.4.14". Google Play's alpha (Closed
-        // Testing) and internal tracks are already published at versionCode
-        // 9 / "1.4.14", so a lower default would not be recognised as an
-        // upgrade. The next Closed Testing build must be versionCode 10 /
-        // "1.4.15" (mobile-release.yml injects these from its version /
-        // version_code inputs at build time; these defaults keep a local or
-        // default-arg build consistent with Play).
-        versionCode 10
-        versionName "1.4.15"
+        // Bumped from versionCode 12 / "1.4.17" (the last cut, 2026-09-24).
+        // Google Play's production, alpha (Closed Testing) and internal tracks
+        // and the VPS sideload feed are all already published at versionCode
+        // 12 / "1.4.17", so a lower default would not be recognised as an
+        // upgrade. The next build must be versionCode 13 / "1.4.18"
+        // (mobile-release.yml injects these from its version / version_code
+        // inputs at build time; these defaults keep a local or default-arg
+        // build consistent with Play).
+        versionCode 13
+        versionName "1.4.18"
         buildConfigField "String", "OET_ATTEST_SECRET", "\"${oetAttestSecret}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

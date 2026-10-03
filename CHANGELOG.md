@@ -5,6 +5,27 @@ All notable changes to this repo are documented here. Format inspired by
 changelogs live alongside their modules (e.g. `docs/speaking/changelog.md`).
 
 
+## [R-2026-10-03-APP-RELEASES] - 2026-10-03
+
+Native shell release cut from `main` `c8d7a570e` (workflow_dispatch, no tags) per `docs/app-release-playbook.md`. The shells load the production web bundle remotely, so learner-visible web behavior arrives with the web deploy; this cut ships the native deltas and converges every channel on one identifier. Full evidence: `docs/releases/2026-10-03-app-releases.md`.
+
+### Android — 1.4.18 (versionCode 13)
+
+- `mobile-release.yml` run `37146943639` success: signed AAB + APK, pinned upload cert verified, VPS sideload feed published (APK `sha256:a7acdc80…`).
+- Play: `cut-android-release` landed 13/1.4.18 on **production, alpha (Closed Testing) and internal** in one atomic edit — all three were live at 1.4.17/12. Beta stays empty/untouched.
+- Shell delta: Speaking microphone was always denied inside the app (`b9f2add39`) + PR #269 cleanup.
+- Committed `android/app/build.gradle` defaults synced to 13/1.4.18 (were stale at 10/1.4.15).
+
+### Windows desktop — 0.7.11
+
+- `tauri-desktop-release.yml` run `37146946812` success: bridge conformance, Windows NSIS, macOS Universal dmg, updater-feed publish all green.
+- Updater feed serves 0.7.11 with a minisign-signed `windows-x86_64` entry (installer `sha256:a85c9cfb…`). macOS downloads stay stripped (unsigned dmg — policy unchanged since 17 Sep).
+- Shell delta: PR #269 repo-wide cleanup touches `src-tauri/`.
+
+### iOS — not cut (owner decision)
+
+- Skipped this round: ASC API keys still 401-blocked (Apple Team Keys need re-download); iOS VPS feed never published. TestFlight/App Store remain manual owner steps.
+
 ## [Unreleased] - Free Mocks (2026-09-22)
 
 - **Free Listening / Reading sample:** a paper tagged `free-sample` opens the content gate and skips the per-paper credit debit; a FREE SAMPLE card sits above the practice cards on both hubs (outside the four-card grid). Reading uses Atlas 02, Listening Atlas ST3; both stay in their libraries.
