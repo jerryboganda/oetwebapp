@@ -192,7 +192,15 @@ function releaseLock(paths) {
 
 function readLease(paths) {
   const lease = readJson(paths.lease);
-  return lease && leaseIsActive(lease) ? lease : null;
+  if (!lease || !leaseIsActive(lease)) return null;
+  // A killed session must not strand the lease: it would block the private flip
+  // (and every other agent's flip decision) until the TTL expires while nobody
+  // needs the repo public. Same-host pids only.
+  if (lease.host === hostname() && !processIsAlive(Number(lease.pid))) {
+    rmSync(paths.lease, { force: true });
+    return null;
+  }
+  return lease;
 }
 
 function acquireLease(paths) {
