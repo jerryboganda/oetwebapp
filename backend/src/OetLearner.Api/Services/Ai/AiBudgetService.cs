@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -184,38 +185,72 @@ public sealed class AiBudgetService(
         ArgumentException.ThrowIfNullOrWhiteSpace(scope);
         var amount = Math.Max(0m, estimatedUsd);
 
-        try
+        // Transient store failures must not fail-close a call that has
+        // headroom: on a loaded CI runner the 40-way budget races occasionally
+        // see a fast connect blip / too-many-clients rejection, and 3 of 40
+        // reservations came back budget_store_unavailable (2026-10-03, qa-smoke
+        // shard 1) while the ledger invariant itself held. Every store op in
+        // the attempt below is idempotent or atomic — the policy reads are
+        // read-only, the UPSERT is ON CONFLICT DO NOTHING, and the atomic
+        // UPDATE either applied (we returned) or threw (it did not apply) —
+        // so a retry re-runs the same attempt cleanly. Real outages still
+        // fail closed via the catch below once the retries are spent.
+        for (var attempt = 1; ; attempt++)
         {
-            await using var dbScope = scopeFactory.CreateAsyncScope();
-            var db = dbScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-
-            var global = await db.AiGlobalPolicies.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == "global", ct);
-            var enforce = global?.EnforceSpendCaps ?? false;
-            var limitUsd = ResolveEffectiveLimit(global);
-            limitUsd += await ExtraHeadroomAsync(scope, ct);
-            if (enforce && limitUsd <= 0m)
+            try
             {
-                logger.LogWarning(
-                    "AI platform budget is unconfigured or zero for scope {Scope}; refusing the call (zero provider calls made). Set AiGlobalPolicy.MonthlyBudgetUsd on /admin/ai-usage.",
-                    scope);
-                return AiBudgetReservation.Denied("global_budget_not_configured");
+                return await ReserveOnceAsync(scope, amount, ct);
             }
-
-            var periodKey = MonthKeyUtc();
-            return await TryReservePeriodAsync(
-                db, scope, periodKey, amount, limitUsd, "global_budget_exhausted", enforce, ct);
-        }
-        catch (Exception ex)
-        {
-            // A control-plane failure BEFORE the provider call must never
-            // degrade into "send anyway" — the same fail-closed rule
-            // DirectAiCallRecorder.BeginOperationAsync applies to the operation
-            // ledger applies here to the budget ledger.
-            logger.LogError(ex, "AiBudgetService.ReserveAsync failed for scope {Scope}; refusing the call.", scope);
-            return AiBudgetReservation.Denied("budget_store_unavailable");
+            catch (Exception ex) when (attempt < 3 && IsTransientStoreException(ex))
+            {
+                logger.LogWarning(ex,
+                    "Transient AI budget store failure for scope {Scope} (attempt {Attempt}); retrying.",
+                    scope, attempt);
+                await Task.Delay(25 * attempt, ct);
+            }
+            catch (Exception ex)
+            {
+                // A control-plane failure BEFORE the provider call must never
+                // degrade into "send anyway" — the same fail-closed rule
+                // DirectAiCallRecorder.BeginOperationAsync applies to the operation
+                // ledger applies here to the budget ledger.
+                logger.LogError(ex, "AiBudgetService.ReserveAsync failed for scope {Scope}; refusing the call.", scope);
+                return AiBudgetReservation.Denied("budget_store_unavailable");
+            }
         }
     }
+
+    private async Task<AiBudgetReservation> ReserveOnceAsync(string scope, decimal amount, CancellationToken ct)
+    {
+        await using var dbScope = scopeFactory.CreateAsyncScope();
+        var db = dbScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+
+        var global = await db.AiGlobalPolicies.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == "global", ct);
+        var enforce = global?.EnforceSpendCaps ?? false;
+        var limitUsd = ResolveEffectiveLimit(global);
+        limitUsd += await ExtraHeadroomAsync(scope, ct);
+        if (enforce && limitUsd <= 0m)
+        {
+            logger.LogWarning(
+                "AI platform budget is unconfigured or zero for scope {Scope}; refusing the call (zero provider calls made). Set AiGlobalPolicy.MonthlyBudgetUsd on /admin/ai-usage.",
+                scope);
+            return AiBudgetReservation.Denied("global_budget_not_configured");
+        }
+
+        var periodKey = MonthKeyUtc();
+        return await TryReservePeriodAsync(
+            db, scope, periodKey, amount, limitUsd, "global_budget_exhausted", enforce, ct);
+    }
+
+    /// <summary>Retryable store conditions: Npgsql marks the transient
+    /// Postgres/SQLSTATE families (serialization, deadlock, too many
+    /// connections, server shutting down, connection failures) and connection
+    /// blips with <c>IsTransient</c>; the explicit list keeps that visible for
+    /// the states that have actually bitten CI.</summary>
+    private static bool IsTransientStoreException(Exception ex)
+        => ex is NpgsqlException { IsTransient: true }
+           || ex is PostgresException pg && pg.SqlState is "40001" or "40P01" or "53300" or "57P01" or "57P02" or "57P03";
 
     public Task<AiBudgetReservation> ReserveForOperationAsync(string? featureCode, decimal estimatedUsd, CancellationToken ct)
         => ReserveForCallAsync(AiBudgetClasses.ClassForFeature(featureCode), estimatedUsd, ct);

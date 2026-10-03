@@ -50,13 +50,16 @@ real native-shell deltas and converge every channel on one identifier:
 - **Visibility:** repo was public for both runs (verified before dispatch),
   flipped private immediately after the desktop run concluded.
 
-## Ledger gap (flagged, not backfilled)
+## Ledger gap (backfilled 2026-10-04)
 
-Android 1.4.15–1.4.17 and desktop 0.7.9 → 0.7.10 were cut ~24 Sep 2026 (and
-0.7.10 some time after the 17 Sep dry-run) without ledger rows. Live feeds were
-read before this release to pick versions correctly (VPS 1.4.17/12, desktop
-0.7.10); the missing rows are not reconstructed here because their run IDs and
-operators are unknown.
+Android 1.4.15–1.4.17 and desktop 0.7.9 → 0.7.10 were cut between 14 Sep and
+24 Sep 2026 without ledger rows. Backfilled on 2026-10-04 as
+`R-2026-09-16-SHELL-ROUND` and `R-2026-09-24-MOBILE-1417` in
+`docs/releases/RELEASE-LEDGER.md`: run IDs, source commits and publish-job
+outcomes reconstructed from the Actions history, and artifact SHA-256 values
+recomputed from the retained artifacts (the 1.4.17 APK hash matches the live
+feed digest captured before that feed was overwritten). The cutting sessions'
+operator identities remain unknown.
 
 ## Parity checklist status
 

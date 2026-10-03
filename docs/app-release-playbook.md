@@ -82,10 +82,12 @@ release; to stage Play-only, roll the feed back afterwards with
    and sanity-check it (ZIP magic `PK`, contains `BundleConfig.pb` + `base/`).
 6. Publish with `.venv\Scripts\python.exe -m playstore.cli cut-android-release <out>\app-release.aab`
    — this is the **default, non-bypassable command for a general release**: it
-   discovers every track that already has a live release (as of 2026-09-05:
-   `internal` and `alpha`/Closed Testing; `beta`/`production` are empty and
-   untouched — it re-checks live state itself every run, don't hardcode this
-   list) and lands the same versionCode on all of them in one atomic edit.
+   discovers every track that already has a live release (as of 2026-10-03:
+   `internal`, `alpha`/Closed Testing **and** `production` are all live —
+   production first went live at 1.4.17/12 in the unledgered ~24 Sep round and
+   was synced from 1.4.18/13 onward; `beta` is still empty — the toolkit
+   re-checks live state itself every run, don't hardcode this list) and lands
+   the same versionCode on all of them in one atomic edit.
    Expect `tracks_synced` to list every previously-live track, `version_code
    == <N>` on each. Only use `publish-bundle --track <t>` for a single named
    track when the owner has explicitly scoped the order to that one track —
@@ -94,10 +96,11 @@ release; to stage Play-only, roll the feed back afterwards with
    another live track is left behind; treat that warning as a failed step,
    not a note to ignore.
 7. Verify live: `list-tracks` shows `<X>`/`<N>` on **every track that was live
-   before this release** (production/beta stay untouched only if they were
-   already empty) AND the VPS android feed serves `<X>`/`<N>`. A track still
-   showing an older version after this step is an incomplete release, not a
-   "someone else can update it later" — fix it in the same pass.
+   before this release** (beta stays untouched only because it is still empty —
+   any track with a live release must move) AND the VPS android feed serves
+   `<X>`/`<N>`. A track still showing an older version after this step is an
+   incomplete release, not a "someone else can update it later" — fix it in
+   the same pass.
 
 ## 3. Pathway B — iOS (VPS sideload feed; TestFlight is manual)
 
