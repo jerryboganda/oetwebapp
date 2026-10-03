@@ -6,6 +6,16 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-03 19:40 | CI triage | CI triage | 37148762001 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | dcaa45207 |
+| 2026-10-03 19:40 | AX Ledger Tools | AX Ledger Tools | 37148758479 | self-test (windows, node 24)=success self-test (linux, node 22)=success self-test (windows, node 22)=success | SUCCESS | dcaa45207 |
+| 2026-10-03 19:11 | CI triage | CI triage | 37146989721 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | c8d7a570e |
+| 2026-10-03 19:09 | CI triage | CI triage | 37146856878 | Classify the failed run (jev-1.13.0)=success | SUCCESS | c8d7a570e |
+| 2026-10-03 19:07 | CI triage | CI triage | 37146777214 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | c8d7a570e |
+| 2026-10-03 19:07 | Deploy production | Deploy production | 37146777264 | Resolve the build to deploy=success Roll out to the VPS=success Apply migration SQL (if the API changed)=skipped | SUCCESS | c8d7a570e |
+| 2026-10-03 19:04 | Jev calibrate | Jev calibrate | 37146568822 | Jev live calibration (jev-1.13.0)=failure | FAILURE | c8d7a570e |
+| 2026-10-03 19:04 | Build images | Build images | 37146567088 | Syntax gate (seconds)=success Deployment contract guards=success Detect what changed=success Writing model-answer gate (on change)=skipped Writing grader regression (on change)=skipped build-agent-gateway=success Retag unchanged web=success build-web=success build-backup=success Retag unchanged api=success build-api=skipped | SUCCESS | c8d7a570e |
+| 2026-10-03 19:04 | Speaking Module CI | Speaking Module CI | 37146567146 | secrets-scan=success migrations-check=success | SUCCESS | c8d7a570e |
+| 2026-10-03 18:37 | CI triage | CI triage | 37144878460 | Classify the failed run (jev-1.13.0)=success | SUCCESS | ca69764bc |
 | 2026-10-03 18:32 | CI triage | CI triage | 37144560414 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | b9df2ec6d |
 | 2026-10-03 18:32 | AX Ledger Tools | AX Ledger Tools | 37144557240 | self-test (linux, node 22)=success self-test (windows, node 22)=success self-test (windows, node 24)=success | SUCCESS | b9df2ec6d |
 | 2026-10-03 18:25 | CI triage | CI triage | 37144115145 | Classify the failed run (jev-1.13.0)=success | SUCCESS | 9ffb41d34 |
