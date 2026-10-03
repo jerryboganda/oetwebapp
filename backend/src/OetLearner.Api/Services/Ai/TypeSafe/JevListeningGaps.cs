@@ -97,7 +97,7 @@ public static class JevListeningGaps
     private static readonly IReadOnlyDictionary<string, string?> Choices = new Dictionary<string, string?>
     {
         [ExactMatch] = "The candidate's answer is the official answer or one of the authorised variants, apart from letter case or surrounding spaces.",
-        [SameMeaningVariant] = "Different wording or word form that carries exactly the same meaning as the official answer, with the same numbers and units.",
+        [SameMeaningVariant] = "Different correctly-spelled wording or word form that carries exactly the same meaning as the official answer, with the same numbers and units.",
         [SpellingNearMiss] = "The same word or term as the official answer with a minor typing or spelling slip of one or two letters.",
         [NumberOrUnitError] = "The candidate's number, quantity or unit differs from the official answer or from what the approved rationale says.",
         [DifferentMeaning] = "A different word or meaning from the official answer, or an answer the approved rationale does not support.",
@@ -160,7 +160,8 @@ public static class JevListeningGaps
                 Instructions =
                     $"Compare the candidate's typed answer `state.gaps[{i}].candidate_answer` with the official answer `state.gaps[{i}].official_answer` "
                     + $"and the authorised variants `state.gaps[{i}].also_accepted`, using `state.gaps[{i}].approved_rationale` as the evidence for what the speaker said. "
-                    + "Pick the single option that best describes how the candidate's answer relates to the official answer. Judge the relationship, not the candidate's effort."
+                    + "Pick the single option that best describes how the candidate's answer relates to the official answer. Judge the relationship, not the candidate's effort. "
+                    + "The options are exclusive: if the candidate's answer is the official answer or a variant with a minor spelling slip, choose spelling_near_miss even though the meaning matches; choose same_meaning_variant only when the wording differs and its spelling is correct."
                     + DataNote,
                 ChoiceCriteria = Choices,
             }).ToList(),

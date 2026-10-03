@@ -171,13 +171,13 @@ public static class JevMockWeakness
                 Kind = JevQuestionKind.Score,
                 Instructions =
                     $"How strongly do the answer counts in `state.skills` show the weakness described in `state.candidates[{i}].weakness` for the skill `state.candidates[{i}].skill`? "
-                    + "Judge only from the counts given; do not assume anything beyond them." + DataNote,
+                    + "Judge only from the counts given; do not assume anything beyond them. For a part-specific weakness use `wrong_by_part`; for a miss-reason-specific weakness use `wrong_by_miss_reason`; for a whole-skill weakness use `answers_wrong`. A weakness whose part or miss reason shows none of the skill's wrong answers scores 0." + DataNote,
                 ScoreLevels =
                 [
-                    "No evidence: the counts for this skill do not point to this weakness.",
-                    "Slight: a few wrong answers fit this weakness but they are not a pattern.",
-                    "Clear: a noticeable share of the wrong answers fit this weakness.",
-                    "Strong: most of the wrong answers, or the bulk of the part, fit this weakness.",
+                    "No evidence: none of this skill's wrong answers fit this weakness - the matching part or miss reason shows no wrong answers.",
+                    "Slight: only a few of the wrong answers fit this weakness (well under a third) and they are not a pattern.",
+                    "Clear: roughly a third or more of this skill's wrong answers fit this weakness.",
+                    "Strong: most (about half or more) of the wrong answers, or the bulk of one part, fit this weakness.",
                 ],
             }).ToList(),
         };
