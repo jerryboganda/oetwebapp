@@ -23,9 +23,9 @@ test.describe('Writing V2 practice start @writing-v2 @smoke', () => {
     await expect(readingWindow.getByRole('button', { name: /skip|start writing/i }))
       .toHaveCount(0);
 
-    const editor = page.locator('#practice-editor');
+    const editor = page.locator('#practice-editor[contenteditable]');
     await expect(editor).toBeAttached({ timeout: 30_000 });
-    await expect(editor).not.toBeEditable();
+    await expect(editor).toHaveAttribute('contenteditable', 'false');
     await page.keyboard.press('Escape');
     await expect(readingWindow).toBeVisible();
   });
