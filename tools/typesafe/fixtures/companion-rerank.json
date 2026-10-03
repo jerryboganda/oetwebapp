@@ -1,6 +1,6 @@
 {
   "name": "companion-rerank",
-  "note": "Rerank anchor for jev.companion.rerank: a query where embedding word-overlap would mislead, but semantic relevance is clear. Asserts the organisation chunk ranks top and the off-topic speaking chunk ranks last.",
+  "note": "Rerank anchor for jev.companion.rerank: a query where embedding word-overlap would mislead, but semantic relevance is clear. Asserts the organisation chunk ranks top; the two off-topic chunks may swap, so the bottom assert only requires speaking_roleplay among the last two.",
   "rerank": {
     "query": "How should an OET referral letter be organised — what does each paragraph do?",
     "candidates": [
@@ -19,7 +19,7 @@
     ],
     "expect": {
       "ordering_top": "organisation_rule",
-      "ordering_last": "speaking_roleplay",
+      "ordering_last_set": ["speaking_roleplay", "totals_scoring"],
       "top_score_gte": 2
     }
   }

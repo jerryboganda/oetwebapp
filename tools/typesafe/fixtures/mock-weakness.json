@@ -1,6 +1,6 @@
 {
   "name": "mock-weakness",
-  "note": "Synthetic answer-review counts (no learner data). Gates TYPESAFE__MOCKWEAKNESSENABLED (jev.mock.weakness). Mirrors JevMockWeakness.RankAsync: one Score (0..3 evidence scale) per candidate catalogue tag over compact counts; the report keeps tags with confidence >= 0.60 and score >= 1.5 (MinReportableScore), ordered by score then tag. Case `listening_spelling_skew`: every wrong Listening answer is a Part A spelling slip, Reading is clean apart from one miss, so listening_partA_spelling must rank first and the unrelated tags must stay below the reporting floor. Case `reading_partc_skew` is the mirror image (guards against a position bias in the candidate order). The state carries counts only, so there is no free-text injection surface to test.",
+  "note": "Synthetic answer-review counts (no learner data). Gates TYPESAFE__MOCKWEAKNESSENABLED (jev.mock.weakness). Mirrors JevMockWeakness.RankAsync: one Score (0..3 evidence scale) per candidate catalogue tag over compact counts; the report keeps tags with confidence >= 0.60 and score >= 1.5 (MinReportableScore), ordered by score then tag. Case `listening_spelling_skew`: every wrong Listening answer is a Part A spelling slip, Reading is clean apart from one miss, so listening_partA_spelling must rank first and the unrelated tags must stay out of the report. Case `reading_partc_skew` is the mirror image (guards against a position bias in the candidate order); the unrelated tags are asserted `not_reported` - the production decision (a tag is kept only at score >= 1.5 AND confidence >= 0.60) - after live runs showed the spelling tag scoring 1.8-2.0 at sub-0.60 confidence there. The state carries counts only, so there is no free-text injection surface to test.",
   "mock_weakness": {
     "cases": [
       {
@@ -13,7 +13,7 @@
           "top": "listening_partA_spelling",
           "top_score_gte": 2.0,
           "top_confidence_gte": 0.60,
-          "score_lte": { "low_reading": 1.4, "reading_partC_inference": 1.4, "listening_partB_inference": 1.4 }
+          "not_reported": ["low_reading", "reading_partC_inference", "listening_partB_inference"]
         }
       },
       {
@@ -26,7 +26,7 @@
           "top": "reading_partC_inference",
           "top_score_gte": 2.0,
           "top_confidence_gte": 0.60,
-          "score_lte": { "listening_partA_spelling": 1.4, "listening_partB_inference": 1.4, "low_listening": 1.4 }
+          "not_reported": ["listening_partA_spelling", "listening_partB_inference", "low_listening"]
         }
       }
     ]

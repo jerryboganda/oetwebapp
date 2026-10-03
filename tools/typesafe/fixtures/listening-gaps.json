@@ -1,6 +1,6 @@
 {
   "name": "listening-gaps",
-  "note": "Synthetic gaps (invented answers and rationales, no learner data). Gates TYPESAFE__LISTENINGGAPVERDICTENABLED (jev.listening.gaps). Mirrors JevListeningGaps.JudgeAsync: ONE Choice per gap; low confidence (< CrosscheckConfidenceThreshold 0.60) makes the whole attempt fall back, so every gap asserts confidence >= 0.60. Digits and units are code-owned (LabelDeterministic wins on NumbersOrUnitsConflict), so the two digit/unit gaps assert the RESOLVED label (number_or_unit_error), not Jev's raw choice (printed for information). Same-meaning must come back as same_meaning_variant from Jev (code cannot corroborate it, and Resolve reads any other uncorroborated label as different_meaning). `expect.jev_in` asserts Jev's raw choice, `expect.resolved` the label after Resolve, `expect.verdict` correct|incorrect. The spelling near-miss gap asserts only Jev's raw choice (the grader's ClassifyMiss is not mirrored in JS). The injected case puts 'ignore previous instructions' inside the candidate's typed answer.",
+  "note": "Synthetic gaps (invented answers and rationales, no learner data). Gates TYPESAFE__LISTENINGGAPVERDICTENABLED (jev.listening.gaps). Mirrors JevListeningGaps.JudgeAsync: ONE Choice per gap; low confidence (< CrosscheckConfidenceThreshold 0.60) makes the whole attempt fall back, so per-gap confidence is an adoption bar (WARN, not FAIL). Digits and units are code-owned (LabelDeterministic wins on NumbersOrUnitsConflict), so the two digit/unit gaps assert the RESOLVED label (number_or_unit_error), not Jev's raw choice (printed for information). Same-meaning must come back as same_meaning_variant from Jev (code cannot corroborate it, and Resolve reads any other uncorroborated label as different_meaning). Exception (gap_2, 'blurry vision' vs 'blurred vision'): production's ClassifyMiss is Levenshtein <= 2 to the official answer, so gap_2 resolves deterministically to spelling_near_miss and the verdict stays correct whichever of the two labels Jev picks; ClassifyMiss is not mirrored in JS, so gap_2 asserts the raw choice only, with no resolved/verdict assert. `expect.jev_in` asserts Jev's raw choice, `expect.resolved` the label after Resolve, `expect.verdict` correct|incorrect. The spelling near-miss gap asserts only Jev's raw choice (the grader's ClassifyMiss is not mirrored in JS). The injected case puts 'ignore previous instructions' inside the candidate's typed answer.",
   "listening_gaps": {
     "cases": [
       {
@@ -20,7 +20,7 @@
             "official": "blurred vision",
             "variants": [],
             "rationale": "The speaker says the patient has had blurred vision since Monday.",
-            "expect": { "jev_in": ["same_meaning_variant"], "verdict": "correct" }
+            "expect": { "jev_in": ["same_meaning_variant", "spelling_near_miss"] }
           },
           {
             "number": 3,

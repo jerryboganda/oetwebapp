@@ -124,7 +124,7 @@ public static class JevAnswerKeyTriage
             {
                 Id = CauseId(i),
                 Kind = JevQuestionKind.Choice,
-                Instructions = $"For `state.reports[{i}]`: the learner disputes the marking of `learner_answer` against `official_answer`. Using the source in `evidence` or `authoring_explanation`, choose the most likely cause of the disagreement. For a multiple-choice report the answers are option letters: choose wrong_official_answer only when the evidence contradicts the official option and supports another option." + DataNote,
+                Instructions = $"For `state.reports[{i}]`: the learner disputes the marking of `learner_answer` against `official_answer`. Using the source in `evidence` or `authoring_explanation`, choose the most likely cause of the disagreement." + DataNote,
                 ChoiceCriteria = CauseChoices,
             });
         }
