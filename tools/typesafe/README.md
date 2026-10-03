@@ -163,8 +163,14 @@ claims. These guard numbers were measured when the check sent the whole fixture
 object as state; `calibrate.mjs` now sends the bare letter text like
 `GuardSubmissionAsync`, so the first run re-baselines them. The criteria radar of that date (strong referral letter at 1.96–2.99)
 was measured on the OLD four-level descriptors and is superseded: the criteria
-and every Wave 2 suite have no live baseline until the first green run of the
-suites above, so record its run id and observed values here.
+and every Wave 2 suite had no live baseline until the first run.
+
+First live baseline (jev-calibrate.yml run 37117759999, 2026-10-03, jev-1.13.0):
+119 of 120 checks pass (~52.8k input tokens, ~$0.002). Every Writing guard, route,
+verify, criteria, outcome and findings suite, speaking-readiness, speaking-crosscheck
+(classic and v1.1), dev-triage and conversation-turn suite is green, including all
+injection cases. Red: `companion-rerank·ordering_last` (the off-topic passage was not
+ranked last), so `TYPESAFE__COMPANIONRERANKENABLED` stays off until that suite is green.
 
 Seed further anchors from the 55 medicine model answers and the Writing
 regression letters as flags approach their flips.
