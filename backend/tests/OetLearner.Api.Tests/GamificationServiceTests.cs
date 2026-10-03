@@ -241,7 +241,7 @@ public class GamificationServiceTests
         // leak into a period the reading store does not maintain.
         var weekly = JsonSerializer.SerializeToElement(
             await svc.GetLeaderboardAsync("OET", "weekly", CancellationToken.None));
-        Assert.Equal("learner-b", weekly[0].GetProperty("displayName").GetString());
-        Assert.Equal("learner-a", weekly[1].GetProperty("displayName").GetString());
+        Assert.Equal("Bilal", weekly[0].GetProperty("displayName").GetString());
+        Assert.Equal("Aisha", weekly[1].GetProperty("displayName").GetString());
     }
 }
