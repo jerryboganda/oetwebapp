@@ -258,7 +258,7 @@ x-web-slot: &web-slot
     HOSTNAME: 0.0.0.0
     NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
     NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN}
-    # 17 Sep 2026 handover: keep in step with the deploy.yml build arg of the
+    # 17 Sep 2026 handover: keep in step with the build-images.yml build-web arg of the
     # same name — the flag is build-time inlined for client code and read from
     # the runtime env for the server routes. Flip BOTH to lift the disable.
     NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED: ${NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED:-1}

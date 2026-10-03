@@ -9,12 +9,12 @@ on:
   push:
     paths:
       - 'scripts/agent/**'
-      - 'scripts/ship/pre-push-gate.mjs'
+      - 'scripts/ship/**'
       - '.github/workflows/ax-check.yml'
   pull_request:
     paths:
       - 'scripts/agent/**'
-      - 'scripts/ship/pre-push-gate.mjs'
+      - 'scripts/ship/**'
       - '.github/workflows/ax-check.yml'
   workflow_dispatch:
 
@@ -71,3 +71,8 @@ jobs:
 
       - name: Ship gate self-test (includes the CLAUDE.md guard)
         run: node scripts/ship/pre-push-gate.mjs --self-test
+
+      # The one-command ship wrapper: lock/lease/ledger-conflict/herald helpers.
+      # Pure functions only - no git, no gh, no network.
+      - name: Ship wrapper self-test
+        run: node scripts/ship/ship.mjs --self-test

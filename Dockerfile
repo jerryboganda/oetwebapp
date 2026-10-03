@@ -26,7 +26,10 @@ ENV NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN}
 ENV NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED=${NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED}
 ENV APP_URL=${APP_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS="--max-old-space-size=2048"
+# 6144 MB: the old 2048 cap made V8 GC-thrash on this app size. Runners have
+# 16 GB, so a 6 GB heap removes the thrash without risking the OOM cascade the
+# cap was originally guarding against (which was a small-box problem).
+ENV NODE_OPTIONS="--max-old-space-size=6144"
 
 # Ensure .env exists for Next.js build (real values come from Docker build args above)
 RUN touch .env

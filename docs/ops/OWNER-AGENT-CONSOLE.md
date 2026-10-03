@@ -78,8 +78,9 @@ Browser /admin/agent-console ──REST (x-csrf-token) + SignalR long-poll──
 Key properties:
 
 - **Separate compose project** (`docker-compose.agent-console.yml`, project
-  `oet-agent-console`). Main deploys (`deploy.yml` → `auto-deploy-ghcr.sh`)
-  never recreate it; they only ensure the `oet_agent_ctl` network exists.
+  `oet-agent-console`). Main deploys (`build-images.yml` → `production-deploy.yml`
+  → `auto-deploy-ghcr.sh`) never recreate it; they only ensure the `oet_agent_ctl`
+  network exists.
   The API slots `oet-api-blue` / `oet-api-green` and `oet-ai-worker` join
   `oet_agent_ctl` (the Writing/Speaking subscription sidecars `oet-writing-claude`
   / `oet-writing-codex` sit on it as well; queued `speaking.grade` operations run
@@ -182,10 +183,9 @@ production deploy secrets.
       required reviewers (that would block auto-deploy).
 - [ ] Add the VPS secrets as **environment** secrets: `PROD_SSH_KEY`,
       `VPS_HOST`, `VPS_USER`, `VPS_PORT` (the ones workflows read today).
-- [ ] Merge the console branch: it already puts `environment: production` and
-      `if: github.ref == 'refs/heads/main'` on the `migrate-production` and
-      `deploy` jobs of `deploy.yml` and on the deploy job of
-      `agent-console.yml`. Watch one green Build & Deploy.
+- [ ] Merge the console branch: it already puts `environment: production` on the
+      `apply-migrations` and `deploy` jobs of `production-deploy.yml` and on the
+      deploy job of `agent-console.yml`. Watch one green Deploy production.
 - [ ] Those secrets are **also** read by `mobile-release.yml`,
       `publish-existing-desktop-to-vps.yml`, `publish-existing-mobile-to-vps.yml`,
       `tauri-desktop-release.yml` (also runs on `v*.*.*-tauri-desktop` tag
@@ -311,12 +311,12 @@ and recreates the four containers.
 ### 4.5 Recreate the API slots
 
 The API reads `OwnerAgent__*` and joins `oet_agent_ctl` only when its slot
-container is (re)created. Trigger a normal Build & Deploy and watch it:
+container is (re)created. Trigger a normal build + rollout and watch it:
 
 ```bash
-gh workflow run deploy.yml --ref main
-# wait a few seconds so the new run is listed
-gh run watch "$(gh run list -w deploy.yml -e workflow_dispatch -L 1 --json databaseId -q '.[0].databaseId')"
+gh workflow run build-images.yml --ref main
+# the Deploy production run starts when the build succeeds
+gh run watch "$(gh run list -w production-deploy.yml -L 1 --json databaseId -q '.[0].databaseId')"
 ```
 
 ### 4.6 Turn on the feature flag

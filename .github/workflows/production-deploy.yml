@@ -1,0 +1,338 @@
+name: Deploy production
+
+# The run name carries the deployed SHA so watchers can find a run for a commit
+# even though a `workflow_run`-triggered run lives on the default branch
+# (owner console src/ship.ts matches on it, then falls back to head_sha).
+run-name: Deploy production ${{ inputs.sha || github.event.workflow_run.head_sha }}
+
+# Rollout half of the former "Build & Deploy (web + API)". Starts when a
+# "Build images" run on main succeeds, or when dispatched with an existing SHA
+# (that is the one-click rollback path: the images are already in GHCR).
+#
+# Several agents may build in parallel; PRODUCTION ROLLOUTS SERIALIZE through
+# the `production-deploy` concurrency group, because two router flips at once
+# would fight over the blue/green slots. The VPS never builds: it pulls the
+# pre-built images and blue/green-redeploys them health-gated - a broken commit
+# fails the gate and is NOT promoted, so prod stays up.
+#
+# SSH uses secrets.PROD_SSH_KEY (environment `production`). The box is
+# root@185.252.233.186:22, /opt/oetwebapp; only the "Prune stale OET images"
+# step still reads secrets VPS_HOST / VPS_USER / VPS_PORT.
+
+on:
+  workflow_run:
+    workflows: ['Build images']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Full commit SHA already built and pushed to GHCR (rollback path)'
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+  packages: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    name: Resolve the build to deploy
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository) || github.event_name == 'workflow_dispatch' }}
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      build_run_id: ${{ steps.resolve.outputs.build_run_id }}
+      deployable: ${{ steps.gate.outputs.deployable }}
+    steps:
+      - id: resolve
+        name: Resolve the SHA to deploy
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHA="${{ inputs.sha }}"
+            BUILD_RUN_ID=""
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            BUILD_RUN_ID="${{ github.event.workflow_run.id }}"
+          fi
+          printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$' || { echo "::error::bad sha '$SHA'"; exit 1; }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "build_run_id=$BUILD_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "deploying $SHA (build run: ${BUILD_RUN_ID:-manual dispatch})"
+
+      # Two guards, owner directive 2026-10-03 (minimum deploy time):
+      #   1. settle window - a burst of pushes produces ONE rollout, because a
+      #      newer Build images run on main already contains this commit;
+      #   2. image existence - a push that touched no build input started no
+      #      build, so there is nothing to roll out.
+      - id: gate
+        name: Settle window + image existence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHA="${{ steps.resolve.outputs.sha }}"
+          RUN_ID="${{ steps.resolve.outputs.build_run_id }}"
+          deployable=true
+          reason=""
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            for attempt in 1 2; do
+              newest="$(gh run list --repo "$GITHUB_REPOSITORY" -w 'Build images' --branch main -L 10 \
+                --json databaseId,status,conclusion \
+                --jq '.[0] | [.databaseId, .status, (.conclusion // "")] | @tsv')"
+              NEWEST_ID="$(printf '%s' "$newest" | cut -f1)"
+              NEWEST_STATUS="$(printf '%s' "$newest" | cut -f2)"
+              NEWEST_CONCLUSION="$(printf '%s' "$newest" | cut -f3)"
+              if [ -n "$NEWEST_ID" ] && [ "$NEWEST_ID" != "$RUN_ID" ] && [ "$NEWEST_CONCLUSION" != "failure" ]; then
+                deployable=false
+                reason="superseded by newer build run $NEWEST_ID ($NEWEST_STATUS)"
+                break
+              fi
+              if [ "$attempt" = "1" ]; then sleep 30; fi
+            done
+          fi
+
+          if [ "$deployable" = "true" ]; then
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
+            missing=""
+            for image in web api db-backup agent-gateway; do
+              docker manifest inspect "ghcr.io/$GITHUB_REPOSITORY-$image:$SHA" >/dev/null 2>&1 || missing="$missing $image"
+            done
+            docker logout ghcr.io >/dev/null 2>&1 || true
+            if [ -n "$missing" ]; then
+              deployable=false
+              reason="no images tagged $SHA (unchanged:$missing) - nothing to deploy"
+            fi
+          fi
+
+          echo "deployable=$deployable" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Resolve"
+            echo "- sha: $SHA"
+            echo "- build run: ${RUN_ID:-manual dispatch}"
+            echo "- deployable: $deployable"
+            if [ -n "$reason" ]; then echo "- skipped: $reason"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "deployable=$deployable ${reason:+($reason)}"
+
+  apply-migrations:
+    name: Apply migration SQL (if any)
+    needs: [resolve]
+    if: needs.resolve.outputs.deployable == 'true'
+    environment: production
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # Normal path: the SQL generated by the Build images run. Best-effort on
+      # purpose - an artifact-storage quota must not block a deploy; the
+      # regenerate step below covers a missing artifact.
+      - name: Download the migration artifact from the build run
+        if: needs.resolve.outputs.build_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: oet-production-migrations-${{ needs.resolve.outputs.sha }}
+          run-id: ${{ needs.resolve.outputs.build_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: output
+
+      # Fallback: the API may have changed while the artifact is missing (best-
+      # effort upload). Regenerating keeps today's guarantee - prod never runs
+      # new code against an old schema. `hashFiles(...) == ''` is the single
+      # switch for every fallback step below.
+      - uses: actions/cache@v4
+        if: ${{ hashFiles('output/oet-production-migrations.sql') == '' }}
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - uses: actions/setup-dotnet@v4
+        if: ${{ hashFiles('output/oet-production-migrations.sql') == '' }}
+        with:
+          dotnet-version: 10.0.x
+      - name: Install EF command-line tools
+        if: ${{ hashFiles('output/oet-production-migrations.sql') == '' }}
+        run: |
+          EF_TOOL_DIR="$RUNNER_TEMP/dotnet-tools"
+          mkdir -p "$EF_TOOL_DIR"
+          dotnet tool install --tool-path "$EF_TOOL_DIR" dotnet-ef --version 10.0.5
+          EF_TOOL="$EF_TOOL_DIR/dotnet-ef"
+          test -x "$EF_TOOL"
+          "$EF_TOOL" --version
+      - name: Restore + build the API for the migration generator
+        if: ${{ hashFiles('output/oet-production-migrations.sql') == '' }}
+        run: |
+          dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
+          dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release --no-restore --nologo
+      - name: Generate the idempotent SQL (fallback path)
+        if: ${{ hashFiles('output/oet-production-migrations.sql') == '' }}
+        run: |
+          EF_TOOL="$RUNNER_TEMP/dotnet-tools/dotnet-ef"
+          mkdir -p output
+          "$EF_TOOL" migrations script --idempotent --no-build --configuration Release \
+            --project backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --output output/oet-production-migrations.sql
+          test -s output/oet-production-migrations.sql
+          sha256sum output/oet-production-migrations.sql
+
+      - name: Apply migration SQL through the production PostgreSQL container
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          VPS_HOST: "185.252.233.186"
+          VPS_USER: "root"
+          VPS_PORT: "22"
+          APP_DIR: "/opt/oetwebapp"
+        run: |
+          set -euo pipefail
+          if [ ! -s output/oet-production-migrations.sql ]; then
+            echo "No migration SQL for this SHA - nothing to apply."
+            exit 0
+          fi
+          PORT="${VPS_PORT:-22}"
+          REMOTE_WRAPPER="/tmp/oet-apply-migrations-${GITHUB_RUN_ID}.sh"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh_opts=(
+            -i ~/.ssh/deploy_key -p "$PORT"
+            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey
+            -o PasswordAuthentication=no -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30
+            -o ServerAliveCountMax=20
+          )
+          cleanup() {
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "rm -f '$REMOTE_WRAPPER'" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; cat > '$REMOTE_WRAPPER'; chmod 700 '$REMOTE_WRAPPER'" \
+            < scripts/deploy/apply-migrations-from-ci.sh
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "set -e; VPS_APP_DIR='$APP_DIR' bash '$REMOTE_WRAPPER'" \
+            < output/oet-production-migrations.sql
+
+  deploy:
+    name: Roll out to the VPS
+    needs: [resolve, apply-migrations]
+    if: ${{ always() && needs.resolve.outputs.deployable == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    environment: production
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    env:
+      SHA: ${{ needs.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to VPS over SSH (pull + blue/green redeploy)
+        env:
+          # Dedicated CI deploy key (authorized on the real prod box's root).
+          # Cutover 2026-06-05 moved production to MAIN; app/api DNS now resolve
+          # to 185.252.233.186. The old 68.183.32.122 box was decommissioned, so
+          # host/user/path are hardcoded to current prod (185.252.233.186).
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          VPS_HOST: "185.252.233.186"
+          VPS_USER: "root"
+          VPS_PORT: "22"
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEB_IMAGE: ghcr.io/${{ github.repository }}-web:${{ needs.resolve.outputs.sha }}
+          API_IMAGE: ghcr.io/${{ github.repository }}-api:${{ needs.resolve.outputs.sha }}
+          DB_BACKUP_IMAGE: ghcr.io/${{ github.repository }}-db-backup:${{ needs.resolve.outputs.sha }}
+          AGENT_GATEWAY_IMAGE: ghcr.io/${{ github.repository }}-agent-gateway:${{ needs.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          APP_DIR="/opt/oetwebapp"
+          REMOTE_DIR="/tmp/oet-image-rollout-${GITHUB_RUN_ID}"
+          REMOTE_SCRIPT="$REMOTE_DIR/auto-deploy-ghcr.sh"
+          REMOTE_COMPOSE="$REMOTE_DIR/docker-compose.production.yml"
+          REMOTE_VALIDATE="$REMOTE_DIR/validate-production-env.sh"
+          REMOTE_NGINX="$REMOTE_DIR/web-bluegreen.conf.template"
+          REMOTE_NGINX_API="$REMOTE_DIR/api-bluegreen.conf.template"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh_opts=(
+            -i ~/.ssh/deploy_key -p "$PORT"
+            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey
+            -o PasswordAuthentication=no -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30
+            -o ServerAliveCountMax=20
+          )
+          cleanup() {
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+              "rm -f '$REMOTE_SCRIPT' '$REMOTE_COMPOSE' '$REMOTE_VALIDATE' '$REMOTE_NGINX' '$REMOTE_NGINX_API'; rmdir '$REMOTE_DIR' 2>/dev/null || true" \
+              >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          # One tar stream instead of five sequential ssh round-trips; the file
+          # modes are re-applied on the remote side (owner directive 2026-10-03).
+          STAGE="$RUNNER_TEMP/rollout"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          cp scripts/deploy/auto-deploy-ghcr.sh "$STAGE/auto-deploy-ghcr.sh"
+          cp docker-compose.production.yml "$STAGE/docker-compose.production.yml"
+          cp scripts/deploy/validate-production-env.sh "$STAGE/validate-production-env.sh"
+          cp scripts/deploy/nginx/web-bluegreen.conf.template "$STAGE/web-bluegreen.conf.template"
+          cp scripts/deploy/nginx/api-bluegreen.conf.template "$STAGE/api-bluegreen.conf.template"
+          tar -czf - -C "$STAGE" . | ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; mkdir -p '$REMOTE_DIR'; tar -xzf - -C '$REMOTE_DIR'; \
+             chmod 700 '$REMOTE_SCRIPT' '$REMOTE_VALIDATE'; \
+             chmod 600 '$REMOTE_COMPOSE'; \
+             chmod 644 '$REMOTE_NGINX' '$REMOTE_NGINX_API'"
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "set -e; echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
+             WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' \
+             AGENT_GATEWAY_IMAGE='$AGENT_GATEWAY_IMAGE' \
+             VPS_APP_DIR='$APP_DIR' VPS_COMPOSE_FILE='$REMOTE_COMPOSE' VPS_VALIDATE_ENV_SCRIPT='$REMOTE_VALIDATE' \
+             NGINX_TEMPLATE_SRC='$REMOTE_NGINX' NGINX_API_TEMPLATE_SRC='$REMOTE_NGINX_API' \
+               bash '$REMOTE_SCRIPT'; \
+             docker logout ghcr.io >/dev/null 2>&1 || true"
+      # Every third rollout only: pruning walks the whole image store on a
+      # shared host and is not needed after every push. The check lives in a
+      # shell step because GitHub expressions have NO modulo operator (`%` makes
+      # the whole workflow file invalid - it silently stops registering).
+      - name: Decide whether to prune
+        id: prune
+        if: success()
+        run: |
+          if [ $((GITHUB_RUN_NUMBER % 3)) -eq 0 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Prune stale OET images on VPS
+        if: ${{ success() && steps.prune.outputs.run == 'true' }}
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh_opts=(-i ~/.ssh/deploy_key -p "$PORT" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" 'bash -s' -- 24 < scripts/deploy/prune-stale-images.sh
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Deploy" >> "$GITHUB_STEP_SUMMARY"
+          echo "- sha: \`$SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- web: \`ghcr.io/${{ github.repository }}-web:$SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- api: \`ghcr.io/${{ github.repository }}-api:$SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- backup: \`ghcr.io/${{ github.repository }}-db-backup:$SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- agent-gateway: \`ghcr.io/${{ github.repository }}-agent-gateway:$SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- result: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"

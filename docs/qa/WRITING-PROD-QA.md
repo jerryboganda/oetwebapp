@@ -62,7 +62,7 @@ dedicated QA admin account is better than the owner's own login. Hosts: `https:/
 ## Safety rails
 
 - Dispatch-only, `permissions: contents: read`, concurrency group `writing-prod-qa` (no cancel-in-progress).
-- `guard` refuses while `deploy.yml` is running or queued and validates the inputs + the 36 scripts.
+- `guard` refuses while `production-deploy.yml` is running or queued and validates the inputs + the 36 scripts.
 - `unit` (vitest + the detector spec) must pass before `live` touches production.
 - `discover` uses a read-only client: any non-GET call throws before the network (the admin sign-in POST is the
   only exception; unit-tested) and it never repairs anything.

@@ -49,7 +49,7 @@ acceptance bar, not the implementation detail.>
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
 | ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| deploy | deploy.yml | NOT RUN | NOT RUN |
+| deploy | production-deploy.yml | NOT RUN | NOT RUN |
 
 ## Blockers
 

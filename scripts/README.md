@@ -7,7 +7,7 @@ audit-trail list before deleting anything. Put one-off scratch in `scripts/_*` o
 ## 1. Deploy / CI-critical (do not rename or move without updating the callers)
 
 - `deploy/` — **deploy-critical.** `auto-deploy-ghcr.sh` (the live blue/green rollout run by
-  `deploy.yml`), `apply-migrations-from-ci.sh`, `validate-production-env.sh`, `prune-stale-images.sh`,
+  `build-images.yml` / `production-deploy.yml`), `apply-migrations-from-ci.sh`, `validate-production-env.sh`, `prune-stale-images.sh`,
   `nginx/*.template`, the static guards `verify-compute-offload.sh` / `verify-image-only-rollout.sh`,
   and `deploy-prod.sh` (+ `rollout-release.sh`, `pre-flight.sh`): the manual digest-pinned incident path.
   `deploy-direct.sh` and `../deploy-production.sh` are owner-gated emergency source-build fallbacks

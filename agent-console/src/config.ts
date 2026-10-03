@@ -302,8 +302,8 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     ship: {
       repo,
       baseBranch: 'main',
-      deployWorkflowFile: str(env, 'AGENT_CONSOLE_DEPLOY_WORKFLOW', 'deploy.yml'),
-      deployWorkflowName: 'Build & Deploy (web + API)',
+      deployWorkflowFile: str(env, 'AGENT_CONSOLE_DEPLOY_WORKFLOW', 'production-deploy.yml'),
+      deployWorkflowName: 'Deploy production',
       consoleWorkflowFile: str(env, 'AGENT_CONSOLE_UPDATE_WORKFLOW', 'agent-console.yml'),
       holdersVariable: 'PUBLIC_WINDOW_HOLDERS',
       healthUrls,

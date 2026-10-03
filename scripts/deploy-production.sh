@@ -8,7 +8,7 @@
 set -Eeuo pipefail
 
 if [ "${ALLOW_VPS_SOURCE_BUILD:-}" != "owner-approved-emergency" ]; then
-  echo "Refusing source-build deployment on the VPS. Use .github/workflows/deploy.yml so GitHub Actions performs the build." >&2
+  echo "Refusing source-build deployment on the VPS. Use .github/workflows/build-images.yml + production-deploy.yml so GitHub Actions performs the build." >&2
   echo "For a specifically approved emergency exception, set ALLOW_VPS_SOURCE_BUILD=owner-approved-emergency." >&2
   exit 78
 fi

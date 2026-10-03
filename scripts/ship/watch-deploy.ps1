@@ -14,7 +14,7 @@
 param(
     [string]$Repo = 'jerryboganda/oetwebapp',
     [string]$Sha = '',
-    [string]$Workflow = 'Build & Deploy (web + API)',
+    [string]$Workflow = 'Deploy production',
     [int]$WaitForRunSeconds = 180,
     [int]$PollSeconds = 25,
     [int]$TimeoutSeconds = 1800,
@@ -69,12 +69,15 @@ do {
             '--repo', $Repo,
             '--workflow', $Workflow,
             '--commit', $Sha,
-            '--json', 'databaseId,status,conclusion,url',
+            '--json', 'databaseId,status,conclusion,url,workflowName',
             '--limit', '5'
         )
         if ($listRaw -and $listRaw -ne '[]') {
-            $runs = $listRaw | ConvertFrom-Json
-            if ($runs -and $runs.Count -gt 0) {
+            # `gh run list -w` matches names CASE-INSENSITIVELY, so a legacy
+            # registration (e.g. "Deploy Production" with no file left behind)
+            # can shadow the real run. Match the name exactly.
+            $runs = @($listRaw | ConvertFrom-Json) | Where-Object { $_.workflowName -eq $Workflow }
+            if ($runs.Count -gt 0) {
                 $runId = [string]$runs[0].databaseId
                 $runUrl = [string]$runs[0].url
                 break
@@ -87,6 +90,60 @@ do {
 } while ([DateTime]::UtcNow -lt $deadline)
 
 if (-not $runId) {
+    # Supersede-aware: several agents may push within minutes, and main is
+    # linear, so a newer run CONTAINS this SHA. Adopt the newest such run
+    # instead of failing with NO_RUN (GitHub keeps only one pending run per
+    # concurrency group, so intermediate SHAs legitimately never get their own).
+    Write-Output 'SHIP-WATCH checking for a superseding run...'
+    try {
+        $recentRaw = Invoke-GhJson @(
+            'run', 'list',
+            '--repo', $Repo,
+            '--workflow', $Workflow,
+            '--limit', '10',
+            '--json', 'databaseId,headSha,status,conclusion,url,workflowName'
+        )
+        if ($recentRaw -and $recentRaw -ne '[]') {
+            $recent = @($recentRaw | ConvertFrom-Json) | Where-Object { $_.workflowName -eq $Workflow }
+            foreach ($candidate in $recent) {
+                $candidateSha = [string]$candidate.headSha
+                if (-not $candidateSha) { continue }
+                & git merge-base --is-ancestor $Sha $candidateSha 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    $runId = [string]$candidate.databaseId
+                    $runUrl = [string]$candidate.url
+                    Write-Output "SHIP-WATCH_SUPERSEDED_BY $candidateSha run $runId"
+                    break
+                }
+            }
+        }
+    } catch {
+        Write-Output "supersede check failed: $($_.Exception.Message)"
+    }
+}
+
+if (-not $runId) {
+    # "Nothing to deploy" is a legitimate outcome: since 2026-10-03 a push that
+    # touched no build input starts NO build at all (build-images.yml is
+    # path-filtered), so there are no images for this SHA and no rollout. Tell
+    # that apart from a genuinely missing run.
+    try {
+        $buildRaw = Invoke-GhJson @(
+            'run', 'list',
+            '--repo', $Repo,
+            '--workflow', 'Build images',
+            '--commit', $Sha,
+            '--limit', '1',
+            '--json', 'databaseId'
+        )
+        if (-not $buildRaw -or $buildRaw -eq '[]') {
+            Write-Output "SHIP-WATCH_NOTHING_TO_DEPLOY no 'Build images' run for $Sha - the push touched no build input, production is unchanged."
+            exit 0
+        }
+    } catch {
+        Write-Output "build-run check failed: $($_.Exception.Message)"
+    }
+
     Write-Output 'SHIP-WATCH_NO_RUN'
     Write-Output 'NEXT: dump `gh run list`, confirm the repo is public (gh repo view --json visibility), then retry this watcher. Do not tell the owner the deploy is done.'
     exit 2
@@ -197,7 +254,22 @@ if ($healthFailed) {
 }
 
 if (-not $SkipPrivateFlip) {
-    Set-RepoVisibility -Visibility private
+    # Lease-aware (owner directive 2026-10-03): never flip private while
+    # another agent holds a ship lease, or while ANY hosted run is queued or
+    # in progress - those runs would be refused on a private repo. The single
+    # implementation of that decision lives in the ship CLI.
+    $mayFlip = $true
+    $shipCli = Join-Path (Split-Path -Parent $PSCommandPath) 'ship.mjs'
+    if (Test-Path $shipCli) {
+        $verdict = & node $shipCli --may-flip-private 2>&1
+        $verdict | ForEach-Object { Write-Output "SHIP-WATCH_$($_)" }
+        if ($LASTEXITCODE -ne 0) { $mayFlip = $false }
+    }
+    if ($mayFlip) {
+        Set-RepoVisibility -Visibility private
+    } else {
+        Write-Output 'SHIP-WATCH_KEEPING_PUBLIC another lease or in-flight run exists'
+    }
 }
 
 Write-Output 'SHIP-WATCH_DONE'

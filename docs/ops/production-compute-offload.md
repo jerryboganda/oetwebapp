@@ -22,7 +22,7 @@ not resource limits or capacity guarantees.
 | .NET restore, compile, publish, and API Docker packaging | GitHub Actions `build-api` | The production VPS no longer needs a source tree or compiler. |
 | Backup-sidecar Docker image packaging | GitHub Actions `build-backup` | The VPS pulls a commit-scoped GHCR image; it does not build the sidecar. |
 | TypeScript, lint, unit, backend, E2E, mobile, performance, security, and SBOM jobs | Existing GitHub Actions workflows | These jobs already run on hosted runners; the deploy path does not invoke them on the VPS. |
-| EF migration compilation and SQL generation | GitHub Actions `migrate-production` | An idempotent SQL script is generated off-server, retained for three days, and streamed to the VPS without production data. |
+| EF migration compilation and SQL generation | GitHub Actions `migrate-sql` (build-images.yml) | An idempotent SQL script is generated off-server, retained for three days, and streamed to the VPS without production data. |
 | EF migration application | Existing PostgreSQL container, invoked by Actions | PostgreSQL must execute against its local production volume. The stdin wrapper runs only `psql -v ON_ERROR_STOP=1`; it performs no build, test, or Compose operation. |
 | API startup `Database.MigrateAsync()` | Development only when explicitly enabled | Production startup no longer applies migrations. The production bootstrap/readiness path still fails closed when pending migrations exist. |
 | Scheduled database/media backup (`pg_dump`, compression, optional GPG/S3, and media archive) | VPS backup sidecar | Moving the dump would require moving or exposing the private database and persistent media volume. Keep this data-local until a separately secured managed backup path and restore drill are proven. |
@@ -33,11 +33,17 @@ not resource limits or capacity guarantees.
 
 ## Deployment contract
 
-`.github/workflows/deploy.yml` now gates deployment on `build-web`, `build-api`,
-`build-backup`, and `migrate-production`. Only after all four succeed does the
-deploy job SSH to production, stream a small deployment bundle, pull
-commit-scoped GHCR images, and run the blue/green rollout. It does not fetch or
-reset the source repository on the VPS.
+`.github/workflows/build-images.yml` builds `build-web`, `build-api`,
+`build-backup`, `build-agent-gateway` and generates the migration SQL
+(`migrate-sql`) in parallel per SHA. A component whose inputs did not change is
+**retagged from `:latest`** instead of rebuilt, and a push that touches no build
+input starts no build at all (path-filtered, owner directive 2026-10-03).
+`.github/workflows/production-deploy.yml`
+starts only when that whole run succeeds (and stands down when a newer build run
+exists, or when the SHA has no images): it applies the migration SQL, then
+SSHes to production, streams a small deployment bundle, pulls commit-scoped GHCR
+images, and runs the blue/green rollout. Neither workflow fetches or resets the
+source repository on the VPS.
 
 The rollout requires `WEB_IMAGE`, `API_IMAGE`, and `DB_BACKUP_IMAGE`, persists
 their references, pulls them with retry, and passes `--no-build` to every

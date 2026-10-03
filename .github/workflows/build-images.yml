@@ -1,0 +1,490 @@
+name: Build images
+
+# Build half of the former "Build & Deploy (web + API)": classifies the push,
+# runs the seconds-long syntax gate (plus the Writing gates only when Writing
+# files changed), builds the web (Next.js/Turbopack), API (.NET), backup-sidecar
+# and agent-gateway images OFF-BOX on GitHub's 16 GB runners, pushes them to
+# GHCR, and generates the idempotent production migration SQL as an artifact.
+# NO production secrets, NO SSH - the rollout lives in production-deploy.yml.
+#
+# Why the split (owner directive 2026-10-03): several agents may push within
+# minutes. Deploying serializes (one router flip at a time), but BUILDING does
+# not need to: this workflow has no cross-SHA concurrency group, so every
+# pushed SHA builds in parallel, and the deploy workflow (triggered by
+# `workflow_run`) starts the moment its build succeeds.
+#
+# Why not build on the VPS: it is a shared host with 60+ co-tenant containers;
+# an in-place `next build` OOM-cascades and can take the whole box down.
+# No build minutes are billed (public repo).
+
+on:
+  push:
+    branches: [main]
+    # Ship only when something the DEPLOYED ARTIFACTS actually consume changed
+    # (owner directive 2026-10-03: minimum deploy time). A push touching only
+    # tests, docs, ledgers or CI bookkeeping starts NO build and NO rollout.
+    # Add a path here the moment it becomes a build input.
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'contexts/**'
+      - 'hooks/**'
+      - 'lib/**'
+      - 'public/**'
+      - 'messages/**'
+      - 'types/**'
+      # Every root-level source/config file the two builds consume: i18n.ts,
+      # next.config.ts, proxy.ts, middleware.ts, instrumentation*.ts,
+      # sentry.*.config.ts, tsconfig.json, package.json, postcss.config.mjs.
+      # Explicit extensions on purpose: brace globs are not part of the
+      # path-filter spec and would silently never match.
+      - '*.ts'
+      - '*.tsx'
+      - '*.mjs'
+      - '*.json'
+      - 'pnpm-lock.yaml'
+      - '.npmrc'
+      - '.dockerignore'
+      - 'Dockerfile'
+      - 'backend/**'
+      - 'global.json'
+      - 'Directory.*.props'
+      - 'NuGet.config'
+      - 'rulebooks/**'
+      - 'data/**'
+      - 'agent-gateway/**'
+      - 'scripts/backup/**'
+      - 'scripts/deploy/**'
+      - 'docker-compose.production.yml'
+      - 'docker-compose.production.*.yml'
+      - '.env.production.example'
+      - '.github/workflows/build-images.yml'
+      - '.github/workflows/production-deploy.yml'
+  # A PR run proves the workflow itself before the merge (routing, retag-reuse,
+  # the contract guards). It can never deploy: production-deploy.yml only acts
+  # on a Build images run whose head branch is `main`.
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+# No cross-SHA lock: builds for different SHAs run in parallel. One SHA is
+# cancelled in favour of itself; Rollout serialization lives in the deploy
+# workflow's `production-deploy` concurrency group.
+concurrency:
+  group: build-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  WEB_IMAGE: ghcr.io/${{ github.repository }}-web:${{ github.sha }}
+  API_IMAGE: ghcr.io/${{ github.repository }}-api:${{ github.sha }}
+  DB_BACKUP_IMAGE: ghcr.io/${{ github.repository }}-db-backup:${{ github.sha }}
+  AGENT_GATEWAY_IMAGE: ghcr.io/${{ github.repository }}-agent-gateway:${{ github.sha }}
+
+jobs:
+  # One cheap classification job replaces the duplicate git-diff detection
+  # that used to live inside writing-regression-gate, so per-job gating
+  # (Writing gates, migration SQL) reads one source of truth.
+  changes:
+    name: Detect what changed
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.detect.outputs.web }}
+      api: ${{ steps.detect.outputs.api }}
+      writing: ${{ steps.detect.outputs.writing }}
+    steps:
+      # No checkout: the compare API answers in a second where a full-history
+      # clone takes ~30s, and every build job waits for this one.
+      - id: detect
+        name: Classify the push
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          all=0
+          BASE="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          elif [ "${{ github.event_name }}" != "push" ]; then
+            all=1
+          fi
+          if [ -z "$BASE" ] || printf '%s' "$BASE" | grep -qE '^0+$'; then all=1; fi
+          FILES=""
+          if [ "$all" = "0" ]; then
+            JSON="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${{ github.sha }}")"
+            FILES="$(printf '%s' "$JSON" | jq -r '.files[].filename')"
+            # The compare API truncates at 300 files; assume everything changed
+            # rather than under-reporting a build input.
+            if [ "$(printf '%s' "$JSON" | jq -r '.files | length')" -ge 300 ]; then all=1; fi
+          fi
+          if [ "$all" = "1" ]; then
+            echo "No usable diff range (first push / manual dispatch / truncated compare) - treating everything as changed."
+            web=true; api=true; writing=true; FILES="(all)"
+          else
+            has() { printf '%s\n' "$FILES" | grep -Eq "$1"; }
+            # true/false strings on purpose: every job condition compares to
+            # 'true' (1/0 would silently skip every gated job).
+            web=false; api=false; writing=false
+            # rulebooks/** is embedded by the API AND imported statically by the
+            # web bundle, so it is an input to BOTH images. Root-level
+            # .ts/.tsx/.mjs/.json files (proxy.ts, i18n.ts, next.config.ts,
+            # instrumentation*.ts, sentry.*.config.ts, ...) are web inputs too.
+            if has '^(app/|components/|contexts/|hooks/|lib/|public/|messages/|types/|rulebooks/|pnpm-lock\.yaml$|\.npmrc$|[^/]+\.(ts|tsx|mjs|json)$)'; then web=true; fi
+            # api: everything the API image bakes (source, embedded rulebooks,
+            # seed data) plus anything that can change the EF model.
+            if has '^(backend/|rulebooks/|data/|global\.json$|Directory\.[A-Za-z]+\.props$|NuGet\.config$|\.npmrc$)'; then api=true; fi
+            # .dockerignore and the compose file shape BOTH images.
+            if has '^(\.dockerignore$|docker-compose\.production(\.build|\.hostports)?\.yml$)'; then web=true; api=true; fi
+            # writing: the old inline detector's patterns (directory granularity).
+            if has '^(backend/src/OetLearner\.Api/Services/Rulebook/|backend/src/OetLearner\.Api/Services/Ai/AiFeatureRouteResolver\.cs|rulebooks/writing/|tests/writing-regression/)'; then writing=true; fi
+          fi
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "api=$api" >> "$GITHUB_OUTPUT"
+          echo "writing=$writing" >> "$GITHUB_OUTPUT"
+          echo "web=$web api=$api writing=$writing"
+          {
+            echo "### Change detection"
+            echo "- web=$web api=$api writing=$writing"
+            echo '```'
+            printf '%s\n' "$FILES" | head -n 200
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  syntax-gate:
+    name: Syntax gate (seconds)
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      # The gate diffs `github.event.before..HEAD`, so the base commit must be
+      # present - but a full-history clone on this repo costs ~30s and both
+      # build jobs wait for this one. Depth 2 + one targeted fetch is enough;
+      # `--unshallow` is the rare (multi-hundred-commit) fallback.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Make the comparison base available
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.before }}"
+          if [ -n "$BASE" ] && ! printf '%s' "$BASE" | grep -qE '^0+$'; then
+            git fetch --no-tags --depth=1 origin "$BASE" || git fetch --no-tags --unshallow || true
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Seconds-long leftover-syntax gate
+        env:
+          SHIP_GATE_CI: "1"
+        run: |
+          node scripts/ship/pre-push-gate.mjs --self-test
+          node scripts/ship/pre-push-gate.mjs --ci
+
+  # The Writing model-answer recovery regression only runs when this push
+  # touches Writing grader code, rules or the regression manifest. It used to
+  # run inside syntax-gate, costing every deploy a full .NET build+test before
+  # any image build could start.
+  writing-model-answer-gate:
+    name: Writing model-answer gate (on change)
+    needs: [changes]
+    if: needs.changes.outputs.writing == 'true'
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Writing model-answer recovery regression gate
+        run: dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj -c Release --nologo -p:RunAnalyzers=false --filter 'FullyQualifiedName~WritingRev8ModelAnswerGateTests' --logger 'console;verbosity=normal'
+
+  # Writing grader prompt/model gate (recorded-artifact). When the push touches the
+  # Writing prompt, house-style rules, rulebooks or the AI route, this verifies the
+  # committed regression manifest matches the CURRENT prompt and records a passing run
+  # (the live grading uses the owner's Claude Max subscription, which runners cannot
+  # reach). No writing change -> the gate passes immediately and deploy is unaffected.
+  writing-regression-gate:
+    name: Writing grader regression (on change)
+    needs: [changes]
+    if: needs.changes.outputs.writing == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Checker self-test + verify manifest matches current prompt
+        working-directory: tests/writing-regression
+        run: |
+          python selftest_checker.py
+          python verify_manifest.py
+
+  # Retag-reuse (owner directive 2026-10-03: minimum deploy time): when a
+  # component's inputs did not change, the previous image IS the correct image
+  # for this SHA. Pull the last built `:latest` and push it under `:<sha>` so
+  # the rollout still finds a per-SHA tag, while the expensive build is skipped.
+  retag:
+    name: Retag unchanged ${{ matrix.image }}
+    needs: [changes, syntax-gate]
+    if: ${{ needs.changes.outputs.web != 'true' || needs.changes.outputs.api != 'true' }}
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: web
+            changed: "${{ needs.changes.outputs.web }}"
+          - image: api
+            changed: "${{ needs.changes.outputs.api }}"
+    steps:
+      - uses: docker/login-action@v3
+        if: matrix.changed != 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Retag ${{ matrix.image }} (inputs unchanged)
+        if: matrix.changed != 'true'
+        run: |
+          set -euo pipefail
+          SHA="${{ github.sha }}"
+          SRC="ghcr.io/${{ github.repository }}-${{ matrix.image }}:latest"
+          DST="ghcr.io/${{ github.repository }}-${{ matrix.image }}:$SHA"
+          docker pull "$SRC"
+          docker tag "$SRC" "$DST"
+          docker push "$DST"
+          echo "reused $SRC as $DST"
+      - name: Nothing to reuse
+        if: matrix.changed == 'true'
+        run: echo "${{ matrix.image }} inputs changed - the build job handles it."
+
+  # Static deployment contract. Its own job (not a step of build-web) because
+  # retag-reuse can SKIP build-web, and the contract must be checked on every
+  # build run regardless of which images were rebuilt.
+  guards:
+    name: Deployment contract guards
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert production rollout is image-only
+        run: |
+          bash scripts/deploy/verify-image-only-rollout.sh
+          bash scripts/deploy/verify-compute-offload.sh
+      # Owner directive 2026-10-03: the CI/CD rules are mechanical, not prose.
+      # This fails the run (and therefore the rollout) on ANY drift: a second
+      # rollout path, a browser lane with an automatic trigger, an e2e job back
+      # in qa-smoke, an un-filtered build trigger, a lost rollout gate.
+      - name: Assert the pipeline contract
+        run: node scripts/deploy/verify-pipeline-contract.mjs
+
+  # NOTE: the build jobs deliberately do NOT `needs:` the Writing gates. A job
+  # that needs a SKIPPED job is itself skipped -  chaining them made every
+  # non-Writing push skip build-web/build-api/build-backup/build-agent-gateway
+  # (and therefore the whole deploy). The Writing gates still fail the run on
+  # their own, which blocks the rollout via deploy-production's
+  # `conclusion == success` check.
+  build-web:
+    needs: [syntax-gate, changes]
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          target: runner
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}-web:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-web:latest
+          build-args: |
+            NEXT_PUBLIC_API_BASE_URL=https://api.oetwithdrhesham.co.uk
+            APP_URL=https://app.oetwithdrhesham.co.uk
+            # 17 Sep 2026 handover: the public Mac DMG has not passed protected
+            # playback QA on a real Mac, so the Mac download stays disabled and
+            # candidates are pointed at the Web App. Remove this arg to
+            # re-enable once the signed 0.7.10 build passes (see
+            # docs/APPLE-RELEASE-EVIDENCE-PACK.md).
+            NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED=1
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  build-api:
+    needs: [syntax-gate, changes]
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish API on the Actions host
+        run: |
+          dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
+          rm -rf backend/publish
+          # /m:1 + BuildInParallel=false + UseSharedCompilation=false were tuned
+          # for a small build box. Hosted runners have 4 vCPU / 16 GB, so MSBuild
+          # compiles in parallel again - this was the slowest image job.
+          dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --configuration Release \
+            --output backend/publish \
+            --no-restore \
+            /p:UseAppHost=false \
+            /p:UseSharedCompilation=true \
+            /p:RunAnalyzers=false
+          test -n "$(find backend/publish -mindepth 1 -maxdepth 1 -print -quit)"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./backend/Dockerfile.runtime
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}-api:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+  build-backup:
+    needs: [syntax-gate]
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push backup sidecar
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./scripts/backup/Dockerfile
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}-db-backup:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-db-backup:latest
+          cache-from: type=gha,scope=db-backup
+          cache-to: type=gha,mode=max,scope=db-backup
+
+  build-agent-gateway:
+    needs: [syntax-gate]
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push agent gateway (Google Antigravity SDK runtime)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agent-gateway
+          file: ./agent-gateway/Dockerfile
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}-agent-gateway:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-agent-gateway:latest
+          cache-from: type=gha,scope=agent-gateway
+          cache-to: type=gha,mode=max,scope=agent-gateway
+
+  # Migration SQL generation stays on Actions (compute policy) and runs in
+  # parallel with the image builds: the deploy workflow only starts when this
+  # whole run succeeds, so prod can never migrate ahead of a failed build.
+  migrate-sql:
+    name: Migration SQL (on API change)
+    needs: [changes]
+    if: ${{ needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Install EF command-line tools
+        run: |
+          EF_TOOL_DIR="$RUNNER_TEMP/dotnet-tools"
+          mkdir -p "$EF_TOOL_DIR"
+          dotnet tool install --tool-path "$EF_TOOL_DIR" dotnet-ef --version 10.0.5
+          EF_TOOL="$EF_TOOL_DIR/dotnet-ef"
+          test -x "$EF_TOOL"
+          "$EF_TOOL" --version
+      - name: Restore API project
+        run: dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
+      - name: Build migration generator on GitHub Actions
+        run: dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release --no-restore --nologo
+      - name: Generate idempotent production migration SQL off-box
+        run: |
+          EF_TOOL="$RUNNER_TEMP/dotnet-tools/dotnet-ef"
+          test -x "$EF_TOOL"
+          mkdir -p output
+          "$EF_TOOL" migrations script --idempotent --no-build --configuration Release \
+            --project backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --output output/oet-production-migrations.sql
+          test -s output/oet-production-migrations.sql
+          sha256sum output/oet-production-migrations.sql
+      - name: Retain migration artifact for deployment audit
+        # Best-effort: the SQL's sha256 is already in the log above, and an
+        # account-level Actions artifact-storage quota must not block a deploy.
+        # The deploy workflow regenerates the SQL if the artifact is missing.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: oet-production-migrations-${{ github.sha }}
+          path: output/oet-production-migrations.sql
+          if-no-files-found: error
+          retention-days: 3

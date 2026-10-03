@@ -3,7 +3,7 @@
 # Do not use this on the production VPS unless the user explicitly approves an
 # emergency source-build exception in the current conversation. Heavy frontend,
 # API, backend, Next.js, and .NET builds belong on GitHub Actions. Normal
-# production deploys use .github/workflows/deploy.yml to build/push GHCR images,
+# production deploys use .github/workflows/build-images.yml + production-deploy.yml to build/push GHCR images,
 # then scripts/deploy/auto-deploy-ghcr.sh pulls and rolls them out on the VPS.
 #
 # This script is only for local rehearsal or approved incident fallback.
@@ -15,7 +15,7 @@
 set -euo pipefail
 
 if [ "${ALLOW_VPS_SOURCE_BUILD:-}" != "owner-approved-emergency" ]; then
-  echo "Refusing source-build deployment on the VPS. Use .github/workflows/deploy.yml so GitHub Actions performs the build." >&2
+  echo "Refusing source-build deployment on the VPS. Use .github/workflows/build-images.yml + production-deploy.yml so GitHub Actions performs the build." >&2
   echo "For a specifically approved emergency exception, set ALLOW_VPS_SOURCE_BUILD=owner-approved-emergency." >&2
   exit 78
 fi

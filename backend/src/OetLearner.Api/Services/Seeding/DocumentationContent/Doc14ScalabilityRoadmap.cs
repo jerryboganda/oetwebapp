@@ -62,7 +62,7 @@ internal static class Doc14ScalabilityRoadmap
                 "the pattern here: each native surface has its own dedicated, currently-exercised CI workflow — " +
                 "`mobile-ci.yml` for Android/iOS builds, `apple-compatibility.yml` for iOS/macOS platform-floor " +
                 "verification, and dedicated desktop packaging/release workflows for the Tauri shell — alongside " +
-                "the core `deploy.yml` web/API pipeline (EV-SCALE-009). Continued investment in that reach is " +
+                "the core `build-images.yml`/`production-deploy.yml` web/API pipeline (EV-SCALE-009). Continued investment in that reach is " +
                 "directly evidenced in the dated record covered in DOC-13: the Apple compatibility hardening effort " +
                 "that raised the iOS floor and ran the iOS build job for the first time, and the synchronized " +
                 "Android/iOS/desktop parity release that followed it days later, are both real, dated engineering " +
@@ -151,7 +151,7 @@ internal static class Doc14ScalabilityRoadmap
                 "The AiProviderAccount entity: multiple credential/quota slots per provider with ascending-priority, atomic race-safe SQL-update failover once one account's quota is exhausted.",
                 "backend/src/OetLearner.Api/Domain/AiProviderEntities.cs (AiProviderAccount, concurrency-contract doc comment)"),
             new DocumentationEvidenceSeed("EV-SCALE-009", DocumentationEvidenceType.Deployment,
-                "Dedicated, currently-exercised per-surface CI workflows: mobile-ci.yml (Android/iOS build), apple-compatibility.yml (iOS/macOS platform-floor verification), and desktop packaging/release workflows, alongside the core deploy.yml web/API pipeline.",
+                "Dedicated, currently-exercised per-surface CI workflows: mobile-ci.yml (Android/iOS build), apple-compatibility.yml (iOS/macOS platform-floor verification), and desktop packaging/release workflows, alongside the core build-images.yml/production-deploy.yml web/API pipeline.",
                 ".github/workflows/ (mobile-ci.yml, apple-compatibility.yml, and desktop release workflow files present in this checkout)"),
             new DocumentationEvidenceSeed("EV-SCALE-010", DocumentationEvidenceType.Security,
                 "Live, admin-configurable AI cost-governance controls: a scoped global kill switch, a monthly USD budget with soft-warn/hard-kill percentage triggers, and per-user spend-anomaly detection against a trailing seven-day median.",

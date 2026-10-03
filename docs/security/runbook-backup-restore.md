@@ -26,7 +26,7 @@ Data that must be covered: the `oetwebsite_oet_postgres_data` volume (learners, 
 ## Backup jobs (existing)
 
 - **`db-backup` sidecar** (`oet-db-backup`, `docker-compose.production.yml`,
-  image built by `deploy.yml` `build-backup`, scripts in `scripts/backup/`).
+  image built by `build-images.yml` `build-backup`, scripts in `scripts/backup/`).
   On `BACKUP_SCHEDULE` (default `17 2 * * *`, 02:17 UTC daily) it writes a
   `pg_dump --format=custom` and a learner-media `tar.gz`, GPG-encrypts both
   (AES256) when `BACKUP_GPG_PASSPHRASE` is set, copies them to `BACKUP_S3_URL`

@@ -24,7 +24,8 @@ name: CI triage
 on:
   workflow_run:
     workflows:
-      - 'Build & Deploy (web + API)'
+      - 'Build images'
+      - 'Deploy production'
       - 'QA Smoke'
       - 'Jev integration'
     types: [completed]

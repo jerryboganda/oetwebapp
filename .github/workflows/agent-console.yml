@@ -6,7 +6,7 @@ name: Owner Agent Console (build + deploy)
 # PULL-ONLY (no build/test/install on the box — AGENTS.md compute directive;
 # asserted by scripts/deploy/verify-compute-offload.sh).
 #
-# Separate from deploy.yml on purpose: own compose project (`oet-agent-console`),
+# Separate from build-images.yml / production-deploy.yml on purpose: own compose project (`oet-agent-console`),
 # own concurrency group, and it only recreates the console when no agent turn
 # is running (or when dispatched with apply=true — the console's "Apply update"
 # drains first). Otherwise it pulls, leaves an update-pending marker on the
@@ -159,7 +159,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Deploy to VPS over SSH (pull + gated recreate)
         env:
-          # Same prod box / key as deploy.yml's deploy job.
+          # Same prod box / key as production-deploy.yml's deploy job.
           SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
           VPS_HOST: "185.252.233.186"
           VPS_USER: "root"

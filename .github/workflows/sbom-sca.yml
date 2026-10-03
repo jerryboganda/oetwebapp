@@ -1,10 +1,44 @@
 name: SBOM and SCA
 
 on:
+  # Dependency-surface changes only (owner directive 2026-10-03): a docs/code
+  # push that touches no dependency or image definition has nothing new for
+  # SBOM/SCA to say. The weekly run still catches newly-published advisories.
   pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'backend/**/*.csproj'
+      - 'backend/Directory.*.props'
+      - 'Directory.*.props'
+      - 'global.json'
+      - 'Dockerfile'
+      - 'backend/Dockerfile*'
+      - 'scripts/backup/Dockerfile'
+      - 'agent-gateway/Dockerfile'
+      - 'scripts/sbom-generate.sh'
+      - 'scripts/sca-scan.sh'
+      - '.github/workflows/sbom-sca.yml'
   push:
     branches:
       - main
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'backend/**/*.csproj'
+      - 'backend/Directory.*.props'
+      - 'Directory.*.props'
+      - 'global.json'
+      - 'Dockerfile'
+      - 'backend/Dockerfile*'
+      - 'scripts/backup/Dockerfile'
+      - 'agent-gateway/Dockerfile'
+      - 'scripts/sbom-generate.sh'
+      - 'scripts/sca-scan.sh'
+      - '.github/workflows/sbom-sca.yml'
+  schedule:
+    # Monday 06:00 UTC - drift check, no push required.
+    - cron: '0 6 * * 1'
   workflow_dispatch:
     inputs:
       fail_on:

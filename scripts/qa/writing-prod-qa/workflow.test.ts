@@ -47,7 +47,7 @@ describe('writing-prod-qa.yml', () => {
     expect(wf.jobs.guard.needs).toBeUndefined();
     expect(wf.jobs.unit.needs).toBe('guard');
     expect(wf.jobs.live.needs).toEqual(['guard', 'unit']);
-    expect(String(step('guard', /deploy/).run)).toMatch(/gh run list [^\n]*--workflow deploy\.yml/);
+    expect(String(step('guard', /deploy/).run)).toMatch(/gh run list [^\n]*--workflow deploy-production\.yml/);
     expect(step('guard', /Validate/).run).toBe('node scripts/qa/writing-prod-qa/run.mjs check-inputs');
     for (const job of ['guard', 'live']) expect(wf.jobs[job].permissions).toEqual({ actions: 'read', contents: 'read' });
     expect(wf.jobs.unit.permissions).toBeUndefined();

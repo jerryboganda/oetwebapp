@@ -45,9 +45,9 @@ Ask only when a missing decision blocks correctness or safety.
 
 ## GitHub Actions visibility + deploy ownership
 
-For every Actions run (deploy/CI/smoke/rerun): make `jerryboganda/oetwebapp` **public** first, start the run, then set it **private** again when the **needed** run finishes. Never leave it public. Never start Actions while it is private.
+For every Actions run (deploy/CI/smoke/rerun): make `jerryboganda/oetwebapp` **public** first, start the run, then set it **private** again when the **needed** run finishes. Never leave it public. Never start Actions while it is private. Several agents may be shipping at once: only flip private when no other session holds a ship lease and no run is queued/in progress (`node scripts/ship/ship.mjs --may-flip-private` exits 0); `pnpm run ship` enforces this automatically.
 
-After every `main` push: run `pnpm run ship:gate` before push, then `pnpm run ship:watch` (or `scripts/ship/watch-deploy.ps1`) until **Build & Deploy (web + API)** for this SHA succeeds and live health is green. On failure, dump logs, fix, push again — do not wait for the owner. Do not stop at "deploy initiated". Ignore QA Smoke. Private flip only after that deploy succeeds.
+After every `main` push: ship with `pnpm run ship` (lock → rebase → `ship:gate` → visibility lease → push → supersede-aware watch of **Deploy production** → `ax:record`); it must end with this SHA green and live health green. On failure, dump logs, fix, push again — do not wait for the owner. Do not stop at "deploy initiated". Ignore QA Smoke. There is **no automated e2e in CI** (owner directive 2026-10-03, hard rule): the Playwright specs are manual tools, bugs are reported by the owner and fixed on demand. Private flip only under the lease rule above.
 
 ## Execution Locality
 

@@ -3,7 +3,7 @@
 #
 # The prod VPS is a shared host (60+ co-tenant containers); building Next.js
 # in-place OOM-cascades the whole box. So images are built off-box in CI
-# (.github/workflows/deploy.yml) and this script only PULLS + recreates
+# (.github/workflows/build-images.yml + production-deploy.yml) and this script only PULLS + recreates
 # containers. Blue/green with a health gate: a broken commit fails the gate on
 # the inactive slot and the router is NOT flipped, so production stays up.
 #
@@ -127,12 +127,34 @@ pull_with_retry() {
   return 1
 }
 
-echo "--- pulling images ---"
-pull_with_retry "$WEB_IMAGE"
-pull_with_retry "$API_IMAGE"
-pull_with_retry "$DB_BACKUP_IMAGE"
+echo "--- pulling images (in parallel) ---"
+# Parallel pulls (owner directive 2026-10-03: minimum deploy time): the four
+# images are independent and the link is latency-bound, so pulling them at once
+# roughly halves the wait. Each pull keeps its own retry/backoff and any
+# failure still aborts the rollout before a slot is touched.
+pull_pids=()
+pull_labels=()
+start_pull() {
+  pull_labels+=("$1")
+  pull_with_retry "$2" &
+  pull_pids+=("$!")
+}
+start_pull web "$WEB_IMAGE"
+start_pull api "$API_IMAGE"
+start_pull db-backup "$DB_BACKUP_IMAGE"
 if [ -n "$AGENT_GATEWAY_IMAGE" ]; then
-  pull_with_retry "$AGENT_GATEWAY_IMAGE"
+  start_pull agent-gateway "$AGENT_GATEWAY_IMAGE"
+fi
+
+pull_failed=""
+for i in "${!pull_pids[@]}"; do
+  if ! wait "${pull_pids[$i]}"; then
+    pull_failed="$pull_failed ${pull_labels[$i]}"
+  fi
+done
+if [ -n "$pull_failed" ]; then
+  echo "  [pull] FAILED:$pull_failed" >&2
+  exit 1
 fi
 
 # The API slots join the internal-only network shared with the separate

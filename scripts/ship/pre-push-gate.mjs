@@ -588,7 +588,7 @@ export function selfTest() {
   }
 
   // Regression tripwire: the ledger advisory added to main() must stay guarded
-  // out of CI. deploy.yml runs `--self-test` then `--ci` on a bare checkout
+  // out of CI. build-images.yml runs `--self-test` then `--ci` on a bare checkout
   // where the ledger may be absent or stale, and neither may be able to fail
   // the gate.
   const ownSource = readFileSync(fileURLToPath(import.meta.url), 'utf8');
@@ -601,7 +601,7 @@ export function selfTest() {
 // Local-only advisory: surface a stale or dishonest state ledger without ever
 // changing this gate's verdict. The hard failure lives in `pnpm run ax:check`.
 // Not reachable in CI (guard at the call site, tripwire in selfTest) so
-// `deploy.yml`'s `--self-test` and `--ci` steps behave exactly as before.
+// `build-images.yml`'s `--self-test` and `--ci` steps behave exactly as before.
 async function reportLedgerAdvisory() {
   try {
     const { readLedger, checkState } = await import('../agent/state.mjs');
@@ -612,6 +612,24 @@ async function reportLedgerAdvisory() {
   } catch {
     // The ledger is advisory here; it must never affect the gate.
   }
+}
+
+// Owner directive 2026-10-03: the CI/CD rules are part of the gate, so a change
+// that bypasses the pipeline (a second rollout path, a re-added browser lane
+// with an automatic trigger, an un-filtered build trigger) cannot even leave
+// the workstation. Enforced in CI as well (the `guards` job of
+// build-images.yml runs the same checker), so deleting this file does not help:
+// that run fails and no image - and therefore no rollout - is produced.
+async function reportPipelineContract() {
+  const modulePath = resolve(root, 'scripts/deploy/verify-pipeline-contract.mjs');
+  if (!existsSync(modulePath)) {
+    console.log('pipeline-contract: checker missing on this branch - skipped here (the CI guards job still enforces it)');
+    return true;
+  }
+  const { scanRepo } = await import(pathToFileURL(modulePath).href);
+  const failures = scanRepo(root);
+  for (const failure of failures) console.error(`pipeline-contract: ${failure}`);
+  return failures.length === 0;
 }
 
 async function main(argv) {
@@ -638,6 +656,12 @@ async function main(argv) {
     process.exit(1);
   }
   console.log('ship-gate OK');
+
+  if (!(await reportPipelineContract())) {
+    console.error('ship-gate FAILED (pipeline contract) - the CI/CD rules are not bypassable');
+    process.exit(1);
+  }
+
   if (!ci && !process.env.CI && !process.env.GITHUB_ACTIONS) {
     await reportLedgerAdvisory();
   }

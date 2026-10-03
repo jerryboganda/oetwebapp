@@ -44,7 +44,7 @@ Where agent working memory lives. Layers have exclusive ownership — no file ha
 
 ## Operations
 
-- [DEPLOY-MANUAL.md](../DEPLOY-MANUAL.md) — how production deploys (`deploy.yml` → GHCR → blue/green); [DEPLOYMENT.md](../DEPLOYMENT.md) for env, compose files and disaster recovery.
+- [DEPLOY-MANUAL.md](../DEPLOY-MANUAL.md) — how production deploys (`build-images.yml` + `production-deploy.yml` → GHCR → blue/green); [DEPLOYMENT.md](../DEPLOYMENT.md) for env, compose files and disaster recovery.
 - [ops/production-compute-offload.md](ops/production-compute-offload.md) — what runs on Actions vs the VPS; [PRIVATE-CI-SELF-HOSTED-RUNNER.md](PRIVATE-CI-SELF-HOSTED-RUNNER.md) for the optional private runner.
 - [ADMIN-RUNTIME-SETTINGS.md](ADMIN-RUNTIME-SETTINGS.md) — secrets and settings managed from `/admin/settings`.
 - [ops/deploy-gate.md](ops/deploy-gate.md) and [ops/incident-response-runbook.md](ops/incident-response-runbook.md) — deploy approval, rollback and incidents.

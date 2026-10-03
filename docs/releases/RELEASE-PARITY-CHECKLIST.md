@@ -19,7 +19,7 @@ record that explicitly rather than leaving the row blank.
 | Surface | Version / deploy identifier | Where the identifier comes from | Rebuilt for this release? | Verified live? |
 | --- | --- | --- | --- | --- |
 | Public website (marketing) | *(e.g. commit sha / FTP deploy stamp)* | `OET Project Website` repo deploy | Yes / No / N/A | ☐ |
-| Web app — desktop + mobile browser | *(Build & Deploy run id + commit sha)* | `.github/workflows/deploy.yml` run for `<sha>`; live at `https://app.oetwithdrhesham.co.uk` | n/a (this is the web deploy) | ☐ |
+| Web app — desktop + mobile browser | *(Build images + Deploy production run ids + commit sha)* | `.github/workflows/build-images.yml` + `.github/workflows/production-deploy.yml` runs for `<sha>`; live at `https://app.oetwithdrhesham.co.uk` | n/a (this is the web deploy) | ☐ |
 | Android | *(versionName / versionCode, e.g. `1.4.13` / `8`)* — Play tracks: internal ☐ alpha ☐ VPS feed ☐ | `android/app/build.gradle`; Play tracks via `playstore.cli list-tracks`; feed `https://app.oetwithdrhesham.co.uk/api/releases/native?platform=android` | Yes / No | ☐ |
 | iOS | *(MARKETING_VERSION / CURRENT_PROJECT_VERSION)* | `ios/App/App.xcodeproj/project.pbxproj`; VPS feed `/api/releases/native?platform=ios`; TestFlight is a manual step | Yes / No | ☐ |
 | Windows (EXE) | *(Tauri version, e.g. `0.7.6`)* | `src-tauri/tauri.conf.json`; updater `https://app.oetwithdrhesham.co.uk/desktop/updates/latest.json` | Yes / No | ☐ |

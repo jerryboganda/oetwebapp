@@ -44,7 +44,7 @@ backend/.../Seeding/AntigravityGatewaySeeder.cs
 docker-compose.{dev,desktop,vps,production}.yml
                                agent-gateway service (internal network, healthcheck,
                                Mode B hard-disabled in production)
-.github/workflows/deploy.yml + scripts/deploy/auto-deploy-ghcr.sh
+.github/workflows/build-images.yml + production-deploy.yml + scripts/deploy/auto-deploy-ghcr.sh
                                GHCR image build/push + blue/green rollout includes the gateway
 docs/antigravity/              this doc + auth.md + roadmap.md + runbook.md +
                                parity-rubric.md + mobile-validation.md +

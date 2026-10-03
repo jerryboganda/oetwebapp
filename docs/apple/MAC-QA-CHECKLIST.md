@@ -57,4 +57,4 @@ On the production backend with a candidate account that has course access:
 
 - [ ] Repeat section B (3 videos) on the exact final notarized DMG installed in section A/E.
 
-**Verdict:** all boxes → 0.7.10 is release-approved; re-enable the Mac download by removing `NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED=1` from deploy.yml build args (and compose env) and record the flip in the release ledger.
+**Verdict:** all boxes → 0.7.10 is release-approved; re-enable the Mac download by removing `NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED=1` from the `build-images.yml` `build-web` build args (and compose env) and record the flip in the release ledger.

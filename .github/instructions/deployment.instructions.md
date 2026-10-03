@@ -48,11 +48,14 @@ that had already been superseded on live Play Console and had to be reverted.
 
 ## Post-push ownership (do not stop at "deploy initiated")
 
-- Required local gate before every `main` push: `pnpm run ship:gate` (`scripts/ship/pre-push-gate.mjs`). Seconds only. Catches conflict markers, leftover rebase splices, and brace imbalance. Not a full `pnpm build` / `dotnet test`.
-- After push, watch **only** `Build & Deploy (web + API)` for this SHA: `pnpm run ship:watch`. Dump `--log-failed` on red, fix, gate, push again without waiting for the owner. Ignore QA Smoke.
-- Once live health is green, run `pnpm run ax:record` then `pnpm run ax:verify` so `VERIFICATION.md` carries this SHA's real run ids — and only then flip the repo back to private.
-- `deploy.yml` `syntax-gate` job must stay first (`needs` of every image build). Do not remove it to "save a minute".
-- Flip the repo private only after this SHA's Build & Deploy succeeds. Then confirm public health + VPS image tags contain the SHA. VPS remains pull-only.
+- One command: `pnpm run ship` — ship lock → rebase on `origin/main` → `ship:gate` → visibility lease + public flip → push with rebase-retry → watch `Deploy production` → `ax:record` → lease release (private only when no other lease holder and no run queued/in-progress). Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--sha <sha>`, `--status`, `--release-lease`.
+- `pnpm run ship:gate` alone stays the seconds-long pre-push check inside that flow (conflict markers, leftover rebase splices, brace imbalance). Not a full `pnpm build` / `dotnet test`.
+- **Parallel agents (owner directive 2026-10-03):** never flip visibility by hand while another session is shipping — the wrapper owns the flips under a cross-session lease. A push may be SUPERSEDED before its deploy runs (the newest push contains it); the watcher follows the newer run and prints `SHIP-WATCH_SUPERSEDED_BY`. Ignore QA Smoke on a push: the 13-project e2e matrix is on-demand (nightly + dispatch) and no longer cancelled by the next push.
+- Once live health is green, `pnpm run ax:record` then `pnpm run ax:verify` (the wrapper already does this on a green watch) so `VERIFICATION.md` carries this SHA's real run ids.
+- `build-images.yml` `syntax-gate` job must stay first (`needs` of every image build). Do not remove it to "save a minute".
+- Rollbacks: `gh workflow run production-deploy.yml -f sha=<previous-sha>` — the images are already in GHCR, so no rebuild is needed.
+- **Pipeline-only deploys (hard enforced):** the rollout path is `Build images` → `Production deploy`; never SSH-deploy, never run the rollout script or `docker compose` on the VPS by hand, never add a second rollout workflow. `pnpm run pipeline:check` (`scripts/deploy/verify-pipeline-contract.mjs`) runs in the `guards` job of every build **and** inside `pnpm run ship:gate`, so a bypassing change fails the pipeline before images exist.
+- Flip the repo private only under the lease rule above. Then confirm public health + VPS image tags contain the SHA. VPS remains pull-only.
 
 ## VPS production operational notes
 
