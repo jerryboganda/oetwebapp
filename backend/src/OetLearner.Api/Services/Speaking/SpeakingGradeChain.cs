@@ -13,8 +13,9 @@ namespace OetLearner.Api.Services.Speaking;
 /// Level 1 pins the configured provider and model (the Claude Max subscription
 /// sidecar); on a provider failure level 2 replays the ORIGINAL unpinned request, i.e.
 /// today's default route, so grading works again the moment that route recovers.
-/// With no pinned provider configured this is a single unpinned call, exactly the
-/// behaviour before the chain existed.
+/// The configured pin can never be blank (<see cref="SpeakingGradingOptions"/> resolves blank to
+/// Max, RULE MAX-ALWAYS-ON); only null options (assessors built without DI, i.e. tests) make a
+/// single unpinned call.
 ///
 /// Level 1 runs under ONE wall-clock budget (<see cref="SpeakingGradingOptions.PinnedTimeoutSeconds"/>,
 /// default 900 s) that covers the sidecar's queue wait, the CLI run and the gateway's own

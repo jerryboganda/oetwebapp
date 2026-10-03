@@ -1,3 +1,5 @@
+using OetLearner.Api.Services.Writing;
+
 namespace OetLearner.Api.Configuration;
 
 /// <summary>
@@ -7,8 +9,9 @@ namespace OetLearner.Api.Configuration;
 /// (env <c>Speaking__Grading__PinnedProviderCode</c> / <c>Speaking__Grading__PinnedModel</c> /
 /// <c>Speaking__Grading__PinnedTimeoutSeconds</c>).
 ///
-/// An empty <see cref="PinnedProviderCode"/> switches the feature off: every grade is
-/// one unpinned gateway call, exactly the behaviour before this option existed.
+/// RULE MAX-ALWAYS-ON (AGENTS.md, owner directive 2026-10-02): the pin can NOT be switched off.
+/// <see cref="PinnedProviderCode"/> defaults to the Claude Max route and an empty or whitespace
+/// configured value also resolves to it, so every grade starts on Max.
 /// </summary>
 public sealed class SpeakingGradingOptions
 {
@@ -17,8 +20,14 @@ public sealed class SpeakingGradingOptions
     /// <summary>Largest <see cref="PinnedTimeoutSeconds"/> the chain honours; a bigger value is clamped to it.</summary>
     public const int MaxPinnedTimeoutSeconds = 1500;
 
-    /// <summary>Registry code of the provider row to try first (for example <c>writing-claude-sub</c>). Empty = off.</summary>
-    public string PinnedProviderCode { get; set; } = string.Empty;
+    private string _pinnedProviderCode = WritingSubscriptionProviders.Claude;
+
+    /// <summary>Registry code of the provider row to try first. Never empty: blank resolves to <c>writing-claude-sub</c> (Max).</summary>
+    public string PinnedProviderCode
+    {
+        get => _pinnedProviderCode;
+        set => _pinnedProviderCode = string.IsNullOrWhiteSpace(value) ? WritingSubscriptionProviders.Claude : value.Trim();
+    }
 
     /// <summary>Model to request from the pinned provider. Empty = the provider row's default model.</summary>
     public string PinnedModel { get; set; } = string.Empty;

@@ -602,8 +602,9 @@ rows. On 2026-09-30 the owner extended the same route to Speaking grading:
 - **What:** `speaking.grade` (classic and v1.1 assessors) tries the `writing-claude-sub` row
   (Claude Opus 5.5, effort `high`) first, and falls back to the default route (Anthropic API)
   when that call fails. Implemented by `SpeakingGradeChain`; configured by
-  `Speaking__Grading__PinnedProviderCode` / `Speaking__Grading__PinnedModel` (empty provider =
-  off). Details and revert: [`docs/speaking/ai-providers.md`](speaking/ai-providers.md).
+  `Speaking__Grading__PinnedProviderCode` / `Speaking__Grading__PinnedModel` (an empty
+  provider resolves to `writing-claude-sub`; the pin cannot be switched off, see AGENTS.md
+  MAX-ALWAYS-ON). Details and revert: [`docs/speaking/ai-providers.md`](speaking/ai-providers.md).
 - **Still under this policy (§0, §12):** the call goes through the coordinator and the gateway:
   grounding enforced, one `AiUsageRecord` per physical call (priced `0.00` on the sidecar row),
   kill switch, feature policy, platform budget reservation (spend booked; it refuses a call only
