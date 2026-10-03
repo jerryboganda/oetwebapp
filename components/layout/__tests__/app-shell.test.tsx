@@ -214,11 +214,49 @@ describe('AppShell', () => {
     });
   });
 
+  // The learner shell never passed userSummary, so every learner's profile
+  // chip degraded to "User / no email". AppShell must derive it from the auth
+  // session whenever the caller omits it, and keep an explicit override.
+  describe('header identity fallback', () => {
+    const learner = { requiredRole: 'learner', workspaceRole: 'learner' } as const;
+    const lastTopNavUserSummary = () =>
+      (topNavSpy.mock.lastCall?.[0] as Record<string, unknown> | undefined)?.userSummary;
+
+    beforeEach(() => {
+      topNavSpy.mockClear();
+    });
+
+    it('derives the header identity from the auth session when the caller omits userSummary', () => {
+      const auth = {
+        ...SIGNED_IN,
+        user: {
+          userId: 'u1',
+          displayName: 'Aisha Khan',
+          email: 'aisha@example.com',
+        },
+      } as AuthContextValue;
+      renderShellAt('/reading', learner, auth);
+
+      expect(lastTopNavUserSummary()).toEqual({ displayName: 'Aisha Khan', email: 'aisha@example.com' });
+    });
+
+    it('keeps an explicit userSummary override', () => {
+      renderShellAt('/reading', { ...learner, userSummary: { displayName: 'Staff', email: 'staff@example.com' } });
+
+      expect(lastTopNavUserSummary()).toEqual({ displayName: 'Staff', email: 'staff@example.com' });
+    });
+
+    it('passes no identity when signed out', () => {
+      renderShellAt('/reading', learner);
+
+      expect(lastTopNavUserSummary()).toBeUndefined();
+    });
+  });
+
   // Focus chrome has no brand, sidebar or bottom nav, and its only other menu
   // trigger is the hamburger, which is `lg:hidden`. Without an exit the header
   // was a dead end on a desktop-width exam.
-  describe('focus chrome exit', () => {
-    /** The exitControl AppShell handed the header on the latest render. */
+  describe('focus chrome exit', () => {    /** The exitControl AppShell handed the header on the latest render. */
     const lastTopNavExit = () =>
       (topNavSpy.mock.lastCall?.[0] as Record<string, unknown> | undefined)?.exitControl;
 

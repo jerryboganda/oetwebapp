@@ -122,6 +122,20 @@ public static partial class SeedData
             hasChanges = true;
         }
 
+        // Gamification (XP, streaks, achievements) is live for every learner and
+        // the header badges honor this flag (LearnerStreakBadges) — keep it ON
+        // the same way strategy_guides is forced on above, so a stale seeded
+        // `false` can never blank the learner header.
+        var gamificationFlag = await db.FeatureFlags.FirstOrDefaultAsync(flag => flag.Key == "gamification", cancellationToken);
+        if (gamificationFlag is not null && (!gamificationFlag.Enabled || gamificationFlag.RolloutPercentage < 100))
+        {
+            gamificationFlag.Enabled = true;
+            gamificationFlag.RolloutPercentage = 100;
+            gamificationFlag.Description = "Enable XP, streaks, achievements, and leaderboard gamification mechanics.";
+            gamificationFlag.UpdatedAt = DateTimeOffset.UtcNow;
+            hasChanges = true;
+        }
+
         if (!await db.AiQuotaPlans.AnyAsync(cancellationToken))
         {
             SeedAiQuotaPlans(db);

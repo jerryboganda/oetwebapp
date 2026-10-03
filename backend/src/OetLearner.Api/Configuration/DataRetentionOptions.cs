@@ -56,6 +56,21 @@ public sealed class DataRetentionOptions
     public TimeSpan SecurityEvents { get; set; } = TimeSpan.FromDays(180);
 
     /// <summary>
+    /// How long <c>NotificationInboxItems</c> rows are kept before deletion.
+    /// Default: 180 days. The inbox is a feed, not an archive — rows past the
+    /// window are noise on every learner's "All" tab.
+    /// </summary>
+    public TimeSpan NotificationInboxItems { get; set; } = TimeSpan.FromDays(180);
+
+    /// <summary>
+    /// Unread inbox items older than this are auto-marked read. Stops the
+    /// bell badge from pinning at "99+" when a learner never clears their
+    /// stale reminders; the rows stay visible under the "All" tab.
+    /// Default: 14 days.
+    /// </summary>
+    public TimeSpan NotificationInboxStaleUnread { get; set; } = TimeSpan.FromDays(14);
+
+    /// <summary>
     /// How often the sweeper runs. Default: 24 hours.
     /// </summary>
     public TimeSpan SweepInterval { get; set; } = TimeSpan.FromHours(24);

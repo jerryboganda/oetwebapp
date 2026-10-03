@@ -236,7 +236,10 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<NotificationConnectionStatus>('disconnected');
+  // Start as 'connecting', not 'disconnected': the bell/popover treat
+  // 'disconnected' as a degraded state, and pinning the placeholder there made
+  // every fresh mount look like an outage before the hub attempt even ran.
+  const [connectionStatus, setConnectionStatus] = useState<NotificationConnectionStatus>('connecting');
   const [preferences, setPreferences] = useState<NotificationPreferencePayload | null>(null);
   const [isPreferencesLoading, setIsPreferencesLoading] = useState(true);
   const [preferencesError, setPreferencesError] = useState<string | null>(null);

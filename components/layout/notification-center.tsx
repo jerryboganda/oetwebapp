@@ -357,7 +357,20 @@ function NotificationCenterContent({
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold tracking-tight text-navy">Notifications</h2>
             <p className="mt-0.5 text-2xs text-muted/70">
-              {unreadCount > 0 ? `${unreadCount} unread · ${totalCount} total` : 'All caught up'}
+              {/* Keep the header in step with the bell pill, which also counts
+                  the pinned admin alerts (they are not inbox rows, so they never
+                  appear in `unreadCount` or the Unread tab). */}
+              {unreadCount > 0 || adminAlerts.length > 0
+                ? [
+                    unreadCount > 0 ? `${unreadCount} unread` : null,
+                    adminAlerts.length > 0
+                      ? `${adminAlerts.length} admin alert${adminAlerts.length === 1 ? '' : 's'}`
+                      : null,
+                    `${totalCount} total`,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')
+                : 'All caught up'}
             </p>
           </div>
         </div>
@@ -628,7 +641,22 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
           'relative inline-flex h-11 w-11 items-center justify-center rounded-lg p-2.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           className,
         )}
-        aria-label={buttonProps['aria-label'] ?? `Notifications${displayUnreadCount > 0 ? ` (${displayUnreadCount} unread)` : ''}${isDegraded ? ' — live updates paused' : ''}`}
+        aria-label={
+          buttonProps['aria-label'] ??
+          `Notifications${
+            displayUnreadCount > 0
+              ? ` (${[
+                    unreadCount > 0 ? `${unreadCount} unread` : null,
+                    adminAlertCount > 0
+                      ? `${adminAlertCount} admin alert${adminAlertCount === 1 ? '' : 's'}`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(', ')})`
+              : ''
+          }${isDegraded ? ' — live updates paused' : ''}`
+        }
+        title="Notifications"
         aria-expanded={open ?? buttonProps['aria-expanded']}
         {...buttonProps}
       >

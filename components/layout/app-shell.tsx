@@ -72,6 +72,12 @@ export function AppShell({
 }: AppShellProps) {
   const authContext = useContext(AuthContext);
   const hasAuthProvider = authContext !== null;
+  // Staff shells pass userSummary explicitly; the learner shell historically did
+  // not, so the header/sidebar fell back to a generic "User". Derive it from the
+  // auth session whenever the caller omitted it.
+  const effectiveUserSummary: ShellUserSummary | undefined = userSummary ?? (authContext?.user
+    ? { displayName: authContext.user.displayName ?? null, email: authContext.user.email ?? null }
+    : undefined);
   const pathname = usePathname() ?? 'root';
   // Route entrance only after a client navigation, never on first paint
   // (adjust-state-on-prop-change; false on server and client, so no hydration diff).
@@ -126,7 +132,7 @@ export function AppShell({
           actions={navActions}
           items={mobileNavItems ?? navItems}
           sectionedItems={mobileMenuSections}
-          userSummary={userSummary}
+          userSummary={effectiveUserSummary}
           workspaceRole={workspaceRole}
           exitControl={<FocusExitControl />}
         />
@@ -160,7 +166,7 @@ export function AppShell({
         actions={navActions}
         items={mobileNavItems ?? navItems}
         sectionedItems={mobileMenuSections}
-        userSummary={userSummary}
+        userSummary={effectiveUserSummary}
         workspaceRole={workspaceRole}
         onOpenSearch={openSearch}
         onToggleSidebar={() => setSidebarCollapsed((current) => !current)}
@@ -172,7 +178,7 @@ export function AppShell({
           className={cn(sidebarCollapsed && 'lg:hidden')}
           items={navItems}
           groups={navGroups}
-          userSummary={userSummary}
+          userSummary={effectiveUserSummary}
           workspaceRole={workspaceRole}
         />
         <div className="flex min-w-0 flex-1 min-h-0 flex-col">
@@ -215,18 +221,18 @@ export function AppShell({
         actions={navActions}
         items={mobileNavItems ?? navItems}
         sectionedItems={mobileMenuSections}
-        userSummary={userSummary}
+        userSummary={effectiveUserSummary}
         workspaceRole={workspaceRole}
         onOpenSearch={openSearch}
       />
-      <Sidebar items={navItems} groups={navGroups} userSummary={userSummary} workspaceRole={workspaceRole} />
+      <Sidebar items={navItems} groups={navGroups} userSummary={effectiveUserSummary} workspaceRole={workspaceRole} />
       <div className="relative z-10 flex min-w-0 flex-1 min-h-0 flex-col">
         <TopNav
           className="hidden lg:flex"
           pageTitle={pageTitle}
           actions={navActions}
           items={navItems}
-          userSummary={userSummary}
+          userSummary={effectiveUserSummary}
           workspaceRole={workspaceRole}
           onOpenSearch={openSearch}
         />

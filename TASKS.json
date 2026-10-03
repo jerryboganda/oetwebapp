@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-02",
+  "updated": "2026-10-04",
   "statuses": [
     "pending",
     "in_progress",
@@ -9,203 +9,125 @@
   ],
   "tasks": [
     {
-      "id": "WAI-00",
-      "title": "Evidence-first diagnosis: production-diagnostics gains diagnose_latest_failures + verify_api_model (the one authorised paid check); record the root-cause table",
+      "id": "LDB-01",
+      "title": "Profile identity: AppShell derives effectiveUserSummary from AuthContext when the caller omits userSummary (learner chip stops showing 'User')",
       "status": "done",
-      "owner": "writing-ai-launch",
+      "owner": "learner-dashboard-fixes",
       "blockedBy": [],
-      "verify": "writing-rev8-ci.yml",
+      "verify": "qa-smoke.yml",
       "evidence": [
-        "writing-rev8-ci.yml run 37018040352 (production-latest-diagnostics + verify_api_model ok)",
-        "writing-rev8-ci.yml run 37018897335 (breakdowns, L1/L3 profiles, catalogue, subscription probes ok)"
+        "components/layout/app-shell.tsx effectiveUserSummary derivation (carried from interrupted session, verified against HEAD)"
       ],
       "files": [
-        ".github/workflows/writing-rev8-ci.yml",
-        "scripts/qa/writing-prod-diagnose.mjs",
-        "SESSION_STATE.md"
+        "components/layout/app-shell.tsx"
       ]
     },
     {
-      "id": "WAI-01",
-      "title": "Credit invariant: charge once at task open, hold on failure, Retry costs 0, plan-gate bypass, real-ledger tests",
-      "status": "pending",
-      "owner": "writing-ai-launch",
+      "id": "LDB-02",
+      "title": "Gamification split-brain merge: XP/streak/achievements/leaderboard read through reading-pathway + engagement stores",
+      "status": "done",
+      "owner": "learner-dashboard-fixes",
       "blockedBy": [],
-      "verify": "writing-rev8-ci.yml",
-      "evidence": [],
+      "verify": "qa-smoke.yml",
+      "evidence": [
+        "backend/src/OetLearner.Api/Services/GamificationService.cs (carried from interrupted session, verified; DbSet cases LearnerXPs vs LearnerXps confirmed distinct)"
+      ],
       "files": [
-        "backend/src/OetLearner.Api/Services/Writing/WritingEntitlementService.cs",
-        "backend/src/OetLearner.Api/Services/Ai/AiCreditReservationService.cs",
-        "backend/src/OetLearner.Api/Services/Writing/WritingSubmissionEvaluationPipeline.cs"
+        "backend/src/OetLearner.Api/Services/GamificationService.cs"
       ]
     },
     {
-      "id": "WAI-02",
-      "title": "Spend-cap switch (off), Max weekly auto-switch removed, Codex model -> gpt-6.1-sol (backend + admin UI + docs)",
-      "status": "pending",
-      "owner": "writing-ai-launch",
+      "id": "LDB-03",
+      "title": "Notification inbox retention: purge 180d rows, mark 14d stale unread read (bell unpins from 99+)",
+      "status": "done",
+      "owner": "learner-dashboard-fixes",
       "blockedBy": [],
-      "verify": "writing-rev8-ci.yml",
-      "evidence": [],
-      "files": [
-        "backend/src/OetLearner.Api/Domain/AiQuotaEntities.cs",
-        "backend/src/OetLearner.Api/Services/AiManagement/AiQuotaService.cs",
-        "backend/src/OetLearner.Api/Services/Ai/AiBudgetService.cs",
-        "app/admin/ai-usage/page.tsx"
-      ]
-    },
-    {
-      "id": "WAI-03",
-      "title": "Grade chain (epoch slots, per-attempt budgets, failover classes), failure codes, auto-resume cron, shutdown requeue, grading/paper page copy",
-      "status": "pending",
-      "owner": "writing-ai-launch",
-      "blockedBy": [
-        "WAI-01"
+      "verify": "qa-smoke.yml",
+      "evidence": [
+        "DataRetentionWorker.cs inboxItems/staleUnread sweeps + DataRetentionOptions defaults (carried from interrupted session, verified; worker registered in Program.cs)"
       ],
-      "verify": "writing-rev8-ci.yml",
-      "evidence": [],
       "files": [
-        "backend/src/OetLearner.Api/Services/Writing/WritingGradeChain.cs",
-        "backend/src/OetLearner.Api/Services/Writing/WritingSubmissionEvaluationPipeline.cs",
-        "backend/src/OetLearner.Api/Services/Writing/Crons/WritingCrons.cs",
-        "app/(learner)/writing/submissions/[id]/grading/page.tsx"
+        "backend/src/OetLearner.Api/Services/DataRetentionWorker.cs",
+        "backend/src/OetLearner.Api/Configuration/DataRetentionOptions.cs"
       ]
     },
     {
-      "id": "WAI-04",
-      "title": "Sidecar hardening: abort-on-disconnect, queue bounds, readyz, typed auth error, Codex quota-detection fix, gpt-6.1-sol default, compose + writing-ai.yml tests",
-      "status": "pending",
-      "owner": "writing-ai-launch",
+      "id": "LDB-04",
+      "title": "Bell truthfulness: badge/popover count consistency with labeled admin alerts, 99+ cap, degraded UI only after a real failed hub attempt",
+      "status": "done",
+      "owner": "learner-dashboard-fixes",
       "blockedBy": [],
-      "verify": "writing-ai.yml",
-      "evidence": [],
-      "files": [
-        "writing-ai-sidecars/",
-        "docker-compose.writing-ai.yml",
-        ".github/workflows/writing-ai.yml"
-      ]
-    },
-    {
-      "id": "WAI-05",
-      "title": "QA-only per-learner fault switch (writing_grade_fault / writing_grade_fault_l1l2)",
-      "status": "pending",
-      "owner": "writing-ai-launch",
-      "blockedBy": [
-        "WAI-03"
+      "verify": "qa-smoke.yml",
+      "evidence": [
+        "notification-center.tsx header/aria-label joins + context initial 'connecting' (this session)"
       ],
-      "verify": "writing-rev8-ci.yml",
-      "evidence": [],
       "files": [
-        "backend/src/OetLearner.Api/Services/Writing/WritingQaFault.cs"
+        "components/layout/notification-center.tsx",
+        "contexts/notification-center-context.tsx"
       ]
     },
     {
-      "id": "WAI-06",
-      "title": "Draft backend (CAS, timers, consume), my-work API, free-sample failed state, attempt-scoped submit lock, failed-row reuse",
-      "status": "pending",
-      "owner": "writing-ai-launch",
+      "id": "LDB-05",
+      "title": "Gamification flag honored: header badges hide on explicit false only; seeding forces the flag on (strategy_guides idiom)",
+      "status": "done",
+      "owner": "learner-dashboard-fixes",
       "blockedBy": [],
-      "verify": "writing-rev8-ci.yml",
-      "evidence": [],
-      "files": [
-        "backend/src/OetLearner.Api/Services/Writing/WritingDraftServiceV2.cs",
-        "backend/src/OetLearner.Api/Services/Writing/WritingMyWorkService.cs",
-        "backend/src/OetLearner.Api/Services/FreeSamples/FreeSampleService.cs"
-      ]
-    },
-    {
-      "id": "WAI-07",
-      "title": "Editor restore fix, draft sync engine, server-restored timer, Resume writing, offline-safe submit rules, revise/mock/paper adoption",
-      "status": "pending",
-      "owner": "writing-ai-launch",
-      "blockedBy": [
-        "WAI-06"
+      "verify": "qa-smoke.yml",
+      "evidence": [
+        "learner-streak-badges.tsx useFeatureFlagMap gate + SeedData.cs upsert (this session)"
       ],
-      "verify": "writing-rev8-ci.yml",
-      "evidence": [],
       "files": [
-        "components/domain/writing/WritingEditorV2.tsx",
-        "hooks/use-writing-draft-sync.ts",
-        "app/(learner)/writing/practice/session/[scenarioId]/page.tsx"
+        "components/layout/learner-streak-badges.tsx",
+        "backend/src/OetLearner.Api/Services/SeedData.cs",
+        "backend/src/OetLearner.Api/Services/SeedData.DemoUserData.cs"
       ]
     },
     {
-      "id": "WAI-08",
-      "title": "Post Submissions UI (my-work list, Resume banner, Retry on list/detail, free-sample routing)",
-      "status": "pending",
-      "owner": "writing-ai-launch",
-      "blockedBy": [
-        "WAI-03",
-        "WAI-06"
-      ],
-      "verify": "writing-rev8-ci.yml",
-      "evidence": [],
-      "files": [
-        "components/domain/writing/WritingMyWorkList.tsx",
-        "app/(learner)/submissions/page.tsx",
-        "components/domain/free-sample-launcher.tsx"
-      ]
-    },
-    {
-      "id": "WAI-09",
-      "title": "Report UI: Appeal removed, Preparing model answer, new section order + View all corrections, desktop guard, mobile overlay fix",
-      "status": "pending",
-      "owner": "writing-ai-launch",
+      "id": "LDB-06",
+      "title": "Polish: theme toggle renders immediately (no placeholder flash), tooltips on header icon chips",
+      "status": "done",
+      "owner": "learner-dashboard-fixes",
       "blockedBy": [],
-      "verify": "writing-rev8-ci.yml",
-      "evidence": [],
+      "verify": "qa-smoke.yml",
+      "evidence": [
+        "theme-toggle.tsx CSS glyph swap; title attrs on bell, account, streak/level chips (this session)"
+      ],
       "files": [
-        "app/(learner)/writing/submissions/[id]/results/page.tsx",
-        "components/shell/ShellControls.tsx",
-        "messages/en/writing.json"
+        "components/ui/theme-toggle.tsx",
+        "components/layout/profile-menu.tsx",
+        "components/layout/learner-streak-badges.tsx",
+        "components/layout/notification-center.tsx"
       ]
     },
     {
-      "id": "WAI-10",
-      "title": "Live QA harness on Actions (writing-prod-qa.yml): discover, matrix, acceptance, ui, evidence",
-      "status": "pending",
-      "owner": "writing-ai-launch",
-      "blockedBy": [
-        "WAI-05",
-        "WAI-06",
-        "WAI-07",
-        "WAI-08",
-        "WAI-09"
+      "id": "LDB-07",
+      "title": "Tests: backend GamificationService merge coverage + frontend identity/bell/badge-flag suites",
+      "status": "done",
+      "owner": "learner-dashboard-fixes",
+      "blockedBy": [],
+      "verify": "qa-smoke.yml",
+      "evidence": [
+        "backend/tests/OetLearner.Api.Tests/GamificationServiceTests.cs (new, 5 tests)",
+        "components/layout/__tests__/app-shell.test.tsx (+3), notification-center.test.tsx (+3, 2 updated), learner-streak-badges.test.tsx (new, 4)"
       ],
-      "verify": "writing-prod-qa.yml",
-      "evidence": [],
       "files": [
-        ".github/workflows/writing-prod-qa.yml",
-        "scripts/qa/writing-prod-qa/"
+        "backend/tests/OetLearner.Api.Tests/GamificationServiceTests.cs",
+        "components/layout/__tests__/app-shell.test.tsx",
+        "components/layout/__tests__/notification-center.test.tsx",
+        "components/layout/__tests__/learner-streak-badges.test.tsx"
       ]
     },
     {
-      "id": "WAI-11",
-      "title": "Ship increments to main, watch deploys, run live QA, fix loop",
-      "status": "pending",
-      "owner": "writing-ai-launch",
-      "blockedBy": [
-        "WAI-10"
-      ],
-      "verify": "deploy.yml",
-      "evidence": [],
-      "files": []
-    },
-    {
-      "id": "WAI-12",
-      "title": "Evidence report (QA-2 table + 15 rows), docs, memory, owner notification",
-      "status": "pending",
-      "owner": "writing-ai-launch",
-      "blockedBy": [
-        "WAI-11"
-      ],
-      "verify": "pnpm run ax:check",
+      "id": "LDB-08",
+      "title": "Ship: commit, public repo, pnpm run ship, qa-smoke green on SHA, deploy, live confirmation, ax:record",
+      "status": "in_progress",
+      "owner": "learner-dashboard-fixes",
+      "blockedBy": [],
+      "verify": "qa-smoke.yml",
       "evidence": [],
       "files": [
-        "docs/ops/WRITING-AI-PROVIDERS.md",
-        "docs/AI-USAGE-POLICY.md",
-        "docs/qa/WRITING-PROD-QA.md",
-        "PROGRESS.md"
+        "SESSION_STATE.md",
+        "VERIFICATION.md"
       ]
     }
   ]

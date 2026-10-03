@@ -13,7 +13,7 @@ const mockNotificationContext = {
   isLoading: false,
   isRefreshing: false,
   error: null,
-  connectionStatus: 'connected' as const,
+  connectionStatus: 'connected' as string,
   preferences: null,
   isPreferencesLoading: false,
   preferencesError: null,
@@ -83,8 +83,9 @@ describe('NotificationCenter', () => {
     useAdminAlertsMock.mockReturnValue({ status: 'ready', alerts: [], totalAlertCount: 3 });
     renderWithRouter(<NotificationCenter />);
 
-    // Inbox unread (8) + admin alerts (3) → 11 inside the single existing pill.
-    expect(screen.getAllByRole('button', { name: /notifications \(11 unread\)/i }).length).toBeGreaterThan(0);
+    // Inbox unread (8) + admin alerts (3) inside the single existing pill — and
+    // the accessible name states both parts instead of the old sum-as-unread.
+    expect(screen.getAllByRole('button', { name: /notifications \(8 unread, 3 admin alerts\)/i }).length).toBeGreaterThan(0);
   });
 
   it('renders the Admin alerts section above the inbox and navigates without calling markRead', () => {
@@ -113,7 +114,7 @@ describe('NotificationCenter', () => {
     });
     renderWithRouter(<NotificationCenter />);
 
-    const [desktopBell] = screen.getAllByRole('button', { name: /notifications \(13 unread\)/i });
+    const [desktopBell] = screen.getAllByRole('button', { name: /notifications \(8 unread, 5 admin alerts\)/i });
     fireEvent.click(desktopBell);
 
     // Pinned group header renders with its own count chip.
@@ -146,5 +147,45 @@ describe('NotificationCenter', () => {
     expect(screen.getByText(/no notifications yet/i)).toBeInTheDocument();
     rerender(at('/admin/billing'));
     expect(screen.queryByText(/no notifications yet/i)).not.toBeInTheDocument();
+  });
+
+  describe('bell pill and header counts', () => {
+    afterEach(() => {
+      mockNotificationContext.unreadCount = 8;
+      mockNotificationContext.connectionStatus = 'connected';
+    });
+
+    it('caps the pill at 99+', () => {
+      mockNotificationContext.unreadCount = 95;
+      useAdminAlertsMock.mockReturnValue({ status: 'ready', alerts: [], totalAlertCount: 10 });
+      renderWithRouter(<NotificationCenter />);
+
+      // 95 + 10 = 105 → the pill shows the cap, not the raw sum.
+      expect(screen.getAllByText('99+').length).toBeGreaterThan(0);
+      expect(screen.queryByText('105')).not.toBeInTheDocument();
+    });
+
+    it('keeps the popover header in step with the pill when admin alerts are pinned', () => {
+      useAdminAlertsMock.mockReturnValue({ status: 'ready', alerts: [], totalAlertCount: 3 });
+      renderWithRouter(<NotificationCenter />);
+
+      fireEvent.click(screen.getAllByRole('button', { name: /notifications \(8 unread, 3 admin alerts\)/i })[0]);
+
+      expect(screen.getByText(/8 unread · 3 admin alerts · 8 total/i)).toBeInTheDocument();
+    });
+
+    it('treats a fresh mount as connecting — no offline banner or degraded dot until a real failure', () => {
+      mockNotificationContext.connectionStatus = 'connecting';
+      renderWithRouter(<NotificationCenter />);
+
+      expect(screen.queryByText(/offline\. updates may be delayed/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/live updates paused/i)).not.toBeInTheDocument();
+
+      mockNotificationContext.connectionStatus = 'disconnected';
+      renderWithRouter(<NotificationCenter />);
+
+      // A real failed attempt is the only thing that may park it offline.
+      expect(screen.getAllByText(/offline\. updates may be delayed/i).length).toBeGreaterThan(0);
+    });
   });
 });

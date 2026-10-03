@@ -82,6 +82,7 @@ export function ProfileMenu({
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="menu"
         aria-expanded={open}
+        title={displayName ? `Account — ${displayName}` : 'Account'}
         className={cn(
           'flex items-center gap-2.5 rounded-full p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 lg:rounded-xl lg:p-1.5 lg:pr-3',
           HEADER_CHIP,

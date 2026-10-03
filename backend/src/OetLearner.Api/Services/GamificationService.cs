@@ -12,7 +12,9 @@ public class GamificationService(LearnerDbContext db)
     public async Task<object> GetXpAsync(string userId, CancellationToken ct)
     {
         var xp = await EnsureXpAsync(userId, ct);
-        return MapXp(xp);
+        var readingTotal = await GetReadingTotalXpAsync(userId, ct);
+        var mergedTotal = xp.TotalXP + readingTotal;
+        return MapXp(xp, mergedTotal, ComputeLevel(mergedTotal));
     }
 
     public async Task<object> AwardXpAsync(string userId, int amount, string reason, CancellationToken ct)
@@ -63,7 +65,25 @@ public class GamificationService(LearnerDbContext db)
     public async Task<object> GetStreakAsync(string userId, CancellationToken ct)
     {
         var streak = await EnsureStreakAsync(userId, ct);
-        return MapStreak(streak);
+        var reading = await GetLatestStreakRecordAsync(userId, ct);
+        var engagement = await db.Users.AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new { u.CurrentStreak, u.LongestStreak, u.LastPracticeDate })
+            .SingleOrDefaultAsync(ct);
+
+        var mergedCurrent = Math.Max(streak.CurrentStreak, Math.Max(reading?.CurrentStreak ?? 0, engagement?.CurrentStreak ?? 0));
+        var mergedLongest = Math.Max(streak.LongestStreak, Math.Max(reading?.LongestStreak ?? 0, engagement?.LongestStreak ?? 0));
+
+        var lastActive = streak.LastActiveDate;
+        if (reading is not null && reading.HasActivity && reading.Date > lastActive)
+            lastActive = reading.Date;
+        if (engagement?.LastPracticeDate is { } lastPractice)
+        {
+            var practiceDate = DateOnly.FromDateTime(lastPractice.UtcDateTime);
+            if (practiceDate > lastActive) lastActive = practiceDate;
+        }
+
+        return MapStreak(streak, mergedCurrent, mergedLongest, lastActive);
     }
 
     public async Task<object> RecordActivityAsync(string userId, CancellationToken ct)
@@ -154,6 +174,7 @@ public class GamificationService(LearnerDbContext db)
             {
                 Xp = xpRow,
                 CurrentStreak = (int?)streak.CurrentStreak ?? 0,
+                EngagementCurrentStreak = user.CurrentStreak,
                 AttemptCount = db.Attempts.Count(a => a.UserId == user.Id),
                 VocabAdded = db.LearnerVocabularies.Count(v => v.UserId == user.Id),
                 VocabMastered = db.LearnerVocabularies.Count(v =>
@@ -162,15 +183,23 @@ public class GamificationService(LearnerDbContext db)
             })
             .SingleOrDefaultAsync(ct);
 
+        var readingTotal = await GetReadingTotalXpAsync(userId, ct);
+        var latestReadingStreak = await GetLatestStreakRecordAsync(userId, ct);
+
         var xp = prerequisites?.Xp;
+        var mergedTotalXp = (xp?.TotalXP ?? 0) + readingTotal;
+        var mergedStreak = Math.Max(prerequisites?.CurrentStreak ?? 0,
+            Math.Max(latestReadingStreak?.CurrentStreak ?? 0, prerequisites?.EngagementCurrentStreak ?? 0));
 
         var toAward = new List<Achievement>();
         foreach (var ach in candidates)
         {
             if (MeetsCriteria(
                 ach,
-                xp,
-                prerequisites?.CurrentStreak ?? 0,
+                xp is null
+                    ? (readingTotal > 0 ? new LearnerXP { TotalXP = readingTotal, Level = ComputeLevel(readingTotal) } : null)
+                    : new LearnerXP { TotalXP = mergedTotalXp, Level = ComputeLevel(mergedTotalXp), WeeklyXP = xp.WeeklyXP, MonthlyXP = xp.MonthlyXP },
+                mergedStreak,
                 prerequisites?.AttemptCount ?? 0,
                 prerequisites?.VocabAdded ?? 0,
                 prerequisites?.VocabMastered ?? 0))
@@ -270,18 +299,33 @@ public class GamificationService(LearnerDbContext db)
                                 Xp = x,
                             }).ToListAsync(ct);
 
+        var periodIsAllTime = string.Equals(NormalisePeriod(period), "alltime", StringComparison.OrdinalIgnoreCase);
+        Dictionary<string, long> readingXpByUser = [];
+        if (periodIsAllTime && joined.Count > 0)
+        {
+            var userIds = joined.Select(r => r.UserId).ToHashSet();
+            readingXpByUser = await db.LearnerXps.AsNoTracking()
+                .Where(x => userIds.Contains(x.UserId))
+                .ToDictionaryAsync(x => x.UserId, x => (long)x.TotalXp, ct);
+        }
+
         return joined
             // A learner may hold more than one registry row (one per exam type);
             // collapse to a single standing so they cannot occupy two ranks.
             .GroupBy(r => r.UserId)
             .Select(g => g.First())
-            .Select(r => new RankedLeaderboardRow(
-                r.UserId,
-                r.DisplayName,
-                r.ExamTypeCode,
-                PeriodXp(r.Xp, period),
-                r.Xp.Level,
-                0))
+            .Select(r =>
+            {
+                var reading = readingXpByUser.GetValueOrDefault(r.UserId);
+                var total = periodIsAllTime ? r.Xp.TotalXP + reading : PeriodXp(r.Xp, period);
+                return new RankedLeaderboardRow(
+                    r.UserId,
+                    r.DisplayName,
+                    r.ExamTypeCode,
+                    total,
+                    periodIsAllTime ? ComputeLevel(r.Xp.TotalXP + reading) : r.Xp.Level,
+                    0);
+            })
             .OrderByDescending(r => r.Xp)
             .ThenBy(r => r.DisplayName, StringComparer.OrdinalIgnoreCase)
             .Select((r, i) => r with { Rank = i + 1 })
@@ -403,6 +447,24 @@ public class GamificationService(LearnerDbContext db)
         return streak;
     }
 
+    /// <summary>
+    /// XP and streaks are also written by the Reading pathway (LearnerXp /
+    /// StreakRecord) and the engagement mirror on Users. Merge those sources at
+    /// read time so the top-bar badges, /achievements and the leaderboard
+    /// reflect all learner activity, not just grammar/study-plan awards.
+    /// </summary>
+    private async Task<long> GetReadingTotalXpAsync(string userId, CancellationToken ct) =>
+        await db.LearnerXps.AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .Select(x => (long?)x.TotalXp)
+            .SingleOrDefaultAsync(ct) ?? 0L;
+
+    private async Task<StreakRecord?> GetLatestStreakRecordAsync(string userId, CancellationToken ct) =>
+        await db.StreakRecords.AsNoTracking()
+            .Where(s => s.UserId == userId)
+            .OrderByDescending(s => s.Date)
+            .FirstOrDefaultAsync(ct);
+
     private static int ComputeLevel(long totalXp)
     {
         // Level thresholds: 1=0, 2=100, 3=300, 4=600, 5=1000, 6=1500, 7=2100, 8=2800, ...
@@ -412,15 +474,20 @@ public class GamificationService(LearnerDbContext db)
         return Math.Min(level, 100);
     }
 
-    private static object MapXp(LearnerXP xp) => new
+    private static object MapXp(LearnerXP xp, long? totalXP = null, int? level = null)
     {
-        totalXP = xp.TotalXP,
-        weeklyXP = xp.WeeklyXP,
-        monthlyXP = xp.MonthlyXP,
-        level = xp.Level,
-        nextLevelXP = ComputeLevelThreshold(xp.Level + 1),
-        currentLevelXP = ComputeLevelThreshold(xp.Level)
-    };
+        var total = totalXP ?? xp.TotalXP;
+        var lvl = level ?? xp.Level;
+        return new
+        {
+            totalXP = total,
+            weeklyXP = xp.WeeklyXP,
+            monthlyXP = xp.MonthlyXP,
+            level = lvl,
+            nextLevelXP = ComputeLevelThreshold(lvl + 1),
+            currentLevelXP = ComputeLevelThreshold(lvl)
+        };
+    }
 
     private static long ComputeLevelThreshold(int level)
     {
@@ -428,11 +495,11 @@ public class GamificationService(LearnerDbContext db)
         return (long)(100 * level * (level - 1) / 2);
     }
 
-    private static object MapStreak(LearnerStreak s) => new
+    private static object MapStreak(LearnerStreak s, int? currentStreak = null, int? longestStreak = null, DateOnly? lastActiveDate = null) => new
     {
-        currentStreak = s.CurrentStreak,
-        longestStreak = s.LongestStreak,
-        lastActiveDate = s.LastActiveDate,
+        currentStreak = currentStreak ?? s.CurrentStreak,
+        longestStreak = longestStreak ?? s.LongestStreak,
+        lastActiveDate = lastActiveDate ?? s.LastActiveDate,
         streakFreezesAvailable = s.StreakFreezeCount - s.StreakFreezeUsedCount
     };
 

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Flame, Zap } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { useIncreaseSinceLastVisit } from '@/hooks/use-increase-since-last-visit';
+import { useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import { useStreak, useXp } from '@/lib/query/hooks';
 import { cn } from '@/lib/utils';
 import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
@@ -41,6 +42,12 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
   const userId = user?.userId ?? '';
   const { data: streakData } = useStreak(userId, { enabled: Boolean(userId) });
   const { data: xpData } = useXp(userId, { enabled: Boolean(userId) });
+  // The `gamification` release flag genuinely gates these badges. Hidden only
+  // on an explicit `false`: the flag map is empty until it resolves and stays
+  // empty on a failed fetch, so a flag-endpoint blip can never strip the
+  // header chips (the seeding forces the flag on — see SeedData.cs).
+  const featureFlags = useFeatureFlagMap(['gamification'], Boolean(userId));
+  const gamificationOff = featureFlags.gamification === false;
 
   const streak = (streakData as { currentStreak: number } | undefined)?.currentStreak ?? null;
   const xp = (xpData as XpSummary | undefined) ?? null;
@@ -48,7 +55,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
   const streakUp = useIncreaseSinceLastVisit('oet_last_seen_streak', streak);
   const levelUp = useIncreaseSinceLastVisit('oet_last_seen_level', xp?.level);
 
-  if (streak === null && xp === null) return null;
+  if (gamificationOff || (streak === null && xp === null)) return null;
 
   const span = xp ? Math.max(1, xp.nextLevelXP - xp.currentLevelXP) : 1;
   const gained = xp ? Math.max(0, xp.totalXP - xp.currentLevelXP) : 0;
@@ -61,6 +68,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
         <Link
           href="/achievements"
           aria-label={`Current streak: ${streak} days`}
+          title={`Current streak: ${streak} days`}
           className={cn('flex items-center gap-2.5 rounded-xl p-1.5 lg:pr-3.5', HEADER_CHIP, HEADER_CHIP_HOVER)}
         >
           <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-warning/15 text-warning-strong', streakUp && 'flame-pop')}>
@@ -77,6 +85,7 @@ export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
         <Link
           href="/achievements"
           aria-label={`Level ${xp.level}, ${tier}, ${progress}% to next level`}
+          title={`Level ${xp.level} · ${tier} · ${progress}% to next level`}
           className={cn('flex items-center gap-2.5 rounded-xl p-1.5 lg:pr-3.5', HEADER_CHIP, HEADER_CHIP_HOVER)}
         >
           <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary', levelUp && 'pop-in')}>

@@ -106,6 +106,33 @@ public sealed class DataRetentionWorker(
                 .ExecuteDeleteAsync(ct);
         }
 
+        var inboxItems = 0;
+        if (settings.NotificationInboxItems > TimeSpan.Zero)
+        {
+            var cutoff = now - settings.NotificationInboxItems;
+            inboxItems = await db.NotificationInboxItems
+                .Where(i => i.CreatedAt < cutoff)
+                .OrderBy(i => i.CreatedAt)
+                .Take(batch)
+                .ExecuteDeleteAsync(ct);
+        }
+
+        var staleUnread = 0;
+        if (settings.NotificationInboxStaleUnread > TimeSpan.Zero)
+        {
+            var cutoff = now - settings.NotificationInboxStaleUnread;
+            var stale = await db.NotificationInboxItems
+                .Where(i => !i.IsRead && i.CreatedAt < cutoff)
+                .OrderBy(i => i.CreatedAt)
+                .Take(batch)
+                .ToListAsync(ct);
+            foreach (var item in stale)
+            {
+                item.IsRead = true;
+            }
+            staleUnread = await db.SaveChangesAsync(ct) > 0 ? stale.Count : 0;
+        }
+
         var securityEvents = 0;
         if (settings.SecurityEvents > TimeSpan.Zero)
         {
@@ -124,11 +151,11 @@ public sealed class DataRetentionWorker(
                 rawResponses = await store.PurgeExpiredAsync(batch, ct);
         }
 
-        if (analytics + audit + webhooks + deliveries + securityEvents + rawResponses > 0)
+        if (analytics + audit + webhooks + deliveries + securityEvents + rawResponses + inboxItems + staleUnread > 0)
         {
             logger.LogInformation(
-                "Data-retention swept: analytics={A} audit={U} webhooks={W} deliveries={D} securityEvents={S} rawResponses={R}",
-                analytics, audit, webhooks, deliveries, securityEvents, rawResponses);
+                "Data-retention swept: analytics={A} audit={U} webhooks={W} deliveries={D} securityEvents={S} rawResponses={R} inboxItems={I} staleUnread={M}",
+                analytics, audit, webhooks, deliveries, securityEvents, rawResponses, inboxItems, staleUnread);
         }
     }
 }
