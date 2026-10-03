@@ -8,9 +8,9 @@ vi.mock('@/lib/api', () => ({ apiClient: { request: vi.fn() } }));
 
 import { NewSessionDialog } from '../NewSessionDialog';
 import type { EngineCapabilities } from '../EngineModelEffortPicker';
-import type { EngineStatus } from '@/lib/owner-agent/types';
+import type { Engine, EngineStatus } from '@/lib/owner-agent/types';
 
-function engineStatus(engine: 'claude' | 'codex', overrides: Partial<EngineStatus> = {}): EngineStatus {
+function engineStatus(engine: Engine, overrides: Partial<EngineStatus> = {}): EngineStatus {
   return { engine, version: '1.0.0', auth: { state: 'signed_in' }, models: [], rateLimits: null, ...overrides };
 }
 
@@ -19,6 +19,9 @@ const engines: EngineCapabilities = {
     models: [{ value: 'model-alpha', displayName: 'Alpha', supportsEffort: false, efforts: [] }],
   }),
   codex: engineStatus('codex', { auth: { state: 'signed_out' }, models: [] }),
+  // EngineCapabilities requires all three engines; the OpenCode engine landed
+  // after this fixture was written and left `pnpm exec tsc --noEmit` red on main.
+  opencode: engineStatus('opencode', { auth: { state: 'signed_out' }, models: [] }),
 };
 
 const VAGUE_COPY = 'The request is too vague to triage - add the task, files and expected result, then send again.';

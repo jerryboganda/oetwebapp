@@ -59,10 +59,26 @@ if (-not $SkipPublic) {
     Set-RepoVisibility -Visibility public
 }
 
-$deadline = [DateTime]::UtcNow.AddSeconds($WaitForRunSeconds)
+# Since 2026-10-03 the deploy is a `workflow_run`-triggered workflow: the
+# ROLLOUT run only exists once `Build images` for this SHA has finished
+# (~5-10 min). So wait for the whole chain, not for a run that cannot exist yet:
+#   - no 'Build images' run at all        -> nothing to deploy (exit 0)
+#   - build queued / in progress          -> keep waiting (print the status)
+#   - build failed                        -> dump ITS logs and fail (exit 1)
+#   - build green, rollout not created yet -> keep waiting
+$waitDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+$noBuildGrace = [DateTime]::UtcNow.AddSeconds($WaitForRunSeconds)
 $runId = $null
 $runUrl = ''
-do {
+while (-not $runId) {
+    if ([DateTime]::UtcNow -ge $waitDeadline) {
+        Write-Output 'SHIP-WATCH_TIMEOUT'
+        Write-Output 'NEXT: dump failed/in-progress logs, fix if this SHA is failing. Do not stop at deploy-initiated.'
+        exit 3
+    }
+
+    # 1. Our rollout run (exact workflow name: `gh run list -w` also matches a
+    #    legacy registration case-insensitively).
     try {
         $listRaw = Invoke-GhJson @(
             'run', 'list',
@@ -73,9 +89,6 @@ do {
             '--limit', '5'
         )
         if ($listRaw -and $listRaw -ne '[]') {
-            # `gh run list -w` matches names CASE-INSENSITIVELY, so a legacy
-            # registration (e.g. "Deploy Production" with no file left behind)
-            # can shadow the real run. Match the name exactly.
             $runs = @($listRaw | ConvertFrom-Json) | Where-Object { $_.workflowName -eq $Workflow }
             if ($runs.Count -gt 0) {
                 $runId = [string]$runs[0].databaseId
@@ -86,15 +99,9 @@ do {
     } catch {
         Write-Output "waiting for Actions run: $($_.Exception.Message)"
     }
-    Start-Sleep -Seconds 8
-} while ([DateTime]::UtcNow -lt $deadline)
 
-if (-not $runId) {
-    # Supersede-aware: several agents may push within minutes, and main is
-    # linear, so a newer run CONTAINS this SHA. Adopt the newest such run
-    # instead of failing with NO_RUN (GitHub keeps only one pending run per
-    # concurrency group, so intermediate SHAs legitimately never get their own).
-    Write-Output 'SHIP-WATCH checking for a superseding run...'
+    # 2. Superseded? A newer rollout run that CONTAINS this SHA does the job
+    #    (main is linear, and GitHub keeps one pending run per group).
     try {
         $recentRaw = Invoke-GhJson @(
             'run', 'list',
@@ -116,17 +123,13 @@ if (-not $runId) {
                     break
                 }
             }
+            if ($runId) { break }
         }
     } catch {
         Write-Output "supersede check failed: $($_.Exception.Message)"
     }
-}
 
-if (-not $runId) {
-    # "Nothing to deploy" is a legitimate outcome: since 2026-10-03 a push that
-    # touched no build input starts NO build at all (build-images.yml is
-    # path-filtered), so there are no images for this SHA and no rollout. Tell
-    # that apart from a genuinely missing run.
+    # 3. Follow the build that must exist before any rollout can.
     try {
         $buildRaw = Invoke-GhJson @(
             'run', 'list',
@@ -134,19 +137,35 @@ if (-not $runId) {
             '--workflow', 'Build images',
             '--commit', $Sha,
             '--limit', '1',
-            '--json', 'databaseId'
+            '--json', 'databaseId,status,conclusion,url'
         )
         if (-not $buildRaw -or $buildRaw -eq '[]') {
-            Write-Output "SHIP-WATCH_NOTHING_TO_DEPLOY no 'Build images' run for $Sha - the push touched no build input, production is unchanged."
-            exit 0
+            if ([DateTime]::UtcNow -ge $noBuildGrace) {
+                Write-Output "SHIP-WATCH_NOTHING_TO_DEPLOY no 'Build images' run for $Sha - the push touched no build input, production is unchanged."
+                exit 0
+            }
+        } else {
+            $build = @($buildRaw | ConvertFrom-Json)[0]
+            $buildStatus = [string]$build.status
+            $buildConclusion = [string]$build.conclusion
+            if ($buildStatus -ne 'completed') {
+                Write-Output "SHIP-WATCH_BUILD_$buildStatus build $($build.databaseId) - waiting for the rollout to be triggered"
+            } elseif ($buildConclusion -ne 'success') {
+                Write-Output "SHIP-WATCH_BUILD_FAILED the build concluded $buildConclusion - the rollout never starts."
+                Write-Output '----- FAILED BUILD LOGS -----'
+                & gh run view ([string]$build.databaseId) --repo $Repo --log-failed
+                Write-Output '----- END FAILED BUILD LOGS -----'
+                Write-Output 'NEXT: fix the build error above, run `pnpm run ship:gate`, commit, `pnpm run ship` again. Do not wait for the owner.'
+                exit 1
+            } else {
+                Write-Output 'SHIP-WATCH_BUILD_OK build green - waiting for the rollout run to appear'
+            }
         }
     } catch {
         Write-Output "build-run check failed: $($_.Exception.Message)"
     }
 
-    Write-Output 'SHIP-WATCH_NO_RUN'
-    Write-Output 'NEXT: dump `gh run list`, confirm the repo is public (gh repo view --json visibility), then retry this watcher. Do not tell the owner the deploy is done.'
-    exit 2
+    Start-Sleep -Seconds 15
 }
 
 Write-Output "SHIP-WATCH_RUN $runId $runUrl"
