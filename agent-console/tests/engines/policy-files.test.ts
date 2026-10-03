@@ -217,7 +217,7 @@ describe('container scripts', () => {
 
   it('oet-env-edit never takes values as arguments and refuses during deploys', () => {
     const script = read('scripts/oet-env-edit');
-    expect(script).toMatch(/gh run list --repo "\$REPO" --workflow deploy\.yml --status "\$status"/);
+    expect(script).toMatch(/gh run list --repo "\$REPO" --workflow production-deploy\.yml --status "\$status"/);
     expect(script).toMatch(/OWNER_AGENT_\* \| OWNERAGENT__\*\)/);
     expect(script).toMatch(/--network none/);
     expect(script).toMatch(/--pull never/);
