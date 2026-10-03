@@ -14,6 +14,7 @@
  *
  *   node hook-shim.mjs session-start    (hook JSON on stdin)
  *   node hook-shim.mjs stop             (hook JSON on stdin)
+ *   node hook-shim.mjs pre-tool-use     (hook JSON on stdin)
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
@@ -96,8 +97,10 @@ function findCheckoutWithHook(dir) {
   return '';
 }
 
+const EVENTS = new Set(['session-start', 'stop', 'pre-tool-use']);
+
 async function main() {
-  if (event !== 'session-start' && event !== 'stop') return;
+  if (!EVENTS.has(event)) return;
   const raw = await readStdin(1500);
   let cwd = process.cwd();
   try {

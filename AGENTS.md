@@ -92,7 +92,7 @@ Externalized working memory. Three layers, exclusive ownership — no file has t
 - After the deploy for this SHA is green: `pnpm run ax:record` writes the real run ids into `VERIFICATION.md` and the raw logs into the gitignored `.github/agent-state.local.md`; `pnpm run ax:verify` re-checks them against GitHub. `VERIFICATION.md` is machine-written — never hand-edit a result.
 - `PROGRESS.md` is the compact durable ledger only. History lives in `docs/PROGRESS-ARCHIVE-2026.md` and git.
 - Before handoff: `pnpm run ax:check` must pass and `SESSION_STATE.md` "Next action" must name the next concrete step. A run id typed into a gate row is checked against GitHub by `pnpm run ax:verify`.
-- Hooks (optional, user-level, fail-open): a SessionStart hook loads this branch's ledger and a Stop hook blocks a "production-ready" style claim while a gate is open. Scope, install and limits: `scripts/agent/README.md`.
+- Hooks (optional, user-level, fail-open): a SessionStart hook loads this branch's ledger, a Stop hook blocks a "production-ready" style claim while a gate is open, and a PreToolUse guard **denies** a local build/test/lint/install command — the mechanical half of the compute rule above, because prose alone did not hold. Scope, install and limits: `scripts/agent/README.md`.
 - Prefer scoped `git status --short -- <paths>` over broad status when catalog archives or unrelated work would flood output.
 
 ## ⛔ GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT — COMPULSORY

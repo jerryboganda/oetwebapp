@@ -5,21 +5,28 @@
  *
  *   session-start  print the ledger status of THIS branch's run (plain stdout)
  *   stop           block, once per issue, a completion claim the ledger contradicts
+ *   pre-tool-use   deny a shell command that would run build/test/lint/install here
  *
  * Contract
- * - Fail open. Every code path ends with exit code 0 (exit code 2 would BLOCK a
- *   Stop hook) and stdout is either empty or exactly what the event expects.
+ * - Fail open, with one exception: `pre-tool-use` denies a command that matches
+ *   the local-compute table below. Every code path still ends with exit code 0
+ *   (exit code 2 would BLOCK a Stop hook) and stdout is either empty or exactly
+ *   what the event expects; a denial is stated as JSON on stdout.
  * - Scoped. The ledger files are tracked and shared, so a ledger only counts as
  *   this session's when it differs from the branch's fork point on origin/main
  *   (committed on this branch, or uncommitted). Anyone else's ledger stays silent.
  * - Bounded. A Stop block is written to a marker first, repeats of the same issue
  *   never block again, and a session is blocked at most twice.
  * - Compute policy (AGENTS.md): reads files and runs read-only git. It never
- *   builds, tests, installs, or calls the network.
+ *   builds, tests, installs, or calls the network. The `pre-tool-use` guard is
+ *   the machine-readable half of that policy — the rules only match at a command
+ *   position, never on text quoted inside another command.
  *
  * Usage:
  *   node scripts/agent/hook.mjs session-start [--index]   (hook JSON on stdin)
  *   node scripts/agent/hook.mjs stop                      (hook JSON on stdin)
+ *   node scripts/agent/hook.mjs pre-tool-use              (hook JSON on stdin)
+ *   node scripts/agent/hook.mjs --check "<command>"       (exit 2 when denied)
  *   node scripts/agent/hook.mjs --self-test               (CI only)
  */
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -287,6 +294,113 @@ export function stopDecision(dir, input) {
   return { decision: 'block', reason: clip(reason) };
 }
 
+// ------------------------------------------------------------------- guard
+
+/**
+ * Local compute policy (AGENTS.md § "GITHUB ACTIONS IS THE ONLY AUTHORIZED
+ * COMPUTE ENVIRONMENT"): builds, tests, linters, typechecks, dev servers,
+ * dependency installs and container builds run on GitHub Actions, never here.
+ * This table is the mechanical half of that rule — the prose half was not enough,
+ * so a `pre-tool-use` hook now denies the command instead of advising against it.
+ *
+ * A rule only matches at a command position: the start of the command, or just
+ * after a shell separator. Text quoted inside another command (a commit message
+ * that mentions `pnpm test`) is therefore not a violation.
+ */
+const AT_COMMAND =
+  String.raw`(?:^|[;&|(\n]|\b(?:then|do)\b)\s*(?:timeout\s+\d+\s+|npx\s+|corepack\s+|env\s+(?:\w+=\S*\s+)+)?`;
+
+export const LOCAL_COMPUTE_RULES = [
+  {
+    what: 'a package script that builds, tests, lints, typechecks or serves',
+    test: new RegExp(
+      AT_COMMAND +
+        String.raw`(?:pnpm|npm|yarn)\s+(?:-{1,2}\S+\s+)*(?:run\s+(?:-{1,2}\S+\s+)*|exec\s+|dlx\s+)?(?:build|test|lint|dev|start|typecheck|backend:test|backend:build|mobile:build|mobile:dev|desktop:dev|check:encoding|docker:[a-z:-]+)\b`,
+      'i',
+    ),
+  },
+  {
+    what: 'a test runner, browser lane or local stack harness',
+    test: new RegExp(
+      AT_COMMAND +
+        String.raw`(?:vitest|jest|pytest|cypress|playwright\s+(?:test|install|show-report)|run-playwright-matrix|assert-local-stack)\b`,
+      'i',
+    ),
+  },
+  {
+    what: 'the .NET toolchain',
+    test: new RegExp(
+      AT_COMMAND + String.raw`dotnet\s+(?:test|build|ef|publish|restore|run|watch|format|vstest|msbuild)\b`,
+      'i',
+    ),
+  },
+  {
+    what: 'a compiler, linter or app server',
+    test: new RegExp(
+      AT_COMMAND +
+        String.raw`(?:tsc|eslint|next\s+(?:build|dev|start)|vite|tauri\s+(?:dev|build)|cargo\s+(?:build|test|run)|start-dev\.ps1|tauri-dev)`,
+      'i',
+    ),
+  },
+  {
+    // `pnpm add` / `remove` stay allowed on purpose: a dependency edit has to
+    // produce a lockfile diff that can be committed, and only the local box can
+    // write it. Re-computing state the lockfile already pins is the forbidden half.
+    what: 'a dependency install',
+    test: new RegExp(
+      AT_COMMAND + String.raw`(?:pnpm|npm|yarn)\s+(?:install|ci|i)\b|dotnet\s+(?:restore|tool\s+install)\b`,
+      'i',
+    ),
+  },
+  {
+    what: 'a container build or a local stack',
+    test: new RegExp(
+      AT_COMMAND +
+        String.raw`docker\s+(?:build|run)\b|docker\s+compose\b[^\n]*\b(?:up|build)\b|docker-compose\b[^\n]*\b(?:up|build)\b`,
+      'i',
+    ),
+  },
+];
+
+/** The rule a shell command violates, or null when the command is allowed. */
+export function forbiddenLocalCompute(command) {
+  const text = String(command ?? '');
+  if (!text.trim()) return null;
+  for (const rule of LOCAL_COMPUTE_RULES) if (rule.test.test(text)) return rule.what;
+  return null;
+}
+
+const GUARD_HELP = [
+  'Allowed locally: `pnpm run ship`, `pnpm run ship:gate`, `pnpm run ax:*`, `pnpm run pipeline:check`, git and gh.',
+  'Everything else that compiles, tests, lints, serves or installs belongs to the pipeline: push the branch (`pnpm run ship`), or dispatch the lane — `gh workflow run qa-smoke.yml --ref <branch>` (frontend unit + the 6 backend shards).',
+  'Cite the Actions run id as evidence (`pnpm run ax:record`); a local pass is not evidence (AGENTS.md, Continuity Protocol).',
+].join('\n');
+
+/** PreToolUse decision for a shell command, or null to stay silent. */
+export function guardDecision(input) {
+  const args = (input && input.tool_input) || {};
+  const command =
+    typeof args.command === 'string'
+      ? args.command
+      : typeof args.cmd === 'string'
+        ? args.cmd
+        : typeof args.command_line === 'string'
+          ? args.command_line
+          : '';
+  const what = forbiddenLocalCompute(command);
+  if (!what) return null;
+  const reason = 'Compute guard: this command would run ' + what + ' on this machine.\n' + GUARD_HELP;
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'deny',
+      permissionDecisionReason: reason,
+    },
+    decision: 'block',
+    reason,
+  };
+}
+
 // --------------------------------------------------------------- dispatcher
 
 /** Returns exactly what to write to stdout. Never throws. */
@@ -299,6 +413,10 @@ export function handle(event, raw, flags = []) {
       input = {};
     }
     if (!input || typeof input !== 'object') input = {};
+    if (event === 'pre-tool-use') {
+      const decision = guardDecision(input);
+      return decision ? JSON.stringify(decision) : '';
+    }
     const cwd = typeof input.cwd === 'string' && input.cwd ? input.cwd : process.cwd();
     const top = toplevel(cwd);
     if (event === 'session-start') {
@@ -442,6 +560,61 @@ export function selfTest() {
     const b3 = stopDecision(repo, { session_id: 's7' });
     expect('the third distinct issue hits the cap', b3?.decision !== 'block' && Boolean(b3?.systemMessage), JSON.stringify(b3));
 
+    // Local-compute guard (AGENTS.md compute policy). Every denied example is a
+    // command an agent has actually reached for on this project.
+    for (const denied of [
+      'pnpm test',
+      'pnpm run test:watch',
+      'pnpm run test:e2e --grep login',
+      'pnpm exec vitest run lib/__tests__/auth-routes.test.ts',
+      'npx playwright test tests/e2e',
+      'pnpm run build',
+      'pnpm run lint',
+      'pnpm exec tsc --noEmit',
+      'pnpm run check:encoding',
+      'pnpm run dev',
+      'timeout 600 pnpm test',
+      'pnpm run backend:test',
+      'dotnet test backend/OetLearner.sln',
+      'dotnet build backend/OetLearner.sln --configuration Release',
+      'dotnet ef migrations add AddThing',
+      'pnpm install --frozen-lockfile',
+      'docker build -t oet .',
+      'docker compose -f docker-compose.dev.yml up -d',
+      'git pull && pnpm run build',
+      'node ./scripts/qa/run-playwright-matrix.mjs smoke',
+    ]) {
+      expect('denied: ' + denied, Boolean(forbiddenLocalCompute(denied)));
+    }
+    for (const allowed of [
+      'pnpm run ship',
+      'pnpm run ship:gate',
+      'pnpm run ax:fingerprint',
+      'pnpm run ax:status',
+      'pnpm run pipeline:check',
+      'git commit -m "drop pnpm test from the docs"',
+      'git status --short',
+      'gh workflow run qa-smoke.yml --ref main',
+      'gh run view 37132337363 --log-failed',
+      'pnpm add zod',
+    ]) {
+      expect('allowed: ' + allowed, forbiddenLocalCompute(allowed) === null);
+    }
+    const deniedEvent = handle(
+      'pre-tool-use',
+      JSON.stringify({ cwd: repo, tool_name: 'Bash', tool_input: { command: 'pnpm test' } }),
+    );
+    expect(
+      'pre-tool-use denies with a permission decision',
+      JSON.parse(deniedEvent).hookSpecificOutput.permissionDecision === 'deny',
+      deniedEvent,
+    );
+    expect(
+      'pre-tool-use is silent for a sanctioned command',
+      handle('pre-tool-use', JSON.stringify({ tool_input: { command: 'pnpm run ship:gate' } })) === '',
+    );
+    expect('pre-tool-use is silent without a command', handle('pre-tool-use', '{}') === '');
+
     // Dispatcher robustness.
     expect('garbage stdin is silent', handle('stop', 'not json') === '');
     expect('an unknown event is silent', handle('mystery', '{}') === '');
@@ -506,6 +679,17 @@ async function main() {
       return;
     }
     console.log('ax hook self-test OK');
+    return;
+  }
+  if (event === '--check') {
+    const command = flags.join(' ');
+    const what = forbiddenLocalCompute(command);
+    if (!what) {
+      console.log('allowed: ' + command);
+      return;
+    }
+    console.error('denied: this command would run ' + what + ' on this machine.\n' + GUARD_HELP);
+    process.exitCode = 2;
     return;
   }
   const raw = await readStdin(1500);

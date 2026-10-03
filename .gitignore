@@ -15,6 +15,7 @@ output/
 output/playwright/
 .tmp-*.png
 .agents/
+.agents.disabled/
 .claude/
 .github/context-mode/
 .github/context-archive-*/

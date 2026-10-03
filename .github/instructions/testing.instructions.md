@@ -16,8 +16,8 @@ Frameworks: Vitest + React Testing Library (frontend unit), Playwright (E2E/desk
   multiple nodes.
 - Mock at boundaries (network, `apiClient`, timers). Do not mock the unit under test.
 - For `motion/react`, strip or mock animations in tests so async timing does not flake assertions.
-- Vitest does not support Jest `--runInBand`. Run a single file by path:
-  `pnpm test -- path/to/file.test.tsx`.
+- Vitest does not support Jest `--runInBand`; a single file is selected with a path argument
+  (`vitest run <path>`). Per "Running tests" below, that command belongs to CI, not this machine.
 
 ## E2E (Playwright)
 

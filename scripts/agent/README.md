@@ -55,15 +55,72 @@ A gate that genuinely did not run is recorded as `NOT RUN` — that is honest an
 A run id typed into a gate row is a claim too: `ax:verify` asks GitHub whether that run exists, is
 completed and — for a `PASS` row — concluded `success`, so an invented or failed run id is caught.
 
-## Claude Code hooks (auto-load + Stop gate)
+## Claude Code hooks (auto-load + Stop gate + compute guard)
 
-Two hooks make the ledger load itself and keep a completion claim honest. Both are **fail-open**: every
-path exits 0, errors are swallowed, and a checkout without `scripts/agent/hook.mjs` is silent.
+Three hooks make the ledger load itself, keep a completion claim honest, and keep builds and tests
+off this machine. All three are **fail-open on error**: every path exits 0, errors are swallowed, and
+a checkout without `scripts/agent/hook.mjs` is silent. `PreToolUse` is the one hook that acts — it
+denies a command instead of advising against it.
 
 | Event | What it does |
 | --- | --- |
 | `SessionStart` (start, resume, clear, compact) | Prints the status of **this branch's** ledger: goal, mode, open gates, next action, `ax:check` result. At the workspace root (not a repo) it prints one line per unfinished run across every registered worktree. |
 | `Stop` | Blocks the stop when the ledger has structural errors, or when the last message makes a strong completion claim ("production-ready", "fully verified", "all gates pass") while a gate is not `PASS`. |
+| `PreToolUse` | Denies a shell command that would build, test, lint, typecheck, serve, install or containerize on this machine (`AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT"). Every other command passes through untouched. |
+
+### What the compute guard denies
+
+The rules are `LOCAL_COMPUTE_RULES` in `hook.mjs` and they are self-tested in `ax-check.yml`, so a new
+bypass becomes a failing test instead of a paragraph nobody reads. A rule only matches at a **command
+position** — the start of the command or just after a shell separator — so
+`git commit -m "drop pnpm test from the docs"` is allowed while `git pull && pnpm run build` is not.
+
+- Denied: `pnpm`/`npm`/`yarn` script runs for `build`, `test*`, `lint`, `dev`, `start`, `typecheck`,
+  `backend:*`, `mobile:*`, `desktop:dev`, `docker:*`, `check:encoding`; the same via `exec`/`dlx`;
+  `vitest`, `jest`, `pytest`, `playwright test`, `run-playwright-matrix`; `dotnet test|build|ef|publish|restore`;
+  `tsc`, `eslint`, `next build|dev`, `cargo`, `tauri dev`; `pnpm install|ci`; `docker build|run`
+  and `docker compose up`.
+- Allowed on purpose: `pnpm run ship`, `pnpm run ship:gate`, `pnpm run ax:*`, `pnpm run pipeline:check`,
+  git and gh. `pnpm add|remove` is also allowed — a dependency edit has to write a lockfile diff
+  somewhere and CI cannot do that for you. Remove that exception in `LOCAL_COMPUTE_RULES` if the rule
+  should be absolute.
+
+```powershell
+node scripts/agent/hook.mjs --check "pnpm test"     # exit 2 + the reason
+node scripts/agent/hook.mjs --check "pnpm run ship" # allowed
+```
+
+- **Compute policy.** Reads files and runs read-only git. No build, no test, no install, no network.
+
+### Install (once per machine)
+
+On Windows, Claude Code reads project settings only from the folder it was launched in, so a project-level hook would
+miss the workspace root and every worktree. A **user-level** hook is the single wiring that covers them all, and the
+launcher is silent anywhere there is no ledger.
+
+1. Copy `scripts/agent/hook-shim.mjs` to `~/.claude/hooks/ax/ax-hook.mjs` (the shim has no ledger logic; the logic
+   lives in each checkout's own `hook.mjs`, so the shim rarely needs updating).
+2. Merge this into `~/.claude/settings.json` (keep every existing key; forward slashes and the quoted path are
+   deliberate):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [ { "type": "command", "command": "node \"C:/Users/<you>/.claude/hooks/ax/ax-hook.mjs\" session-start", "timeout": 10 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "node \"C:/Users/<you>/.claude/hooks/ax/ax-hook.mjs\" stop", "timeout": 10 } ] }
+    ],
+    "PreToolUse": [
+      { "matcher": "Bash|PowerShell", "hooks": [ { "type": "command", "command": "node \"C:/Users/<you>/.claude/hooks/ax/ax-hook.mjs\" pre-tool-use", "timeout": 10 } ] }
+    ]
+  }
+}
+```
+
+3. Refresh the shim whenever this file changes (it is a copy, not a link): re-copy step 1.
+4. Open `/hooks` once (or start a new session). No matcher is set on `SessionStart`, so it also fires on `fork`.
 
 - **Scoped.** The ledger files are tracked and shared, so a ledger counts as this session's only when it differs
   from the branch's fork point on `origin/main` (committed on this branch, or uncommitted). Someone else's ledger
@@ -129,6 +186,9 @@ Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--no-visibility`, `--sh
 This directory obeys `AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE
 ENVIRONMENT". `state.mjs` performs **static file reads and read-only `gh` calls only**.
 It must never run `pnpm`/`npm`/`dotnet`/`next`/`docker`, never install, never build and
-never test. `record` and `verify` are the only networked commands and are never reachable
+never test. `hook.mjs` enforces the same policy on agent shell commands through the
+`pre-tool-use` guard (above), because the prose rule alone was not holding: agents kept
+reaching for `pnpm test` / `dotnet test` to shorten their own feedback loop.
+`record` and `verify` are the only networked commands and are never reachable
 from CI. If you need a build, a test or a typecheck, push the branch or dispatch
 `.github/workflows/qa-smoke.yml` — see `.github/instructions/validation.instructions.md`.
