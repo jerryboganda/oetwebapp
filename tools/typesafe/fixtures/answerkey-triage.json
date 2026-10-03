@@ -27,7 +27,7 @@
             "official": "A",
             "variants": [],
             "learner": "C",
-            "evidence": "Since the programme began, the average wait for a first appointment has fallen from nine weeks to six. The writer points out that its running cost has stayed within the original budget, and that most clinicians now support it.",
+            "evidence": "Since the programme began, the average wait for a first appointment has fallen from nine weeks to six, so waiting times are shorter. The writer points out that its running cost has stayed within the original budget, so it has not cost more than expected, and that most clinicians now support it.",
             "explanation": null,
             "expect": {
               "choice_in": ["wrong_official_answer"],
