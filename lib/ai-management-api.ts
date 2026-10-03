@@ -34,14 +34,16 @@ export type AiProviderDialect =
   | 'Anthropic'
   | 'Cloudflare'
   | 'Copilot'
+  | 'GeminiNative'
   | 'AzureTts'
   | 'ElevenLabsTts'
   | 'AzureAsr'
   | 'WhisperAsr'
   | 'AzurePhoneme'
   | 'ElevenLabsStt'
+  | 'TypeSafeJev'
   | 'Mock';
-export type AiProviderCategory = 'TextChat' | 'Tts' | 'Asr' | 'Phoneme' | 'Ocr' | 'PdfExtraction';
+export type AiProviderCategory = 'TextChat' | 'Tts' | 'Asr' | 'Phoneme' | 'Ocr' | 'PdfExtraction' | 'Judgment';
 export type AiCredentialStatus = 'Active' | 'Invalid' | 'Revoked';
 
 export interface AiUsageRow {

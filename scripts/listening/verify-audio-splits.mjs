@@ -31,7 +31,7 @@
  *     recording. Same media asset id → automatic FAIL. Different ids with
  *     near-identical first-speech windows (re-encodes, re-uploads) → FAIL via
  *     deterministic similarity, with Jev (TypeSafe System One, model
- *     jev-latest) as the semantic judge in the ambiguous band.
+ *     jev-1.13.0) as the semantic judge in the ambiguous band.
  *   - Boundary clipping: Jev judges whether the head/tail speech is cut
  *     mid-sentence.
  *   - B: opening-speech-present + not a duplicate of its neighbours (review
@@ -64,7 +64,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { jevJudge, jevConfigured, noulVerdict, confidentChoice, JevError } from './jev-client.mjs';
+import { jevJudge, jevConfigured, noulVerdict, confidentChoice, JevError, MODEL as JEV_MODEL } from './jev-client.mjs';
 import { transcribeLocal } from './local-stt.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -402,7 +402,7 @@ async function liveMode(opts) {
   const summary = {
     generatedAt: new Date().toISOString(),
     mode: 'live-content',
-    jev: useJev ? 'typesafe jev-latest (direct API)' : 'disabled (--no-jev)',
+    jev: useJev ? `typesafe ${JEV_MODEL} (direct API)` : 'disabled (--no-jev)',
     apiBase: API_BASE,
     papers: rows.length,
     fullyVerified: rows.filter((r) => r.fullyVerified).length,

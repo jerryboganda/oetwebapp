@@ -579,6 +579,8 @@ public static class AiUsageAdminEndpoints
         {
             if (string.IsNullOrWhiteSpace(dto.Code) || string.IsNullOrWhiteSpace(dto.Name))
                 return new ApiErrorResult(400, "ai_admin_code_name_required", "Code and Name are required.");
+            if (JudgmentPairingError(dto.Dialect, dto.Category) is { } pairingError)
+                return pairingError;
             if (string.IsNullOrWhiteSpace(dto.BaseUrl))
                 return new ApiErrorResult(400, "ai_provider_base_url_required", "BaseUrl is required.");
             var baseUrl = dto.BaseUrl.Trim();
@@ -636,6 +638,8 @@ public static class AiUsageAdminEndpoints
             var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Id == id, ct);
             if (row is null) return Results.NotFound();
             if (!dto.IsActive && IsMaxSubscriptionRow(row)) return MaxAlwaysOn(409);
+            if (JudgmentPairingError(dto.Dialect, dto.Category) is { } pairingError)
+                return pairingError;
             row.Name = dto.Name?.Trim() ?? row.Name;
             row.Dialect = dto.Dialect;
             row.Category = dto.Category;
@@ -1116,10 +1120,16 @@ public static class AiUsageAdminEndpoints
                 return new ApiErrorResult(400, "ai_provider_code_required", "ProviderCode is required.");
             var providerCode = dto.ProviderCode.Trim().ToLowerInvariant();
 
-            var providerExists = await db.AiProviders.AsNoTracking()
-                .AnyAsync(p => p.Code == providerCode && p.IsActive, ct);
-            if (!providerExists)
+            var routeProvider = await db.AiProviders.AsNoTracking()
+                .Where(p => p.Code == providerCode && p.IsActive)
+                .Select(p => new { p.Dialect, p.Category })
+                .FirstOrDefaultAsync(ct);
+            if (routeProvider is null)
                 return new ApiErrorResult(400, "ai_provider_inactive", $"Provider '{providerCode}' is not registered or not active.");
+            // TypeSafe Jev is a typed-judgment API with no chat adapter: a route onto it
+            // would silently fall through to the default provider, so refuse it up front.
+            if (routeProvider.Category == AiProviderCategory.Judgment || routeProvider.Dialect == AiProviderDialect.TypeSafeJev)
+                return new ApiErrorResult(400, "ai_provider_not_routable", $"Provider '{providerCode}' is a typed-judgment provider and cannot be a feature route target.");
 
             var now = DateTimeOffset.UtcNow;
             var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == featureCode, ct);
@@ -1409,6 +1419,18 @@ public static class AiUsageAdminEndpoints
         => new(statusCode, "max_subscription_always_on",
             "The Claude Max subscription route (writing-claude-sub) is always on by owner rule; it cannot be switched off, forced to Codex or bypassed.");
 
+    /// <summary>TypeSafeJev and Judgment only make sense together. A Jev-dialect row saved
+    /// as TextChat could be picked as the top default chat row and, having no chat adapter,
+    /// block the default provider pick; a Judgment row on a chat dialect is equally
+    /// meaningless. Refuse the mismatch at the admin boundary.</summary>
+    private static ApiErrorResult? JudgmentPairingError(AiProviderDialect dialect, AiProviderCategory category)
+        => (dialect == AiProviderDialect.TypeSafeJev) == (category == AiProviderCategory.Judgment)
+            ? null
+            : new ApiErrorResult(400, "ai_provider_judgment_pairing",
+                "Dialect TypeSafeJev and Category Judgment must be used together.");
+
+    // Chat dialects only. Judgment / TypeSafeJev is deliberately absent: the Jev model pin
+    // lives in TypeSafeOptions.Model, so an active Jev row may leave DefaultModel blank.
     private static bool RequiresDefaultModel(bool isActive, AiProviderCategory category, AiProviderDialect dialect)
         => isActive
            && category == AiProviderCategory.TextChat

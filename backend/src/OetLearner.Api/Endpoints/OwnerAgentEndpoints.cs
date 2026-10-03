@@ -39,6 +39,8 @@ public static partial class OwnerAgentEndpoints
 {
     public const string RoutePrefix = "/v1/owner-agent";
     public const int MaxMessageChars = 200_000;
+    /// <summary>A Jev "review required" triage only blocks a message at least this long.</summary>
+    private const int JevReviewMinMessageChars = 60;
     public const int MaxTitleChars = 200;
     public const int MaxNoteChars = 2_000;
     public const int MaxPrTitleChars = 256;
@@ -475,7 +477,8 @@ public static partial class OwnerAgentEndpoints
         OwnerAgentClient client,
         IOwnerAgentAuditService audit,
         ITypeSafeJudgmentService judgments,
-        IOptions<TypeSafeOptions> typeSafeOptions)
+        IOptions<TypeSafeOptions> typeSafeOptions,
+        ILoggerFactory loggerFactory)
     {
         var id = OwnerAgentIds.RequireUlid(sessionId, "sessionId");
         var text = OwnerAgentIds.OptionalText(request?.Text, "text", MaxMessageChars);
@@ -486,6 +489,7 @@ public static partial class OwnerAgentEndpoints
 
         var model = OwnerAgentIds.OptionalOpaque(request?.Model, "model");
         var effort = OwnerAgentIds.OptionalOpaque(request?.Effort, "effort");
+        JevDevelopmentAdvisory? jevTriage = null;
         JevDevelopmentAdvisory? jevAdvisory = null;
         if (typeSafeOptions.Value.Enabled && typeSafeOptions.Value.DevelopmentTriageEnabled)
         {
@@ -493,12 +497,25 @@ public static partial class OwnerAgentEndpoints
             if (session.Status is < 200 or >= 300)
                 return session.Result;
 
-            jevAdvisory = await JevWorkflowAdvisor.TriageDevelopmentAsync(
+            jevTriage = await JevWorkflowAdvisor.TriageDevelopmentAsync(
                 judgments, typeSafeOptions.Value, text, http.RequestAborted);
-            if (jevAdvisory?.Status == "unavailable")
-                throw ApiException.ServiceUnavailable("jev_unavailable", "Required Jev triage is unavailable. The message was not forwarded.");
-            if (jevAdvisory?.RequiresHumanReview == true)
-                throw ApiException.Conflict("jev_review_required", "Jev could not establish the task and impact. Clarify the request before continuing.");
+            if (jevTriage?.Status == "unavailable")
+            {
+                // Fail-open: Jev is advice for the break-glass console, never a gate on it. No key,
+                // an outage or an open breaker must not lock the owner out of Claude/Codex.
+                loggerFactory.CreateLogger("OwnerAgentEndpoints").LogWarning(
+                    "Jev development triage unavailable ({Reason}); forwarding the owner message without advice.",
+                    jevTriage?.Reason);
+            }
+            else
+            {
+                // Only a real "review required" judgment on a substantive message blocks; a terse
+                // follow-up ("continue") has too little context to triage and goes through with no
+                // advice attached (the sidecar only accepts a confident "ok" advisory and would 409 it).
+                if (jevTriage?.RequiresHumanReview == true && text.Trim().Length >= JevReviewMinMessageChars)
+                    throw ApiException.Conflict("jev_review_required", "Jev could not establish the task and impact. Clarify the request before continuing.");
+                jevAdvisory = jevTriage?.Status == "ok" ? jevTriage : null;
+            }
         }
 
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.SessionMessages(id),
@@ -511,10 +528,11 @@ public static partial class OwnerAgentEndpoints
             ["effort"] = effort,
             ["turnId"] = ReadString(relay.Json, "turnId"),
             ["status"] = relay.Status,
-            ["jevStatus"] = jevAdvisory?.Status,
-            ["jevModel"] = jevAdvisory?.Model,
-            ["jevTask"] = jevAdvisory?.TaskKind,
-            ["jevRisk"] = jevAdvisory?.RiskLevel,
+            ["jevStatus"] = jevTriage?.Status,
+            ["jevModel"] = jevTriage?.Model,
+            ["jevTask"] = jevTriage?.TaskKind,
+            ["jevRisk"] = jevTriage?.RiskLevel,
+            ["jevReason"] = jevTriage?.Reason,
         }, http.RequestAborted);
         return relay.Result;
     }

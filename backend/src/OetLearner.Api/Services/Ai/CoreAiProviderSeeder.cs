@@ -6,7 +6,7 @@ using OetLearner.Api.Services.Rulebook;
 namespace OetLearner.Api.Services.Ai;
 
 /// <summary>
-/// Idempotent startup hook that guarantees the three canonical AI provider
+/// Idempotent startup hook that guarantees the canonical AI provider
 /// rows exist so an admin only has to paste a key in <c>/admin/ai-providers</c>
 /// for the integration to start working — no hand-creating rows with magic
 /// codes, no redeploy.
@@ -17,6 +17,8 @@ namespace OetLearner.Api.Services.Ai;
 ///   (Listening Part A extraction + scanned-PDF fallback for all imports).</item>
 ///   <item><c>whisper-asr</c> — one STT key covering Speaking, Pronunciation,
 ///   and Conversation transcription.</item>
+///   <item><c>typesafe-jev</c> — TypeSafe Jev typed-judgment API (Judgment
+///   category, seeded INACTIVE; activate after the key + connection test pass).</item>
 /// </list>
 /// <para>
 /// Safety: strictly additive. Rows are seeded <b>keyless</b>
@@ -91,7 +93,7 @@ public sealed class CoreAiProviderSeeder(
                     CircuitBreakerThreshold = 5,
                     CircuitBreakerWindowSeconds = 30,
                     FailoverPriority = s.FailoverPriority,
-                    IsActive = true,
+                    IsActive = s.IsActive,
                     CreatedAt = now,
                     UpdatedAt = now,
                 });
@@ -151,6 +153,22 @@ public sealed class CoreAiProviderSeeder(
             PricePer1kPromptTokens: 0m,
             PricePer1kCompletionTokens: 0m,
             FailoverPriority: 27),
+        // TypeSafe Jev (typed judgments): keyless AND inactive. Not a chat provider
+        // (Judgment category, no IAiModelProvider adapter); the row only holds the
+        // admin-pasted key (read via GetPlatformKeyAsync, which ignores inactive rows
+        // and falls back to TypeSafe__ApiKey) so the admin activates it after the
+        // key + connection test pass. Code must equal TypeSafeOptions.ProviderCode.
+        new CoreProviderSeed(
+            Code: OetLearner.Api.Configuration.TypeSafeOptions.ProviderCode,
+            Name: "TypeSafe Jev (typed judgments)",
+            Category: AiProviderCategory.Judgment,
+            Dialect: AiProviderDialect.TypeSafeJev,
+            BaseUrl: "https://api.typesafe.ai",
+            DefaultModel: "jev-1.13.0",
+            PricePer1kPromptTokens: 0m,
+            PricePer1kCompletionTokens: 0m,
+            FailoverPriority: 28,
+            IsActive: false),
     };
 }
 
@@ -164,4 +182,5 @@ public sealed record CoreProviderSeed(
     string DefaultModel,
     decimal PricePer1kPromptTokens,
     decimal PricePer1kCompletionTokens,
-    int FailoverPriority);
+    int FailoverPriority,
+    bool IsActive = true);

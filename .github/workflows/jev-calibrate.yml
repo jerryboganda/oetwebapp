@@ -103,7 +103,9 @@ jobs:
                 echo
                 echo "calibrate verdict:"
                 echo '```'
-                grep -E '^[0-9]+ checks, |^FAIL' "$RUNNER_TEMP/calibrate.log" | head -n 40 || true
+                # `FAIL: ` catch lines can embed an API error body: print only record lines and a clipped catch line.
+                grep -E '^[0-9]+ checks, |^FAIL  ' "$RUNNER_TEMP/calibrate.log" | head -n 40 || true
+                grep -E '^FAIL: ' "$RUNNER_TEMP/calibrate.log" | cut -c1-80 | head -n 5 || true
                 echo '```'
               fi
             fi

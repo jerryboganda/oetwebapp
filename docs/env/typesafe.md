@@ -37,9 +37,9 @@ Two things to know before provisioning:
 
 - `TYPESAFE__ENABLED=true` is required even when the key lives only in the admin row.
   The master switch is checked before the registry key is looked up.
-- `scripts/deploy/validate-production-env.sh` requires `TYPESAFE__APIKEY` to be at least
-  16 characters in `.env.production` whenever `TYPESAFE__ENABLED=true`. It fails the
-  deploy otherwise.
+- `TYPESAFE__APIKEY` is admin-optional in `scripts/deploy/validate-production-env.sh`: it may
+  be empty (key kept only in the admin row), but a non-empty value must be at least 16
+  characters. With no key anywhere Jev stays fail-soft (`typesafe_key_missing`).
 
 A key that has ever appeared in chat, a ticket or a log is burned: rotate it, then
 provision the new value in the homes above.
@@ -74,7 +74,7 @@ start (a normal Build & Deploy), not live.
 | `TYPESAFE__WRITINGCRITERIAENABLED` | Writing advisory criteria (`jev.writing.criteria`) | Per-criterion Scores merged into the feedback JSON as `jevAdvisory`. Display-only, never a grade input. |
 | `TYPESAFE__COMPANIONRERANKENABLED` | Companion retrieval rerank (`jev.companion.rerank`) | One Score per hybrid-search candidate, after the entitlement prefilter. Ordering only; an outage keeps the hybrid order. |
 | `TYPESAFE__CONVERSATIONADVISORYENABLED` | AI-patient turn advisory (`jev.conversation.turn`) | Stays-in-role / clinically-appropriate / unsafe Nouls next to reply generation. Informational only; never gates, scores or ends a session. |
-| `TYPESAFE__RESPONSEVERIFYENABLED` | Gateway response review (`jev.response.verify`) | Advisory review of a gateway completion (evidence relation, addresses-task, unsafe-recommendation). Never changes a grade or the gateway verdict. |
+| `TYPESAFE__RESPONSEVERIFYENABLED` | Gateway response review (`jev.response.verify`) | Advisory review of a Reading/Listening explanation completion only (evidence relation, addresses-task, unsafe-recommendation). Never changes a grade or the gateway verdict. |
 | `TYPESAFE__DEVELOPMENTTRIAGEENABLED` | Development/review tooling triage (`jev.development.triage`) | Typed triage for the owner agent console. Never on a learner path. |
 
 ### Thresholds (code-owned decisions; the model only supplies probabilities)
@@ -100,7 +100,10 @@ All six are probabilities in the range 0 to 1 inclusive.
 
 ### What `validate-production-env.sh` checks
 
-- `TYPESAFE__ENABLED=true` requires `TYPESAFE__APIKEY` of at least 16 characters (fails).
+- A non-empty `TYPESAFE__APIKEY` must be at least 16 characters (fails); empty is allowed
+  because the key may live only in the admin provider row.
+- `TYPESAFE__ENABLED` and every per-surface flag must be `true` or `false` when set (fails
+  otherwise: a malformed bool makes .NET option binding throw on first use).
 - Any per-surface flag set to `true` while `TYPESAFE__ENABLED` is not `true` prints a
   warning (does not fail): the flag does nothing until the master switch is on.
 - When set, the six thresholds and `TYPESAFE__COSTPERINPUTTOKENUSD` must be numbers
@@ -128,9 +131,10 @@ calibration kit on a workstation or the VPS; it runs on Actions only.
 1. `TYPESAFE__ENABLED=true`, with the key provisioned and every surface flag still off.
    Confirm a clean startup and the model-pin log line.
 2. `TYPESAFE__DEVELOPMENTTRIAGEENABLED` (owner console only, no learner impact).
-3. `TYPESAFE__RESPONSEVERIFYENABLED`, scoped. Only after the change that limits response
-   verify to features with a consumer is live; before that it runs on every gateway
-   completion.
+3. `TYPESAFE__RESPONSEVERIFYENABLED`. Scoped in code: only the Reading and Listening
+   explanation features are reviewed (`JevResponseReviewFeatureCodes` in `AiGatewayService`),
+   never grading, conversation or pronunciation, and the review is time-boxed so it can
+   never fail or discard a completed reply.
 4. `TYPESAFE__WRITINGVERIFYENABLED` and `TYPESAFE__WRITINGCRITERIAENABLED` (shadow first:
    tutor flags and advisory fields only).
 5. `TYPESAFE__CONVERSATIONADVISORYENABLED` (Speaking shadow). Only after the advisory

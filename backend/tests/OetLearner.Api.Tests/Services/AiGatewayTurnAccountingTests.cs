@@ -337,7 +337,8 @@ public sealed class AiGatewayTurnAccountingTests : IAsyncDisposable
     }
 
     /// <summary>A hung reviewer is cut off by the short linked timeout
-    /// (TypeSafe:TimeoutSeconds) and cannot delay the reply indefinitely.</summary>
+    /// (TypeSafe:TimeoutSeconds plus a 2 s margin, so about 3 s here) and cannot
+    /// delay the reply indefinitely.</summary>
     [Fact]
     public async Task JevReview_HungReviewer_TimesOut_AndStillReturnsCompletion()
     {

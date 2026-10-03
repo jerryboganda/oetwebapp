@@ -147,6 +147,68 @@ describe('AiProvidersPage — GitHub Copilot integration', () => {
     expect(payload.defaultModel).toBe('scribe_v2_realtime');
   });
 
+  it('exposes a TypeSafe Jev preset with the Judgment category, inactive until the key is tested', async () => {
+    mockFetch.mockResolvedValue([]);
+    mockCreate.mockResolvedValue({
+      id: 'typesafe-jev-1',
+      code: 'typesafe-jev',
+      apiKeyHint: '…0000',
+    });
+
+    render(<AiProvidersPage />);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+
+    await userEvent.click(screen.getByRole('button', { name: /Register provider/i }));
+    await userEvent.click(await screen.findByRole('button', { name: 'TypeSafe Jev (typed judgments)' }));
+    // Judgment rows get the "key is entered here, never in files" hint.
+    expect(screen.getByText(/never put it in files/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/API key/i), { target: { value: 'typesafe_test_key_000000' } });
+    await userEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
+    const payload = mockCreate.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.code).toBe('typesafe-jev');
+    expect(payload.dialect).toBe('TypeSafeJev');
+    expect(payload.category).toBe('Judgment');
+    expect(payload.baseUrl).toBe('https://api.typesafe.ai');
+    expect(payload.defaultModel).toBe('jev-1.13.0');
+    expect(payload.isActive).toBe(false);
+  });
+
+  it('lists a Judgment row only under the Judgment category filter', async () => {
+    const base = {
+      baseUrl: 'https://example.com',
+      apiKeyHint: '',
+      defaultModel: 'm',
+      allowedModelsCsv: '',
+      pricePer1kPromptTokens: 0,
+      pricePer1kCompletionTokens: 0,
+      retryCount: 2,
+      circuitBreakerThreshold: 5,
+      circuitBreakerWindowSeconds: 30,
+      failoverPriority: 28,
+      isActive: false,
+      createdAt: '',
+      updatedAt: '',
+    };
+    mockFetch.mockResolvedValue([
+      { ...base, id: 'jev-1', code: 'typesafe-jev', name: 'TypeSafe Jev (typed judgments)', dialect: 'TypeSafeJev', category: 'Judgment' },
+      { ...base, id: 'chat-1', code: 'plain-chat', name: 'Plain chat provider', dialect: 'OpenAiCompatible', category: 'TextChat' },
+    ]);
+
+    render(<AiProvidersPage />);
+    await waitFor(() => {
+      expect(screen.getAllByText('TypeSafe Jev (typed judgments)').length).toBeGreaterThan(0);
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'TextChat' }));
+    expect(screen.queryAllByText('TypeSafe Jev (typed judgments)')).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Judgment' }));
+    expect(screen.getAllByText('TypeSafe Jev (typed judgments)').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Plain chat provider')).toHaveLength(0);
+  });
+
   it('blocks non-admin viewers', () => {
     authState.role = 'learner';
     render(<AiProvidersPage />);

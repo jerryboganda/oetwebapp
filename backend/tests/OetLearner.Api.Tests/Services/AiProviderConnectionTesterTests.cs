@@ -278,6 +278,54 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.Contains("not available", result.ErrorMessage);
     }
 
+    [Fact]
+    public async Task TypeSafeJevProbe_IsABearerGetOnV1Models_NeverAChatCompletion()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(
+            db, "secret-key-1234567890",
+            baseUrl: "https://api.typesafe.ai",
+            dialect: AiProviderDialect.TypeSafeJev,
+            category: AiProviderCategory.Judgment);
+        HttpRequestMessage? captured = null;
+        var tester = NewTester(db, request =>
+        {
+            captured = request;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"models":[{"name":"jev-1.13.0"}]}""", Encoding.UTF8, "application/json"),
+            });
+        });
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.Equal(AiProviderTestStatuses.Ok, result.Status);
+        Assert.NotNull(captured);
+        Assert.Equal(HttpMethod.Get, captured!.Method);
+        Assert.Equal("https://api.typesafe.ai/v1/models", captured.RequestUri!.ToString());
+        Assert.Equal("Bearer", captured.Headers.Authorization!.Scheme);
+    }
+
+    [Fact]
+    public async Task ModelTest_TypeSafeJev_IsNotAvailableAndMakesNoNetworkCall()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(
+            db, "secret-key-1234567890",
+            baseUrl: "https://api.typesafe.ai",
+            dialect: AiProviderDialect.TypeSafeJev,
+            category: AiProviderCategory.Judgment);
+        var called = false;
+        var tester = NewTester(db, _ => { called = true; return Task.FromResult(BuildResponse(HttpStatusCode.OK)); });
+
+        var result = await tester.TestProviderModelAsync("copilot", "jev-1.13.0", default);
+
+        // The full-pipeline test is a chat completion; Jev must never receive one.
+        Assert.Equal(AiProviderTestStatuses.Unknown, result.Status);
+        Assert.False(called);
+        Assert.Contains("not available", result.ErrorMessage);
+    }
+
     private async Task SeedUnsupportedAsync(LearnerDbContext db)
     {
         var protector = _dp.CreateProtector("AiProvider.PlatformKey.v1");

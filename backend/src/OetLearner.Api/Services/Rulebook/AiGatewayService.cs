@@ -1079,7 +1079,11 @@ public sealed class AiGatewayService(
     /// Advisory-only: runs for the allowlisted explanation features, under a
     /// short linked timeout. Any failure, including cancellation of the caller's
     /// token or the review timeout, yields null and never fails or discards the
-    /// completion the provider already served and billed.
+    /// completion the provider already served and billed. The outer cap is
+    /// TypeSafe:TimeoutSeconds plus a small margin so the client's own per-attempt
+    /// timeout (which starts later) fires first and is classified as a provider
+    /// failure (breaker + <c>jev_failed</c>) instead of a caller cancellation;
+    /// the cap still bounds 429/529 retries and backoff.
     /// </summary>
     private async Task<JevResponseAdvisory?> TryReviewResponseAsync(
         AiGatewayRequest request, string featureCode, string completionText, CancellationToken ct)
@@ -1092,7 +1096,7 @@ public sealed class AiGatewayService(
         {
             var options = judgmentOptions.Value;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds)));
+            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds) + 2));
             return await JevWorkflowAdvisor.ReviewResponseAsync(judgments, options, request, completionText, timeout.Token);
         }
         catch (Exception ex)

@@ -41,6 +41,15 @@ public enum AiProviderDialect
     AzurePhoneme = 14,
     /// <summary>ElevenLabs Scribe realtime/batch speech-to-text.</summary>
     ElevenLabsStt = 15,
+    /// <summary>
+    /// TypeSafe System One ("Jev") typed-judgment API. NOT a chat endpoint: it
+    /// has no <c>IAiModelProvider</c> adapter and must never be a gateway
+    /// default or route target. The row exists so the admin can hold the
+    /// Data-Protection-encrypted key (read via
+    /// <c>IAiProviderRegistry.GetPlatformKeyAsync("typesafe-jev")</c>) and
+    /// run the <c>GET /v1/models</c> connectivity probe.
+    /// </summary>
+    TypeSafeJev = 16,
     Mock = 99,
 }
 
@@ -62,6 +71,11 @@ public enum AiProviderCategory
     Ocr = 4,
     /// <summary>Structured PDF extraction (tables, forms, native-text PDFs).</summary>
     PdfExtraction = 5,
+    /// <summary>Typed-judgment providers (TypeSafe Jev). Never chat: excluded
+    /// from every text-chat default / provider pick. The Postgres CHECK
+    /// <c>CK_AiProviders_Category</c> must list every member (see migration
+    /// <c>AllowAiProviderCategoryJudgment</c>).</summary>
+    Judgment = 6,
 }
 
 /// <summary>

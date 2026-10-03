@@ -54,6 +54,12 @@ public static class JevWorkflowAdvisor
         ["insufficient_evidence"] = "The supplied text does not establish the material claims; do not guess.",
     };
 
+    /// <summary>
+    /// Advisory triage of an owner console message. Fail-open by design: status
+    /// <c>unavailable</c> means "no judgment was obtained" (no key, outage, open breaker,
+    /// timeout, oversized input, bad config) and the caller must carry on without advice. Only
+    /// <c>review_required</c> / <c>ok</c> are real Jev judgments.
+    /// </summary>
     public static async Task<JevDevelopmentAdvisory?> TriageDevelopmentAsync(
         ITypeSafeJudgmentService judgments,
         TypeSafeOptions options,
@@ -67,10 +73,14 @@ public static class JevWorkflowAdvisor
         if (!double.IsFinite(threshold) || threshold is < 0.5 or > 1)
             return new("unavailable", null, true, null, null, null, null, "jev_triage_threshold_invalid");
         if (text.Length > MaxDevelopmentInputChars)
-            return new("review_required", null, true, null, null, null, null, "jev_context_too_large");
+            return new("unavailable", null, true, null, null, null, null, "jev_context_too_large");
 
         try
         {
+            // Never let triage hold the owner's message much longer than one client attempt; the margin lets
+            // the client's own timeout fire first so a hang counts as a provider failure, not a cancel.
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            budget.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, options.TimeoutSeconds) + 2));
             var result = await judgments.AskAsync(new JevJudgmentRequest
             {
                 StateJson = JsonSerializer.SerializeToElement(new
@@ -100,10 +110,11 @@ public static class JevWorkflowAdvisor
                 FeatureCode = AiFeatureCodes.JevDevelopmentTriage,
                 ResourceId = Guid.NewGuid().ToString("N"),
                 ResourceType = "owner_agent_message",
-            }, ct);
+            }, budget.Token);
 
             if (!result.IsOk)
-                return new("unavailable", null, true, null, null, null, null, "jev_unavailable");
+                return new("unavailable", null, true, null, null, null, null,
+                    result.Status == JevCallStatus.Disabled ? "jev_not_configured" : "jev_unavailable");
 
             var task = result.Answers?.GetValueOrDefault("task_kind")?.Choice;
             var risk = result.Answers?.GetValueOrDefault("risk_level")?.Choice;
