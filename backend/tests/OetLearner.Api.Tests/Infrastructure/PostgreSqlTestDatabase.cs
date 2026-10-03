@@ -68,6 +68,9 @@ public sealed class PostgreSqlTestDatabase : IAsyncDisposable
         => new NpgsqlConnectionStringBuilder(_baseConnectionString)
         {
             SearchPath = Schema,
+            // Tags every session of this schema so DisposeAsync can close them
+            // all, including pools it cannot reach (EF's own NpgsqlDataSource).
+            ApplicationName = Schema,
             // Sized for one 40-way race (one scoped DbContext per caller).
             // A 256 cap against postgres:16-alpine max_connections=100 lets
             // idle pools from parallel classes starve the server; keep this
@@ -106,6 +109,16 @@ public sealed class PostgreSqlTestDatabase : IAsyncDisposable
         NpgsqlConnection.ClearPool(schemaPool);
         await using var cleanup = new NpgsqlConnection(_baseConnectionString);
         await cleanup.OpenAsync();
+        // EF Core (UseVector) builds its own NpgsqlDataSource per test, which
+        // ClearPool above cannot reach: its idle sessions outlived the test and
+        // back-to-back concurrency races hit "too many clients" (max 100).
+        await using (var terminate = new NpgsqlCommand(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = @schema AND pid <> pg_backend_pid();",
+            cleanup))
+        {
+            terminate.Parameters.AddWithValue("schema", Schema);
+            await terminate.ExecuteNonQueryAsync();
+        }
         await using var drop = new NpgsqlCommand($"DROP SCHEMA IF EXISTS \"{Schema}\" CASCADE;", cleanup);
         await drop.ExecuteNonQueryAsync();
         await Connection.DisposeAsync();
