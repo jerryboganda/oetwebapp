@@ -190,12 +190,20 @@ jobs:
             -p 5432:5432 \
             pgvector/pgvector:pg17 \
             -c max_connections=400
+          # Poll from the HOST over TCP. The official entrypoint's temporary
+          # init server listens on the unix socket only, so a socket-based
+          # pg_isready (docker exec) reports "accepting connections" while the
+          # real server is still restarting — which is exactly how the very
+          # next psql died with "server closed the connection unexpectedly"
+          # (shard 3, run 37149559513). A TCP probe can only succeed once the
+          # real server is listening on 5432.
           for i in $(seq 1 30); do
-            if docker exec oet-qa-pg pg_isready -U postgres -d oet_provider_tests; then
+            if PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d oet_provider_tests -c "SELECT 1;" >/dev/null 2>&1; then
+              echo "Postgres ready (TCP) after ${i}s."
               break
             fi
             if [ "$i" -eq 30 ]; then
-              echo "::error::Postgres test container never became ready." >&2
+              echo "::error::Postgres test container never became ready on TCP 5432." >&2
               docker logs oet-qa-pg 2>&1 | tail -50
               exit 1
             fi
