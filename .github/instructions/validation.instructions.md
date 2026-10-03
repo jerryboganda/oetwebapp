@@ -13,8 +13,13 @@ the local machine or the production VPS.
 ## Local (the only allowed commands)
 
 ```powershell
-pnpm run ship:gate          # REQUIRED before every main push (seconds, static checks only)
-pnpm run ship:watch         # REQUIRED after every main push (watches Build & Deploy only)
+pnpm run ship               # ONE command per ship (lock -> rebase -> gate -> visibility lease
+                            # -> push -> watch Deploy production -> ax:record); multi-agent safe
+pnpm run ship:gate          # the seconds-long static gate inside that flow
+pnpm run ship:watch         # watch Deploy production for a SHA on its own (supersede-aware)
+pnpm run ship:self-test     # ship wrapper self-test (also runs in ax-check.yml, linux + windows)
+pnpm run pipeline:check     # CI/CD contract: single pull-only rollout, no automated browser lanes,
+                            # path-filtered builds, rollout gates intact (runs in the guards job too)
 pnpm run ax:check           # validate the state ledger (static; fails on a gate with no evidence)
 pnpm run ax:status          # read the current run's goal, gates and next action
 pnpm run ax:next            # pick the next ready task from TASKS.json
@@ -30,15 +35,18 @@ like `ship:watch` they are local tooling, not compute. See `scripts/agent/README
 | Check | Workflow / job |
 | --- | --- |
 | `pnpm exec tsc --noEmit`, `pnpm run check:encoding` (report-only), `pnpm run lint`, `vitest run`, `pnpm run build` | `qa-smoke.yml` / `frontend-unit` |
-| `dotnet test` (6 shards, Postgres/pgvector) | `qa-smoke.yml` / `backend-tests` |
-| Playwright smoke (one job per project) | `qa-smoke.yml` / `e2e-smoke` |
+| `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached) | `qa-smoke.yml` / `backend-tests` |
 | Placement entry contracts | `qa-smoke.yml` / `placement-entry` |
-| Pending EF model changes, gitleaks | `speaking-ci.yml` / `migrations-check`, `secrets-scan` |
-| Web + API images, migrations, blue/green deploy | `deploy.yml` (push to `main` only) |
+| ~~Playwright/e2e~~ | **Removed by owner directive 2026-10-03 (hard rule).** No e2e job runs on any trigger; `tests/e2e/**` is a manual tool. Bugs are reported by the owner and fixed on demand. |
+| Pending EF model changes, gitleaks (path-filtered) | `speaking-ci.yml` / `migrations-check`, `secrets-scan` |
+| Images → GHCR + migration SQL artifact. Runs only for pushes touching a build input; rebuilds only the changed component (the rest are retagged from `:latest`); parallel per SHA, no cross-SHA lock | `build-images.yml` (push to `main` only) |
+| Migrations apply + blue/green rollout with health gate (serialized `production-deploy`); stands down when superseded or when the SHA has no images; dispatch with `sha` = rollback | `production-deploy.yml` |
 | Android / iOS builds | `mobile-ci.yml` |
 | Tauri desktop (fmt, clippy, cargo test) | `tauri-ci.yml` |
 
-Ship-it default is `ship:gate` only. Never treat "pushed" as done.
+Ship-it default is `pnpm run ship` (which runs `ship:gate` internally). Never treat "pushed" as done.
+A push touching no build input starts no build and no rollout at all; the watcher reports
+`SHIP-WATCH_NOTHING_TO_DEPLOY` and exits 0 — production is legitimately unchanged.
 
 ## Scope & safety
 

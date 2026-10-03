@@ -7,7 +7,7 @@ Add new entries at the top; keep each entry to: **Mistake → Lesson → Action*
 
 - **Rebase leftovers shipped because the agent stopped at push.** `payment-return/page.tsx` had `return () => {, user?.userId` (Turbopack "Expression expected"). `AiPackageCreditServiceTests.cs` had an extra `}` so the next `[Fact]` nested (CS0106). Build & Deploy failed; live stayed on `b23893ec` until the owner asked.
   → Never report done after push. Run `pnpm run ship:gate` before push and `pnpm run ship:watch` until Build & Deploy for **this SHA** succeeds. On fail: dump logs, fix, push again without waiting. Flip private only after that success.
-  → `deploy.yml` `syntax-gate` now fails in seconds on conflict markers / leftover splices / brace imbalance so Docker does not start.
+  → the `syntax-gate` job (now in `build-images.yml`, ran as `deploy.yml`'s first job when this was written) fails in seconds on conflict markers / leftover splices / brace imbalance so Docker does not start.
 - **QA Smoke / Speaking 450 warnings are not deploy blockers.** The one Speaking lint *error* was the same payment-return parse. Ignore chronic red suites unless the error is in a touched file.
 - **PowerShell `-match` / `-notmatch` on `docker inspect` output is array-filter, not a boolean.** Leftover green still tagged with the previous SHA made `if ($inspect -notmatch $Sha)` true even when blue already had the new SHA. Join the inspect text first, then match. Inactive slot may keep the previous image; that is not a failed cutover.
 

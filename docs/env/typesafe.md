@@ -156,7 +156,7 @@ calibration kit on a workstation or the VPS; it runs on Actions only.
 planned waves. Leave them off unless the owner asks, and calibrate them first.
 
 To change a flag: edit `.env.production` through `oet-env-edit`, then run Build &
-Deploy (`.github/workflows/deploy.yml`). The deploy runs `validate-production-env.sh`.
+Deploy (`.github/workflows/production-deploy.yml`). The deploy runs `validate-production-env.sh`.
 
 ## Kill levers
 

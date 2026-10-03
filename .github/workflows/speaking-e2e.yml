@@ -1,8 +1,9 @@
 name: Speaking Module — Playwright E2E
 
+# MANUAL ONLY (owner directive 2026-10-03, HARD PROJECT RULE): no automated
+# Playwright/e2e jobs in CI. This nightly schedule was removed on purpose -
+# do not re-add a schedule. Run it by hand when the owner reports a bug.
 on:
-  schedule:
-    - cron: "0 3 * * *" # nightly 03:00 UTC
   workflow_dispatch:
     inputs:
       base_url:

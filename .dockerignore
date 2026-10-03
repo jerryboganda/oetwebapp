@@ -45,3 +45,30 @@ agents
 OET with Dr. Ahmed Hesham ( Medicine Only )
 /*.pdf
 /*.md
+
+# Repo content that no root-context image consumes. Excluding it shrinks the
+# build context uploaded to the builder on every push (owner directive
+# 2026-10-03: minimum deploy time). Before adding a line here, confirm the web
+# bundle and the API csproj do not reference it: rulebooks/, data/,
+# messages/, public/, types/ and scripts/ must STAY.
+tests
+output
+playwright-report-prod
+pdf-policy-release
+pdf-policy-release2
+OET Materials & Videos Data
+tools
+agent-console
+agent-gateway
+writing-ai-sidecars
+desktop-backend-runtime
+capacitor-web
+android
+ios
+src-tauri
+fastlane
+automation
+ds-bundle
+ruvector.db
+*.tsbuildinfo
+artifacts

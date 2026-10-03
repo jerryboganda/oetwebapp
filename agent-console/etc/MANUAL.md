@@ -66,7 +66,7 @@ manual) override it for console sessions.
 - `oet-env-edit keys` lists key names; `oet-env-edit has KEY` checks presence;
   `printf '%s' "$VALUE" | oet-env-edit set KEY` sets one key; `oet-env-edit unset KEY` removes it;
   `oet-env-edit restore` rolls back the last change.
-- First check that no deploy is running: `gh run list -w deploy.yml -s in_progress` must be empty
+- First check that no deploy is running: `gh run list -w production-deploy.yml -s in_progress` must be empty
   (the helper refuses anyway). Never `cat`, `grep`, `sed -i` or otherwise read/print `.env*` values.
 - Changes apply on the next deploy/recreate of the services that read the variable; say so.
 

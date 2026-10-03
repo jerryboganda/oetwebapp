@@ -192,7 +192,7 @@ internal static class Doc10PlatformArchitecture
                 "contributor contract states the VPS's side of that in one line: \"The VPS ... only pulls prebuilt " +
                 "GHCR images and runs health gates.\" (EV-PLATFORM-004). This is not " +
                 "just policy prose — the concrete workflow files exist in `.github/workflows/`, including " +
-                "`deploy.yml` (web + API build → GHCR → VPS blue/green deploy with a health gate), `qa-smoke.yml` " +
+                "`build-images.yml` (web + API build → GHCR) plus `production-deploy.yml` (migrations + VPS blue/green deploy with a health gate), `qa-smoke.yml` " +
                 "(sharded frontend Vitest/lint/typecheck/build and backend `dotnet test` against Postgres/" +
                 "pgvector) and `mobile-ci.yml` (mobile/Android build), each named as an authorized CI entry point " +
                 "in the contributor contract (EV-PLATFORM-010). The wider workflow directory also holds dedicated " +
@@ -216,7 +216,7 @@ internal static class Doc10PlatformArchitecture
                 "its own compose project and deployed only by its own workflow). At the time of this revision a stale, " +
                 "pre-blue/green `docker-compose.vps.yml` also remains in the repository; its own header marks it as " +
                 "used by no deploy path, and it is slated for removal (EV-PLATFORM-019). Production uses " +
-                "exactly one of them: the `deploy.yml` workflow copies `docker-compose.production.yml` to the VPS, and " +
+                "exactly one of them: the `production-deploy.yml` workflow copies `docker-compose.production.yml` to the VPS, and " +
                 "the rollout script it runs there (`scripts/deploy/auto-deploy-ghcr.sh`) refuses to start without the " +
                 "GHCR web and API image references built by that same run and brings the blue/green slots up with " +
                 "`--no-build` (EV-PLATFORM-019). Keeping these files explicit and separate, instead of one compose file " +
@@ -253,8 +253,8 @@ internal static class Doc10PlatformArchitecture
                 "Backend engineering rules: Minimal API endpoints under Endpoints/, DI/cancellation-token/server-side-authz conventions, and EF Core PostgreSQL patterns.",
                 "AGENTS.md, section \"Backend Rules\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-004", DocumentationEvidenceType.Architecture,
-                "Per-surface architecture sources (hand-authored EF migrations, the Tauri remote-only thin client, the Capacitor shell), the deploy path (push to main -> Build & Deploy (web + API) -> GHCR -> blue/green on the VPS) and the VPS's role as a shared host that only pulls prebuilt images and runs health gates.",
-                "docs/adr/0001-hand-authored-ef-migrations.md; docs/tauri-desktop-shell.md (opening paragraph and section \"Security & capabilities (least privilege)\"); README.md, section \"Stack\"; .github/workflows/deploy.yml; AGENTS.md, section \"GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT\" (\"The VPS ... only pulls prebuilt GHCR images and runs health gates\"); DEPLOYMENT.md, section \"8. Updating the deployment\""),
+                "Per-surface architecture sources (hand-authored EF migrations, the Tauri remote-only thin client, the Capacitor shell), the deploy path (push to main -> Build images -> GHCR + migration SQL -> Deploy production -> blue/green on the VPS) and the VPS's role as a shared host that only pulls prebuilt images and runs health gates.",
+                "docs/adr/0001-hand-authored-ef-migrations.md; docs/tauri-desktop-shell.md (opening paragraph and section \"Security & capabilities (least privilege)\"); README.md, section \"Stack\"; .github/workflows/build-images.yml + production-deploy.yml; AGENTS.md, section \"GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT\" (\"The VPS ... only pulls prebuilt GHCR images and runs health gates\"); DEPLOYMENT.md, section \"8. Updating the deployment\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-005", DocumentationEvidenceType.Code,
                 "Capacitor shell configuration: appId, remote server.url pointed at the production web app, per-platform URL scheme, and the offline error.html recovery screen.",
                 "capacitor.config.ts"),
@@ -272,11 +272,11 @@ internal static class Doc10PlatformArchitecture
                 "Production storage-persistence design: papers/media/users/backups live in named Docker volumes independent of the web/API containers, with the live volume names stated explicitly, so container rebuilds cannot delete content.",
                 "AGENTS.md, section \"Storage Persistence\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-010", DocumentationEvidenceType.Deployment,
-                "The table of authorized CI entry points: qa-smoke.yml (frontend + backend test matrix), deploy.yml (web+API build, GHCR, VPS blue/green deploy with health gate), and mobile-ci.yml (mobile/Android build).",
+                "The table of authorized CI entry points: qa-smoke.yml (frontend + backend test matrix; 13-project e2e on demand), build-images.yml (web+API build, GHCR, migration SQL) + production-deploy.yml (VPS blue/green deploy with health gate), and mobile-ci.yml (mobile/Android build).",
                 "AGENTS.md, section \"Authorized CI entry points\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-011", DocumentationEvidenceType.Deployment,
-                "The repository's workflow directory, confirming dedicated per-surface pipelines beyond the core deploy workflow (Apple compatibility, mobile release, desktop packaging, and others exist as real files).",
-                ".github/workflows/ (deploy.yml, mobile-ci.yml, mobile-release.yml, apple-compatibility.yml, qa-smoke.yml, and others)"),
+                "The repository's workflow directory, confirming dedicated per-surface pipelines beyond the core build/deploy workflows (Apple compatibility, mobile release, desktop packaging, and others exist as real files).",
+                ".github/workflows/ (build-images.yml, production-deploy.yml, mobile-ci.yml, mobile-release.yml, apple-compatibility.yml, qa-smoke.yml, and others)"),
             new DocumentationEvidenceSeed("EV-PLATFORM-012", DocumentationEvidenceType.Architecture,
                 "The compute-location policy: local machine is read/edit/commit/push only, GitHub Actions is the sole build/test/verify environment, and the production VPS is deploy-and-serve only, with no discretionary exceptions.",
                 "AGENTS.md, section \"GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT\""),
@@ -300,10 +300,10 @@ internal static class Doc10PlatformArchitecture
                 "AGENTS.md, section \"Admin UI\""),
             new DocumentationEvidenceSeed("EV-PLATFORM-019", DocumentationEvidenceType.Deployment,
                 "One Docker Compose file per operating mode (dev, hotreload, local, backend, desktop, staging, production, production.build, production.hostports, agent-console), plus a stale pre-blue/green docker-compose.vps.yml that no deploy path uses; the production deploy copies only docker-compose.production.yml to the VPS and its rollout script requires the GHCR web/API image refs from the same run and starts the blue/green slots with --no-build.",
-                "Repository root (docker-compose.*.yml); DEPLOYMENT.md, section \"Dockerfile & compose-file matrix\"; .github/workflows/deploy.yml (VPS rollout step); scripts/deploy/auto-deploy-ghcr.sh; docker-compose.production.build.yml and docker-compose.vps.yml (header comments)"),
+                "Repository root (docker-compose.*.yml); DEPLOYMENT.md, section \"Dockerfile & compose-file matrix\"; .github/workflows/production-deploy.yml (VPS rollout step); scripts/deploy/auto-deploy-ghcr.sh; docker-compose.production.build.yml and docker-compose.vps.yml (header comments)"),
             new DocumentationEvidenceSeed("EV-PLATFORM-020", DocumentationEvidenceType.Code,
                 "Pinned toolchain versions (packageManager pnpm@10.33.0; .NET SDK floor 10.0.201; Node 22 and .NET 10.0.x in CI), the documented local ports, and the additional native toolchain requirements for the Tauri desktop build (stable Rust via rustup, WebView2/MSVC) and Capacitor Android build (JDK 21).",
-                "package.json (packageManager); global.json; README.md, sections \"Rust toolchain (desktop)\" and \"Local Baseline\"; .github/workflows/qa-smoke.yml and deploy.yml (setup-node 22, setup-dotnet 10.0.x); .github/workflows/mobile-ci.yml (JAVA_VERSION '21'); .github/workflows/tauri-ci.yml (dtolnay/rust-toolchain@stable)"),
+                "package.json (packageManager); global.json; README.md, sections \"Rust toolchain (desktop)\" and \"Local Baseline\"; .github/workflows/qa-smoke.yml, build-images.yml and production-deploy.yml (setup-node 22, setup-dotnet 10.0.x); .github/workflows/mobile-ci.yml (JAVA_VERSION '21'); .github/workflows/tauri-ci.yml (dtolnay/rust-toolchain@stable)"),
             new DocumentationEvidenceSeed("EV-PLATFORM-021", DocumentationEvidenceType.Testing,
                 "The frontend test layering (Vitest unit tests via pnpm test; a Playwright smoke matrix via pnpm run test:e2e:smoke, run by qa-smoke.yml against the docker-compose.desktop.yml stack) and the quantified full QA Smoke run size (13 e2e shards plus backend and frontend, parallel on hosted infra, roughly one hour).",
                 "package.json (scripts test, test:e2e:smoke); .github/workflows/qa-smoke.yml (e2e-smoke job); AGENTS.md, section \"GitHub Actions on a public-when-working repo — COMPULSORY\""),

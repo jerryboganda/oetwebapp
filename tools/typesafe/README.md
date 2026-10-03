@@ -176,7 +176,7 @@ Saves coding-agent quota in the Ship-It fix-loop: instead of reading a 200 KB
 classifies; the coding agent still reads the logs and fixes the cause.
 
 - **Workflow:** `.github/workflows/ci-triage.yml` fires on `workflow_run`
-  (completed) for `Build & Deploy (web + API)`, `QA Smoke` and `Jev integration`,
+  (completed) for `Build images`, `Deploy production`, `QA Smoke` and `Jev integration`,
   only when the run failed and its head repository is this repository (never
   forks). It checks out the default branch only, never the failed PR/head code,
   and is fail-soft: a missing `TYPESAFE_API_KEY` secret logs a notice and skips.

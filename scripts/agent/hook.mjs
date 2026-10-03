@@ -418,7 +418,16 @@ export function selfTest() {
     expect('a mild message with an open gate does not block', stopDecision(repo, { session_id: 's5', last_assistant_message: 'Implemented the change.' }) === null);
 
     // A claim is fine once no gate is open.
-    writeFileSync(join(repo, 'SESSION_STATE.md'), mineText.replace('| deploy | deploy.yml | NOT RUN | NOT RUN |', '| deploy | deploy.yml | run 36824151971 | PASS |'));
+    // Tick EVERY open gate. Match generically: the template's row names track
+    // the deploy pipeline (deploy.yml -> production-deploy.yml, ...), and this
+    // test is about the hook, not about which workflow name the row carries.
+    writeFileSync(
+      join(repo, 'SESSION_STATE.md'),
+      mineText.replace(
+        /\| ([^|]+) \| ([^|]+) \| NOT RUN \| NOT RUN \|/g,
+        '| $1 | $2 | run 36824151971 | PASS |',
+      ),
+    );
     expect('a claim with every gate PASS does not block', stopDecision(repo, { session_id: 's6', ...claim }) === null);
 
     // Structural errors block even without a claim, at most twice per session.

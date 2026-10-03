@@ -9,11 +9,12 @@ name: Writing Rev8 CI
 # backend and frontend tests run against (the API embeds rulebooks/**/*.json at
 # build time; lib/rulebook imports them statically), so a green run describes
 # the tree as it will be once the regenerated files are committed.
+# MANUAL ONLY (owner directive 2026-10-03, HARD PROJECT RULE): no automated
+# browser lanes. The push trigger on the (long-merged) ci/writing-rev8/** and
+# fix/writing-rev8-rule-enforcement branches was removed on purpose - this
+# workflow's production-report job drives a real browser, so it is
+# workflow_dispatch only now. Do not re-add a push trigger.
 on:
-  push:
-    branches:
-      - 'ci/writing-rev8/**'
-      - 'fix/writing-rev8-rule-enforcement'
   workflow_dispatch:
     inputs:
       dotnet_filter:

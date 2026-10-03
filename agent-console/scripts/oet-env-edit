@@ -11,7 +11,7 @@
 #
 # Guarantees:
 #   - values come from stdin or a file, never argv, and are never printed; output names keys only;
-#   - refuses to write while Build & Deploy (deploy.yml) is queued/running — the deploy rewrites
+#   - refuses to write while Deploy production (production-deploy.yml) is queued/running — the deploy rewrites
 #     this file — and fails closed when that cannot be checked;
 #   - refuses OWNER_AGENT_* / OWNERAGENT__* keys (the console's own controls);
 #   - /opt/oetwebapp is mounted read-only in the console, so the edit runs in a throwaway,
@@ -56,11 +56,11 @@ refuse_while_deploying() {
   need gh
   local status count
   for status in in_progress queued waiting pending requested; do
-    if ! count="$(gh run list --repo "$REPO" --workflow deploy.yml --status "$status" --limit 20 --json databaseId --jq 'length' 2>/dev/null)"; then
-      die "could not check deploy.yml runs with gh; refusing to edit (fail closed)" 75
+    if ! count="$(gh run list --repo "$REPO" --workflow production-deploy.yml --status "$status" --limit 20 --json databaseId --jq 'length' 2>/dev/null)"; then
+      die "could not check production-deploy.yml runs with gh; refusing to edit (fail closed)" 75
     fi
     if [ "$count" != "0" ]; then
-      die "Build & Deploy (deploy.yml) is $status; wait until it finishes (gh run list -w deploy.yml) and retry" 75
+      die "Deploy production (production-deploy.yml) is $status; wait until it finishes (gh run list -w production-deploy.yml) and retry" 75
     fi
   done
 }

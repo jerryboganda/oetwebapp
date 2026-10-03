@@ -1,16 +1,37 @@
 name: QA Smoke
 
+# Unit + backend evidence only. Owner directive 2026-10-03 (HARD PROJECT RULE):
+# there are NO Playwright/e2e jobs in CI. The specs under tests/e2e/** stay in the
+# repo as manual tools; the owner reports a regression and the agent fixes it on
+# demand. Do not re-add e2e jobs, e2e images or a nightly e2e schedule here.
+
 on:
   push:
     branches:
       - main
       - master
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'ops/**'
+      - '.github/agent-state.local.md'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'ops/**'
+      - '.github/agent-state.local.md'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: qa-smoke-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Main pushes must FINISH: agents need green evidence for their SHA (the old
+  # cancel-in-progress killed in-flight runs on every push - run 36953672205 was
+  # CANCELLED wholesale). PRs still auto-cancel; a newer commit replaces the old.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   placement-entry:
@@ -78,6 +99,14 @@ jobs:
       OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_provider_tests;Username=postgres;Password=postgres
     steps:
       - uses: actions/checkout@v4
+      # Each shard used to download every NuGet package from scratch (6x per
+      # run). The cache key follows the project files, so a restore is warm
+      # after the first run for a lockstep of csproj changes.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
+          restore-keys: nuget-${{ runner.os }}-
       - name: Create the vector extension
         run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d oet_provider_tests -c "CREATE EXTENSION IF NOT EXISTS vector;"
       - uses: actions/setup-dotnet@v4
@@ -174,6 +203,14 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
+      # Turbopack/webpack build cache. The Docker build's cache mount does not
+      # survive an ephemeral runner, so without this every CI `next build` is
+      # cold; the cache key follows the lockfile + build config.
+      - uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-cache-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'next.config.ts') }}
+          restore-keys: next-cache-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec tsc --noEmit
       # Mojibake guard. Report-only until the existing hits (mostly vendored
@@ -185,142 +222,10 @@ jobs:
       - run: pnpm exec vitest run --reporter=dot
       - run: pnpm run build
 
-  e2e-smoke:
-    name: E2E smoke (shard ${{ matrix.shard }}/${{ strategy.job-total }} · ${{ matrix.project }})
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        # One job per Playwright project. Each job runs that project's full
-        # smoke surface end-to-end against an in-job production-mode Docker
-        # stack — no `next dev` cold-compile flakes.
-        project:
-          - chromium-learner
-          - firefox-learner
-          - webkit-learner
-          - sydney-learner
-          - mobile-chromium-learner
-          - mobile-webkit-learner
-          - chromium-expert
-          - firefox-expert
-          - webkit-expert
-          - chromium-admin
-          - firefox-admin
-          - webkit-admin
-          - chromium-unauth
-        shard: [1]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright browsers
-        # All three engines are required: the `setup` project (auth state
-        # generation) always runs under chromium regardless of which
-        # downstream project this shard targets, and webkit/firefox shards
-        # also need their own engine.
-        run: pnpm exec playwright install --with-deps chromium firefox webkit
-
-      - name: Build local smoke stack
-        run: |
-          for attempt in 1 2 3; do
-            if docker compose -f docker-compose.desktop.yml up -d --build; then
-              exit 0
-            fi
-            echo "Smoke stack build failed on attempt ${attempt}; retrying after cleanup."
-            docker compose -f docker-compose.desktop.yml down -v || true
-            sleep $((attempt * 15))
-          done
-          docker compose -f docker-compose.desktop.yml up -d --build
-
-      - name: Verify stack readiness
-        run: node ./scripts/qa/assert-local-stack.mjs
-
-      - name: Run Playwright smoke buckets for ${{ matrix.project }}
-        env:
-          # Surface every bucket failure but keep the rest of the project's
-          # buckets running so we capture a complete report per shard.
-          PLAYWRIGHT_CONTINUE_ON_FAILURE: '1'
-          PLAYWRIGHT_HTML_OPEN: never
-        run: |
-          node ./scripts/qa/run-playwright-matrix.mjs smoke \
-            --project=${{ matrix.project }} \
-            --skip-readiness
-
-      - name: Capture docker logs
-        if: always()
-        run: |
-          mkdir -p output/playwright
-          docker compose -f docker-compose.desktop.yml logs --no-color > output/playwright/docker-compose.log
-
-      - name: Upload Playwright artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-${{ matrix.project }}-shard${{ matrix.shard }}
-          path: |
-            output/playwright/
-            blob-report/
-          if-no-files-found: ignore
-          retention-days: 14
-
-      - name: Shut down smoke stack
-        if: always()
-        run: docker compose -f docker-compose.desktop.yml down -v
-
-  e2e-merge-report:
-    name: E2E merged HTML report
-    if: always()
-    needs: e2e-smoke
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Download all blob reports
-        uses: actions/download-artifact@v4
-        with:
-          path: all-blob-reports
-          pattern: playwright-*
-          merge-multiple: false
-      - name: Merge into HTML report
-        run: |
-          mkdir -p merged-blob
-          find all-blob-reports -type d -name 'blob-report' -exec sh -c 'cp -r "$1"/* merged-blob/ 2>/dev/null || true' _ {} \;
-          if [ -n "$(ls -A merged-blob 2>/dev/null)" ]; then
-            pnpm exec playwright merge-reports --reporter html ./merged-blob
-          else
-            echo "No blob reports found to merge."
-          fi
-      - name: Upload merged HTML report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-merged-html-report
-          path: playwright-report/
-          if-no-files-found: ignore
-          retention-days: 30
-
   qa-gate:
     name: QA gate (all suites green)
     if: always()
-    needs: [backend-tests, frontend-unit, e2e-smoke]
+    needs: [backend-tests, frontend-unit]
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Verify all dependencies succeeded
@@ -330,8 +235,5 @@ jobs:
           fi
           if [ "${{ needs.frontend-unit.result }}" != "success" ]; then
             echo "::error::frontend-unit failed"; exit 1
-          fi
-          if [ "${{ needs.e2e-smoke.result }}" != "success" ]; then
-            echo "::error::e2e-smoke failed"; exit 1
           fi
           echo "All QA gates passed."

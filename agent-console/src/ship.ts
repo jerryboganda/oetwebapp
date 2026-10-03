@@ -19,7 +19,8 @@ import { asObject, optString } from './validate.js';
 //   pr_open    create (or reuse) the PR
 //   visibility add a PUBLIC_WINDOW_HOLDERS lease; flip public if private
 //   merging    squash-merge the PR at the scanned head SHA
-//   deploying  find + watch "Build & Deploy (web + API)" for the merge SHA
+//   deploying  find + watch "Deploy production" for the merge SHA (matched on
+//              the run name, which carries the SHA; head_sha is the fallback)
 //   health     the three live health URLs
 //   restoring_visibility  drop the lease; private again when no holders and
 //              no queued/in-progress runs (a watchdog forces private after 90 min)
@@ -565,16 +566,22 @@ export class ShipExecutor {
   private async deployAndCheck(state: ShipState, mergeSha: string, env: Record<string, string>): Promise<void> {
     const { deployWorkflowFile, deployWorkflowName, healthUrls } = this.deps.config.ship;
     this.phase(state, 'deploying', `Waiting for "${deployWorkflowName}" on ${mergeSha.slice(0, 12)}.`);
-    type Run = { id: number; html_url: string; status: string; conclusion: string | null; head_sha: string };
+    type Run = { id: number; html_url: string; status: string; conclusion: string | null; head_sha: string; name?: string };
     let run: Run | undefined;
     const lookupDeadline = this.now() + this.timings.runLookupTimeoutMs;
     while (!run) {
+      // Since 2026-10-03 the rollout is a `workflow_run`-triggered workflow,
+      // so its runs live on the default branch. production-deploy.yml puts the
+      // deployed SHA in the run NAME; match on that first and keep the old
+      // head_sha match as a fallback for older runs.
       const runs = await this.gh<{ workflow_runs: Run[] }>(
         env,
         'GET',
-        `repos/${this.repo}/actions/workflows/${encodeURIComponent(deployWorkflowFile)}/runs?head_sha=${mergeSha}&per_page=10`,
+        `repos/${this.repo}/actions/workflows/${encodeURIComponent(deployWorkflowFile)}/runs?per_page=20`,
       );
-      run = runs.workflow_runs.find((r) => r.head_sha === mergeSha);
+      run =
+        runs.workflow_runs.find((r) => (r.name ?? '').includes(mergeSha)) ??
+        runs.workflow_runs.find((r) => r.head_sha === mergeSha);
       if (run) break;
       if (this.now() >= lookupDeadline) throw new ShipFailure(`No "${deployWorkflowName}" run appeared for ${mergeSha.slice(0, 12)}.`);
       await this.sleep(this.timings.runLookupIntervalMs);

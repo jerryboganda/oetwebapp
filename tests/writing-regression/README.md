@@ -34,7 +34,7 @@ python build_report.py              # before/after table
 
 `.github/workflows/writing-regression.yml` runs the checker self-test and
 `verify_manifest.py` whenever the Writing prompt, house-style rules, rulebooks, AI route
-or this corpus change. `deploy.yml` makes the same check a hard gate before deploy: a
+or this corpus change. `build-images.yml` makes the same check a hard gate before deploy: a
 Writing prompt/rules/model change without a fresh passing `manifest.json` **blocks the
 deploy**. Because grading runs on the owner's Claude subscription (unreachable from CI
 runners), the gate verifies a *recorded* passing run rather than re-running the model —

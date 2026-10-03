@@ -15,16 +15,16 @@ right pair for the scenario:
 
 | File | Purpose |
 | --- | --- |
-| `Dockerfile` | Web-only multi-stage image (Next.js `output: 'standalone'`, `runner` target). Built and pushed to GHCR by `deploy.yml` `build-web`; also used by the local, desktop, staging and emergency source-build stacks. It does not build the API. |
-| `backend/Dockerfile.runtime` | Production API image. `deploy.yml` `build-api` runs `dotnet publish` on the Actions host and packages `backend/publish` with this file. |
+| `Dockerfile` | Web-only multi-stage image (Next.js `output: 'standalone'`, `runner` target). Built and pushed to GHCR by `build-images.yml` `build-web`; also used by the local, desktop, staging and emergency source-build stacks. It does not build the API. |
+| `backend/Dockerfile.runtime` | Production API image. `build-images.yml` `build-api` runs `dotnet publish` on the Actions host and packages `backend/publish` with this file. |
 | `backend/Dockerfile` | API image built from source (SDK build stage). Used by the local, dev, backend, desktop, staging and emergency source-build compose files. |
 | `backend/Dockerfile.dev` | `dotnet watch` API image for `docker-compose.hotreload.yml`. |
-| `scripts/backup/Dockerfile` | `db-backup` sidecar image, built by `deploy.yml` `build-backup`. |
-| `agent-gateway/Dockerfile` | Agent gateway image, built by `deploy.yml` `build-agent-gateway`. |
+| `scripts/backup/Dockerfile` | `db-backup` sidecar image, built by `build-images.yml` `build-backup`. |
+| `agent-gateway/Dockerfile` | Agent gateway image, built by `build-images.yml` `build-agent-gateway`. |
 | `docker-compose.local.yml` | Full local stack (postgres + API + web) for Docker Desktop development. Mirrors production topology with simplified networking. Use with `--env-file .env.docker-local`. |
 | `docker-compose.dev.yml` | Backend-only (postgres + API) in Docker; run Next.js on the host with `npm run dev` for hot-reload. Use with `--env-file .env.docker-local`. |
 | `docker-compose.hotreload.yml` | Podman hot-reload stack (Next.js HMR + `dotnet watch`) started by `start-dev.ps1`; see `docs/QUICK-START.md`. |
-| `docker-compose.production.yml` | The production stack (project `oetwebsite`): stable `web`/`learner-api` router containers plus blue/green app slots, Postgres, ClamAV, AI worker, agent gateway and backup sidecar joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`, and the only compose file `deploy.yml` ships to the VPS. |
+| `docker-compose.production.yml` | The production stack (project `oetwebsite`): stable `web`/`learner-api` router containers plus blue/green app slots, Postgres, ClamAV, AI worker, agent gateway and backup sidecar joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`, and the only compose file `production-deploy.yml` ships to the VPS. |
 | `docker-compose.production.hostports.yml` | Override — exposes ports on the host (no reverse proxy). Use for bare-metal / single-host installs without NPM. |
 | `docker-compose.production.build.yml` | Override — emergency/local source-build when immutable image refs are unavailable. Needs explicit owner approval on the VPS (see §3). |
 | `docker-compose.agent-console.yml` | Owner Agent Console, its own compose project (`oet-agent-console`). Deployed only by `.github/workflows/agent-console.yml`. |
@@ -133,17 +133,27 @@ gates. If Actions is unavailable, fix Actions first; do not silently move heavy
 build work to the VPS. Desktop/mobile release workflows upload only the latest
 artifact per channel and delete the previous VPS copy automatically.
 
-The normal path is `.github/workflows/deploy.yml` (**Build & Deploy (web +
-API)**). It runs on every push to `main` and can be dispatched manually:
+The normal path is two workflows (split 2026-10-03 so agents can build in
+parallel while production rollouts serialize):
 
-1. `syntax-gate` — ship-gate self-test plus the Writing model-answer
-   regression tests.
-2. `build-web`, `build-api`, `build-backup`, `build-agent-gateway` — build the
-   images on Actions and push them to GHCR tagged `:<sha>` (and `:latest`).
-3. `migrate-production` — generates idempotent EF migration SQL on Actions and
-   applies it through the production PostgreSQL container
-   (`scripts/deploy/apply-migrations-from-ci.sh`). Migrations are forward-only.
-4. `deploy` — streams `scripts/deploy/auto-deploy-ghcr.sh`,
+- `.github/workflows/build-images.yml` (**Build images**) — runs on every push to
+  `main`, no cross-SHA lock:
+  1. `changes` — classifies the push (api / writing) so the Writing gates and
+     migration SQL only run when their files changed.
+  2. `syntax-gate` — ship-gate self-test plus the CI ship gate (seconds); the
+     Writing model-answer dotnet regression runs only when Writing changed.
+  3. `build-web`, `build-api`, `build-backup`, `build-agent-gateway` — build the
+     images on Actions and push them to GHCR tagged `:<sha>` (and `:latest`).
+  4. `migrate-sql` — generates the idempotent EF migration SQL on Actions and
+     uploads it as an artifact (`oet-production-migrations-<sha>`). Migrations
+     are forward-only.
+- `.github/workflows/production-deploy.yml` (**Deploy production**) — starts when
+  a Build images run on `main` succeeds (or `workflow_dispatch -f sha=<sha>` for
+  a rollback); serialized by the `production-deploy` concurrency group:
+  5. `apply-migrations` — applies the SQL through the production PostgreSQL
+     container (`scripts/deploy/apply-migrations-from-ci.sh`); regenerates it
+     in-workflow if the artifact is missing.
+  6. `deploy` — streams `scripts/deploy/auto-deploy-ghcr.sh`,
    `docker-compose.production.yml`, `validate-production-env.sh` and the nginx
    router templates to the VPS and runs the script with the `:<sha>` image
    refs. The script validates `.env.production`, pulls the images, recreates
@@ -164,7 +174,7 @@ topology: [`DEPLOY-MANUAL.md`](DEPLOY-MANUAL.md). Compute boundary:
 `scripts/deploy/deploy-prod.sh` is the manual incident path. It still uses
 prebuilt images, pinned by digest, and needs the exact SHA plus all four
 immutable image refs. `ROUTER_IMAGE` is an `nginx`-compatible `@sha256:`
-digest; `deploy.yml` does not build a router image (the compose default is
+digest; the build/deploy workflows do not build a router image (the compose default is
 `nginx:1.27-alpine`).
 
 ```bash
@@ -297,7 +307,7 @@ Back up both named volumes before upgrades or VPS maintenance.
 
 ## 8. Updating the deployment
 
-Merge or push to `main` and let `deploy.yml` build and deploy that exact SHA
+Merge or push to `main` and let `build-images.yml` + `production-deploy.yml` build and deploy that exact SHA
 (§3). The VPS must not build frontend, API, backend, Next.js, or .NET
 artifacts. The step-by-step checklist is [`DEPLOY-MANUAL.md`](DEPLOY-MANUAL.md);
 the digest-pinned `deploy-prod.sh` incident path is described in §3. On that
@@ -316,7 +326,7 @@ digest-input gate and can overload the shared host.
 Destructive or irreversible EF migrations require a maintenance window, fresh
 verified backup ID, non-live restore drill evidence, and owner approval.
 `scripts/deploy/pre-flight.sh` (run by `deploy-prod.sh`) enforces this; the
-`deploy.yml` `migrate-production` job does not, so review such migrations
+`build-images.yml` `migrate-sql` / `production-deploy.yml` `apply-migrations` jobs do not, so review such migrations
 before they reach `main`.
 
 ## Troubleshooting

@@ -98,6 +98,32 @@ launcher is silent anywhere there is no ledger.
 
 3. Open `/hooks` once (or start a new session). No matcher is set on `SessionStart`, so it also fires on `fork`.
 
+## Ship wrapper (multi-agent safe) — `pnpm run ship`
+
+`scripts/ship/ship.mjs` is the one command per ship (owner directive 2026-10-03):
+
+1. **Ship lock** — `<git-common-dir>/ax-ship/lock.json`, shared by every linked worktree, TTL 30 min
+   with a 60 s heartbeat. Two local sessions can never rebase/push at once; `--force-release` clears
+   a stuck lock.
+2. **Rebase** — `git fetch origin main` + `git rebase --autostash origin/main`. Ledger conflicts
+   auto-resolve by the documented rule (newer `Updated:` block wins wholesale for
+   `SESSION_STATE.md` / `TASKS.json`; `VERIFICATION.md` merges by union), anything else aborts.
+3. **Gate** — `scripts/ship/pre-push-gate.mjs` (seconds).
+4. **Visibility lease** — `<git-common-dir>/ax-ship/visibility.json`. The repo is made public
+   *before* the push (a queued run that starts on a private repo is refused by hosted runners), and
+   flipped private again only when this session is the last unexpired lease holder **and** no Actions
+   run is queued or in progress. `--may-flip-private` is the read-only verdict used by
+   `watch-deploy.ps1`.
+5. **Push** — `git push origin HEAD:main` (never `--force`) with fetch/rebase/gate retry.
+6. **Watch** — `watch-deploy.ps1 -SkipPublic -SkipPrivateFlip`, supersede-aware: when a newer push
+   replaced this SHA before its deploy ran, it adopts the newer run and prints
+   `SHIP-WATCH_SUPERSEDED_BY <sha>`.
+7. **Record** — `ax:record` on green (the evidence rule above still applies).
+
+Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--no-visibility`, `--sha <sha>`,
+`--status`, `--release-lease`, `--force-release`, `--self-test` (pure helpers; runs in
+`ax-check.yml` on Linux and Windows).
+
 ## Compute policy
 
 This directory obeys `AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE

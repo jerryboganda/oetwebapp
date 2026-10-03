@@ -17,12 +17,10 @@ name: UBAG integration end-to-end
 #      internal network (the same path oet-api uses).
 #
 # Uses pre-existing repo secrets: PROD_SSH_KEY (and VPS_* for reference).
+# MANUAL ONLY (owner directive 2026-10-03, HARD PROJECT RULE): no automated
+# browser/e2e jobs in CI. The push trigger was removed on purpose - do not
+# re-add one. Dispatch it by hand when the owner asks.
 on:
-  push:
-    paths:
-      - ".github/workflows/ubag-integration-e2e.yml"
-      - "scripts/deploy/ubag-e2e-probe.py"
-      - "app/admin/ai-providers/**"
   workflow_dispatch:
     inputs:
       mode:

@@ -62,7 +62,7 @@ mock with assessment seeding, and live-tutor calibration banner.
 ## 4. Production deploy
 
 Follow `DEPLOY-MANUAL.md`: merge to `main` and let
-`.github/workflows/deploy.yml` (**Build & Deploy (web + API)**) build the images
+`.github/workflows/build-images.yml` (**Build images**) build the images
 on Actions and run `scripts/deploy/auto-deploy-ghcr.sh` on the VPS. The
 blue/green rollout:
 

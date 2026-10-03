@@ -41,8 +41,8 @@ internal static class Doc12QaValidation
                 "owner-flagged defect type becomes a permanent injection test in the relevant fixture before further " +
                 "letters are written, and if correct clinical wording exposes a validator weakness, the validator is " +
                 "fixed rather than the letter reworded to dodge the check (EV-QA-004). The production deploy pipeline " +
-                "itself runs one of these as a hard release gate before any web/API image is built: `syntax-gate` in " +
-                "`deploy.yml` runs `dotnet test ... --filter 'FullyQualifiedName~WritingRev8ModelAnswerGateTests'` " +
+                "itself runs one of these as a hard release gate before any web/API image is built: `writing-model-answer-gate` in " +
+                "`build-images.yml` runs `dotnet test ... --filter 'FullyQualifiedName~WritingRev8ModelAnswerGateTests'` " +
                 "and the build step will not proceed if it fails (EV-QA-005)."),
             new DocumentationSectionBlock(
                 "Adversarial and security boundary tests",
@@ -94,10 +94,9 @@ internal static class Doc12QaValidation
                 "The repository runs two separate GitHub Actions workflows that are easy to conflate but serve " +
                 "different purposes, and its own always-loaded agent contract is explicit about which one actually " +
                 "gates production: `qa-smoke.yml` (\"QA Smoke\") runs placement-entry contract checks, the six-shard " +
-                "backend test matrix, a frontend unit/lint/typecheck/build job, and a multi-shard Playwright end-to-" +
-                "end smoke matrix, but is stated to be \"chronically red on main (flaky)\" and is deliberately not " +
+                "backend test matrix and a frontend unit/lint/typecheck/build job. It is deliberately not " +
                 "blocked on for a routine change (EV-QA-014). The workflow that actually gates what reaches " +
-                "production is the separate `deploy.yml` (\"Build & Deploy (web + API)\"): it runs the syntax gate " +
+                "production is the separate `build-images.yml` + `production-deploy.yml` pipeline: it runs the syntax gate " +
                 "described above, then builds the web and API images off-box on GitHub-hosted runners, pushes them " +
                 "to GHCR, and only then triggers a health-gated blue/green deploy on the production VPS — the " +
                 "workflow's own top-of-file comment states the reason for building off-box directly: the VPS is a " +
@@ -141,7 +140,7 @@ internal static class Doc12QaValidation
                 "AGENTS.md, \"OET Writing Model Answers — COMPULSORY\" section"),
             new DocumentationEvidenceSeed("EV-QA-005", DocumentationEvidenceType.Reliability,
                 "Deploy pipeline hard gate running the Writing model-answer regression fixture before any image is built.",
-                ".github/workflows/deploy.yml, syntax-gate job (WritingRev8ModelAnswerGateTests filter)"),
+                ".github/workflows/build-images.yml, writing-model-answer-gate job (WritingRev8ModelAnswerGateTests filter)"),
             new DocumentationEvidenceSeed("EV-QA-006", DocumentationEvidenceType.Testing,
                 "Adversarial tests targeting score-conversion tables and objective scoring / AI gateway paths.",
                 "backend/tests/OetLearner.Api.Tests/Assessment/M2AdversarialChallengerTests.cs; M2AdversarialScoringAndAiGatewayTests.cs"),
@@ -167,22 +166,22 @@ internal static class Doc12QaValidation
                 "Manual assistive-technology (NVDA/VoiceOver) signoff recorded as pending external execution, not complete.",
                 "docs/qa/release-readiness.md, \"External Signoff Gates\" section"),
             new DocumentationEvidenceSeed("EV-QA-014", DocumentationEvidenceType.Reliability,
-                "QA Smoke workflow disclosed as chronically red/flaky on main and deliberately not blocked on for routine changes.",
+                "QA Smoke workflow kept to unit + backend evidence and deliberately not blocked on for routine changes; the Playwright/e2e matrix was removed from CI by owner directive 2026-10-03 (no automated e2e; bugs are reported by the owner and fixed on demand).",
                 "AGENTS.md, \"Ship-It Workflow — COMPULSORY\" section, step 2; .github/workflows/qa-smoke.yml"),
             new DocumentationEvidenceSeed("EV-QA-015", DocumentationEvidenceType.Reliability,
-                "The real production gate is the separate Build & Deploy workflow: off-box image build, GHCR push, health-gated blue/green VPS deploy.",
-                ".github/workflows/deploy.yml (top-of-file comment; syntax-gate, build-web jobs)"),
+                "The real production gate is the separate Build images + Deploy production pipeline: off-box image build, GHCR push, health-gated blue/green VPS deploy.",
+                ".github/workflows/build-images.yml (top-of-file comment; syntax-gate, build-web jobs)"),
             new DocumentationEvidenceSeed("EV-QA-016", DocumentationEvidenceType.Reliability,
                 "A fully observed, green GitHub-hosted QA Smoke run recorded as still pending external observation as of the release-readiness document.",
                 "docs/qa/release-readiness.md, \"GitHub-Hosted QA Smoke Observation\" section"),
             new DocumentationEvidenceSeed("EV-QA-017", DocumentationEvidenceType.Reliability,
                 "Blue/green health-gated deploy; named persistent Docker volumes independent of web/API containers.",
-                "AGENTS.md, \"Storage Persistence\" section; .github/workflows/deploy.yml"),
+                "AGENTS.md, \"Storage Persistence\" section; .github/workflows/build-images.yml"),
             new DocumentationEvidenceSeed("EV-QA-018", DocumentationEvidenceType.Reliability,
                 "Production script blocking destructive volume commands at the shell level; content removal only via admin UI.",
                 "AGENTS.md, \"Storage Persistence\" section (scripts/deploy/protect-production-data.sh)"),
             new DocumentationEvidenceSeed("EV-QA-019", DocumentationEvidenceType.Reliability,
                 "CI-enforced image-only rollout and compute-offload verification before any image build.",
-                ".github/workflows/deploy.yml, build-web job (verify-image-only-rollout.sh, verify-compute-offload.sh)"),
+                ".github/workflows/build-images.yml, build-web job (verify-image-only-rollout.sh, verify-compute-offload.sh)"),
         ]);
 }

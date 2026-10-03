@@ -20,9 +20,10 @@ Rules that govern behavior live in `AGENTS.md`; domain specs are indexed in
  Providers: AI (via the grounded gateway only) · Stripe/PayPal/Whop/… · Brevo · LiveKit · Zoom · Bunny
 ```
 
-Production: push to `main` → `.github/workflows/deploy.yml` builds GHCR images →
-`scripts/deploy/auto-deploy-ghcr.sh` rolls blue/green on the VPS
-(`docker-compose.production.yml`, project `oetwebsite`). The VPS never builds.
+Production: push to `main` → `.github/workflows/build-images.yml` builds GHCR
+images (+ the migration SQL artifact) → `.github/workflows/production-deploy.yml`
+applies migrations and runs `scripts/deploy/auto-deploy-ghcr.sh` blue/green on
+the VPS (`docker-compose.production.yml`, project `oetwebsite`). The VPS never builds.
 
 ## Where things live
 
@@ -48,7 +49,7 @@ Production: push to `main` → `.github/workflows/deploy.yml` builds GHCR images
 | Real-time | SignalR hubs in `Hubs/` (plus Notification/MockLiveRoom hubs under `Services/`). No backplane: hubs rely on the single active slot. |
 | Frontend tests | Co-located `*.test.ts(x)` / `__tests__/` (vitest), Playwright in `tests/e2e/`. |
 | Backend tests | `backend/tests/OetLearner.Api.Tests`, folders mirror the domain (`Writing/`, `Billing/`, …); shared doubles in `Infrastructure/`. See `.github/instructions/testing.instructions.md`. |
-| CI | `.github/workflows/`: `qa-smoke.yml` (PR gate: backend shards, frontend unit, e2e), `deploy.yml` (production), path-filtered gates for speaking, mobile, tauri, rulebooks. |
+| CI | `.github/workflows/`: `qa-smoke.yml` (push/PR: backend shards, frontend unit, placement-entry — no e2e, owner rule), `build-images.yml` + `production-deploy.yml` (production), path-filtered gates for speaking, mobile, tauri, rulebooks. Playwright specs are manual/`workflow_dispatch` tools. |
 | Scripts | `scripts/` indexed in [`scripts/README.md`](../scripts/README.md); deploy-critical ones in `scripts/deploy/` and `scripts/ship/`. |
 | Native shells | `capacitor.config.ts` + `android/` + `ios/` (remote URL shell), `src-tauri/` (remote-only desktop, IPC allow-list in `capabilities/`). |
 | Sidecars | `agent-console/` (owner-only ops console, own workflow and compose file), `agent-gateway/` (dormant OpenAI-compatible gateway; routes off by default). |
@@ -73,7 +74,7 @@ Production: push to `main` → `.github/workflows/deploy.yml` builds GHCR images
 
 - Android id `com.oetwithdrhesham.app` vs iOS `com.oetprep.learner`: frozen store identities.
 - `lib/mock-data.ts` holds real shared types; renaming it would touch hundreds of imports.
-- `docker-compose.staging.yml` is not a deploy path; `deploy.yml` ships only `docker-compose.production.yml`.
+- `docker-compose.staging.yml` is not a deploy path; `production-deploy.yml` ships only `docker-compose.production.yml`.
 - Multi-exam scoring strategies (`Services/Scoring/`, `Services/ExamSession/`) compile and are
   unit-tested but are not wired into DI; OET scoring goes through `OetScoring` directly.
 - ~8 EF entities have no reads or writes in code; they back live tables and stay.

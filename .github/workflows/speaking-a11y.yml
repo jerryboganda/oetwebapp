@@ -1,8 +1,9 @@
 name: Speaking Module — Accessibility (axe)
 
+# MANUAL ONLY (owner directive 2026-10-03, HARD PROJECT RULE): no automated
+# Playwright/e2e jobs in CI. The nightly schedule was removed on purpose -
+# do not re-add one. Run it by hand when the owner asks.
 on:
-  schedule:
-    - cron: "30 3 * * *"
   workflow_dispatch:
 
 jobs:

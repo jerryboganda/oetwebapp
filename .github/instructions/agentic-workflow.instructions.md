@@ -47,7 +47,7 @@ Externalized working memory. Three layers, exclusive ownership — no file has t
 - Prefer focused tests for behavior changes and bug fixes.
 - Review the diff for OET contracts, security, tests, and regressions.
 - Validate with the lightest credible GitHub Actions run (`validation.instructions.md`) before reporting done.
-- After a `main` push, `pnpm run ship:watch` until Build & Deploy for this SHA succeeds. Failure logs are the agent's job to fix and re-push. Do not stop at "deploy initiated" and do not wait for the owner to notice.
+- Ship with `pnpm run ship`: it owns the lock, the rebase, `ship:gate`, the visibility lease (public before push, private only when nobody else is mid-ship), the push retry, and the supersede-aware watch of `Deploy production`. Failure logs are the agent's job to fix and re-push. Do not stop at "deploy initiated" and do not wait for the owner to notice.
 - Once live health is green, `pnpm run ax:record` then `pnpm run ax:verify` so `VERIFICATION.md` carries this SHA's real evidence.
 - Ask only when a missing decision blocks correctness or safety; offer a recommended option.
 

@@ -86,9 +86,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          busy=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow deploy.yml --limit 20 --json status --jq '[.[] | select(.status != "completed")] | length')
+          busy=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow production-deploy.yml --limit 20 --json status --jq '[.[] | select(.status != "completed")] | length')
           if [ "$busy" != 0 ]; then
-            echo "::error::deploy.yml has $busy run(s) in progress or queued. A deploy restarts the API (and its in-memory provider breaker) in the middle of a run. Wait for it to finish, then dispatch again."
+            echo "::error::production-deploy.yml has $busy run(s) in progress or queued. A deploy restarts the API (and its in-memory provider breaker) in the middle of a run. Wait for it to finish, then dispatch again."
             exit 1
           fi
       - name: Reject a card-specific script in exam mode

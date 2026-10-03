@@ -6,7 +6,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-WORKFLOW="$REPO_ROOT/.github/workflows/deploy.yml"
+# Owner directive 2026-10-03: the former deploy.yml is split so builds run in
+# parallel per SHA while production rollouts serialize. Migrations are still
+# generated on Actions (build-images.yml) and applied by the deploy workflow
+# (production-deploy.yml) - which only starts after the whole build run passed,
+# so prod can never migrate ahead of a failed build.
+BUILD_WORKFLOW="$REPO_ROOT/.github/workflows/build-images.yml"
+DEPLOY_WORKFLOW="$REPO_ROOT/.github/workflows/production-deploy.yml"
 ROLLOUT="$SCRIPT_DIR/auto-deploy-ghcr.sh"
 IMMUTABLE_ROLLOUT="$SCRIPT_DIR/rollout-release.sh"
 PREFLIGHT="$SCRIPT_DIR/pre-flight.sh"
@@ -30,26 +36,32 @@ require_match() {
   fi
 }
 
-require_literal "$WORKFLOW" 'migrations script --idempotent'
-require_literal "$WORKFLOW" 'apply-migrations-from-ci.sh'
+require_literal "$BUILD_WORKFLOW" 'migrations script --idempotent'
+require_literal "$DEPLOY_WORKFLOW" 'apply-migrations-from-ci.sh'
 require_literal "$ROLLOUT" '--no-build'
 require_literal "$ROLLOUT" 'DB_BACKUP_IMAGE'
 require_literal "$IMMUTABLE_ROLLOUT" '--no-build'
 require_literal "$PREFLIGHT" '--no-build'
-# migrate-production must wait for all pre-built images.
-require_literal "$WORKFLOW" 'needs: [build-web, build-api, build-backup]'
-
-require_match '^  migrate-production:' "$WORKFLOW" \
-  "deploy workflow must generate/apply migrations in the migrate-production Actions job."
-require_match 'needs: \[build-web, build-api, build-backup, build-agent-gateway, migrate-production\]' "$WORKFLOW" \
+# migrate-sql is gated on `changes.outputs.api` so a non-API push skips SQL
+# generation entirely; the deploy workflow only starts when the whole build run
+# succeeded, which keeps the original invariant (never migrate ahead of a
+# failed build) structurally true.
+require_match '^  migrate-sql:' "$BUILD_WORKFLOW" \
+  "build-images workflow must generate the production migration SQL in the migrate-sql Actions job."
+require_match '^  deploy:' "$DEPLOY_WORKFLOW" \
+  "deploy-production workflow must run the rollout in a job named deploy."
+require_match 'needs: \[resolve, apply-migrations\]' "$DEPLOY_WORKFLOW" \
   "deploy must wait for the Actions migration gate."
 require_match 'ALLOW_VPS_SOURCE_BUILD=owner-approved-emergency' "$REPO_ROOT/scripts/deploy-production.sh" \
   "the legacy source-build fallback must be explicitly gated."
 require_match 'ALLOW_VPS_SOURCE_BUILD=owner-approved-emergency' "$REPO_ROOT/scripts/deploy/deploy-direct.sh" \
   "the legacy direct source-build fallback must be explicitly gated."
 
-if grep -Eq 'git[[:space:]]+(fetch|reset[[:space:]]+--hard)' "$WORKFLOW"; then
-  echo "[compute-offload] deploy workflow must not sync the full source repository to the VPS" >&2
+# The VPS must never receive a source sync - only the ROLLOUT workflow is
+# checked here. build-images.yml runs on a CI checkout, where fetching the
+# diff base for the syntax gate is normal runner work and never touches the VPS.
+if grep -Eq 'git[[:space:]]+(fetch|reset[[:space:]]+--hard)' "$DEPLOY_WORKFLOW"; then
+  echo "[compute-offload] $DEPLOY_WORKFLOW must not sync the full source repository to the VPS" >&2
   exit 1
 fi
 

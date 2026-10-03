@@ -58,7 +58,7 @@ Frameworks: Vitest + React Testing Library (frontend unit), Playwright (E2E/desk
   No permanent `Skip`: delete the test or fix it.
 - When moving or renaming a test class, update the CI filters that name it:
   `writing-rev8-ci.yml` `DOTNET_FILTER`, `ai-control-plane-tests.yml` `paths` and `--filter`,
-  `rulebook-conformance.yml` `--filter`, `deploy.yml` `syntax-gate` filter, the `--filter` of
+  `rulebook-conformance.yml` `--filter`, `build-images.yml` `writing-model-answer-gate` filter, the `--filter` of
   `ubag-integration-e2e.yml`, `ai-provider-benchmark.yml` and
   `elevenlabs-realtime-stt-live-smoke.yml`, and the pinned classes in `qa-smoke.yml`
   (`PlacementEndpointsTests`, `AuthFlowsTests`).

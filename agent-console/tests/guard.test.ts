@@ -229,7 +229,7 @@ describe('guard: ordinary commands', () => {
     'cat package.json | jq .version',
     'docker ps --filter name=oet-',
     'docker inspect oet-api-blue',
-    'gh run list -w deploy.yml -s in_progress',
+    'gh run list -w production-deploy.yml -s in_progress',
     'gh workflow list',
     `${DB} "SELECT count(*) FROM users"`,
     `${DB} "SELECT 1"`,

@@ -11,7 +11,7 @@ name: AI Control Plane Schema Tests
 # indexes) that SQLite/InMemory cannot faithfully emulate.
 #
 # No runtime service reads or writes these tables yet, so this workflow is
-# scoped narrowly and kept separate from deploy.yml.
+# scoped narrowly and kept separate from build-images.yml / production-deploy.yml.
 on:
   pull_request:
     paths:

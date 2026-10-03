@@ -60,7 +60,7 @@ prefix_rule(
     decision = "forbidden",
     justification = "Actions secrets and variables (including the visibility lease) are owner/Ship-only.",
     match = ["gh secret set PROD_SSH_KEY", "gh variable set PUBLIC_WINDOW_HOLDERS"],
-    not_match = ["gh run list -w deploy.yml"],
+    not_match = ["gh run list -w production-deploy.yml"],
 )
 
 prefix_rule(

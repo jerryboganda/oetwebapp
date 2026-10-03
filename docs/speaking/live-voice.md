@@ -746,7 +746,7 @@ the inputs added on 1 Oct 2026, the checks and the order of runs are under
 Dispatch from a branch, never by merging: `gh workflow run speaking-live-voice-prod-e2e.yml --ref <branch> -f name=value ...`.
 Every push to `main` redeploys production (new slot, the in-memory provider breaker is reset, in-flight grading is requeued), so
 a harness-only change is never merged to run it. Dispatch one run at a time and wait for each to finish (GitHub keeps one
-pending run per concurrency group). The first workflow step fails the run while `deploy.yml` has a run in progress or queued.
+pending run per concurrency group). The first workflow step fails the run while `production-deploy.yml` has a run in progress or queued.
 The artifact (QA transcripts, the patient's audio, screenshots) is kept for 3 days. `scripts/qa/live-voice-workflow.test.ts`
 fails CI when a module the script imports is not copied, an environment variable the script reads is not wired, an input
 description would break YAML (a colon-space in a plain scalar once made a push run fail with 0 jobs) or a script option has no

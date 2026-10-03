@@ -1,8 +1,9 @@
 name: Performance Gates (staging + isolated)
 
+# MANUAL ONLY (owner directive 2026-10-03, HARD PROJECT RULE): no automated
+# browser/e2e jobs in CI. The weekly Monday 05:00 UTC schedule was removed on
+# purpose - do not re-add one. Dispatch it by hand when the owner asks.
 on:
-  schedule:
-    - cron: '0 5 * * 1'
   workflow_dispatch:
     inputs:
       mode:

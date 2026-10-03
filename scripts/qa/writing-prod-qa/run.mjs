@@ -51,7 +51,7 @@ function loadScripts() {
 // Is a production deploy running or queued? (gh CLI with the job's token; unknown = not busy, logged.)
 function deployBusy() {
   try {
-    const out = execFileSync('gh', ['run', 'list', '--repo', process.env.GITHUB_REPOSITORY, '--workflow', 'deploy.yml', '--limit', '20',
+    const out = execFileSync('gh', ['run', 'list', '--repo', process.env.GITHUB_REPOSITORY, '--workflow', 'production-deploy.yml', '--limit', '20',
       '--json', 'status', '--jq', '[.[] | select(.status != "completed")] | length'], { encoding: 'utf8' });
     return Number(out.trim()) > 0;
   } catch (error) {

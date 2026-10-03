@@ -11,6 +11,9 @@ name: Visual QA
 # Separate from QA Smoke so layout checks never slow or redden the smoke gate.
 # One worker: each seeded role allows a single active session, so parallel tests
 # of one role revoke each other's session and land on /sign-in.
+# MANUAL ONLY (owner directive 2026-10-03, HARD PROJECT RULE): no automated
+# Playwright/e2e jobs in CI. The pull_request trigger was removed on purpose -
+# do not re-add one. Dispatch it by hand when the owner asks.
 on:
   workflow_dispatch:
     inputs:
@@ -18,14 +21,6 @@ on:
         description: Run the six Writing V2 learner journeys instead of the visual sweep
         type: boolean
         default: false
-  pull_request:
-    paths:
-      - 'app/**'
-      - 'components/**'
-      - 'tests/e2e/shared/visual-qa.spec.ts'
-      - 'tests/e2e/shared/route-transition.spec.ts'
-      - 'tests/e2e/shared/command-palette.spec.ts'
-      - 'tests/e2e/shared/learner-layout-crawl.spec.ts'
 
 concurrency:
   group: visual-qa-${{ github.ref }}${{ inputs.writing_journeys && '-writing' || '' }}

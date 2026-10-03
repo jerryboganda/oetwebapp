@@ -11,8 +11,10 @@ new slot is healthy.
 ## Required Flow
 
 1. Push or merge the target commit to `main`.
-2. Let `.github/workflows/deploy.yml` run for that exact commit, or manually run
-   the `Build & Deploy (web + API)` workflow from GitHub Actions.
+2. Let `.github/workflows/build-images.yml` (`Build images`) run for that exact
+   commit — `.github/workflows/production-deploy.yml` (`Deploy production`)
+   starts automatically when the build succeeds. For a rollback, dispatch
+   `Deploy production` with `-f sha=<previous-sha>` (images already in GHCR).
 3. Confirm the workflow built and pushed:
    - `ghcr.io/jerryboganda/oetwebapp-web:<sha>`
    - `ghcr.io/jerryboganda/oetwebapp-api:<sha>`
@@ -75,7 +77,8 @@ Production currently uses the blue/green GHCR image flow:
 - App slots: `oet-web-blue`, `oet-web-green`, `oet-api-blue`, `oet-api-green`
 - Supporting containers: `oet-postgres`, `oet-clamav`, `oet-db-backup`
 - Deploy helper: `scripts/deploy/auto-deploy-ghcr.sh`
-- Workflow: `.github/workflows/deploy.yml`
+- Workflows: `.github/workflows/build-images.yml` (images → GHCR) and
+  `.github/workflows/production-deploy.yml` (pull + blue/green rollout)
 
 Nginx Proxy Manager routes to the stable containers:
 

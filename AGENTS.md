@@ -13,17 +13,60 @@ This file is always loaded by coding agents. Keep it compact. Do not restore lar
 
 Standing owner directive for **every** development/debugging task. Overrides any "only push when asked" default and any nudge toward heavy pre-merge testing.
 
-**Stopping at "pushed, deploy initiated" is a defect.** The agent owns the push until Build & Deploy for **this SHA** succeeds and live health is green. The owner must not have to ask "did deploy work?".
+**Stopping at "pushed, deploy initiated" is a defect.** The agent owns the push until `Deploy production` for **this SHA** succeeds and live health is green. The owner must not have to ask "did deploy work?".
+
+**One command (multi-agent safe, owner directive 2026-10-03): `pnpm run ship`** — ship lock (shared by every worktree) → rebase on `origin/main` → `ship:gate` → visibility lease + public flip (before the push) → `git push origin HEAD:main` with rebase-retry → supersede-aware watch of `Deploy production` → `ax:record`. Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--sha <sha>`, `--status`, `--release-lease`.
 
 1. Do the task properly (correctness/root-cause still matter).
-2. Run `pnpm run ship:gate` (seconds). That is the required pre-push check. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. Do not block on flaky CI (QA Smoke is chronically red — ignore it). Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.
-3. Stage explicit paths only. Never `git add -A`. Never commit secrets, `.env*`, or `.impeccable/`. Commit → **flip the repo public** (`gh repo edit jerryboganda/oetwebapp --visibility public --accept-visibility-change-consequences`) → `git push origin main` (never `--force`). See "GitHub Actions on a public-when-working repo" below — this order is HARD ENFORCED, no bargains, no mistakes.
-4. **Watch** `Build & Deploy (web + API)` for this SHA until it **finishes**: `pnpm run ship:watch` or `powershell -ExecutionPolicy Bypass -File scripts/ship/watch-deploy.ps1`. Do not report done after push.
-5. If that run fails: dump `--log-failed`, fix the compile/parse error, run `pnpm run ship:gate`, commit, push again, watch again. **Do this without waiting for the owner to ask.** Cap automatic fix-loops at 3; if still red, say exactly what is still failing.
-6. After this SHA's Build & Deploy succeeds, confirm live: `https://app.oetwithdrhesham.co.uk/api/health`, `https://api.oetwithdrhesham.co.uk/health/ready`, `/health/live`, and VPS image tags contain this SHA. Then 2–3 lines of what shipped.
-7. Once verified live, and there is no other active work needing the repo public (check with any other agent session before flipping), **flip the repo back to PRIVATE**: `gh repo edit jerryboganda/oetwebapp --visibility private --accept-visibility-change-consequences`.
+2. Run `pnpm run ship`. `ship:gate` (seconds) is the required pre-push check inside it. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. Ignore QA Smoke on a push — the 13-project e2e matrix is on-demand (nightly + dispatch). Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.
+3. Stage explicit paths only. Never `git add -A`. Never commit secrets, `.env*`, or `.impeccable/`. Commit before shipping; the wrapper never stages for you. See "GitHub Actions on a public-when-working repo" below — the public-before-push order is HARD ENFORCED, no bargains, no mistakes.
+4. **Parallel agents:** the wrapper owns every visibility flip under a cross-session lease. Never flip public/private by hand while another session is shipping. A push may be **superseded** before its deploy runs (GitHub keeps one pending run; the newest push contains it) — the watcher follows the newer run and prints `SHIP-WATCH_SUPERSEDED_BY`.
+5. If the deploy fails: the watcher dumps `--log-failed`; fix the compile/parse error, `pnpm run ship` again. **Do this without waiting for the owner to ask.** Cap automatic fix-loops at 3; if still red, say exactly what is still failing.
+6. After `Deploy production` succeeds, confirm live: `https://app.oetwithdrhesham.co.uk/api/health`, `https://api.oetwithdrhesham.co.uk/health/ready`, `/health/live`, and VPS image tags contain this SHA. Then 2–3 lines of what shipped.
+7. Evidence: the wrapper runs `ax:record` on green; run `pnpm run ax:verify` if you need the GitHub re-check. The lease releases itself, and the repo returns to **private** only when no other lease holder and no run is queued/in-progress (`node scripts/ship/ship.mjs --may-flip-private` decides).
+
+**Minimum-time rules (owner directive 2026-10-03):** `build-images.yml` runs **only** for pushes that touch a
+build input, rebuilds **only** the component whose inputs changed (the other is retagged from `:latest`, so
+`:<sha>` tags always exist), and `production-deploy.yml` stands down when a newer build run exists (one rollout
+per burst instead of N) or when this SHA has no images. A push that legitimately ships nothing ends the watcher
+with `SHIP-WATCH_NOTHING_TO_DEPLOY` and exit 0 — that is success, not a missing run.
+
+Rollback: `gh workflow run production-deploy.yml -f sha=<previous-sha>` — images are already in GHCR, no rebuild.
 
 Only skip the auto-push if the user explicitly says "don't push" for that task. Never skip the watch after a push you did make.
+
+## ⛔ NO AUTOMATED E2E IN CI — COMPULSORY (owner directive 2026-10-03; HARD PROJECT RULE)
+
+- **No Playwright job runs on `push`, `pull_request` or a `schedule`** anywhere in
+  `.github/workflows/`. `qa-smoke.yml` is unit + backend evidence only. Every browser lane is
+  `workflow_dispatch` only - no exceptions.
+- The specs under `tests/e2e/**`, `tests/performance/**` and the Playwright configs stay in the
+  repo as **manual tools**. Every Playwright-based workflow (`speaking-e2e`, `speaking-a11y`,
+  `visual-qa`, `ubag-integration-e2e`, `performance`, `writing-rev8-render-verify`,
+  `macos-video-acceptance`) is `workflow_dispatch`-only.
+- **Bugs are reported by the owner and fixed on demand**: read the report, reproduce with the
+  manual spec when useful, fix, ship. Do not re-add e2e shards, e2e-only images, nightly e2e
+  crons or PR triggers for these workflows, and do not "restore" them as an improvement.
+
+## ⛔ PRODUCTION DEPLOYS GO THROUGH THE PIPELINE — COMPULSORY (owner directive 2026-10-03; HARD ENFORCED, not bypassable)
+
+- **The only path to production:** push to `main` → `Build images` (GHCR images + migration SQL artifact) →
+  `Production deploy` (blue/green rollout, serialized, health-gated). Rollback is
+  `gh workflow run production-deploy.yml -f sha=<previous-sha>` — images are already in GHCR.
+- **No agent may:** SSH-deploy, run `scripts/deploy/auto-deploy-ghcr.sh` (or any rollout script) by hand, run
+  `docker compose up`/`build` on the VPS, add a second rollout workflow, or re-enable a browser lane with an
+  automatic trigger. Emergency source builds remain behind `ALLOW_VPS_SOURCE_BUILD=owner-approved-emergency`
+  **and** the owner's explicit say-so in the current conversation.
+- **Enforced mechanically in three places, so it cannot be quietly bypassed:**
+  1. `scripts/deploy/verify-pipeline-contract.mjs` (`pnpm run pipeline:check`) runs in the always-executing
+     `guards` job of `build-images.yml` — a second rollout path, a browser lane on an automatic trigger, an e2e
+     job back in `qa-smoke`, an un-filtered build trigger or a lost rollout gate fails the run *before* any
+     image is produced;
+  2. `scripts/deploy/verify-compute-offload.sh` + `verify-image-only-rollout.sh` assert the pull-only rollout
+     contract on every build;
+  3. `pnpm run ship:gate` runs the same contract checker on every agent push, so a bypassing change cannot even
+     leave the workstation. Deleting a checker is not a bypass: the `guards` job fails and no rollout happens.
+- **Deploy only what the pipeline built:** the VPS pulls `:<sha>` images and never compiles, tests or installs.
 
 ## Operating Rules
 
@@ -106,8 +149,9 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 
 | Purpose | Workflow |
 | --- | --- |
-| Frontend unit (vitest + lint + tsc + build) and backend `dotnet test` (sharded, Postgres/pgvector) | `.github/workflows/qa-smoke.yml` (`workflow_dispatch` enabled) |
-| Web + API build → GHCR → VPS blue/green deploy with health gate | `.github/workflows/deploy.yml` |
+| Frontend unit (vitest + lint + tsc + build), backend `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached), placement-entry. **No e2e** (owner directive 2026-10-03) | `.github/workflows/qa-smoke.yml` |
+| Build all four images → GHCR + generate the migration SQL artifact. Parallel per SHA, no cross-SHA lock | `.github/workflows/build-images.yml` (push to `main` only) |
+| Apply migrations + blue/green VPS rollout with health gate. Serialized by the `production-deploy` concurrency group; `workflow_dispatch -f sha=<sha>` is the rollback path | `.github/workflows/production-deploy.yml` |
 | Mobile/Android build | `.github/workflows/mobile-ci.yml` |
 | Owner Agent Console sidecar + proxy images (unit tests, build → GHCR → pull-only VPS rollout of `docker-compose.agent-console.yml`) | `.github/workflows/agent-console.yml` (`workflow_dispatch`, `apply=true` to recreate) |
 
@@ -208,8 +252,11 @@ to fix Billing & plans — it means flip the repo public yourself, right now, no
 4. Once the work that needed the repo public is verified done (deploy confirmed live, or the PR you
    pushed for is merged/closed), **flip back to PRIVATE**:
    `gh repo edit jerryboganda/oetwebapp --visibility private --accept-visibility-change-consequences`.
-   Check with any other agent session first (`gh repo view --json visibility` before every push is
-   not enough by itself — another session may be mid-run on the same public window; message it).
+   **Cross-session lease (owner directive 2026-10-03):** with several agents shipping, a hand flip can
+   strand another session's queued runs on a private repo. `pnpm run ship` owns this under
+   `<git-common-dir>/ax-ship/visibility.json`; a hand flip is only safe when
+   `node scripts/ship/ship.mjs --may-flip-private` exits 0 (no other unexpired lease, no run queued or
+   in progress). That same check is what `watch-deploy.ps1` runs before it flips.
 
 Never leave the repo public indefinitely once the work is done, and never leave it private and stuck
 waiting on hosted Actions — those are the two mistakes this rule exists to prevent.

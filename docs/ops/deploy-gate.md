@@ -16,10 +16,12 @@ Every production deploy must, at minimum, attach:
    tests, production build) — see `.github/workflows`.
 2. Latest SBOM + SCA workflow artifacts for the deploying SHA, with any accepted
    vulnerability risk explicitly owned and time-bounded.
-3. Successful **Build & Deploy (web + API)** (`.github/workflows/deploy.yml`)
-   run for the deploying SHA: `build-web`, `build-api`, `build-backup`,
-   `build-agent-gateway`, `migrate-production` and `deploy` all green, with the
-   `:<sha>` images in GHCR.
+3. Successful **Build images** (`.github/workflows/build-images.yml`) run for the
+   deploying SHA — `build-web`, `build-api`, `build-backup`,
+   `build-agent-gateway`, `migrate-sql` all green, with the `:<sha>` images in
+   GHCR — plus a green **Deploy production**
+   (`.github/workflows/production-deploy.yml`) run
+   (`apply-migrations`, `deploy`).
 4. Pre-flight script success: `scripts/deploy/pre-flight.sh` against the
    target host. Only the manual `deploy-prod.sh` path runs it automatically.
 5. `.env.production` validation — no missing keys, no `__placeholder__`
@@ -28,18 +30,20 @@ Every production deploy must, at minimum, attach:
 6. Production mock/stub scan success from `scripts/deploy/mock-stub-scan.sh`.
 7. Approver acknowledgement (Dr Faisal Maqsood) recorded in the deploy
    commit message or release notes.
-8. Pinned SSH host fingerprint. **Not enforced today:** `deploy.yml` uses
-   `ssh-keyscan` with `StrictHostKeyChecking=accept-new`, and no workflow reads
-   a `VPS_SSH_FINGERPRINT` secret. Pinning it is an open owner item.
+8. Pinned SSH host fingerprint. **Not enforced today:** `production-deploy.yml`
+   uses `ssh-keyscan` with `StrictHostKeyChecking=accept-new`, and no workflow
+   reads a `VPS_SSH_FINGERPRINT` secret. Pinning it is an open owner item.
 
 ## Deploy Command (current)
 
-Production deploys come from `.github/workflows/deploy.yml` on every push to
-`main` (or a manual dispatch): images are built on Actions, pushed to GHCR as
-`:<sha>`, migrations are applied by `migrate-production`, and the `deploy` job
-runs `scripts/deploy/auto-deploy-ghcr.sh` on the VPS. See `DEPLOYMENT.md` §3
-and `DEPLOY-MANUAL.md`. (The earlier protected `Build Release Images` /
-`Deploy Production` workflows were removed in e616c3dcd.)
+Production deploys come from `.github/workflows/build-images.yml` (every push to
+`main`: images built on Actions and pushed to GHCR as `:<sha>`, migration SQL
+generated as an artifact) followed automatically by
+`.github/workflows/production-deploy.yml` (apply migrations, then run
+`scripts/deploy/auto-deploy-ghcr.sh` on the VPS). A manual dispatch of
+`production-deploy.yml` with `-f sha=<sha>` is the rollback path. See
+`DEPLOYMENT.md` §3 and `DEPLOY-MANUAL.md`. (The earlier protected `Build Release
+Images` / `Deploy Production` workflows were removed in e616c3dcd.)
 
 The manual incident path is exact-SHA and digest-pinned. The VPS command shape
 is:
@@ -115,7 +119,7 @@ scripts/deploy/post-deploy-verify.sh
 ```
 
 `.deploy/rollback-target.env` and `release-history.tsv` are written only by the
-`deploy-prod.sh` path. After automatic `deploy.yml` releases, the previous
+`deploy-prod.sh` path. After automatic `production-deploy.yml` releases, the previous
 `:<sha>` image refs are in `.deploy/auto-deploy-history.tsv`; redeploy them with
 the `auto-deploy-ghcr.sh` command in `DEPLOY-MANUAL.md`.
 
