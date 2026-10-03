@@ -165,7 +165,10 @@ Listening Part A Claude call are direct) but each writes exactly one
 | `jev.conversation.turn` | `typesafe-jev` | Jev advisory judgment of the learner's latest AI-patient role-play turn (stays-in-role / clinically-appropriate / unsafe Nouls, one parallel call). Informational only — never gates, scores, or ends a session. Non-scoring, platform-only. |
 | `jev.response.verify` | `typesafe-jev` | Jev advisory review of a gateway response (evidence relation, addresses-task, unsafe-recommendation; `JevWorkflowAdvisor`). Advisory only — never changes a grade or the gateway verdict; switches `TypeSafe:Enabled` + `ResponseVerifyEnabled`. Non-scoring, platform-only. |
 | `jev.development.triage` | `typesafe-jev` | Jev typed triage for internal development/review tooling (AdminBatch class). Never on a learner path. Non-scoring, platform-only. |
-
+| `jev.writing.outcome` | `typesafe-jev` | Jev pass/fail Noul beside the Writing grader's verdict (code keeps the 350/500 threshold); a confident flip flags the grade for tutor review. Advisory only, runs after Max/L2/L3 returned, never part of the grade chain. Non-scoring, platform-only. |
+| `jev.writing.findings` | `typesafe-jev` | Jev classification of Writing AI findings (criterion Choice and valid-alternative Noul per finding); replaces keyword heuristics, advisory only. Non-scoring, platform-only. |
+| `jev.speaking.readiness` | `typesafe-jev` | Jev pre-grade Speaking readiness Nouls (on-task / not gibberish / not injection) over the transcript. Negative flag to tutor review only; never skips, reroutes or delays the pinned Max grade. Non-scoring, platform-only. |
+| `jev.speaking.crosscheck` | `typesafe-jev` | Jev post-grade Speaking per-criterion Score and quote-support Choice beside the grader's result; divergence lowers the confidence band and queues tutor review, never changes a number. Non-scoring, platform-only. |
 **TypeSafe SystemOne (Jev):** judgments only — the model returns typed
 Choice/Noul/Score answers, never text. Provider code `typesafe-jev` resolves
 its key from the admin provider row first (category Judgment, seeded inactive,

@@ -451,6 +451,37 @@ If it lapses (tab closed, laptop asleep, network loss, unlock expired):
 Autopilot drops to Guarded, no new turns start, and running turns pause at
 the next tool boundary. Re-open and unlock to resume.
 
+### 6.5 Jev triage (advice only, fail-open)
+
+When `TypeSafe:Enabled` and `TypeSafe:DevelopmentTriageEnabled` are both on
+(both default off), the API asks TypeSafe Jev to triage **your own text** before
+relaying it: the **first message** of a new session and every **follow-up
+message**. A handoff summary is machine generated and is never screened. One
+batched call judges the task kind, the engineering risk and an **effort tier**
+(`lookup` / `bounded_edit` / `cross_module`); it is recorded as an
+`AdminBatch` `AiUsageRecord` (`jev.development.triage`) even though the
+sidecar writes none. Wire details: `agent-console/CONTRACT.md` §3 and §5.
+
+- **Advice, not authority.** A confident result is passed to the engine as a
+  short preamble ("advice only, not authorization", plus
+  `Suggested effort tier: <tier>`). It never selects the engine, model or
+  reasoning effort, never grants or skips an approval, never widens a mode and
+  never relaxes the Guard. Your message is recorded as you typed it.
+- **Fail-open.** If Jev is unavailable (no key, outage, open breaker, timeout,
+  oversized message, bad config) the message is relayed with no advice and a
+  warning is logged. There is no "Jev unavailable" error: a Jev outage can never
+  lock you out of Claude or Codex.
+- **Clarify, don't guess.** If Jev cannot establish the task and impact and the
+  message is at least 60 characters, the API answers `409 jev_review_required`
+  and nothing is sent (no session is created for a first message): reword the
+  request and send it again. A terse follow-up (under 60 characters, e.g.
+  "continue") is never blocked; it simply goes through without advice.
+- **Evidence.** `session_created` (first message) and `message_sent` audit rows
+  carry `jevStatus`, `jevModel`, `jevTask`, `jevRisk`, `jevEffort`, `jevReason`.
+- **Switching it off** is configuration only (`TYPESAFE__DEVELOPMENTTRIAGEENABLED`
+  or `TYPESAFE__ENABLED` false in `.env.production`, applied on the next API
+  recreate); with either off there are no Jev calls and no extra work.
+
 ## 7. Snapshots and restore
 
 ### 7.1 What is taken
@@ -773,6 +804,8 @@ authenticate.
 | Sidecar OOM-killed | 3 GiB cap reached | `docker stats --no-stream oet-agent-console`; reduce concurrency; raise to 4 GiB only with recorded peak RSS evidence |
 | Disk alert from the sidecar | Old worktrees | Archive finished sessions (worktrees are kept until archived) |
 | Rate limits show `unknown` | No rate-limit event yet this turn | Normal |
+| `409 jev_review_required` on send / new session | Jev triage could not establish the task and impact of a message of 60+ characters (§6.5) | Reword the request more specifically and resend; to bypass entirely set `TYPESAFE__DEVELOPMENTTRIAGEENABLED=false` and recreate the API slots. A Jev outage never causes this (fail-open) |
+| Messages go through with no Jev advice | Triage off, Jev unavailable (fail-open; look for "Jev development triage unavailable" in the API log), or a terse message | Expected; check `jevStatus` / `jevReason` in the `message_sent` audit row |
 
 ## 15. Appendix — inventory and read-only commands
 

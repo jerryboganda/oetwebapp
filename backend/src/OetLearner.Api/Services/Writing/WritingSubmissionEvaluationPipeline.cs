@@ -112,9 +112,15 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IAiCreditReservationService? creditReservations = null,
     IJevWritingPilot? writingPilot = null,
     Microsoft.Extensions.Options.IOptions<WritingGradeChainOptions>? gradeChainOptions = null,
-    WritingQaFault? qaFault = null) : IWritingSubmissionEvaluationPipeline
+    WritingQaFault? qaFault = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null) : IWritingSubmissionEvaluationPipeline
 {
     private readonly WritingGradeChainOptions _chainOptions = gradeChainOptions?.Value ?? new WritingGradeChainOptions();
+
+    // Jev flags (guard enforcement only here; every other Jev flag lives in the pilot). Absent in
+    // tests that build the pipeline by hand: defaults are all OFF / not enforced.
+    private readonly OetLearner.Api.Configuration.TypeSafeOptions _jevOptions =
+        typeSafeOptions?.Value ?? new OetLearner.Api.Configuration.TypeSafeOptions();
 
     // NOTE: there is deliberately NO WritingModelAnswerService dependency on
     // this pipeline. The Model Answer is generated once per task in the admin
@@ -459,26 +465,49 @@ public sealed class WritingSubmissionEvaluationPipeline(
             return await GradeBlankSubmissionAsync(submission, scenario, assessmentPreflightResult, ct);
         }
 
+        // Why Jev asked for tutor review during THIS run (guard_block, outcome_flip,
+        // criteria_divergence, verify_flag, finding_valid_alternative). Staged once, after the
+        // grade exists, as a single pending assignment (one per submission, however many reasons).
+        var jevReviewReasons = new List<string>();
+        void FlagJevReview(string reason)
+        {
+            if (!jevReviewReasons.Contains(reason)) jevReviewReasons.Add(reason);
+        }
+
         // Jev writing guard (Phase-1 pilot; TypeSafe:WritingGuardEnabled,
-        // default OFF). Negative gate ONLY: a block skips the paid AI grade
-        // and hands the submission to a human via a pending tutor
-        // assignment; a review proceeds but is logged. Disabled,
-        // unavailable, or crashed — the flow proceeds exactly as before.
+        // default OFF). Negative gate ONLY. A Block verdict is recorded and flagged for tutor
+        // review but the letter is STILL graded by the unchanged Max chain (owner decision 2:
+        // Max always on) — unless TypeSafe:WritingGuardEnforced is true, which restores the old
+        // behaviour of skipping the paid AI grade and handing the submission to a human via a
+        // pending tutor assignment. A review proceeds but is logged. Disabled, unavailable, or
+        // crashed — the flow proceeds exactly as before.
         if (writingPilot is not null)
         {
+            // The run's epoch keys every Jev call: each (re-)run is its own control-plane
+            // operation, so a Block seen on a run that fails upstream is seen again on the
+            // auto-retry that finally grades (a same-key repeat would be a silent Duplicate).
             var guard = await writingPilot.GuardSubmissionAsync(
-                submission.LetterContent, assessmentPreflightResult.LetterType, submission.UserId, ct);
+                submission.LetterContent, assessmentPreflightResult.LetterType, submission.UserId, ct,
+                resourceVersion: submission.GradeEpoch);
             if (guard.Decision == WritingGuardDecision.Block)
             {
+                if (_jevOptions.WritingGuardEnforced)
+                {
+                    logger.LogWarning(
+                        "Jev guard blocked submission {SubmissionId} for user {UserId}: signal {Signal}.",
+                        submission.Id, submission.UserId, guard.TriggeredSignal);
+                    submission.Status = "failed";
+                    await EnqueueJevTutorReviewAsync(submission.Id, [WritingJevReviewReasons.GuardBlock], ct);
+                    await db.SaveChangesAsync(ct);
+                    throw ApiException.Conflict(
+                        "writing_submission_flagged",
+                        "This submission was flagged for manual review. No grade has been recorded — our team will follow up.");
+                }
+
                 logger.LogWarning(
-                    "Jev guard blocked submission {SubmissionId} for user {UserId}: signal {Signal}.",
+                    "Jev guard flagged submission {SubmissionId} for user {UserId}: signal {Signal}. Not enforced, so the letter is still graded.",
                     submission.Id, submission.UserId, guard.TriggeredSignal);
-                submission.Status = "failed";
-                await EnqueueJevTutorReviewAsync(submission.Id, ct);
-                await db.SaveChangesAsync(ct);
-                throw ApiException.Conflict(
-                    "writing_submission_flagged",
-                    "This submission was flagged for manual review. No grade has been recorded — our team will follow up.");
+                FlagJevReview(WritingJevReviewReasons.GuardBlock);
             }
         }
 
@@ -539,37 +568,129 @@ public sealed class WritingSubmissionEvaluationPipeline(
             CreatedAt = clock.GetUtcNow(),
         };
 
-        // Jev verify + advisory criteria (Phase-1 pilot; flags default OFF).
-        // Verify: contradicted or low-confidence findings flag the grade for
-        // tutor review via ConfidenceFlag + a pending assignment. Criteria:
-        // display-only advisory radar merged as an EXTRA field per criterion
-        // — the V2 mapper reads only known fields inside each object, so
-        // this is inert until a UI chooses to surface it. Neither hook ever
-        // changes a score.
+        // Jev post-grade hooks (flags default OFF; every one runs strictly AFTER the grade call,
+        // never inside the Max chain, and never changes a score, band or pass/fail).
+        //  - verify: contradicted / low-confidence findings flag tutor review.
+        //  - findings: criterion Choice for findings the grader left without a criterionCode
+        //    (heuristic stays as the fallback) + a valid-professional-alternative Noul that flags
+        //    tutor review; no finding is ever removed or downgraded.
+        //  - criteria: display-only advisory radar merged as an EXTRA field per criterion — the V2
+        //    mapper reads only known fields inside each object, so this is inert until a UI chooses
+        //    to surface it — plus a divergence check against the grader's six scores.
+        //  - outcome: one Noul "reaches Grade B (350/500)" against the grader's own verdict.
+        // Every flag only raises a reason; ONE pending assignment + ConfidenceFlag 'jev_review' is
+        // staged below. Each Jev call is fail-soft on its own.
+        IReadOnlyList<AiGradeFinding>? aiFindings = rubric.AiFindings;
         if (writingPilot is not null)
         {
-            var verifyFindings = (rubric.AiFindings ?? [])
+            var jevFindings = (aiFindings ?? [])
                 .Select((f, i) => new WritingFindingInput(
                     FindingId: f.RuleId ?? $"finding_{i}",
                     Message: f.Message ?? string.Empty,
                     Quote: f.Quote,
-                    RuleId: f.RuleId))
+                    RuleId: f.RuleId,
+                    NeedsCriterion: f.CriterionInferred))
                 .ToList();
             var verify = await writingPilot.VerifyFindingsAsync(
-                submission.LetterContent, verifyFindings, submission.UserId, ct);
-            if (verify.FlagsTutorReview)
+                submission.LetterContent, jevFindings, submission.UserId, ct,
+                resourceVersion: submission.GradeEpoch);
+            if (verify.FlagsTutorReview) FlagJevReview(WritingJevReviewReasons.VerifyFlag);
+
+            try
             {
-                grade.ConfidenceFlag = JevWritingPilot.TutorReviewConfidenceFlag;
-                await EnqueueJevTutorReviewAsync(submission.Id, ct);
+                var classified = await writingPilot.ClassifyFindingsAsync(
+                    submission.LetterContent, jevFindings, submission.UserId, ct,
+                    resourceVersion: submission.GradeEpoch);
+                if (classified.Status == JevCallStatus.Ok)
+                {
+                    if (aiFindings is { Count: > 0 })
+                    {
+                        var reclassified = aiFindings.ToList();
+                        var changed = false;
+                        foreach (var item in classified.Items)
+                        {
+                            if (item.Criterion is null || item.Index >= reclassified.Count) continue;
+                            var current = reclassified[item.Index];
+                            if (!current.CriterionInferred) continue;
+                            reclassified[item.Index] = current with { Criterion = item.Criterion, CriterionInferred = false };
+                            changed |= !string.Equals(current.Criterion, item.Criterion, StringComparison.Ordinal);
+                        }
+
+                        if (changed)
+                        {
+                            aiFindings = reclassified;
+                            grade.PerCriterionFeedbackJson = RebuildPerCriterionFeedbackJson(rubric, reclassified);
+                        }
+                    }
+
+                    if (classified.FlagsTutorReview) FlagJevReview(WritingJevReviewReasons.FindingValidAlternative);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Jev findings step failed for submission {SubmissionId}; findings keep their heuristic criteria.", submission.Id);
             }
 
             var advisory = await writingPilot.ScoreCriteriaAsync(
-                submission.LetterContent, assessmentPreflightResult.LetterType, submission.UserId, ct);
+                submission.LetterContent, assessmentPreflightResult.LetterType, submission.UserId, ct,
+                resourceVersion: submission.GradeEpoch);
             if (advisory.Status == JevCallStatus.Ok && advisory.AdvisoryScores.Count > 0)
             {
                 grade.PerCriterionFeedbackJson = writingPilot.MergeAdvisoryIntoPerCriterionJson(
                     grade.PerCriterionFeedbackJson, advisory.AdvisoryScores);
+
+                try
+                {
+                    var divergence = writingPilot.AssessCriteriaDivergence(
+                        new Dictionary<string, int>
+                        {
+                            ["c1"] = rubric.C1,
+                            ["c2"] = rubric.C2,
+                            ["c3"] = rubric.C3,
+                            ["c4"] = rubric.C4,
+                            ["c5"] = rubric.C5,
+                            ["c6"] = rubric.C6,
+                        },
+                        advisory);
+                    if (divergence.FlagsTutorReview) FlagJevReview(WritingJevReviewReasons.CriteriaDivergence);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Jev criteria divergence check failed for submission {SubmissionId}; the grade stands.", submission.Id);
+                }
             }
+
+            try
+            {
+                // The 350/500 anchor lives in OetScoring; the verdict compared against is the grader's own.
+                var outcome = await writingPilot.CheckOutcomeAsync(
+                    assessmentPreflightResult.TaskSnapshot,
+                    assessmentPreflightResult.CaseNotesSnapshot,
+                    submission.LetterContent,
+                    rubric.EstimatedScaledScore >= OetScoring.ScaledPassGradeB,
+                    submission.UserId,
+                    ct,
+                    resourceVersion: submission.GradeEpoch);
+                if (outcome.FlagsTutorReview) FlagJevReview(WritingJevReviewReasons.OutcomeFlip);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Jev outcome cross-check failed for submission {SubmissionId}; the grade stands.", submission.Id);
+            }
+        }
+
+        if (jevReviewReasons.Count > 0)
+        {
+            grade.ConfidenceFlag = JevWritingPilot.TutorReviewConfidenceFlag;
+            await EnqueueJevTutorReviewAsync(submission.Id, jevReviewReasons, ct);
         }
 
         db.WritingGrades.Add(grade);
@@ -582,7 +703,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 grade,
                 assessmentRuleEngine,
                 rubric.EstimatedScaledScore,
-                rubric.AiFindings);
+                aiFindings);
             if (calibrationReleaseService is not null)
             {
                 var release = await calibrationReleaseService.ResolveAsync(
@@ -668,15 +789,28 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
     /// <summary>
     /// Idempotently stages a pending tutor-review assignment for a submission
-    /// the jev guard blocked or jev verify flagged (Phase-1 pilot). Stages
-    /// only — the caller's surrounding SaveChanges persists it, mirroring
-    /// the mock-review pattern in WritingTutorReviewService.
+    /// a Jev hook flagged (guard block, verify, outcome flip, criteria
+    /// divergence, valid-alternative finding). Stages only — the caller's
+    /// surrounding SaveChanges persists it, mirroring the mock-review pattern
+    /// in WritingTutorReviewService. There is at most ONE assignment per
+    /// submission (the tutor flow looks it up by submission id), so a re-run
+    /// or a second reason never stacks a duplicate; the new reasons are still
+    /// logged. The assignment row has no text column, so the reasons live in
+    /// the log line, not the database (no schema change for this slice).
     /// </summary>
-    private async Task EnqueueJevTutorReviewAsync(Guid submissionId, CancellationToken ct)
+    private async Task EnqueueJevTutorReviewAsync(Guid submissionId, IReadOnlyCollection<string> reasons, CancellationToken ct)
     {
-        var existing = await db.WritingTutorReviewAssignments.AsNoTracking()
-            .AnyAsync(a => a.SubmissionId == submissionId, ct);
-        if (existing) return;
+        var reasonText = string.Join(',', reasons);
+        var existing = db.WritingTutorReviewAssignments.Local.Any(a => a.SubmissionId == submissionId)
+            || await db.WritingTutorReviewAssignments.AsNoTracking()
+                .AnyAsync(a => a.SubmissionId == submissionId, ct);
+        if (existing)
+        {
+            logger.LogInformation(
+                "Jev tutor review for submission {SubmissionId} already queued; reasons {Reasons} noted, no second assignment.",
+                submissionId, reasonText);
+            return;
+        }
 
         var now = clock.GetUtcNow();
         db.WritingTutorReviewAssignments.Add(new WritingTutorReviewAssignment
@@ -688,6 +822,9 @@ public sealed class WritingSubmissionEvaluationPipeline(
             DueAt = now.AddHours(24),
             Status = "pending",
         });
+        logger.LogWarning(
+            "Jev flagged writing submission {SubmissionId} for tutor review: {Reasons}.",
+            submissionId, reasonText);
     }
 
     /// <summary>
@@ -2006,7 +2143,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
         => !string.IsNullOrWhiteSpace(f.CriterionCode) ? f.CriterionCode! : CriterionFor(f.RuleId, f.Message);
 
     // Heuristic mapping from rule id / message to one of the six OET Writing
-    // criteria; used only when the AI did not stamp criterionCode itself.
+    // criteria; used only when the AI did not stamp criterionCode itself. With
+    // TypeSafe:WritingFindingsEnabled a confident Jev Choice replaces it for those
+    // findings (EvaluateClaimedAsync); it remains the fallback whenever Jev is
+    // disabled, unavailable, low-confidence or the finding is beyond the call cap.
     private static string CriterionFor(string? ruleId, string? message)
     {
         var text = $"{ruleId} {message}".ToLowerInvariant();
@@ -2158,7 +2298,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
         string? Quote,
         string? Message,
         string? FixSuggestion,
-        string Criterion);
+        string Criterion,
+        // True when the grader stamped no usable criterionCode and Criterion came from the
+        // keyword heuristic — the only findings Jev may reclassify. Optional so rows persisted
+        // before this field existed read as "grader-assigned" and are left alone.
+        bool CriterionInferred = false);
 
     private static readonly HashSet<string> SixCriteria = new(StringComparer.Ordinal)
     {
@@ -2171,16 +2315,36 @@ public sealed class WritingSubmissionEvaluationPipeline(
             .Select(f =>
             {
                 var criterion = (f.CriterionCode ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
-                if (!SixCriteria.Contains(criterion)) criterion = CriterionFor(f.RuleId, f.Message);
+                var inferred = !SixCriteria.Contains(criterion);
+                if (inferred) criterion = CriterionFor(f.RuleId, f.Message);
                 return new AiGradeFinding(
                     string.IsNullOrWhiteSpace(f.RuleId) ? null : f.RuleId!.Trim(),
                     string.IsNullOrWhiteSpace(f.Severity) ? "major" : f.Severity!.Trim().ToLowerInvariant(),
                     string.IsNullOrWhiteSpace(f.Quote) ? null : f.Quote!.Trim(),
                     string.IsNullOrWhiteSpace(f.Message) ? null : f.Message!.Trim(),
                     string.IsNullOrWhiteSpace(f.FixSuggestion) ? null : f.FixSuggestion!.Trim(),
-                    criterion);
+                    criterion,
+                    inferred);
             })
             .ToList();
+
+    /// <summary>
+    /// Rebuilds the per-criterion feedback blob from the (possibly Jev-reclassified) findings.
+    /// Only used when a classification actually moved a finding; every <c>Criterion</c> here is
+    /// already one of the six codes, so it round-trips through <see cref="CriterionForFinding"/>.
+    /// </summary>
+    private static string RebuildPerCriterionFeedbackJson(RubricResult rubric, IReadOnlyList<AiGradeFinding> findings)
+        => BuildPerCriterionFeedbackJson(
+            rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
+            findings.Select(f => new RubricAiFinding
+            {
+                RuleId = f.RuleId,
+                Severity = f.Severity,
+                Quote = f.Quote,
+                Message = f.Message,
+                FixSuggestion = f.FixSuggestion,
+                CriterionCode = f.Criterion,
+            }).ToList());
 
     /// <summary>Converts AI findings into v1.1 report rows (deduplicated
     /// against deterministic findings that quote the same wording).</summary>

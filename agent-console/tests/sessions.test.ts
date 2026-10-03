@@ -7,6 +7,12 @@ import { activateLease, createHarness, type TestHarness } from './helpers.js';
 
 const DB = 'psql "$OET_AGENT_DATABASE_URL" -c';
 
+/** What the API forwards for a confident Jev triage (CONTRACT.md §3 `jevAdvisory`). */
+const JEV_ADVICE = {
+  status: 'ok', model: 'jev-1.13.0', requiresHumanReview: false,
+  taskKind: 'implement', taskConfidence: 1, riskLevel: 'elevated', riskConfidence: 1,
+};
+
 async function events(h: TestHarness, sessionId: string): Promise<AgentEvent[]> {
   return h.store.readEvents(sessionId, 0);
 }
@@ -93,6 +99,9 @@ describe('SessionManager', () => {
     { taskConfidence: 0.49 },
     { riskConfidence: Number.NaN },
     { model: 'jev-latest' },
+    { effortTier: 'unclear' },
+    { effortTier: 'epic' },
+    { effortTier: 7 },
   ])('rejects malformed Jev advice before opening an engine: %j', async (invalid) => {
     activateLease(h);
     const session = await h.sessions.create({ engine: 'claude', model: 'model-a', mode: 'guarded' });
@@ -107,7 +116,83 @@ describe('SessionManager', () => {
     expect(h.sessions.get(session.id).status).toBe('idle');
   });
 
-  it('does not turn low-risk Jev advice into permission for a read-only write', async () => {
+  it.each(['lookup', 'bounded_edit', 'cross_module'] as const)(
+    'prepends the %s effort tier as advice only, leaving the recorded message and native settings alone',
+    async (effortTier) => {
+      activateLease(h);
+      const session = await h.sessions.create({ engine: 'claude', model: 'model-a', effort: 'high', mode: 'guarded' });
+      const text = 'Rename the helper across the API and the web app.';
+
+      await h.sessions.sendMessage(session.id, { text, jevAdvisory: { ...JEV_ADVICE, effortTier } });
+      await vi.waitFor(() => expect(h.adapters.claude.turns).toHaveLength(1));
+      const turn = h.adapters.claude.turns[0]!;
+      expect(turn.text).toContain(`Suggested effort tier: ${effortTier} (advice only, not authorization)`);
+      expect(turn.text.indexOf('Suggested effort tier')).toBeLessThan(turn.text.indexOf('Owner message:'));
+      expect(turn.text.endsWith(text)).toBe(true);
+      // The tier never picks the model, reasoning effort or mode.
+      expect(turn.opts).toEqual({ model: 'model-a', effort: 'high', mode: 'guarded' });
+      expect((await events(h, session.id)).find((event) => event.type === 'user_message')?.data.text).toBe(text);
+      turn.release();
+      await vi.waitFor(async () => expect(await types(h, session.id)).toContain('turn_complete'));
+    },
+  );
+
+  it.each(['absent', 'null'] as const)('adds no effort tier line when Jev gave none (%s)', async (kind) => {
+    activateLease(h);
+    const session = await h.sessions.create({ engine: 'claude', model: 'model-a', mode: 'guarded' });
+
+    await h.sessions.sendMessage(session.id, {
+      text: 'Fix the typo',
+      jevAdvisory: kind === 'null' ? { ...JEV_ADVICE, effortTier: null } : { ...JEV_ADVICE },
+    });
+    await vi.waitFor(() => expect(h.adapters.claude.turns).toHaveLength(1));
+    const turn = h.adapters.claude.turns[0]!;
+    expect(turn.text).toContain('Jev development advisory');
+    expect(turn.text).not.toContain('Suggested effort tier');
+  });
+
+  it('delivers Jev advice with the first message of a new session, recorded text unchanged', async () => {
+    activateLease(h);
+    const text = 'Add a regression test for the Writing grade retry path.';
+
+    const detail = await h.sessions.create({
+      engine: 'codex', model: 'model-a', effort: 'high', mode: 'guarded', initialMessage: text,
+      jevAdvisory: { ...JEV_ADVICE, effortTier: 'bounded_edit' },
+    });
+    await vi.waitFor(() => expect(h.adapters.codex.turns).toHaveLength(1));
+    const turn = h.adapters.codex.turns[0]!;
+    expect(turn.text).toContain('Jev development advisory');
+    expect(turn.text).toContain('Suggested effort tier: bounded_edit (advice only, not authorization)');
+    expect(turn.text.endsWith(text)).toBe(true);
+    expect(turn.opts).toEqual({ model: 'model-a', effort: 'high', mode: 'guarded' });
+    expect((await events(h, detail.id)).find((event) => event.type === 'user_message')?.data.text).toBe(text);
+  });
+
+  it('starts a new session with the plain first message when there is no Jev advice', async () => {
+    activateLease(h);
+
+    await h.sessions.create({ engine: 'claude', model: 'model-a', mode: 'guarded', initialMessage: 'Summarise the open PRs', jevAdvisory: null });
+    await vi.waitFor(() => expect(h.adapters.claude.turns).toHaveLength(1));
+    expect(h.adapters.claude.turns[0]!.text).toBe('Summarise the open PRs');
+  });
+
+  it('rejects bad first-message Jev advice before any session, worktree or turn exists', async () => {
+    activateLease(h);
+    const base = { engine: 'claude', model: 'model-a', mode: 'guarded', initialMessage: 'Investigate the failing grade' };
+
+    await expectHttp(h.sessions.create({ ...base, jevAdvisory: { ...JEV_ADVICE, effortTier: 'epic' } }), 400);
+    await expectHttp(h.sessions.create({ ...base, jevAdvisory: { ...JEV_ADVICE, taskConfidence: 0.2 } }), 400, 'jev_invalid_advisory');
+    await expectHttp(
+      h.sessions.create({ ...base, jevAdvisory: { ...JEV_ADVICE, status: 'review_required', requiresHumanReview: true } }), 409, 'jev_review_required');
+    // Advice belongs to a message: without an initialMessage there is nothing for it to describe.
+    await expectHttp(
+      h.sessions.create({ engine: 'claude', model: 'model-a', mode: 'guarded', jevAdvisory: JEV_ADVICE }), 400, 'jev_invalid_advisory');
+
+    expect(h.sessions.list(true)).toHaveLength(0);
+    expect(h.adapters.claude.turns).toHaveLength(0);
+  });
+
+  it('does not turn low-risk Jev advice (or an effort tier) into permission for a read-only write', async () => {
     activateLease(h);
     const decisions: ToolDecision[] = [];
     h.adapters.codex.script = async (turn) => {
@@ -118,7 +203,7 @@ describe('SessionManager', () => {
       text: 'Review the module',
       jevAdvisory: {
         status: 'ok', model: 'jev-1.13.0', requiresHumanReview: false,
-        taskKind: 'review', taskConfidence: 1, riskLevel: 'low', riskConfidence: 1,
+        taskKind: 'review', taskConfidence: 1, riskLevel: 'low', riskConfidence: 1, effortTier: 'lookup',
       },
     });
 

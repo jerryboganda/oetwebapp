@@ -63,6 +63,29 @@ export interface ConsoleStatus {
   systemSessionId: string;
 }
 
+export const JEV_TASK_KINDS = ['implement', 'debug', 'review', 'verify', 'plan', 'content', 'other'] as const;
+export const JEV_RISK_LEVELS = ['low', 'elevated', 'high'] as const;
+export const JEV_EFFORT_TIERS = ['lookup', 'bounded_edit', 'cross_module'] as const;
+export type JevEffortTier = (typeof JEV_EFFORT_TIERS)[number];
+
+/**
+ * The API's Jev triage advice for one owner message (CONTRACT.md §3, additive v1.3). Only a
+ * confident `ok` judgment is ever sent. Advice only: it is quoted to the engine and never selects
+ * the engine/model/effort, grants an approval or relaxes the Guard. `effortTier` is absent when Jev
+ * was unsure or `unclear`.
+ */
+export interface JevAdvisory {
+  status: 'ok';
+  model: string;
+  requiresHumanReview: false;
+  taskKind: (typeof JEV_TASK_KINDS)[number];
+  taskConfidence: number;
+  riskLevel: (typeof JEV_RISK_LEVELS)[number];
+  riskConfidence: number;
+  effortTier?: JevEffortTier | null;
+  reason?: string | null;
+}
+
 export interface CreateSession {
   engine: Engine;
   model: string;
@@ -70,6 +93,8 @@ export interface CreateSession {
   mode: Mode;
   title?: string;
   initialMessage?: string;
+  /** Advice for `initialMessage` (same shape and rules as the messages route); invalid without it. */
+  jevAdvisory?: JevAdvisory;
 }
 
 export interface SessionUsage {

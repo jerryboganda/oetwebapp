@@ -1,0 +1,109 @@
+name: CI triage
+
+# Jev classifies WHY a failed run failed (compile / test_failure / lint / infra_flake /
+# deploy_health / policy_gate / secret_scan / unrelated_preexisting / unknown) so the
+# Ship-It fix-loop reads one label instead of a 200 KB --log-failed dump. Jev never
+# fixes anything: the coding agent still reads the logs and fixes the cause.
+#
+# Safety:
+# - workflow_run runs in the context of the DEFAULT branch with a read-only token.
+#   It never runs for forks (head repository must equal this repository) and it
+#   checks out the default branch only, never the PR/head code that failed.
+# - The only code that runs is scripts/ci/jev-ci-triage.mjs from the default branch.
+#   Event fields reach it through env, never interpolated into `run:`.
+# - The script scrubs the log tail before sending it to Jev and prints LABELS ONLY
+#   (class, confidence, byte/line counts): this repo is public-when-working, so
+#   logs and summaries are world-readable.
+# - Fail-soft: no TYPESAFE_API_KEY, Jev down or low confidence => "unknown"; this
+#   workflow never fails the pipeline it triages.
+#
+# Needs the repository secret TYPESAFE_API_KEY (owner: `gh secret set TYPESAFE_API_KEY`).
+# Read the verdict in the run summary or the artifact ci-triage-<run id>
+# (verdict.json + summary.md). See tools/typesafe/README.md "CI triage".
+
+on:
+  workflow_run:
+    workflows:
+      - 'Build & Deploy (web + API)'
+      - 'QA Smoke'
+      - 'Jev integration'
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  triage:
+    name: Classify the failed run (jev-1.13.0)
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_repository.full_name == github.repository }}
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Require TYPESAFE_API_KEY
+        id: key
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+        run: |
+          if [ -z "$TYPESAFE_API_KEY" ]; then
+            echo "::notice title=CI triage skipped::Repository secret TYPESAFE_API_KEY is empty, so nothing was classified. The owner sets it with 'gh secret set TYPESAFE_API_KEY'."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::add-mask::$TYPESAFE_API_KEY"
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Classify (scripts/ci/jev-ci-triage.mjs)
+        id: classify
+        if: ${{ steps.key.outputs.present == 'true' }}
+        continue-on-error: true
+        env:
+          TYPESAFE_API_KEY: ${{ secrets.TYPESAFE_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CI_TRIAGE_RUN_ID: ${{ github.event.workflow_run.id }}
+          CI_TRIAGE_WORKFLOW: ${{ github.event.workflow_run.name }}
+          CI_TRIAGE_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          CI_TRIAGE_REPO: ${{ github.repository }}
+          CI_TRIAGE_OUT_DIR: ${{ runner.temp }}/ci-triage
+        run: |
+          export TYPESAFE_API_KEY="$(printf '%s' "$TYPESAFE_API_KEY" | tr -d '[:space:]')"
+          node scripts/ci/jev-ci-triage.mjs
+
+      - name: Summary
+        if: ${{ always() }}
+        env:
+          KEY_PRESENT: ${{ steps.key.outputs.present }}
+          CLASSIFY: ${{ steps.classify.outcome }}
+          CI_TRIAGE_OUT_DIR: ${{ runner.temp }}/ci-triage
+        run: |
+          {
+            if [ "$KEY_PRESENT" != "true" ]; then
+              echo "## CI triage"
+              echo
+              echo "**Not run:** repository secret \`TYPESAFE_API_KEY\` is empty."
+            elif [ -f "$CI_TRIAGE_OUT_DIR/summary.md" ]; then
+              cat "$CI_TRIAGE_OUT_DIR/summary.md"
+            else
+              echo "## CI triage"
+              echo
+              echo "No verdict was produced (classify step: $CLASSIFY). The failed run's own logs are still the source of truth."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload verdict
+        if: ${{ always() && steps.key.outputs.present == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-triage-${{ github.event.workflow_run.id }}
+          path: ${{ runner.temp }}/ci-triage
+          if-no-files-found: ignore
+          retention-days: 14

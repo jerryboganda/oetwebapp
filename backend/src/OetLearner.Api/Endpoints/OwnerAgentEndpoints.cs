@@ -413,7 +413,10 @@ public static partial class OwnerAgentEndpoints
         HttpContext http,
         OwnerAgentCreateSessionRequest? request,
         OwnerAgentClient client,
-        IOwnerAgentAuditService audit)
+        IOwnerAgentAuditService audit,
+        ITypeSafeJudgmentService judgments,
+        IOptions<TypeSafeOptions> typeSafeOptions,
+        ILoggerFactory loggerFactory)
     {
         var engine = OwnerAgentIds.RequireEngine(request?.Engine);
         var model = OwnerAgentIds.RequireOpaque(request?.Model, "model");
@@ -422,10 +425,20 @@ public static partial class OwnerAgentEndpoints
         var title = OwnerAgentIds.OptionalText(request?.Title, "title", MaxTitleChars);
         var initialMessage = OwnerAgentIds.OptionalText(request?.InitialMessage, "initialMessage", MaxMessageChars);
 
+        // Same triage as a follow-up message. Only the owner's own first message is screened; a handoff
+        // summary is machine generated and never goes through here.
+        JevDevelopmentAdvisory? jevTriage = null;
+        JevDevelopmentAdvisory? jevAdvisory = null;
+        if (!string.IsNullOrWhiteSpace(initialMessage))
+        {
+            (jevTriage, jevAdvisory) = await TriageOwnerMessageAsync(
+                initialMessage, judgments, typeSafeOptions.Value, loggerFactory, http.RequestAborted);
+        }
+
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.Sessions,
-            new { engine, model, effort, mode, title, initialMessage });
+            new { engine, model, effort, mode, title, initialMessage, jevAdvisory });
         var sessionId = ReadString(relay.Json, "id");
-        await audit.WriteAsync(http.User, OwnerAgentAuditActions.SessionCreated, SafeId(sessionId), new Dictionary<string, object?>
+        var details = new Dictionary<string, object?>
         {
             ["engine"] = engine,
             ["model"] = model,
@@ -434,8 +447,54 @@ public static partial class OwnerAgentEndpoints
             ["hasInitialMessage"] = initialMessage is not null,
             ["initialMessagePreview"] = initialMessage,
             ["status"] = relay.Status,
-        }, http.RequestAborted);
+        };
+        if (jevTriage is not null)
+            AddJevAudit(details, jevTriage);
+        await audit.WriteAsync(http.User, OwnerAgentAuditActions.SessionCreated, SafeId(sessionId), details, http.RequestAborted);
         return relay.Result;
+    }
+
+    /// <summary>
+    /// Advisory Jev triage of an owner message, shared by the session's first message and every follow-up.
+    /// Fail-open: <c>unavailable</c> (no key, outage, open breaker, timeout) forwards the message with no
+    /// advice, because Jev is advice for the break-glass console and never a gate on it. A real
+    /// <c>review_required</c> judgment only blocks a substantive message (a terse "continue" has too little
+    /// context to triage). The returned advisory is non-null only for a confident <c>ok</c>, the one shape
+    /// the sidecar accepts. Both are null while triage is off.
+    /// </summary>
+    private static async Task<(JevDevelopmentAdvisory? Triage, JevDevelopmentAdvisory? Advisory)> TriageOwnerMessageAsync(
+        string text,
+        ITypeSafeJudgmentService judgments,
+        TypeSafeOptions options,
+        ILoggerFactory loggerFactory,
+        CancellationToken ct)
+    {
+        if (!options.Enabled || !options.DevelopmentTriageEnabled)
+            return (null, null);
+
+        var triage = await JevWorkflowAdvisor.TriageDevelopmentAsync(judgments, options, text, ct);
+        if (triage?.Status == "unavailable")
+        {
+            loggerFactory.CreateLogger("OwnerAgentEndpoints").LogWarning(
+                "Jev development triage unavailable ({Reason}); forwarding the owner message without advice.",
+                triage?.Reason);
+            return (triage, null);
+        }
+
+        if (triage?.RequiresHumanReview == true && text.Trim().Length >= JevReviewMinMessageChars)
+            throw ApiException.Conflict("jev_review_required", "Jev could not establish the task and impact. Clarify the request before continuing.");
+
+        return (triage, triage?.Status == "ok" ? triage : null);
+    }
+
+    private static void AddJevAudit(Dictionary<string, object?> details, JevDevelopmentAdvisory? triage)
+    {
+        details["jevStatus"] = triage?.Status;
+        details["jevModel"] = triage?.Model;
+        details["jevTask"] = triage?.TaskKind;
+        details["jevRisk"] = triage?.RiskLevel;
+        details["jevEffort"] = triage?.EffortTier;
+        details["jevReason"] = triage?.Reason;
     }
 
     private static async Task<IResult> UpdateSessionAsync(
@@ -497,30 +556,13 @@ public static partial class OwnerAgentEndpoints
             if (session.Status is < 200 or >= 300)
                 return session.Result;
 
-            jevTriage = await JevWorkflowAdvisor.TriageDevelopmentAsync(
-                judgments, typeSafeOptions.Value, text, http.RequestAborted);
-            if (jevTriage?.Status == "unavailable")
-            {
-                // Fail-open: Jev is advice for the break-glass console, never a gate on it. No key,
-                // an outage or an open breaker must not lock the owner out of Claude/Codex.
-                loggerFactory.CreateLogger("OwnerAgentEndpoints").LogWarning(
-                    "Jev development triage unavailable ({Reason}); forwarding the owner message without advice.",
-                    jevTriage?.Reason);
-            }
-            else
-            {
-                // Only a real "review required" judgment on a substantive message blocks; a terse
-                // follow-up ("continue") has too little context to triage and goes through with no
-                // advice attached (the sidecar only accepts a confident "ok" advisory and would 409 it).
-                if (jevTriage?.RequiresHumanReview == true && text.Trim().Length >= JevReviewMinMessageChars)
-                    throw ApiException.Conflict("jev_review_required", "Jev could not establish the task and impact. Clarify the request before continuing.");
-                jevAdvisory = jevTriage?.Status == "ok" ? jevTriage : null;
-            }
+            (jevTriage, jevAdvisory) = await TriageOwnerMessageAsync(
+                text, judgments, typeSafeOptions.Value, loggerFactory, http.RequestAborted);
         }
 
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.SessionMessages(id),
             new { text, model, effort, jevAdvisory });
-        await audit.WriteAsync(http.User, OwnerAgentAuditActions.MessageSent, id, new Dictionary<string, object?>
+        var details = new Dictionary<string, object?>
         {
             ["length"] = text.Length,
             ["preview"] = text,
@@ -528,12 +570,9 @@ public static partial class OwnerAgentEndpoints
             ["effort"] = effort,
             ["turnId"] = ReadString(relay.Json, "turnId"),
             ["status"] = relay.Status,
-            ["jevStatus"] = jevTriage?.Status,
-            ["jevModel"] = jevTriage?.Model,
-            ["jevTask"] = jevTriage?.TaskKind,
-            ["jevRisk"] = jevTriage?.RiskLevel,
-            ["jevReason"] = jevTriage?.Reason,
-        }, http.RequestAborted);
+        };
+        AddJevAudit(details, jevTriage);
+        await audit.WriteAsync(http.User, OwnerAgentAuditActions.MessageSent, id, details, http.RequestAborted);
         return relay.Result;
     }
 

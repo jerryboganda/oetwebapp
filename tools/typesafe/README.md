@@ -80,3 +80,45 @@ claims; the 0–3 criteria radar lands a strong referral letter at 1.96–2.99.
 
 Seed further anchors from the 55 medicine model answers and the Writing
 regression letters as flags approach their flips.
+
+## CI triage (failed-run classifier)
+
+Saves coding-agent quota in the Ship-It fix-loop: instead of reading a 200 KB
+`--log-failed` dump to learn "that is a compile error", read one label. Jev
+classifies; the coding agent still reads the logs and fixes the cause.
+
+- **Workflow:** `.github/workflows/ci-triage.yml` fires on `workflow_run`
+  (completed) for `Build & Deploy (web + API)`, `QA Smoke` and `Jev integration`,
+  only when the run failed and its head repository is this repository (never
+  forks). It checks out the default branch only, never the failed PR/head code,
+  and is fail-soft: a missing `TYPESAFE_API_KEY` secret logs a notice and skips.
+- **Script:** `scripts/ci/jev-ci-triage.mjs` fetches the failed jobs, the last
+  ~6 KB of their failed-step logs (scrubbed: emails, tokens, secret-looking
+  `key=value`, long hex/base64; repeats collapsed) and the head commit's changed
+  files, then makes ONE batched Jev call (pinned `jev-1.13.0`): a Choice
+  `error_class` over `compile | test_failure | lint | infra_flake | deploy_health |
+  policy_gate | secret_scan | unrelated_preexisting | unknown` plus a Noul "the
+  failing file or test is one of the changed paths". Unit tests (fake fetch, fake
+  judge, no network): `node --test scripts/ci/jev-ci-triage.test.mjs`.
+- **Labels only:** the repo is public-when-working, so logs and summaries are
+  world-readable. The script prints the class, confidence, byte and line counts
+  and failed job names, never log text and never the key.
+- **Reading the verdict:** the run summary of the `CI triage` run, or the
+  artifact `ci-triage-<failed run id>` (`verdict.json` + `summary.md`):
+  `{"errorClass","confidence","touchesChange","logTailBytes","reason"}`.
+  `errorClass` is `unknown` when confidence is below 0.60 or Jev was
+  unavailable; `reason` says which (`low_confidence`, `jev_unavailable`,
+  `no_key`, `github_unavailable`, `no_evidence`, `unrecognised_label`,
+  `bad_input`, `internal_error`, or `ok`). `touchesChange` is `true` / `false`
+  / `null` (`null` = unsure or no changed paths). Treat the class as a hint for
+  which log section to open first, not as a diagnosis: `unknown`, low confidence
+  or `touchesChange: false` means read the logs the usual way.
+- **Related:** `scripts/qa/writing-prod-diagnose.mjs` adds an optional Jev second
+  opinion on grade-failure rows its regexes cannot classify, only when
+  `TYPESAFE_API_KEY` is in the environment. Its only caller is
+  `.github/workflows/writing-rev8-ci.yml` (step "Rank the latest Writing grade
+  failures", sparse checkout of `scripts/qa`), so the key must be added to that
+  step's `env`; the script makes its own pinned `jev-1.13.0` call and does not
+  import `scripts/listening/jev-client.mjs`. Until the key is added the block is
+  skipped. The regex result stays the default; Jev is adopted only for rows the
+  regexes left `unknown`, at confidence >= 0.80.
