@@ -23,7 +23,11 @@ public sealed class WritingDraftEndpointsTests(TestWebApplicationFactory factory
         // The slow first-version retry arrives last: it must be refused, not applied.
         var stale = await client.PutAsJsonAsync(url, Body("stale older text", 1));
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
-        Assert.Equal("draft_version_conflict", (await JsonAsync(stale)).GetProperty("code").GetString());
+        var body = await JsonAsync(stale);
+        Assert.Equal("draft_version_conflict", body.GetProperty("code").GetString());
+        // Same body as the global ApiException handler (the endpoint now logs it as an expected outcome).
+        Assert.False(body.GetProperty("retryable").GetBoolean());
+        Assert.Contains("changed elsewhere", body.GetProperty("message").GetString());
 
         var draft = await JsonAsync(await client.GetAsync(url));
         Assert.Equal("newer text", draft.GetProperty("content").GetString());

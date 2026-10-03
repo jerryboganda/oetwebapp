@@ -199,6 +199,53 @@ describe('useWritingDraftSync', () => {
     expect(putWritingDraftV2.mock.calls[1][2]).toMatchObject({ content: 'this device!', expectedVersion: 9 });
   });
 
+  it('never re-sends a stale version after a 409 whose re-read failed: it re-reads first, then saves on the new version', async () => {
+    // Production 3 Oct 2026: 409 "This draft was changed elsewhere" every ~10 s for
+    // minutes — the heartbeat kept PUTting the same stale expectedVersion.
+    putWritingDraftV2.mockRejectedValueOnce(new ApiError(409, 'draft_version_conflict', 'conflict', false));
+    getWritingDraftV2
+      .mockRejectedValueOnce(new ApiError(429, 'rate_limited', 'slow down', true))
+      .mockResolvedValueOnce({ content: 'Dear Dr Green, typed', wordCount: 4, version: 7 });
+    const { result } = setup({ heartbeatMs: 10_000 });
+
+    act(() => result.current.update('Dear Dr Green, typed', 4));
+    await tick(1_200);
+    await tick();
+    expect(putWritingDraftV2).toHaveBeenCalledTimes(1);
+    expect(getWritingDraftV2).toHaveBeenCalledTimes(1);
+
+    // Backoff and heartbeats: the next request is the GET, never the stale PUT.
+    await tick(2_000);
+    expect(getWritingDraftV2).toHaveBeenCalledTimes(2);
+    expect(putWritingDraftV2).toHaveBeenCalledTimes(1);
+    expect(result.current.conflict).toBeNull();
+    expect(result.current.state).toBe('saved');
+
+    await tick(10_000);
+    for (const call of putWritingDraftV2.mock.calls.slice(1)) {
+      expect(call[2]).toMatchObject({ content: 'Dear Dr Green, typed', expectedVersion: 7 });
+    }
+    expect(putWritingDraftV2.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('a 409 for different text stops the heartbeat and every background save until the learner chooses', async () => {
+    putWritingDraftV2.mockRejectedValueOnce(new ApiError(409, 'draft_version_conflict', 'conflict', false));
+    getWritingDraftV2.mockResolvedValueOnce({ content: 'other device', wordCount: 2, version: 9 });
+    const { result } = setup({ heartbeatMs: 10_000 });
+
+    act(() => result.current.update('this device', 2));
+    await tick(1_200);
+    await tick();
+    expect(result.current.conflict).toEqual({ serverText: 'other device' });
+
+    act(() => result.current.update('this device, more', 3));
+    act(() => result.current.flush());
+    await tick(60_000);
+    expect(putWritingDraftV2).toHaveBeenCalledTimes(1);
+    expect(getWritingDraftV2).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(localStorage.getItem(SHADOW_KEY) ?? '{}')).toMatchObject({ text: 'this device, more' });
+  });
+
   it('heartbeats the remaining time even without edits', async () => {
     const getClock = () => ({
       phase: 'writing' as const,
