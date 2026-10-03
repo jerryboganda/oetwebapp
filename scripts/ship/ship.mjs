@@ -139,9 +139,26 @@ function writeJson(file, value) {
 
 // ------------------------------------------------------------------- lock
 
+/** Is a process with this pid alive on THIS host? EPERM means "alive, not ours". */
+function processIsAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
 function acquireLock(paths, { force = false } = {}) {
   const existing = readJson(paths.lock);
-  if (existing && leaseIsActive({ expiresAt: existing.expiresAt }) && !force) {
+  // A killed session (Ctrl+C, closed shell, hard stop) leaves its lock behind.
+  // Reclaim it when the recorded pid is gone instead of blocking other agents
+  // for the full TTL; only same-host pids can be checked.
+  const stale = Boolean(
+    existing && existing.host === hostname() && !processIsAlive(Number(existing.pid)),
+  );
+  if (existing && leaseIsActive({ expiresAt: existing.expiresAt }) && !force && !stale) {
     throw new Error(
       `another ship is running: ${existing.session} (pid ${existing.pid}, expires ${existing.expiresAt}).\n` +
         'Wait for it, or release with: pnpm run ship -- --force-release',
@@ -379,6 +396,9 @@ export function parseArgs(argv) {
   const flags = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
+    // `pnpm run ship -- --sha <sha>` passes the `--` separator through as an
+    // argument; ignoring it keeps the flags after it working.
+    if (token === '--') continue;
     if (!token.startsWith('--')) {
       flags._.push(token);
       continue;
@@ -574,6 +594,15 @@ export function selfTest() {
 
   const parsed = parseArgs(['--sha', 'abc', '--no-watch', '--dry-run']);
   expect('flags parse', parsed.sha === 'abc' && parsed['no-watch'] === true && parsed['dry-run'] === true);
+
+  // `pnpm run ship -- --sha <sha>` forwards the separator; it must not swallow
+  // the flag that follows it (that once turned a watch-only run into a ship).
+  const withSeparator = parseArgs(['--', '--sha', 'abc', '--force-release']);
+  expect(
+    'a bare -- separator is ignored',
+    withSeparator.sha === 'abc' && withSeparator['force-release'] === true && withSeparator._.length === 0,
+    JSON.stringify(withSeparator),
+  );
 
   return { ok: failures.length === 0, failures };
 }
