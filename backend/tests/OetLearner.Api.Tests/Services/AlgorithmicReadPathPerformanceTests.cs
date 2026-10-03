@@ -156,7 +156,10 @@ public sealed class AlgorithmicReadPathPerformanceTests
             CancellationToken.None);
 
         var firstReadCommands = database.Sql.SelectCommands;
-        Assert.Equal(2, firstReadCommands.Count);
+        // Four set-based reads: candidates NOT EXISTS, the Users aggregate
+        // prerequisites, and the reading-pathway merge (LearnerXps + StreakRecords)
+        // that achievement criteria now evaluate against.
+        Assert.Equal(4, firstReadCommands.Count);
         Assert.Contains(
             firstReadCommands,
             command => command.Contains("NOT EXISTS", StringComparison.OrdinalIgnoreCase));

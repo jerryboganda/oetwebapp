@@ -299,7 +299,7 @@ function NotificationCenterContent({
   } = useNotificationCenter();
   // Backend-side ops alerts (manual fulfilment queue). Rendered as a pinned
   // group above the personal feed; adds to the bell's unread pill below.
-  const { alerts: adminAlerts } = useAdminAlerts();
+  const { alerts: adminAlerts, totalAlertCount: adminAlertCount } = useAdminAlerts();
   const reducedMotion = prefersReducedMotion(useReducedMotionConfig());
   const [tab, setTab] = useState<'all' | 'unread'>('all');
   const [category, setCategory] = useState<string | null>(null);
@@ -357,14 +357,15 @@ function NotificationCenterContent({
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold tracking-tight text-navy">Notifications</h2>
             <p className="mt-0.5 text-2xs text-muted/70">
-              {/* Keep the header in step with the bell pill, which also counts
-                  the pinned admin alerts (they are not inbox rows, so they never
-                  appear in `unreadCount` or the Unread tab). */}
-              {unreadCount > 0 || adminAlerts.length > 0
+              {/* Keep the header in step with the bell pill, which counts
+                  `totalAlertCount` — the pinned admin alerts are not inbox
+                  rows, so they never appear in `unreadCount` or the Unread
+                  tab, and `alerts` may be a capped view of the total. */}
+              {unreadCount > 0 || adminAlertCount > 0
                 ? [
                     unreadCount > 0 ? `${unreadCount} unread` : null,
-                    adminAlerts.length > 0
-                      ? `${adminAlerts.length} admin alert${adminAlerts.length === 1 ? '' : 's'}`
+                    adminAlertCount > 0
+                      ? `${adminAlertCount} admin alert${adminAlertCount === 1 ? '' : 's'}`
                       : null,
                     `${totalCount} total`,
                   ]

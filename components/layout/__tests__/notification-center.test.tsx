@@ -117,8 +117,9 @@ describe('NotificationCenter', () => {
     const [desktopBell] = screen.getAllByRole('button', { name: /notifications \(8 unread, 5 admin alerts\)/i });
     fireEvent.click(desktopBell);
 
-    // Pinned group header renders with its own count chip.
-    expect(screen.getByText(/admin alerts/i)).toBeInTheDocument();
+    // Pinned group header renders with its own count chip. Exact text — the
+    // popover header line now also mentions admin alerts ("N admin alerts").
+    expect(screen.getByText('Admin alerts')).toBeInTheDocument();
     expect(screen.getByText('Pending Fulfilment')).toBeInTheDocument();
     expect(screen.getByText(/3 paid order\(s\) waiting for fulfilment/i)).toBeInTheDocument();
     expect(screen.getByText('Payment Proofs Pending')).toBeInTheDocument();
@@ -176,16 +177,17 @@ describe('NotificationCenter', () => {
 
     it('treats a fresh mount as connecting — no offline banner or degraded dot until a real failure', () => {
       mockNotificationContext.connectionStatus = 'connecting';
-      renderWithRouter(<NotificationCenter />);
-
-      expect(screen.queryByText(/offline\. updates may be delayed/i)).not.toBeInTheDocument();
-      expect(screen.queryByLabelText(/live updates paused/i)).not.toBeInTheDocument();
-
-      mockNotificationContext.connectionStatus = 'disconnected';
-      renderWithRouter(<NotificationCenter />);
+      const fresh = renderWithRouter(<NotificationCenter />);
+      expect(fresh.queryByLabelText(/live updates paused/i)).not.toBeInTheDocument();
+      fresh.unmount();
 
       // A real failed attempt is the only thing that may park it offline.
-      expect(screen.getAllByText(/offline\. updates may be delayed/i).length).toBeGreaterThan(0);
+      mockNotificationContext.connectionStatus = 'disconnected';
+      renderWithRouter(<NotificationCenter />);
+      fireEvent.click(screen.getAllByRole('button', { name: /notifications/i })[0]);
+
+      expect(screen.getByText(/offline\. updates may be delayed/i)).toBeInTheDocument();
+      expect(screen.getAllByLabelText(/live updates paused/i).length).toBeGreaterThan(0);
     });
   });
 });

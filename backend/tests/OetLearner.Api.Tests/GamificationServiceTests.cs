@@ -232,9 +232,9 @@ public class GamificationServiceTests
 
         var allTime = JsonSerializer.SerializeToElement(
             await svc.GetLeaderboardAsync("OET", "alltime", CancellationToken.None));
-        Assert.Equal("learner-a", allTime[0].GetProperty("displayName").GetString());
+        Assert.Equal("Aisha", allTime[0].GetProperty("displayName").GetString());
         Assert.Equal(700, allTime[0].GetProperty("xp").GetInt64());
-        Assert.Equal("learner-b", allTime[1].GetProperty("displayName").GetString());
+        Assert.Equal("Bilal", allTime[1].GetProperty("displayName").GetString());
         Assert.Equal(600, allTime[1].GetProperty("xp").GetInt64());
 
         // Weekly/monthly buckets only track grammar awards — reading XP must not
