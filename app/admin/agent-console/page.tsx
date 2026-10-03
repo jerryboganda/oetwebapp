@@ -23,7 +23,7 @@ export default function AgentConsolePage() {
     <AdminOperationsLayout
       title="Agent Console"
       eyebrow="Owner only"
-      description="Claude Code and Codex working on the production project under your subscriptions. Every action is audited."
+      description="Claude Code, Codex and OpenCode working on the production project. Every action is audited."
       actions={
         <div className="flex flex-wrap gap-2">
           <Button variant="primary" size="sm" onClick={() => setCreating(true)} disabled={!engines || blocked}>
