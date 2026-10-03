@@ -747,6 +747,10 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             PaymentWebhookPiiNullOutAge: DaysOrDefault(r.DataRetentionPaymentWebhookPiiNullOutAgeDays, env.PaymentWebhookPiiNullOutAge),
             NotificationDeliveryAttempts: DaysOrDefault(r.DataRetentionNotificationDeliveryAttemptsDays, env.NotificationDeliveryAttempts),
             SecurityEvents: DaysOrDefault(r.DataRetentionSecurityEventsDays, env.SecurityEvents),
+            // Inbox windows resolve env-only for now (options defaults 180d/14d);
+            // DB override columns would need a RuntimeSettingsRow migration.
+            NotificationInboxItems: env.NotificationInboxItems,
+            NotificationInboxStaleUnread: env.NotificationInboxStaleUnread,
             SweepInterval: HoursOrDefault(r.DataRetentionSweepIntervalHours, env.SweepInterval),
             BatchSize: r.DataRetentionBatchSize is > 0 ? r.DataRetentionBatchSize.Value : (env.BatchSize <= 0 ? 5000 : env.BatchSize));
 

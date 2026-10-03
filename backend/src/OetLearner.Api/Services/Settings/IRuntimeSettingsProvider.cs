@@ -617,6 +617,8 @@ public sealed record DataRetentionSettings(
     TimeSpan PaymentWebhookPiiNullOutAge,
     TimeSpan NotificationDeliveryAttempts,
     TimeSpan SecurityEvents,
+    TimeSpan NotificationInboxItems,
+    TimeSpan NotificationInboxStaleUnread,
     TimeSpan SweepInterval,
     int BatchSize);
 
