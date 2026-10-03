@@ -158,11 +158,19 @@ public static class JevMockWeakness
                     wrong_by_part = s.WrongByPart,
                     wrong_by_miss_reason = s.MissReasons,
                 }).ToArray(),
-                candidates = candidates.Select((t, i) => new
+                candidates = candidates.Select((t, i) =>
                 {
-                    index = i,
-                    skill = SkillOf(t),
-                    weakness = MeaningOf(t),
+                    var figures = FiguresFor(t, skills.First(s => s.Skill == SkillOf(t)));
+                    return new
+                    {
+                        index = i,
+                        skill = SkillOf(t),
+                        weakness = MeaningOf(t),
+                        whole_skill = figures.WholeSkill,
+                        matching_wrong_answers = figures.Matching,
+                        share_of_skill_wrong_answers = figures.Share,
+                        skill_error_rate = figures.ErrorRate,
+                    };
                 }).ToArray(),
             }),
             Questions = candidates.Select((t, i) => new JevQuestion
@@ -170,14 +178,15 @@ public static class JevMockWeakness
                 Id = WeakId(i),
                 Kind = JevQuestionKind.Score,
                 Instructions =
-                    $"How strongly do the answer counts in `state.skills` show the weakness described in `state.candidates[{i}].weakness` for the skill `state.candidates[{i}].skill`? "
-                    + "Judge only from the counts given; do not assume anything beyond them. For a part-specific weakness use `wrong_by_part`; for a miss-reason-specific weakness use `wrong_by_miss_reason`; for a whole-skill weakness use `answers_wrong`. A weakness whose part or miss reason shows none of the skill's wrong answers scores 0." + DataNote,
+                    $"How strongly do the figures of `state.candidates[{i}]` show the weakness it describes? "
+                    + "Use only that candidate's `matching_wrong_answers`, `share_of_skill_wrong_answers` and `skill_error_rate`: they were already counted for you, so do not recount from `state.skills`. "
+                    + "For a whole-skill weakness (`whole_skill` is true) read `skill_error_rate`; otherwise read `share_of_skill_wrong_answers`. A candidate with 0 `matching_wrong_answers` shows no evidence." + DataNote,
                 ScoreLevels =
                 [
-                    "No evidence: none of this skill's wrong answers fit this weakness - the matching part or miss reason shows no wrong answers.",
-                    "Slight: only a few of the wrong answers fit this weakness (well under a third) and they are not a pattern.",
-                    "Clear: roughly a third or more of this skill's wrong answers fit this weakness.",
-                    "Strong: most (about half or more) of the wrong answers, or the bulk of one part, fit this weakness.",
+                    "No evidence: matching_wrong_answers is 0.",
+                    "Slight: share_of_skill_wrong_answers is 'a few', or the weakness is whole-skill and skill_error_rate is 'low'.",
+                    "Clear: share_of_skill_wrong_answers is 'about a third' or 'about half', or the weakness is whole-skill and skill_error_rate is 'moderate'.",
+                    "Strong: share_of_skill_wrong_answers is 'most' or 'nearly all', or the weakness is whole-skill and skill_error_rate is 'high'.",
                 ],
             }).ToList(),
         };
@@ -278,6 +287,38 @@ public static class JevMockWeakness
     }
 
     // ── Internals ───────────────────────────────────────────────────────────
+
+    /// <summary>The counts a candidate tag rests on, computed in code because Jev is poor at
+    /// arithmetic (first live calibration: it split Clear and Strong on Part C 8 of 8).
+    /// Whole-skill tags use the skill's error rate; the others use the share of the skill's
+    /// wrong answers that fall in the matching part or miss reason.</summary>
+    internal static (bool WholeSkill, int Matching, string Share, string ErrorRate) FiguresFor(string tag, JevSkillEvidence s)
+    {
+        int Part(string p) => s.WrongByPart.GetValueOrDefault(p);
+        switch (tag)
+        {
+            case "low_listening":
+            case "low_reading":
+                var rate = s.Total <= 0 ? 0d : (double)s.Wrong / s.Total;
+                return (true, s.Wrong, "not applicable", rate < 0.15 ? "low" : rate < 0.30 ? "moderate" : "high");
+            default:
+                var matching = tag switch
+                {
+                    "listening_partA_spelling" => s.MissReasons.GetValueOrDefault("spelling_error"),
+                    "listening_partB_inference" => Part("B") + Part("C"),
+                    "reading_partC_inference" => Part("C"),
+                    _ => 0,
+                };
+                var share = s.Wrong <= 0 ? 0d : (double)matching / s.Wrong;
+                var band = matching == 0 ? "none"
+                    : matching < 3 || share < 0.25 ? "a few"
+                    : share < 0.40 ? "about a third"
+                    : share < 0.65 ? "about half"
+                    : share < 0.90 ? "most"
+                    : "nearly all";
+                return (false, matching, band, "not applicable");
+        }
+    }
 
     private static string MeaningOf(string tag) =>
         TagMeanings.TryGetValue(tag, out var meaning)

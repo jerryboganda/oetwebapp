@@ -334,4 +334,27 @@ public sealed class JevMockWeaknessTests
         Assert.Equal(2, evidence.MissReasons["spelling_error"]);
         Assert.Equal(1, evidence.MissReasons["wrong_number"]);
     }
+
+    [Fact]
+    public void FiguresFor_CountsInCode_SoJevOnlyMapsBandsToLevels()
+    {
+        // Reading Part C skew from the first live calibration: 8 wrong, all in Part C.
+        var rows = Enumerable.Range(0, 16).Select(i => ("C", (bool?)(i >= 8), (string?)(i < 8 ? "wrong_option" : null)))
+            .Concat(Enumerable.Range(0, 26).Select(_ => ("A", (bool?)true, (string?)null)));
+        var reading = JevMockWeakness.BuildEvidence("reading", rows);
+
+        var partC = JevMockWeakness.FiguresFor("reading_partC_inference", reading);
+        Assert.False(partC.WholeSkill);
+        Assert.Equal(8, partC.Matching);
+        Assert.Equal("nearly all", partC.Share);
+
+        var whole = JevMockWeakness.FiguresFor("low_reading", reading);
+        Assert.True(whole.WholeSkill);
+        Assert.Equal("moderate", whole.ErrorRate); // 8 of 42 is about 19%; bands: low < 15%, moderate < 30%, else high
+
+        // Fewer than three matching answers is always "a few", whatever the share.
+        var one = JevMockWeakness.BuildEvidence("listening", [("A", false, "spelling_error")]);
+        Assert.Equal("a few", JevMockWeakness.FiguresFor("listening_partA_spelling", one).Share);
+        Assert.Equal("none", JevMockWeakness.FiguresFor("listening_partB_inference", one).Share);
+    }
 }

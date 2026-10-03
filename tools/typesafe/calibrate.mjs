@@ -638,11 +638,27 @@ const MOCK_TAGS = {
 };
 const MOCK_CANDIDATES = Object.keys(MOCK_TAGS).sort();
 const MOCK_SCORE_LEVELS = [
-  "No evidence: none of this skill's wrong answers fit this weakness - the matching part or miss reason shows no wrong answers.",
-  'Slight: only a few of the wrong answers fit this weakness (well under a third) and they are not a pattern.',
-  "Clear: roughly a third or more of this skill's wrong answers fit this weakness.",
-  'Strong: most (about half or more) of the wrong answers, or the bulk of one part, fit this weakness.',
+  'No evidence: matching_wrong_answers is 0.',
+  "Slight: share_of_skill_wrong_answers is 'a few', or the weakness is whole-skill and skill_error_rate is 'low'.",
+  "Clear: share_of_skill_wrong_answers is 'about a third' or 'about half', or the weakness is whole-skill and skill_error_rate is 'moderate'.",
+  "Strong: share_of_skill_wrong_answers is 'most' or 'nearly all', or the weakness is whole-skill and skill_error_rate is 'high'.",
 ];
+
+// JevMockWeakness.FiguresFor: counted in code (Jev is poor at arithmetic).
+function mockFigures(tag, s) {
+  const part = (p) => s.wrongByPart?.[p] ?? 0;
+  if (tag === 'low_listening' || tag === 'low_reading') {
+    const rate = s.total <= 0 ? 0 : s.wrong / s.total;
+    return { wholeSkill: true, matching: s.wrong, share: 'not applicable', errorRate: rate < 0.15 ? 'low' : rate < 0.30 ? 'moderate' : 'high' };
+  }
+  const matching = tag === 'listening_partA_spelling' ? (s.missReasons?.spelling_error ?? 0)
+    : tag === 'listening_partB_inference' ? part('B') + part('C')
+    : tag === 'reading_partC_inference' ? part('C') : 0;
+  const share = s.wrong <= 0 ? 0 : matching / s.wrong;
+  const band = matching === 0 ? 'none' : matching < 3 || share < 0.25 ? 'a few' : share < 0.40 ? 'about a third'
+    : share < 0.65 ? 'about half' : share < 0.90 ? 'most' : 'nearly all';
+  return { wholeSkill: false, matching, share: band, errorRate: 'not applicable' };
+}
 
 // ── Answer-key dispute triage (mirror JevAnswerKeyTriage.cs) ────────────────
 
@@ -1261,8 +1277,9 @@ async function evaluateMockWeakness(caseName, c) {
   const candidates = MOCK_CANDIDATES.filter((t) => skillNames.has(MOCK_TAGS[t].skill));
   const questions = Object.fromEntries(candidates.map((t, i) => [`weak_${i}`, {
     type: 'score',
-    instructions: `How strongly do the answer counts in \`state.skills\` show the weakness described in \`state.candidates[${i}].weakness\` for the skill \`state.candidates[${i}].skill\`? `
-      + "Judge only from the counts given; do not assume anything beyond them. For a part-specific weakness use `wrong_by_part`; for a miss-reason-specific weakness use `wrong_by_miss_reason`; for a whole-skill weakness use `answers_wrong`. A weakness whose part or miss reason shows none of the skill's wrong answers scores 0." + GAP_DATA_NOTE,
+    instructions: `How strongly do the figures of \`state.candidates[${i}]\` show the weakness it describes? `
+      + "Use only that candidate's `matching_wrong_answers`, `share_of_skill_wrong_answers` and `skill_error_rate`: they were already counted for you, so do not recount from `state.skills`. "
+      + 'For a whole-skill weakness (`whole_skill` is true) read `skill_error_rate`; otherwise read `share_of_skill_wrong_answers`. A candidate with 0 `matching_wrong_answers` shows no evidence.' + GAP_DATA_NOTE,
     criteria: MOCK_SCORE_LEVELS,
   }]));
   const response = await ask({
@@ -1274,7 +1291,18 @@ async function evaluateMockWeakness(caseName, c) {
       wrong_by_part: s.wrongByPart,
       wrong_by_miss_reason: s.missReasons,
     })),
-    candidates: candidates.map((t, i) => ({ index: i, skill: MOCK_TAGS[t].skill, weakness: MOCK_TAGS[t].meaning })),
+    candidates: candidates.map((t, i) => {
+      const f = mockFigures(t, skills.find((s) => s.skill === MOCK_TAGS[t].skill));
+      return {
+        index: i,
+        skill: MOCK_TAGS[t].skill,
+        weakness: MOCK_TAGS[t].meaning,
+        whole_skill: f.wholeSkill,
+        matching_wrong_answers: f.matching,
+        share_of_skill_wrong_answers: f.share,
+        skill_error_rate: f.errorRate,
+      };
+    }),
   }, questions, `${caseName}/weakness`);
 
   const scored = candidates.map((tag, i) => ({ tag, score: response.answers?.[`weak_${i}`]?.score, confidence: response.answers?.[`weak_${i}`]?.confidence }));
