@@ -306,9 +306,15 @@ export function stopDecision(dir, input) {
  * A rule only matches at a command position: the start of the command, or just
  * after a shell separator. Text quoted inside another command (a commit message
  * that mentions `pnpm test`) is therefore not a violation.
+ *
+ * Launchers may sit between that separator and the command that actually runs:
+ * `pnpm exec vitest` and `node ./scripts/qa/run-playwright-matrix.mjs` are the
+ * same violation as a bare `vitest`, and they slipped past the first version of
+ * this table. Regex backtracking keeps the zero-launcher path working, so
+ * `pnpm run build` still matches on `pnpm` itself.
  */
-const AT_COMMAND =
-  String.raw`(?:^|[;&|(\n]|\b(?:then|do)\b)\s*(?:timeout\s+\d+\s+|npx\s+|corepack\s+|env\s+(?:\w+=\S*\s+)+)?`;
+const LAUNCHERS = String.raw`(?:timeout\s+\d+|npx|corepack(?:\s+(?:pnpm|npm|yarn))?|env\s+\w+=\S*|node|cmd(?:\.exe)?\s+/[ck]|powershell(?:\.exe)?\s+-{1,2}(?:c|command)|pwsh\s+-{1,2}(?:c|command)|(?:bash|sh|zsh)\s+-c|pnpm\s+(?:exec|dlx)|npm\s+exec|yarn\s+(?:exec|dlx))`;
+const AT_COMMAND = String.raw`(?:^|[;&|(\n]|\b(?:then|do)\b)\s*(?:${LAUNCHERS}\s+)*`;
 
 export const LOCAL_COMPUTE_RULES = [
   {
@@ -323,7 +329,7 @@ export const LOCAL_COMPUTE_RULES = [
     what: 'a test runner, browser lane or local stack harness',
     test: new RegExp(
       AT_COMMAND +
-        String.raw`(?:vitest|jest|pytest|cypress|playwright\s+(?:test|install|show-report)|run-playwright-matrix|assert-local-stack)\b`,
+        String.raw`(?:vitest|jest|pytest|cypress|playwright\s+(?:test|install|show-report)|\S*run-playwright-matrix|\S*assert-local-stack)\b`,
       'i',
     ),
   },
@@ -362,11 +368,28 @@ export const LOCAL_COMPUTE_RULES = [
   },
 ];
 
+/**
+ * The text a rule is matched against. Quoted segments are masked — otherwise a
+ * `;` inside a commit message would invent a command position — and a shell
+ * wrapper (`bash -c "pnpm test"`) is also tried unwrapped, because that is the
+ * same command.
+ */
+function commandVariants(text) {
+  const unwrapped = text.replace(
+    /\b(?:bash|sh|zsh|pwsh|powershell|cmd)(?:\.exe)?\s+(?:-{1,2}[\w-]+\s+)*["']([^"']+)["']/gi,
+    '$1',
+  );
+  const masked = text.replace(/"[^"]*"|'[^']*'/g, ' ');
+  return unwrapped === text ? [masked] : [masked, unwrapped];
+}
+
 /** The rule a shell command violates, or null when the command is allowed. */
 export function forbiddenLocalCompute(command) {
   const text = String(command ?? '');
   if (!text.trim()) return null;
-  for (const rule of LOCAL_COMPUTE_RULES) if (rule.test.test(text)) return rule.what;
+  for (const variant of commandVariants(text)) {
+    for (const rule of LOCAL_COMPUTE_RULES) if (rule.test.test(variant)) return rule.what;
+  }
   return null;
 }
 
@@ -583,6 +606,9 @@ export function selfTest() {
       'docker compose -f docker-compose.dev.yml up -d',
       'git pull && pnpm run build',
       'node ./scripts/qa/run-playwright-matrix.mjs smoke',
+      'powershell -Command "pnpm run build"',
+      'bash -c "dotnet test backend/OetLearner.sln"',
+      'pnpm run --silent test',
     ]) {
       expect('denied: ' + denied, Boolean(forbiddenLocalCompute(denied)));
     }
