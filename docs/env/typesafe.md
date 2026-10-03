@@ -76,7 +76,11 @@ start (a normal Build & Deploy), not live.
 | `TYPESAFE__CONVERSATIONADVISORYENABLED` | AI-patient turn advisory (`jev.conversation.turn`) | Stays-in-role / clinically-appropriate / unsafe Nouls next to reply generation. Informational only; never gates, scores or ends a session. |
 | `TYPESAFE__RESPONSEVERIFYENABLED` | Gateway response review (`jev.response.verify`) | Advisory review of a Reading/Listening explanation completion only (evidence relation, addresses-task, unsafe-recommendation). Never changes a grade or the gateway verdict. |
 | `TYPESAFE__DEVELOPMENTTRIAGEENABLED` | Development/review tooling triage (`jev.development.triage`) | Typed triage for the owner agent console. Never on a learner path. |
-
+| `TYPESAFE__WRITINGGUARDENFORCED` | Writing guard enforcement (owner decision) | Default `false`: a guard Block is recorded and flagged to a tutor but the letter is still graded by Max. `true` restores the old skip-the-paid-grade behaviour and needs explicit owner approval. |
+| `TYPESAFE__WRITINGOUTCOMEENABLED` | Writing pass/fail cross-check (`jev.writing.outcome`) | One Noul beside the grader's verdict; a confident flip flags tutor review. Advisory, runs after the grade chain. |
+| `TYPESAFE__WRITINGFINDINGSENABLED` | Writing finding classification (`jev.writing.findings`) | Criterion Choice and valid-alternative Noul per AI finding. Advisory. |
+| `TYPESAFE__SPEAKINGREADINESSENABLED` | Speaking pre-grade readiness (`jev.speaking.readiness`) | Negative flag to tutor review only; never skips or reroutes the pinned Max grade. |
+| `TYPESAFE__SPEAKINGCROSSCHECKENABLED` | Speaking post-grade cross-check (`jev.speaking.crosscheck`) | Per-criterion Score + quote-support Choice; divergence lowers confidence and queues tutor review. Never changes a number. |
 ### Thresholds (code-owned decisions; the model only supplies probabilities)
 
 All six are probabilities in the range 0 to 1 inclusive.
@@ -84,6 +88,10 @@ All six are probabilities in the range 0 to 1 inclusive.
 | Variable | Default | Meaning |
 |---|---|---|
 | `TYPESAFE__GUARDBLOCKTHRESHOLD` | `0.80` | Any single guard Noul at or above this blocks the submission from the paid grade and flags it to a human. |
+| `TYPESAFE__OUTCOMECONFIDENCETHRESHOLD` | `0.70` | Writing outcome Noul must be at least this confident (either way) before a pass/fail flip counts. |
+| `TYPESAFE__CROSSCHECKDIVERGENCETHRESHOLD` | `0.34` | Normalised grader-vs-Jev distance (0..1 of the criterion scale) that counts as divergence. |
+| `TYPESAFE__CROSSCHECKCONFIDENCETHRESHOLD` | `0.60` | Minimum Jev confidence for a cross-check answer to be used; lower is treated as no signal. |
+| `TYPESAFE__READINESSFLAGTHRESHOLD` | `0.80` | Any single Speaking readiness Noul at or above this flags the submission for tutor attention. |
 | `TYPESAFE__GUARDREVIEWTHRESHOLD` | `0.50` | At or above this (below the block threshold) the submission proceeds and is logged for calibration. |
 | `TYPESAFE__ROUTECONFIDENCETHRESHOLD` | `0.70` | Router confidence required before a routed target may override the caller's explicit request. |
 | `TYPESAFE__VERIFYCONFIDENCETHRESHOLD` | `0.60` | A "supported" verdict below this counts as unproven and flags the grade, like a contradicted verdict. |

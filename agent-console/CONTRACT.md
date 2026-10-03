@@ -53,7 +53,7 @@ Errors: `{ "error": { "code": string, "message": string } }` with 400/401/403/40
 | POST | `/v1/sessions` | `CreateSession` | `SessionDetail` |
 | GET | `/v1/sessions/:id` | – | `SessionDetail` |
 | PATCH | `/v1/sessions/:id` | `{ title?, mode?, model?, effort?, archived? }` | `SessionDetail` |
-| POST | `/v1/sessions/:id/messages` | `{ text, model?, effort? }` | `{ turnId }` |
+| POST | `/v1/sessions/:id/messages` | `{ text, model?, effort?, jevAdvisory? }` | `{ turnId }` |
 | POST | `/v1/sessions/:id/interrupt` | – | `{ ok: true }` |
 | POST | `/v1/sessions/:id/handoff` | `{ engine, model, effort? }` | `SessionDetail` (new session, same worktree/branch, seeded with a summary) |
 | POST | `/v1/sessions/:id/approvals/:approvalId` | `{ decision, nonce, note? }` | `{ ok: true }` |
@@ -86,6 +86,24 @@ non-archived session, as before). Unknown keys are ignored; a bad value (or a re
 | `limit` | integer 1..200 | page size; default 200 when omitted |
 
 A page shorter than `limit` is the last page.
+
+#### Jev triage advice (additive v1.3)
+
+`jevAdvisory` is optional on `POST /v1/sessions` (for `initialMessage`) and `POST /v1/sessions/:id/messages`
+(for `text`); `null`/absent = no advice. It is **advice only, not authorization**: the sidecar quotes it to
+the engine and never lets it choose the engine, model, reasoning effort or mode, grant an approval, widen a
+session's authority or relax the Guard (the Guard and the Ship executor stay deterministic).
+
+- Only a confident `ok` judgment is accepted. `status !== "ok"` or `requiresHumanReview !== false` → 409
+  `jev_review_required` (defence in depth: the API never forwards one). A `model` that is not a pinned
+  `jev-<major>.<minor>.<patch>`, or a confidence that is not a finite number in 0.5..1 → 400
+  `jev_invalid_advisory`; a `taskKind` / `riskLevel` outside the `JevAdvisory` shape's lists (see Shapes) → 400 `bad_request`.
+- `effortTier` is optional: absent or `null` adds nothing; any value outside `lookup` | `bounded_edit` |
+  `cross_module` (including `unclear`) → 400 `bad_request`. When present, the engine prompt gets the line
+  `Suggested effort tier: <tier> (advice only, not authorization)` inside the advisory preamble, in front of
+  the owner's text. The recorded `user_message` stays the owner's text exactly.
+- On `POST /v1/sessions` the advice is validated before any worktree exists; without an `initialMessage` it
+  is 400 `jev_invalid_advisory`. A handoff summary is machine generated and never carries advice.
 
 ### Shapes
 
@@ -125,6 +143,17 @@ type GithubStatus = { agentTokenSet: boolean; shipTokenSet: boolean; login?: str
 type CreateSession = {
   engine: Engine; model: string; effort?: string; mode: Mode;
   title?: string; initialMessage?: string;
+  jevAdvisory?: JevAdvisory | null;    // v1.3: advice for `initialMessage` only (400 `jev_invalid_advisory` without one)
+};
+type JevAdvisory = {                   // v1.3: advice only, see "Jev triage advice" above
+  status: "ok"; model: string;         // model: pinned judgment model id, /^jev-\d+\.\d+\.\d+$/
+  requiresHumanReview: false;
+  taskKind: "implement" | "debug" | "review" | "verify" | "plan" | "content" | "other";
+  taskConfidence: number;              // 0.5..1
+  riskLevel: "low" | "elevated" | "high";
+  riskConfidence: number;              // 0.5..1
+  effortTier?: "lookup" | "bounded_edit" | "cross_module" | null;  // absent/null = Jev was unsure or "unclear"
+  reason?: string | null;              // ignored
 };
 type SessionSummary = {
   id: string; title: string; engine: Engine; model: string; effort?: string; mode: Mode;
@@ -213,6 +242,25 @@ one unlock covers every action (engine connect/logout, GitHub tokens, Autopilot,
 Sidecar 4xx bodies are relayed as `{ code, message, retryable, correlationId, error: { code, message } }`
 (flat for the app's shared API client, nested per §3); sidecar 401/403/5xx become 502.
 
+Jev triage (additive v1.3). While `TypeSafe:Enabled` and `TypeSafe:DevelopmentTriageEnabled` are both on, the
+API screens the owner's own text before relaying it: `initialMessage` of `POST /sessions` (if present) and
+`text` of `POST /sessions/{id}/messages`, through one shared helper. One batched Jev call returns `task_kind`,
+`risk_level` and the advisory `effort_tier`; the call is recorded as an `AdminBatch` `AiUsageRecord`
+(`jev.development.triage`). It is advice for a break-glass console, never a gate on it:
+
+| Jev outcome | API behaviour |
+|---|---|
+| flags off | no Jev call, no extra work; body relayed unchanged |
+| `unavailable` (no key, outage, open breaker, timeout, oversized, bad config) | **fail-open**: logged, message relayed **without** `jevAdvisory`. There is no `jev_unavailable` error and no 503 for it |
+| `review_required`, trimmed message ≥ 60 chars | `409 jev_review_required`; nothing is relayed, no session is created |
+| `review_required`, trimmed message < 60 chars (e.g. "continue") | relayed **without** `jevAdvisory` (too little context to triage) |
+| `ok` | relayed with `jevAdvisory` (incl. `effortTier` only when confident and not `unclear`) |
+
+Only an `ok` advisory is ever forwarded (the sidecar 409s anything else). A handoff summary is never
+screened. `effortTier` is advice only and never feeds `review_required`. The `session_created` (only when an
+`initialMessage` was screened) and `message_sent` audit rows carry `jevStatus`, `jevModel`, `jevTask`,
+`jevRisk`, `jevEffort`, `jevReason`.
+
 Unlock ticket presentation: the API reads the `X-Owner-Agent-Unlock` header first, else the
 `oet_owner_unlock` cookie (never a query string). The browser relies on the HttpOnly cookie only
 (sent through the same-origin Next `/api/backend` proxy, `credentials: 'include'`), so reloads, new
@@ -252,4 +300,4 @@ Every decision is logged as JSON lines to stdout (`docker logs oet-agent-dockerp
 
 ## 7. Audit
 
-API-side `AuditEvent.ResourceType = "OwnerAgent"` actions: `unlock`, `unlock_failed`, `lock`, `engine_connect`, `engine_logout`, `github_tokens_updated`, `session_created`, `message_sent`, `approval_decided`, `mode_changed`, `ship_started`, `kill_switch`, `apply_update`, `resume`. `Details` never contains secrets or message bodies beyond the first 200 chars.
+API-side `AuditEvent.ResourceType = "OwnerAgent"` actions: `unlock`, `unlock_failed`, `lock`, `engine_connect`, `engine_logout`, `github_tokens_updated`, `session_created`, `message_sent`, `approval_decided`, `mode_changed`, `ship_started`, `kill_switch`, `apply_update`, `resume`. `Details` never contains secrets or message bodies beyond the first 200 chars. When Jev triage ran, `message_sent` / `session_created` details also carry `jevStatus`, `jevModel`, `jevTask`, `jevRisk`, `jevEffort`, `jevReason` (§5, "Jev triage").

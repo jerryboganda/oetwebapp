@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Speaking;
@@ -23,13 +24,22 @@ namespace OetLearner.Api.Services.Speaking;
 /// Evidence quotes from the AI are best-effort verified against the
 /// transcript so the per-criterion drawer can render highlighted
 /// segments without trusting the AI to fabricate substrings.
+///
+/// Optional Jev (TypeSafe) layer, default off and fail-soft: a readiness check
+/// runs before the grade chain call and a criterion cross-check after the grade
+/// is parsed and scaled. Both only record an advisory, may lower
+/// <see cref="SpeakingAiAssessment.ConfidenceBand"/> to <c>low</c> and flag tutor
+/// review; no score, band or scaled score is ever changed. Skipped for mocks;
+/// <c>judgments</c> null (e.g. the corpus harness) means no Jev call at all.
 /// </summary>
 public sealed class SpeakingAiAssessmentService(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
     ILogger<SpeakingAiAssessmentService> logger,
     SpeakingSimulationV11EvidenceCaptureService? v11EvidenceCapture = null,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null)
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null,
+    ITypeSafeJudgmentService? judgments = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null)
 {
     private const string PromptTemplateId = "speaking.score.v2";
     private const string ProviderName = "ai_gateway";
@@ -208,6 +218,24 @@ Scoring rules:
         // plan/token gate (kill switches still win in AiQuotaService).
         var freeSample = await FreeSamples.FreeSampleService.IsFreeSpeakingSessionAsync(db, session, ct);
 
+        // ── Jev readiness (advisory, flag-gated, fail-soft, <= 3 s) ──
+        // Strictly BEFORE the grade chain and sequential with it (the scoped DbContext is not
+        // thread-safe). It never skips, delays beyond its time box or reroutes the pinned grade;
+        // a flag only records an advisory and flags tutor review. Mocks are skipped (live-tutor
+        // sessions returned above), and `judgments` null (corpus harness) means zero Jev calls.
+        var jevOptions = isMock ? null : typeSafeOptions?.Value;
+        var jevActive = judgments is not null && JevSpeakingAdvisor.AnyActive(jevOptions);
+        var jevTranscript = jevActive ? JevSpeakingAdvisor.TranscriptFromSegmentsJson(transcript.SegmentsJson) : string.Empty;
+        var jevCard = jevActive
+            ? JevSpeakingAdvisor.CardSummary(card.ScenarioTitle, card.Setting, card.CandidateRole, card.ClinicalTopic, card.Tasks)
+            : string.Empty;
+        SpeakingReadinessAdvisory? jevReadiness = null;
+        if (jevActive)
+        {
+            jevReadiness = await JevSpeakingAdvisor.CheckReadinessAsync(
+                judgments!, jevOptions!, jevTranscript, jevCard, session.UserId, sessionId, ct, logger: logger);
+        }
+
         // ── Invoke gateway (mirror SpeakingEvaluationPipeline pattern) ──
         // SpeakingGradeChain pins the Claude subscription sidecar first and falls back to the
         // default route; with no pinned provider configured it is one plain gateway call.
@@ -299,6 +327,28 @@ Scoring rules:
         var scaled = OetScoring.SpeakingProjectedScaled(rubricScores);
         var readinessBand = OetScoring.SpeakingReadinessBandCode(
             OetScoring.SpeakingReadinessBandFromScaled(scaled));
+        var confidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand);
+
+        // ── Jev cross-check (advisory, flag-gated, fail-soft, <= 3 s) ──
+        // After the grade is parsed and scaled, never inside the grade chain. It can only lower the
+        // stored ConfidenceBand to "low" (the existing tutor-review-recommended value); every score,
+        // band and the scaled score above are final and untouched. Text-only: the audio-bound
+        // criteria (intelligibility, fluency) are not part of the Jev questions.
+        SpeakingCrosscheckAdvisory? jevCrosscheck = null;
+        if (jevActive)
+        {
+            jevCrosscheck = await JevSpeakingAdvisor.CrosscheckAsync(
+                judgments!, jevOptions!, SpeakingCrosscheckSchema.Classic, jevTranscript, jevCard,
+                parsed.CriterionScores
+                    .Select(kv => new SpeakingCrosscheckCriterion(
+                        kv.Key,
+                        ScoreOf(parsed, kv.Key, 0, IsLinguisticCriterion(kv.Key) ? 6 : 3),
+                        kv.Value.Rationale,
+                        kv.Value.EvidenceQuotes))
+                    .ToList(),
+                session.UserId, sessionId, ct, logger: logger);
+            if (jevCrosscheck?.RequiresReview == true) confidenceBand = "low";
+        }
 
         // ── Persist ──
         var now = DateTimeOffset.UtcNow;
@@ -313,6 +363,12 @@ Scoring rules:
                 evidenceQuotes = criterion.EvidenceQuotes,
             };
         }
+
+        // Advisory lives beside the rationales (RulebookFindingsJson is a List<string> read by
+        // analytics, so it cannot hold it). ReadRationales and the projection only look up the
+        // nine criterion codes, so the extra entry is inert.
+        var jevPayload = JevSpeakingAdvisor.AdvisoryPayload(jevReadiness, jevCrosscheck);
+        if (jevPayload is not null) rationalesPayload[JevSpeakingAdvisor.AdvisoryKey] = jevPayload;
 
         var row = new SpeakingAiAssessment
         {
@@ -336,7 +392,7 @@ Scoring rules:
             ReadinessBand = readinessBand,
             PerCriterionRationalesJson = JsonSerializer.Serialize(rationalesPayload),
             OverallSummary = parsed.OverallSummary ?? string.Empty,
-            ConfidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand),
+            ConfidenceBand = confidenceBand,
             GeneratedAt = now,
             RulebookFindingsJson = "[]",
             IsAdvisory = session.Mode != SpeakingSessionMode.AiExam,
@@ -354,6 +410,21 @@ Scoring rules:
             return ProjectAssessment(existingCanonical, RehydrateCriterionScores(existingCanonical));
 
         db.SpeakingAiAssessments.Add(row);
+
+        // Tutor review hand-off: the review queue itself is derived (finished non-AI-exam sessions
+        // without a final tutor assessment), so a flag adds no queue row. The audit event is the
+        // traceable record, saved atomically with the assessment.
+        AuditEvent? jevReviewAudit = null;
+        if (jevPayload is not null && (jevReadiness?.RequiresReview == true || jevCrosscheck?.RequiresReview == true))
+        {
+            jevReviewAudit = JevSpeakingAdvisor.ReviewEvent(
+                JevSpeakingAdvisor.ReviewFlaggedAction, "SpeakingSession", sessionId, now, jevPayload);
+            db.AuditEvents.Add(jevReviewAudit);
+            logger.LogInformation(
+                "Jev flagged Speaking session {SessionId} for tutor review (readiness={Readiness}, crosscheck={Crosscheck}).",
+                sessionId, jevReadiness?.RequiresReview == true, jevCrosscheck?.RequiresReview == true);
+        }
+
         try
         {
             await db.SaveChangesAsync(ct);
@@ -361,6 +432,7 @@ Scoring rules:
         catch (DbUpdateException)
         {
             db.Entry(row).State = EntityState.Detached;
+            if (jevReviewAudit is not null) db.Entry(jevReviewAudit).State = EntityState.Detached;
             var raced = await db.SpeakingAiAssessments.AsNoTracking()
                 .FirstOrDefaultAsync(a => a.IdentityHash == identityHash, ct);
             if (raced is not null)

@@ -5,6 +5,7 @@ import type {
   AgentEvent,
   CreateSession,
   Engine,
+  JevAdvisory,
   Mode,
   ResolvedBy,
   SessionDetail,
@@ -13,7 +14,16 @@ import type {
   SessionSummary,
   TurnStatus,
 } from './contract.js';
-import { APPROVAL_DECISIONS, ENGINES, MODES, SESSION_STATUSES, SYSTEM_SESSION_ID } from './contract.js';
+import {
+  APPROVAL_DECISIONS,
+  ENGINES,
+  JEV_EFFORT_TIERS,
+  JEV_RISK_LEVELS,
+  JEV_TASK_KINDS,
+  MODES,
+  SESSION_STATUSES,
+  SYSTEM_SESSION_ID,
+} from './contract.js';
 import type {
   EngineAdapter,
   EngineEvent,
@@ -203,6 +213,36 @@ function clipText(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n…[truncated ${text.length - max} chars]` : text;
 }
 
+/**
+ * Validates the API's Jev triage advice (CONTRACT.md §3, `jevAdvisory`) and returns the preamble put in
+ * front of the owner's text for the engine ('' when there is none). The recorded user message is never
+ * changed. Advice only: nothing here picks the engine/model/effort/mode, grants an approval or touches
+ * the Guard; an unknown field value is rejected rather than ignored.
+ */
+export function parseJevAdvisory(raw: unknown): string {
+  if (raw === undefined || raw === null) return '';
+  const advisory = asObject(raw, false);
+  if (advisory.status !== 'ok' || advisory.requiresHumanReview !== false) {
+    throw conflict('jev_review_required', 'Required Jev advice is not ready for this turn.');
+  }
+  const advisoryModel = reqOpaqueId(advisory, 'model');
+  if (!/^jev-\d+\.\d+\.\d+$/.test(advisoryModel)) {
+    throw badRequest('jev_invalid_advisory', 'Jev advice must identify a pinned judgment model.');
+  }
+  const taskKind = reqEnum(advisory, 'taskKind', JEV_TASK_KINDS);
+  const riskLevel = reqEnum(advisory, 'riskLevel', JEV_RISK_LEVELS);
+  const taskConfidence = advisory.taskConfidence;
+  const riskConfidence = advisory.riskConfidence;
+  if (![taskConfidence, riskConfidence].every((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0.5 && value <= 1)) {
+    throw badRequest('jev_invalid_advisory', 'Jev advice must include valid judgment confidence.');
+  }
+  // null / absent = Jev was unsure; "unclear" and anything else unknown is a 400.
+  const effortTier = optEnum(advisory, 'effortTier', JEV_EFFORT_TIERS);
+  const context = JSON.stringify({ model: advisoryModel, taskKind, taskConfidence, riskLevel, riskConfidence });
+  const tierLine = effortTier ? `Suggested effort tier: ${effortTier} (advice only, not authorization)\n` : '';
+  return `Jev development advisory (advice only, not authorization; native Guard, approvals, engine selection and official scores remain authoritative):\n${context}\n${tierLine}\nOwner message:\n`;
+}
+
 export function summarizeToolCall(req: ToolCallRequest): string {
   if (req.command) return `${req.name}: ${req.command.split('\n')[0]?.slice(0, 200) ?? ''}`;
   if (req.writePaths && req.writePaths.length > 0) return `${req.name}: ${req.writePaths.slice(0, 5).join(', ')}`;
@@ -358,7 +398,7 @@ export class SessionManager {
       createdBy: createdBy?.trim().toLowerCase() || null,
       firstMessage: null,
     });
-    if (input.initialMessage) await this.sendMessage(id, { text: input.initialMessage });
+    if (input.initialMessage) await this.sendMessage(id, { text: input.initialMessage, jevAdvisory: input.jevAdvisory });
     return this.get(id);
   }
 
@@ -408,26 +448,7 @@ export class SessionManager {
     const text = reqString(obj, 'text', MAX_MESSAGE);
     const model = optOpaqueId(obj, 'model');
     const effort = optOpaqueId(obj, 'effort');
-    let engineText = text;
-    if (obj.jevAdvisory !== undefined && obj.jevAdvisory !== null) {
-      const advisory = asObject(obj.jevAdvisory, false);
-      if (advisory.status !== 'ok' || advisory.requiresHumanReview !== false) {
-        throw conflict('jev_review_required', 'Required Jev advice is not ready for this turn.');
-      }
-      const advisoryModel = reqOpaqueId(advisory, 'model');
-      if (!/^jev-\d+\.\d+\.\d+$/.test(advisoryModel)) {
-        throw badRequest('jev_invalid_advisory', 'Jev advice must identify a pinned judgment model.');
-      }
-      const taskKind = reqEnum(advisory, 'taskKind', ['implement', 'debug', 'review', 'verify', 'plan', 'content', 'other']);
-      const riskLevel = reqEnum(advisory, 'riskLevel', ['low', 'elevated', 'high']);
-      const taskConfidence = advisory.taskConfidence;
-      const riskConfidence = advisory.riskConfidence;
-      if (![taskConfidence, riskConfidence].every((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0.5 && value <= 1)) {
-        throw badRequest('jev_invalid_advisory', 'Jev advice must include valid judgment confidence.');
-      }
-      const context = JSON.stringify({ model: advisoryModel, taskKind, taskConfidence, riskLevel, riskConfidence });
-      engineText = `Jev development advisory (advice only, not authorization; native Guard, approvals, engine selection and official scores remain authoritative):\n${context}\n\nOwner message:\n${text}`;
-    }
+    const engineText = `${parseJevAdvisory(obj.jevAdvisory)}${text}`;
     this.assertCanStartTurn();
     let row = this.requireSession(id);
     if (row.archived) throw conflict('session_archived', 'The session is archived.');
@@ -705,6 +726,12 @@ export class SessionManager {
     if (effort !== undefined) input.effort = effort;
     if (title !== undefined) input.title = title;
     if (initialMessage !== undefined) input.initialMessage = initialMessage;
+    if (obj.jevAdvisory !== undefined && obj.jevAdvisory !== null) {
+      // Validated here, before any worktree exists; sendMessage re-validates the same object.
+      if (initialMessage === undefined) throw badRequest('jev_invalid_advisory', 'Jev advice needs an initialMessage to apply to.');
+      parseJevAdvisory(obj.jevAdvisory);
+      input.jevAdvisory = obj.jevAdvisory as JevAdvisory;
+    }
     return input;
   }
 

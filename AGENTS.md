@@ -129,7 +129,7 @@ user. Runbook: `docs/ops/OWNER-AGENT-CONSOLE.md` · wire contract: `agent-consol
   install/build/test, `dotnet`, `docker build` — dispatch `gh workflow run qa-smoke.yml` instead.
 - **(e)** Watch deploys with `gh run watch` (not `ship:watch` / `watch-deploy.ps1`).
 - **(f)** Carve-out from "one `AiUsageRecord` per physical provider call": subscription engines are not
-  `AiProvider`s and write no `AiUsageRecord`; evidence = `AuditEvent` (`OwnerAgent`) + session transcripts.
+  `AiProvider`s and write no `AiUsageRecord`; evidence = `AuditEvent` (`OwnerAgent`) + session transcripts. The API does record an `AdminBatch` `AiUsageRecord` (`jev.development.triage`) for each Jev triage call it makes on an owner message, even though the sidecar writes none.
 - **(g)** Continuity state lives in the sidecar session volume. Console sessions read and write neither `SESSION_STATE.md` / `TASKS.json` nor `PROGRESS.md`.
 - **(h)** SSH break-glass (`docker exec -it -u agent oet-agent-console claude auth login`, `docker stop
   oet-agent-console`) is ops, not compute.

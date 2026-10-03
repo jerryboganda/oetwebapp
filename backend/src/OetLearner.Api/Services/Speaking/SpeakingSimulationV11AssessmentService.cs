@@ -6,10 +6,18 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Speaking;
 
+/// <remarks>
+/// Optional Jev (TypeSafe) layer, default off and fail-soft. Readiness runs before the grade
+/// stopwatch starts and the cross-check after the SLA checks, so neither can trip
+/// <c>latency_sla_exceeded</c> or withhold a score. Both only record an advisory (audit event),
+/// may lower the stored confidence label to <c>low</c> and flag tutor review; no score, range or
+/// estimate is ever changed. Skipped for mocks; <c>judgments</c> null means no Jev call at all.
+/// </remarks>
 public sealed class SpeakingSimulationV11AssessmentService(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
@@ -18,7 +26,9 @@ public sealed class SpeakingSimulationV11AssessmentService(
     SpeakingSimulationV11AudioAssessmentService audioAssessment,
     SpeakingSimulationV11TurnTelemetryService telemetry,
     ILogger<SpeakingSimulationV11AssessmentService> logger,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null)
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null,
+    ITypeSafeJudgmentService? judgments = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null)
 {
     private const string PromptTemplateId = "speaking.simulation.v1.1.assessment";
     private const string CardKind = "card";
@@ -203,6 +213,28 @@ Rules:
             CardType = "role_play",
         });
         var input = BuildInput(card, turns, timing, rubricCriteria);
+
+        // ── Jev readiness (advisory, flag-gated, fail-soft, <= 3 s) ──
+        // Strictly BEFORE the grade stopwatch below, so it can never count toward the latency SLA
+        // (latency_sla_exceeded withholds the score). Sequential with the chain (the scoped
+        // DbContext is not thread-safe). It never skips, reroutes or delays the pinned grade beyond
+        // its time box; a flag only records an advisory and flags tutor review. Mocks are skipped
+        // (live-tutor sessions returned above).
+        var jevOptions = isMock ? null : typeSafeOptions?.Value;
+        var jevActive = judgments is not null && JevSpeakingAdvisor.AnyActive(jevOptions);
+        var jevTranscript = jevActive
+            ? JevSpeakingAdvisor.TranscriptFromTurns(turns.Select(x => ((string?)x.Speaker, (string?)x.Text)))
+            : string.Empty;
+        var jevCard = jevActive
+            ? JevSpeakingAdvisor.CardSummary(card.ScenarioTitle, card.Setting, card.CandidateRole, card.ClinicalTopic, card.Tasks)
+            : string.Empty;
+        SpeakingReadinessAdvisory? jevReadiness = null;
+        if (jevActive)
+        {
+            jevReadiness = await JevSpeakingAdvisor.CheckReadinessAsync(
+                judgments!, jevOptions!, jevTranscript, jevCard, session.UserId, sessionId, ct, logger: logger);
+        }
+
         var callStartedAt = DateTimeOffset.UtcNow;
         var watch = Stopwatch.StartNew();
         AiGatewayResult result;
@@ -446,6 +478,33 @@ Rules:
         var low = parsed.RangeLow ?? Math.Max(0, estimated - RangeWidth(confidence));
         var high = parsed.RangeHigh ?? Math.Min(500, estimated + RangeWidth(confidence));
         if (low > high) (low, high) = (high, low);
+
+        // ── Jev cross-check (advisory, flag-gated, fail-soft, <= 3 s) ──
+        // After the grade is parsed and every score, the estimate and the range above are final, and
+        // after the SLA checks, so it cannot withhold a score. It can only lower the stored confidence
+        // LABEL to "low" (the range was already derived from the grader's own label, so it does not
+        // widen). Text-only: audio-bound (intelligibility, fluency) and timing-bound (closure) criteria
+        // are not part of the Jev questions.
+        SpeakingCrosscheckAdvisory? jevCrosscheck = null;
+        if (jevActive)
+        {
+            jevCrosscheck = await JevSpeakingAdvisor.CrosscheckAsync(
+                judgments!, jevOptions!, SpeakingCrosscheckSchema.SimulationV11, jevTranscript, jevCard,
+                criterionResults
+                    .Select(c => new SpeakingCrosscheckCriterion(
+                        c.CriterionCode,
+                        (double)c.RawScore,
+                        c.Rationale,
+                        c.Evidence
+                            .Where(e => e.EvidenceType != "audio_acoustic" && !string.IsNullOrWhiteSpace(e.QuoteText))
+                            .Select(e => e.QuoteText)
+                            .ToList()))
+                    .ToList(),
+                session.UserId, sessionId, ct, logger: logger);
+            if (jevCrosscheck?.RequiresReview == true) confidence = "low";
+        }
+        var jevPayload = JevSpeakingAdvisor.AdvisoryPayload(jevReadiness, jevCrosscheck);
+
         var slot = string.IsNullOrWhiteSpace(session.ExamSlot) ? "standalone" : session.ExamSlot;
         var report = new SpeakingSimulationV11AssessmentReport(
             assessmentId, CardKind, slot, gate.SpecVersion, gate.RubricVersion,
@@ -510,6 +569,24 @@ Rules:
             EstimatedCostUsd = usageRow?.CostEstimateUsd ?? 0m,
             GeneratedAt = now,
         });
+
+        // No spare column holds the advisory and ReportJson is a fixed contract, so the audit event
+        // carries it (signals, codes and verdicts only, never transcript text). A flag is also the
+        // tutor review hand-off: the review queue itself is derived, so no queue row is inserted.
+        if (jevPayload is not null)
+        {
+            var flagged = jevReadiness?.RequiresReview == true || jevCrosscheck?.RequiresReview == true;
+            db.AuditEvents.Add(JevSpeakingAdvisor.ReviewEvent(
+                flagged ? JevSpeakingAdvisor.ReviewFlaggedAction : JevSpeakingAdvisor.AdvisoryAction,
+                "SpeakingSimulationV11Assessment", assessmentId, now, jevPayload));
+            if (flagged)
+            {
+                logger.LogInformation(
+                    "Jev flagged Speaking v1.1 session {SessionId} for tutor review (readiness={Readiness}, crosscheck={Crosscheck}).",
+                    sessionId, jevReadiness?.RequiresReview == true, jevCrosscheck?.RequiresReview == true);
+            }
+        }
+
         try
         {
             await db.SaveChangesAsync(ct);

@@ -179,6 +179,12 @@ describe('etc/MANUAL.md (operating manual)', () => {
     expect(manual).toMatch(/Never\*\* push to `main`/);
   });
 
+  it('tells the engine that the Jev advisory and effort tier are advice, not authorization', () => {
+    for (const phrase of ['Jev development advisory', 'Suggested effort tier', 'not authorization', 'never relaxes the Guard']) {
+      expect(manual).toContain(phrase);
+    }
+  });
+
   it('points at domain documents that exist in the repository', () => {
     const docs = [...manual.matchAll(/`(docs\/[A-Za-z0-9_./-]+\.md)`/g)].map((m) => m[1] as string);
     expect(docs).toEqual(expect.arrayContaining(['docs/WRITING-MODEL-ANSWER-RULES.md', 'docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md', 'docs/SCORING.md']));

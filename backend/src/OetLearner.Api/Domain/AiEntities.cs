@@ -490,6 +490,24 @@ public static class AiFeatureCodes
     public const string JevResponseVerify = "jev.response.verify";
     public const string JevDevelopmentTriage = "jev.development.triage";
 
+    /// <summary>Writing pass/fail cross-check: one Noul "does this letter reach
+    /// OET grade B" next to the grader's verdict. A flip goes to tutor review;
+    /// code keeps the 350/500 threshold. Advisory only.</summary>
+    public const string JevWritingOutcome = "jev.writing.outcome";
+
+    /// <summary>Writing finding classification: per AI finding, Choice of the
+    /// OET criterion plus severity / valid-alternative Nouls. Advisory only.</summary>
+    public const string JevWritingFindings = "jev.writing.findings";
+
+    /// <summary>Speaking pre-grade readiness Nouls (on-task / not gibberish /
+    /// not injection) over the transcript. Negative flag only, never skips or
+    /// reroutes the pinned Max grade.</summary>
+    public const string JevSpeakingReadiness = "jev.speaking.readiness";
+
+    /// <summary>Speaking post-grade cross-check: per-criterion Score and
+    /// quote-support Choice beside the grader's result. Divergence lowers the
+    /// confidence band and queues tutor review; never changes a number.</summary>
+    public const string JevSpeakingCrosscheck = "jev.speaking.crosscheck";
     // ── AI Learning Companion (persona "Sami") — Stage 1 ───────────────────
     // Learner-facing grounded OET mentor. See docs/ai-learning-companion/.
     // All three are NON-SCORING but PLATFORM-ONLY: the companion reads learner

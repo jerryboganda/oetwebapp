@@ -99,6 +99,44 @@ public sealed class TypeSafeOptions
     /// session.</summary>
     public bool ConversationAdvisoryEnabled { get; set; } = false;
 
+    /// <summary>Owner decision 2 (Max-always-on): when false (default) a guard
+    /// Block verdict is only recorded and flagged to a tutor while the letter is
+    /// STILL graded by Max. Set true only with explicit owner approval, which
+    /// restores the old behaviour of skipping the paid grade for that letter.</summary>
+    public bool WritingGuardEnforced { get; set; } = false;
+
+    /// <summary>Writing pass/fail Noul cross-check beside the grader's verdict
+    /// (<c>jev.writing.outcome</c>). Advisory: a flip only flags tutor review.</summary>
+    public bool WritingOutcomeEnabled { get; set; } = false;
+
+    /// <summary>Writing finding classification (<c>jev.writing.findings</c>):
+    /// criterion Choice and valid-alternative Noul per AI finding.</summary>
+    public bool WritingFindingsEnabled { get; set; } = false;
+
+    /// <summary>Speaking pre-grade readiness Nouls (<c>jev.speaking.readiness</c>).
+    /// Negative flag only; never skips the pinned Max grade.</summary>
+    public bool SpeakingReadinessEnabled { get; set; } = false;
+
+    /// <summary>Speaking post-grade criterion cross-check
+    /// (<c>jev.speaking.crosscheck</c>). Never changes a number.</summary>
+    public bool SpeakingCrosscheckEnabled { get; set; } = false;
+
+    /// <summary>Outcome cross-check: the Noul answer must be at least this far
+    /// from 0.5 (i.e. confident either way) before a flip counts.</summary>
+    public double OutcomeConfidenceThreshold { get; set; } = 0.70;
+
+    /// <summary>Cross-checks: normalised distance (0..1 of the criterion scale)
+    /// between the grader's score and Jev's position that counts as divergence.</summary>
+    public double CrosscheckDivergenceThreshold { get; set; } = 0.34;
+
+    /// <summary>Cross-checks: minimum Jev confidence for a Score/Choice to be
+    /// used at all; lower confidence is treated as no signal.</summary>
+    public double CrosscheckConfidenceThreshold { get; set; } = 0.60;
+
+    /// <summary>Speaking readiness: any single readiness Noul at or above this
+    /// flags the submission for tutor attention.</summary>
+    public double ReadinessFlagThreshold { get; set; } = 0.80;
+
     public bool ResponseVerifyEnabled { get; set; } = false;
     public double ResponseConfidenceThreshold { get; set; } = 0.80;
     public bool DevelopmentTriageEnabled { get; set; } = false;

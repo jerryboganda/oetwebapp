@@ -18,6 +18,8 @@ on:
       - 'backend/tests/OetLearner.Api.Tests/OwnerAgent/**'
       - 'tools/typesafe/**'
       - '.github/workflows/jev-*.yml'
+      - '.github/workflows/ci-triage.yml'
+      - 'scripts/ci/**'
   pull_request:
     paths:
       - 'backend/src/OetLearner.Api/Services/Ai/TypeSafe/**'
@@ -34,6 +36,8 @@ on:
       - 'backend/tests/OetLearner.Api.Tests/OwnerAgent/**'
       - 'tools/typesafe/**'
       - '.github/workflows/jev-*.yml'
+      - '.github/workflows/ci-triage.yml'
+      - 'scripts/ci/**'
   workflow_dispatch:
 
 permissions:
@@ -59,3 +63,8 @@ jobs:
           --configuration Debug --nologo
           --logger "console;verbosity=normal"
           --filter "FullyQualifiedName~TypeSafe|FullyQualifiedName~Jev|FullyQualifiedName~AiGatewayTurnAccountingTests|FullyQualifiedName~OwnerAgentRelayTests.Relay_NeverForwardsBrowserHeaders"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test CI triage classifier (fake fetch, no network)
+        run: node --test scripts/ci/jev-ci-triage.test.mjs
