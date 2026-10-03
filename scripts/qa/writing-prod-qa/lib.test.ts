@@ -210,6 +210,15 @@ describe('provider evidence', () => {
     expect(providerEvidence({ usage: [], modelUsed: undefined }).problems[0]).toMatch(/no writing.grade usage/);
   });
 
+  it('accepts a reused grade (no AI call) only when graded with a real model', () => {
+    const reused = providerEvidence({ usage: [], modelUsed: 'claude-opus-5-5', graded: true });
+    expect(reused).toMatchObject({ reused: true, problems: [], calls: 0 });
+    expect(reused.note).toMatch(/grade reused for identical text/);
+    expect(providerEvidence({ usage: [], modelUsed: 'claude-opus-5-5', graded: false }).problems[0]).toMatch(/no writing.grade usage/);
+    expect(providerEvidence({ usage: [], modelUsed: 'deterministic-empty-v1', graded: true }).problems.join(' ')).toMatch(/no writing.grade usage/);
+    expect(providerEvidence({ usage: [], modelUsed: null, graded: true }).problems[0]).toMatch(/no writing.grade usage/);
+  });
+
   it('counts paid spend per run with zero expected', () => {
     expect(paidSpendProblems(0)).toEqual([]);
     expect(paidSpendProblems(2)[0]).toMatch(/zero expected/);
