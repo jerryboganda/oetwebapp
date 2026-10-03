@@ -6,6 +6,19 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-03 21:00 | CI triage | CI triage | 37153578566 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e484b7104 |
+| 2026-10-03 20:53 | CI triage | CI triage | 37153138339 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e484b7104 |
+| 2026-10-03 20:53 | Deploy production | Deploy production | 37153138315 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | e484b7104 |
+| 2026-10-03 20:52 | CI triage | CI triage | 37153101431 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e484b7104 |
+| 2026-10-03 20:49 | CI triage | CI triage | 37152901331 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e484b7104 |
+| 2026-10-03 20:49 | Build images | Build images | 37152898262 | Syntax gate (seconds)=success Deployment contract guards=success Detect what changed=success Writing model-answer gate (on change)=skipped Writing grader regression (on change)=skipped build-agent-gateway=success build-backup=success build-api=success Retag unchanged api=success Retag unchanged web=success build-web=skipped | SUCCESS | e484b7104 |
+| 2026-10-03 20:47 | CI triage | CI triage | 37152781674 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | a479f98d4 |
+| 2026-10-03 20:38 | CI triage | CI triage | 37152261132 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | a479f98d4 |
+| 2026-10-03 20:38 | Deploy production | Deploy production | 37152261199 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | a479f98d4 |
+| 2026-10-03 20:38 | CI triage | CI triage | 37152240160 | Classify the failed run (jev-1.13.0)=success | SUCCESS | a479f98d4 |
+| 2026-10-03 20:35 | CI triage | CI triage | 37152063848 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | a479f98d4 |
+| 2026-10-03 20:35 | Jev integration | Jev integration | 37152060321 | Jev typed judgment contracts=failure | FAILURE | a479f98d4 |
+| 2026-10-03 20:35 | Build images | Build images | 37152060338 | Deployment contract guards=success Detect what changed=success Syntax gate (seconds)=success Writing grader regression (on change)=skipped Writing model-answer gate (on change)=skipped Retag unchanged web=success build-agent-gateway=success build-backup=success build-api=success Retag unchanged api=success build-web=skipped | SUCCESS | a479f98d4 |
 | 2026-10-03 19:40 | CI triage | CI triage | 37148762001 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | dcaa45207 |
 | 2026-10-03 19:40 | AX Ledger Tools | AX Ledger Tools | 37148758479 | self-test (windows, node 24)=success self-test (linux, node 22)=success self-test (windows, node 22)=success | SUCCESS | dcaa45207 |
 | 2026-10-03 19:11 | CI triage | CI triage | 37146989721 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | c8d7a570e |
