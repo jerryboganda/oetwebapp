@@ -37,77 +37,78 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
 
         stripeSessionId = AddonGrantProcessor.FitDatabaseKey(stripeSessionId);
         quoteId = quoteId is null ? null : AddonGrantProcessor.FitDatabaseKey(quoteId);
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
-
-        var existing = await db.AiPackageCreditTransactions.AsNoTracking()
-            .AnyAsync(row => row.StripeSessionId == stripeSessionId, ct);
-        if (existing)
+        return await InLedgerTransactionAsync<AiPackageCreditSnapshot>(async () =>
         {
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+
+            var existing = await db.AiPackageCreditTransactions.AsNoTracking()
+                .AnyAsync(row => row.StripeSessionId == stripeSessionId, ct);
+            if (existing)
+            {
+                return await ProjectSnapshotAsync(userId, 20, ct);
+            }
+
+            var grant = AiPackageGrant.FromAddOn(addOn, Math.Max(1, quantity));
+            var now = DateTimeOffset.UtcNow;
+            var grantValidFrom = validFrom ?? now;
+            DateTimeOffset? newExpiry = addOn.DurationDays > 0
+                ? grantValidFrom.AddDays(addOn.DurationDays)
+                : null;
+            var referenceId = AddonGrantProcessor.FitDatabaseKey(
+                quoteId is null ? $"stripe:{stripeSessionId}" : $"quote:{quoteId}:{addOn.Code}");
+            var source = AddonGrantProcessor.FitDatabaseKey(sourceReferenceId ?? referenceId);
+
+            AddLot(account, new AiPackageCreditLot
+            {
+                Id = NewId("aipkg-lot"),
+                PackageId = addOn.Code,
+                PackageType = grant.PackageType,
+                SharedCredits = grant.SharedCredits,
+                FlexibleCredits = grant.FlexibleCredits,
+                WritingOnlyCredits = grant.WritingOnlyCredits,
+                SpeakingOnlyCredits = grant.SpeakingOnlyCredits,
+                ListeningTestsRemaining = grant.ListeningTests,
+                ReadingTestsRemaining = grant.ReadingTests,
+                MockExamsRemaining = grant.MockExams,
+                UnlimitedGrading = grant.UnlimitedGrading,
+                UnlimitedListening = grant.ListeningTests is null,
+                UnlimitedReading = grant.ReadingTests is null,
+                ValidFrom = grantValidFrom,
+                ExpiresAt = newExpiry,
+                SourceReferenceId = referenceId,
+                CreatedAt = now,
+            });
+
+            account.ExpiredBecausePassed = false;
+            account.PassedAt = null;
+            RebuildAccountFromLots(account);
+
+            AddTransaction(account, new AiPackageCreditTransaction
+            {
+                Id = NewId("aipkg-tx"),
+                StripeSessionId = stripeSessionId,
+                PackageId = addOn.Code,
+                PackageType = grant.PackageType,
+                SharedCreditsDelta = grant.SharedCredits,
+                FlexibleCreditsDelta = grant.FlexibleCredits,
+                WritingOnlyCreditsDelta = grant.WritingOnlyCredits,
+                SpeakingOnlyCreditsDelta = grant.SpeakingOnlyCredits,
+                ListeningTestsDelta = grant.ListeningTests ?? 0,
+                ReadingTestsDelta = grant.ReadingTests ?? 0,
+                MockExamsDelta = grant.MockExams,
+                Reason = AiPackageCreditReason.Purchase,
+                ReferenceId = referenceId,
+                SourceReferenceId = source,
+                Description = $"{addOn.Name} purchased",
+                ValidFrom = grantValidFrom,
+                ExpiresAt = newExpiry,
+                CreatedAt = now
+            });
+
+            await db.SaveChangesAsync(ct);
             return await ProjectSnapshotAsync(userId, 20, ct);
-        }
-
-        var grant = AiPackageGrant.FromAddOn(addOn, Math.Max(1, quantity));
-        var now = DateTimeOffset.UtcNow;
-        var grantValidFrom = validFrom ?? now;
-        DateTimeOffset? newExpiry = addOn.DurationDays > 0
-            ? grantValidFrom.AddDays(addOn.DurationDays)
-            : null;
-        var referenceId = AddonGrantProcessor.FitDatabaseKey(
-            quoteId is null ? $"stripe:{stripeSessionId}" : $"quote:{quoteId}:{addOn.Code}");
-        sourceReferenceId = AddonGrantProcessor.FitDatabaseKey(sourceReferenceId ?? referenceId);
-
-        AddLot(account, new AiPackageCreditLot
-        {
-            Id = NewId("aipkg-lot"),
-            PackageId = addOn.Code,
-            PackageType = grant.PackageType,
-            SharedCredits = grant.SharedCredits,
-            FlexibleCredits = grant.FlexibleCredits,
-            WritingOnlyCredits = grant.WritingOnlyCredits,
-            SpeakingOnlyCredits = grant.SpeakingOnlyCredits,
-            ListeningTestsRemaining = grant.ListeningTests,
-            ReadingTestsRemaining = grant.ReadingTests,
-            MockExamsRemaining = grant.MockExams,
-            UnlimitedGrading = grant.UnlimitedGrading,
-            UnlimitedListening = grant.ListeningTests is null,
-            UnlimitedReading = grant.ReadingTests is null,
-            ValidFrom = grantValidFrom,
-            ExpiresAt = newExpiry,
-            SourceReferenceId = referenceId,
-            CreatedAt = now,
-        });
-
-        account.ExpiredBecausePassed = false;
-        account.PassedAt = null;
-        RebuildAccountFromLots(account);
-
-        AddTransaction(account, new AiPackageCreditTransaction
-        {
-            Id = NewId("aipkg-tx"),
-            StripeSessionId = stripeSessionId,
-            PackageId = addOn.Code,
-            PackageType = grant.PackageType,
-            SharedCreditsDelta = grant.SharedCredits,
-            FlexibleCreditsDelta = grant.FlexibleCredits,
-            WritingOnlyCreditsDelta = grant.WritingOnlyCredits,
-            SpeakingOnlyCreditsDelta = grant.SpeakingOnlyCredits,
-            ListeningTestsDelta = grant.ListeningTests ?? 0,
-            ReadingTestsDelta = grant.ReadingTests ?? 0,
-            MockExamsDelta = grant.MockExams,
-            Reason = AiPackageCreditReason.Purchase,
-            ReferenceId = referenceId,
-            SourceReferenceId = sourceReferenceId,
-            Description = $"{addOn.Name} purchased",
-            ValidFrom = grantValidFrom,
-            ExpiresAt = newExpiry,
-            CreatedAt = now
-        });
-
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        return await ProjectSnapshotAsync(userId, 20, ct);
+        }, ct);
     }
 
     public async Task<bool> GrantCourseGiftCreditsAsync(
@@ -127,57 +128,58 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
         }
 
         referenceId = AddonGrantProcessor.FitDatabaseKey(referenceId);
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        var now = DateTimeOffset.UtcNow;
-        var giftValidFrom = validFrom ?? now;
-        sourceReferenceId = AddonGrantProcessor.FitDatabaseKey(sourceReferenceId ?? referenceId);
-        await ExpireIfNeededAsync(account, now, ct);
-        if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.Purchase, ct))
+        return await InLedgerTransactionAsync<bool>(async () =>
         {
-            return false;
-        }
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            var now = DateTimeOffset.UtcNow;
+            var giftValidFrom = validFrom ?? now;
+            var source = AddonGrantProcessor.FitDatabaseKey(sourceReferenceId ?? referenceId);
+            await ExpireIfNeededAsync(account, now, ct);
+            if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.Purchase, ct))
+            {
+                return false;
+            }
 
-        account.ExpiredBecausePassed = false;
-        account.PassedAt = null;
+            account.ExpiredBecausePassed = false;
+            account.PassedAt = null;
 
-        AddLot(account, new AiPackageCreditLot
-        {
-            Id = NewId("aipkg-lot"),
-            PackageId = planCode,
-            PackageType = "full",
-            SharedCredits = credits,
-            ListeningTestsRemaining = 0,
-            ReadingTestsRemaining = 0,
-            ExpiresAt = expiresAt is { } expiry && expiry > now ? expiry : expiresAt,
-            SourceReferenceId = referenceId,
-            ValidFrom = giftValidFrom,
-            CreatedAt = now,
-        });
-        RebuildAccountFromLots(account);
-        if (expiresAt is { } giftExpiry && giftExpiry > now)
-        {
-            account.ExpiresAt = Later(account.ExpiresAt, giftExpiry);
-        }
+            AddLot(account, new AiPackageCreditLot
+            {
+                Id = NewId("aipkg-lot"),
+                PackageId = planCode,
+                PackageType = "full",
+                SharedCredits = credits,
+                ListeningTestsRemaining = 0,
+                ReadingTestsRemaining = 0,
+                ExpiresAt = expiresAt is { } expiry && expiry > now ? expiry : expiresAt,
+                SourceReferenceId = referenceId,
+                ValidFrom = giftValidFrom,
+                CreatedAt = now,
+            });
+            RebuildAccountFromLots(account);
+            if (expiresAt is { } giftExpiry && giftExpiry > now)
+            {
+                account.ExpiresAt = Later(account.ExpiresAt, giftExpiry);
+            }
 
-        AddTransaction(account, new AiPackageCreditTransaction
-        {
-            Id = NewId("aipkg-tx"),
-            PackageId = planCode,
-            PackageType = "full",
-            SharedCreditsDelta = credits,
-            Reason = AiPackageCreditReason.Purchase,
-            ReferenceId = referenceId,
-            SourceReferenceId = sourceReferenceId,
-            Description = $"{planName} gifted Shared AI practice credits",
-            ValidFrom = giftValidFrom,
-            ExpiresAt = expiresAt,
-            CreatedAt = now
-        });
+            AddTransaction(account, new AiPackageCreditTransaction
+            {
+                Id = NewId("aipkg-tx"),
+                PackageId = planCode,
+                PackageType = "full",
+                SharedCreditsDelta = credits,
+                Reason = AiPackageCreditReason.Purchase,
+                ReferenceId = referenceId,
+                SourceReferenceId = source,
+                Description = $"{planName} gifted Shared AI practice credits",
+                ValidFrom = giftValidFrom,
+                ExpiresAt = expiresAt,
+                CreatedAt = now
+            });
 
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        return true;
+            await db.SaveChangesAsync(ct);
+            return true;
+        }, ct);
     }
 
     public async Task<int> ReverseGrantsAsync(string userId, string sourceReferenceId, CancellationToken ct)
@@ -437,86 +439,87 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
             return new(false, "unsupported_subtest", "Only Writing and Speaking consume AI grading credits.", null);
         }
 
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        var now = DateTimeOffset.UtcNow;
-        await ExpireIfNeededAsync(account, now, ct);
-        quantity = ResolveGradingActivities(account, normalized, quantity);
-        if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.GradingDeduct, ct))
+        return await InLedgerTransactionAsync<AiPackageDebitResult>(async () =>
         {
-            return new(true, "already_debited", "This grading job has already consumed a credit.", referenceId);
-        }
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            var now = DateTimeOffset.UtcNow;
+            await ExpireIfNeededAsync(account, now, ct);
+            var activities = ResolveGradingActivities(account, normalized, quantity);
+            if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.GradingDeduct, ct))
+            {
+                return new(true, "already_debited", "This grading job has already consumed a credit.", referenceId);
+            }
 
-        // Unlimited checked before the account-level expiry/package-expired
-        // throw (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026, §12.1:
-        // "the unlimited entitlement itself is sufficient; a zero balance in
-        // another pool must not block the attempt"). As of §12's fix, both
-        // Writing "Practice this" surfaces (WritingScenarioEndpoints
-        // eligibility, LearnerService.CreateWritingAttemptAsync) reach this
-        // only via WritingEntitlementService.AuthorizeStartAsync — never
-        // directly — precisely so it stays in lockstep with the reservation
-        // service and the dashboard's free-tier fallback.
-        if (await HasActiveUnlimitedGradingAsync(userId, now, ct))
-        {
-            return new(true, null, null, referenceId, BalanceSource: "unlimited");
-        }
+            // Unlimited checked before the account-level expiry/package-expired
+            // throw (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026, §12.1:
+            // "the unlimited entitlement itself is sufficient; a zero balance in
+            // another pool must not block the attempt"). As of §12's fix, both
+            // Writing "Practice this" surfaces (WritingScenarioEndpoints
+            // eligibility, LearnerService.CreateWritingAttemptAsync) reach this
+            // only via WritingEntitlementService.AuthorizeStartAsync — never
+            // directly — precisely so it stays in lockstep with the reservation
+            // service and the dashboard's free-tier fallback.
+            if (await HasActiveUnlimitedGradingAsync(userId, now, ct))
+            {
+                return new(true, null, null, referenceId, BalanceSource: "unlimited");
+            }
 
-        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= now))
-        {
-            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
-        }
+            if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= now))
+            {
+                return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
+            }
 
-        if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
-        {
-            return new(true, null, null, referenceId);
-        }
+            if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
+            {
+                return new(true, null, null, referenceId);
+            }
 
-        if (!CanFundWritingOrSpeaking(account, normalized, quantity))
-        {
-            return new(false, "no_ai_package_credits", NoCreditsMessage, null);
-        }
+            if (!CanFundWritingOrSpeaking(account, normalized, activities))
+            {
+                return new(false, "no_ai_package_credits", NoCreditsMessage, null);
+            }
 
-        var spend = SpendWritingOrSpeaking(account, normalized, quantity);
-        // FINAL 2026-09-06: one letter/card costs exactly 2 AI credits. If the
-        // spend could not fund every requested activity in full (e.g. a lone
-        // stranded credit), refuse BEFORE persisting anything so the candidate
-        // is never partially charged. No SaveChanges has run yet, so the
-        // tracked lot mutations are discarded with the transaction.
-        var expectedUnits = quantity * AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
-        if (spend.CreditsUsed != expectedUnits)
-        {
-            return new(false, "no_ai_package_credits", NoCreditsMessage, null);
-        }
+            var spend = SpendWritingOrSpeaking(account, normalized, activities);
+            // FINAL 2026-09-06: one letter/card costs exactly 2 AI credits. If the
+            // spend could not fund every requested activity in full (e.g. a lone
+            // stranded credit), refuse BEFORE persisting anything so the candidate
+            // is never partially charged. No SaveChanges has run yet, so the
+            // tracked lot mutations are discarded with the transaction.
+            var expectedUnits = activities * AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+            if (spend.CreditsUsed != expectedUnits)
+            {
+                return new(false, "no_ai_package_credits", NoCreditsMessage, null);
+            }
 
-        account.UpdatedAt = DateTimeOffset.UtcNow;
-        AddTransaction(account, new AiPackageCreditTransaction
-        {
-            Id = NewId("aipkg-tx"),
-            PackageType = normalized,
-            SharedCreditsDelta = spend.SharedDelta,
-            FlexibleCreditsDelta = spend.FlexibleDelta,
-            WritingOnlyCreditsDelta = spend.WritingDelta,
-            SpeakingOnlyCreditsDelta = spend.SpeakingDelta,
-            AllocationJson = spend.AllocationJson,
-            Reason = AiPackageCreditReason.GradingDeduct,
-            ReferenceId = referenceId,
-            JobId = referenceId,
-            Description = $"{normalized} AI grading credits deducted ({spend.CreditsUsed})",
-            CreatedAt = DateTimeOffset.UtcNow
-        });
+            account.UpdatedAt = DateTimeOffset.UtcNow;
+            AddTransaction(account, new AiPackageCreditTransaction
+            {
+                Id = NewId("aipkg-tx"),
+                PackageType = normalized,
+                SharedCreditsDelta = spend.SharedDelta,
+                FlexibleCreditsDelta = spend.FlexibleDelta,
+                WritingOnlyCreditsDelta = spend.WritingDelta,
+                SpeakingOnlyCreditsDelta = spend.SpeakingDelta,
+                AllocationJson = spend.AllocationJson,
+                Reason = AiPackageCreditReason.GradingDeduct,
+                ReferenceId = referenceId,
+                JobId = referenceId,
+                Description = $"{normalized} AI grading credits deducted ({spend.CreditsUsed})",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
 
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        return new(
-            true,
-            null,
-            null,
-            referenceId,
-            Bypassed: false,
-            BalanceSource: spend.BalanceSource,
-            CreditsUsed: spend.CreditsUsed,
-            RemainingAfter: RemainingAfterSpend(account, normalized),
-            FeedbackMessage: spend.FeedbackMessage);
+            await db.SaveChangesAsync(ct);
+            return new(
+                true,
+                null,
+                null,
+                referenceId,
+                Bypassed: false,
+                BalanceSource: spend.BalanceSource,
+                CreditsUsed: spend.CreditsUsed,
+                RemainingAfter: RemainingAfterSpend(account, normalized),
+                FeedbackMessage: spend.FeedbackMessage);
+        }, ct);
     }
 
     public Task<AiPackageCreditTransaction?> FindGradingDebitAsync(string userId, string referenceId, CancellationToken ct)
@@ -573,112 +576,113 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
             return new(false, "unsupported_subtest", "Only Listening and Reading use deterministic practice allowances.", null);
         }
 
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
-        if (await ShouldBypassObjectiveDebitForLegacyAccountAsync(account, ct))
+        return await InLedgerTransactionAsync<AiPackageDebitResult>(async () =>
         {
-            return new(true, null, null, referenceId, Bypassed: true);
-        }
-
-        if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.ObjectivePracticeDeduct, ct))
-        {
-            return new(true, null, null, referenceId);
-        }
-
-        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
-        {
-            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
-        }
-
-        var listeningDelta = 0;
-        var readingDelta = 0;
-        var sharedDelta = 0;
-        string? feedback = null;
-        string? balanceSource = null;
-        var allocations = new List<LotAllocation>();
-        if (normalized == "listening")
-        {
-            if (HasLiveRealUnlimited(account, "listening"))
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+            if (await ShouldBypassObjectiveDebitForLegacyAccountAsync(account, ct))
             {
-                return new(true, null, null, referenceId, BalanceSource: "listening", FeedbackMessage: "Unlimited Listening practice — no credits consumed.");
+                return new(true, null, null, referenceId, Bypassed: true);
             }
 
-            if ((account.ListeningTestsRemaining ?? 0) > 0)
+            if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.ObjectivePracticeDeduct, ct))
             {
-                allocations.AddRange(SpendDedicatedObjective(account, "listening", 1));
-                listeningDelta = -AiGradingCreditCost.ListeningExam;
-                balanceSource = "listening";
-                feedback = FormatUsedRemaining("Listening Credit", 1, account.ListeningTestsRemaining ?? 0);
+                return new(true, null, null, referenceId);
             }
-            else if (account.SharedCredits >= AiGradingCreditCost.ListeningExam)
+
+            if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
             {
-                allocations.AddRange(SpendSharedFromLots(account, AiGradingCreditCost.ListeningExam));
-                sharedDelta = -AiGradingCreditCost.ListeningExam;
-                balanceSource = "shared";
-                feedback = FormatSharedUsed(normalized, 1, account.SharedCredits);
+                return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
+            }
+
+            var listeningDelta = 0;
+            var readingDelta = 0;
+            var sharedDelta = 0;
+            string? feedback = null;
+            string? balanceSource = null;
+            var allocations = new List<LotAllocation>();
+            if (normalized == "listening")
+            {
+                if (HasLiveRealUnlimited(account, "listening"))
+                {
+                    return new(true, null, null, referenceId, BalanceSource: "listening", FeedbackMessage: "Unlimited Listening practice — no credits consumed.");
+                }
+
+                if ((account.ListeningTestsRemaining ?? 0) > 0)
+                {
+                    allocations.AddRange(SpendDedicatedObjective(account, "listening", 1));
+                    listeningDelta = -AiGradingCreditCost.ListeningExam;
+                    balanceSource = "listening";
+                    feedback = FormatUsedRemaining("Listening Credit", 1, account.ListeningTestsRemaining ?? 0);
+                }
+                else if (account.SharedCredits >= AiGradingCreditCost.ListeningExam)
+                {
+                    allocations.AddRange(SpendSharedFromLots(account, AiGradingCreditCost.ListeningExam));
+                    sharedDelta = -AiGradingCreditCost.ListeningExam;
+                    balanceSource = "shared";
+                    feedback = FormatSharedUsed(normalized, 1, account.SharedCredits);
+                }
+                else
+                {
+                    return new(false, "no_listening_tests", NoCreditsMessage, null);
+                }
             }
             else
             {
-                return new(false, "no_listening_tests", NoCreditsMessage, null);
-            }
-        }
-        else
-        {
-            if (HasLiveRealUnlimited(account, "reading"))
-            {
-                return new(true, null, null, referenceId, BalanceSource: "reading", FeedbackMessage: "Unlimited Reading practice — no credits consumed.");
+                if (HasLiveRealUnlimited(account, "reading"))
+                {
+                    return new(true, null, null, referenceId, BalanceSource: "reading", FeedbackMessage: "Unlimited Reading practice — no credits consumed.");
+                }
+
+                if ((account.ReadingTestsRemaining ?? 0) > 0)
+                {
+                    allocations.AddRange(SpendDedicatedObjective(account, "reading", 1));
+                    readingDelta = -AiGradingCreditCost.ReadingExam;
+                    balanceSource = "reading";
+                    feedback = FormatUsedRemaining("Reading Credit", 1, account.ReadingTestsRemaining ?? 0);
+                }
+                else if (account.SharedCredits >= AiGradingCreditCost.ReadingExam)
+                {
+                    allocations.AddRange(SpendSharedFromLots(account, AiGradingCreditCost.ReadingExam));
+                    sharedDelta = -AiGradingCreditCost.ReadingExam;
+                    balanceSource = "shared";
+                    feedback = FormatSharedUsed(normalized, 1, account.SharedCredits);
+                }
+                else
+                {
+                    return new(false, "no_reading_tests", NoCreditsMessage, null);
+                }
             }
 
-            if ((account.ReadingTestsRemaining ?? 0) > 0)
+            account.UpdatedAt = DateTimeOffset.UtcNow;
+            AddTransaction(account, new AiPackageCreditTransaction
             {
-                allocations.AddRange(SpendDedicatedObjective(account, "reading", 1));
-                readingDelta = -AiGradingCreditCost.ReadingExam;
-                balanceSource = "reading";
-                feedback = FormatUsedRemaining("Reading Credit", 1, account.ReadingTestsRemaining ?? 0);
-            }
-            else if (account.SharedCredits >= AiGradingCreditCost.ReadingExam)
-            {
-                allocations.AddRange(SpendSharedFromLots(account, AiGradingCreditCost.ReadingExam));
-                sharedDelta = -AiGradingCreditCost.ReadingExam;
-                balanceSource = "shared";
-                feedback = FormatSharedUsed(normalized, 1, account.SharedCredits);
-            }
-            else
-            {
-                return new(false, "no_reading_tests", NoCreditsMessage, null);
-            }
-        }
+                Id = NewId("aipkg-tx"),
+                PackageType = normalized,
+                SharedCreditsDelta = sharedDelta,
+                ListeningTestsDelta = listeningDelta,
+                ReadingTestsDelta = readingDelta,
+                AllocationJson = SerializeAllocations(allocations),
+                Reason = AiPackageCreditReason.ObjectivePracticeDeduct,
+                ReferenceId = referenceId,
+                Description = sharedDelta < 0
+                    ? $"{normalized} exam used {Math.Abs(sharedDelta)} Shared AI credit"
+                    : $"{normalized} deterministic practice allowance used",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
 
-        account.UpdatedAt = DateTimeOffset.UtcNow;
-        AddTransaction(account, new AiPackageCreditTransaction
-        {
-            Id = NewId("aipkg-tx"),
-            PackageType = normalized,
-            SharedCreditsDelta = sharedDelta,
-            ListeningTestsDelta = listeningDelta,
-            ReadingTestsDelta = readingDelta,
-            AllocationJson = SerializeAllocations(allocations),
-            Reason = AiPackageCreditReason.ObjectivePracticeDeduct,
-            ReferenceId = referenceId,
-            Description = sharedDelta < 0
-                ? $"{normalized} exam used {Math.Abs(sharedDelta)} Shared AI credit"
-                : $"{normalized} deterministic practice allowance used",
-            CreatedAt = DateTimeOffset.UtcNow
-        });
-
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        return new(
-            true,
-            null,
-            null,
-            referenceId,
-            Bypassed: false,
-            BalanceSource: balanceSource,
-            CreditsUsed: Math.Abs(listeningDelta + readingDelta + sharedDelta),
-            RemainingAfter: (account.ListeningTestsRemaining ?? 0) + (account.ReadingTestsRemaining ?? 0) + account.SharedCredits,
-            FeedbackMessage: feedback);
+            await db.SaveChangesAsync(ct);
+            return new(
+                true,
+                null,
+                null,
+                referenceId,
+                Bypassed: false,
+                BalanceSource: balanceSource,
+                CreditsUsed: Math.Abs(listeningDelta + readingDelta + sharedDelta),
+                RemainingAfter: (account.ListeningTestsRemaining ?? 0) + (account.ReadingTestsRemaining ?? 0) + account.SharedCredits,
+                FeedbackMessage: feedback);
+        }, ct);
     }
 
     public async Task<bool> HasObjectivePracticeAllowanceAsync(string userId, string subtest, CancellationToken ct)
@@ -713,246 +717,250 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
 
     public async Task<AiPackageDebitResult> DeductMockAsync(string userId, string referenceId, CancellationToken ct)
     {
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
-        if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.MockDeduct, ct))
+        return await InLedgerTransactionAsync<AiPackageDebitResult>(async () =>
         {
-            return new(true, "already_debited", "This mock has already consumed allowance.", referenceId);
-        }
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+            if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.MockDeduct, ct))
+            {
+                return new(true, "already_debited", "This mock has already consumed allowance.", referenceId);
+            }
 
-        if (await ShouldBypassMockDebitForLegacyAccountAsync(account, ct))
-        {
-            return new(true, null, null, referenceId, Bypassed: true);
-        }
+            if (await ShouldBypassMockDebitForLegacyAccountAsync(account, ct))
+            {
+                return new(true, null, null, referenceId, Bypassed: true);
+            }
 
-        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
-        {
-            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
-        }
-        if (account.MockExamsRemaining <= 0)
-        {
-            return new(false, "no_mock_exams", NoCreditsMessage, null);
-        }
+            if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
+            {
+                return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
+            }
+            if (account.MockExamsRemaining <= 0)
+            {
+                return new(false, "no_mock_exams", NoCreditsMessage, null);
+            }
 
-        var mockAllocations = SpendMockFromLots(account, 1);
-        account.UpdatedAt = DateTimeOffset.UtcNow;
-        AddTransaction(account, new AiPackageCreditTransaction
-        {
-            Id = NewId("aipkg-tx"),
-            PackageType = "mock",
-            MockExamsDelta = -1,
-            AllocationJson = SerializeAllocations(mockAllocations),
-            Reason = AiPackageCreditReason.MockDeduct,
-            ReferenceId = referenceId,
-            Description = "Mock exam allowance used",
-            CreatedAt = DateTimeOffset.UtcNow
-        });
+            var mockAllocations = SpendMockFromLots(account, 1);
+            account.UpdatedAt = DateTimeOffset.UtcNow;
+            AddTransaction(account, new AiPackageCreditTransaction
+            {
+                Id = NewId("aipkg-tx"),
+                PackageType = "mock",
+                MockExamsDelta = -1,
+                AllocationJson = SerializeAllocations(mockAllocations),
+                Reason = AiPackageCreditReason.MockDeduct,
+                ReferenceId = referenceId,
+                Description = "Mock exam allowance used",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
 
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        return new(
-            true,
-            null,
-            null,
-            referenceId,
-            Bypassed: false,
-            BalanceSource: "mock",
-            CreditsUsed: 1,
-            RemainingAfter: account.MockExamsRemaining,
-            FeedbackMessage: $"1 Full Mock attempt used. {account.MockExamsRemaining} Mock Attempts remaining.");
+            await db.SaveChangesAsync(ct);
+            return new(
+                true,
+                null,
+                null,
+                referenceId,
+                Bypassed: false,
+                BalanceSource: "mock",
+                CreditsUsed: 1,
+                RemainingAfter: account.MockExamsRemaining,
+                FeedbackMessage: $"1 Full Mock attempt used. {account.MockExamsRemaining} Mock Attempts remaining.");
+        }, ct);
     }
 
     public async Task<bool> RefundAsync(string userId, string originalReferenceId, string refundReferenceId, string description, CancellationToken ct)
     {
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        if (await TransactionExistsAsync(userId, refundReferenceId, AiPackageCreditReason.RefundOnFailure, ct)
-            || await TransactionExistsAsync(userId, refundReferenceId, AiPackageCreditReason.MockRefundOnFailure, ct))
+        return await InLedgerTransactionAsync<bool>(async () =>
         {
-            return false;
-        }
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            if (await TransactionExistsAsync(userId, refundReferenceId, AiPackageCreditReason.RefundOnFailure, ct)
+                || await TransactionExistsAsync(userId, refundReferenceId, AiPackageCreditReason.MockRefundOnFailure, ct))
+            {
+                return false;
+            }
 
-        var debit = await db.AiPackageCreditTransactions.AsNoTracking()
-            .Where(row => row.UserId == userId
-                          && row.ReferenceId == originalReferenceId
-                          && (row.Reason == AiPackageCreditReason.GradingDeduct
-                              || row.Reason == AiPackageCreditReason.MockDeduct
-                              || row.Reason == AiPackageCreditReason.ObjectivePracticeDeduct))
-            .OrderByDescending(row => row.CreatedAt)
-            .FirstOrDefaultAsync(ct);
-        if (debit is null)
-        {
-            return false;
-        }
+            var debit = await db.AiPackageCreditTransactions.AsNoTracking()
+                .Where(row => row.UserId == userId
+                              && row.ReferenceId == originalReferenceId
+                              && (row.Reason == AiPackageCreditReason.GradingDeduct
+                                  || row.Reason == AiPackageCreditReason.MockDeduct
+                                  || row.Reason == AiPackageCreditReason.ObjectivePracticeDeduct))
+                .OrderByDescending(row => row.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+            if (debit is null)
+            {
+                return false;
+            }
 
-        var reason = debit.Reason == AiPackageCreditReason.MockDeduct
-            ? AiPackageCreditReason.MockRefundOnFailure
-            : AiPackageCreditReason.RefundOnFailure;
-        RestoreAllocation(account, debit);
-        account.UpdatedAt = DateTimeOffset.UtcNow;
-
-        AddTransaction(account, new AiPackageCreditTransaction
-        {
-            Id = NewId("aipkg-tx"),
-            PackageType = debit.PackageType,
-            SharedCreditsDelta = Math.Abs(debit.SharedCreditsDelta),
-            FlexibleCreditsDelta = Math.Abs(debit.FlexibleCreditsDelta),
-            WritingOnlyCreditsDelta = Math.Abs(debit.WritingOnlyCreditsDelta),
-            SpeakingOnlyCreditsDelta = Math.Abs(debit.SpeakingOnlyCreditsDelta),
-            ListeningTestsDelta = Math.Abs(debit.ListeningTestsDelta),
-            ReadingTestsDelta = Math.Abs(debit.ReadingTestsDelta),
-            MockExamsDelta = Math.Abs(debit.MockExamsDelta),
-            AllocationJson = debit.AllocationJson,
-            Reason = reason,
-            ReferenceId = refundReferenceId,
-            JobId = debit.JobId,
-            Description = description,
-            CreatedAt = DateTimeOffset.UtcNow
-        });
-
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        return true;
-    }
-
-    public async Task<AiPackageCreditSnapshot> AdjustAsync(string userId, AiPackageCreditAdjustmentRequest request, string adminId, CancellationToken ct)
-    {
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
-
-        // Genuine used-per-bucket so admin adjustments never mutate "Used" and the
-        // Total >= Used invariant can be validated. SetExact targets TOTAL:
-        // delta = (setTotal - used) - currentRemaining, i.e. Remaining = setTotal - Used.
-        var ledgerRows = await db.AiPackageCreditTransactions.AsNoTracking()
-            .Where(row => row.UserId == userId)
-            .Select(row => new LedgerRow(
-                row.PackageId,
-                row.Description,
-                row.Reason,
-                row.SharedCreditsDelta,
-                row.FlexibleCreditsDelta,
-                row.WritingOnlyCreditsDelta,
-                row.SpeakingOnlyCreditsDelta,
-                 row.ListeningTestsDelta,
-                 row.ReadingTestsDelta,
-                 row.MockExamsDelta,
-                 row.ValidFrom,
-                 row.ExpiresAt,
-                 row.CreatedAt,
-                 row.ReferenceId,
-                 row.SourceReferenceId))
-            .ToListAsync(ct);
-        var usage = ComputeUsage(ledgerRows);
-
-        var sharedDelta = ResolveAdminDelta(account.SharedCredits, usage.Shared, request.SharedCreditsDelta, request.SharedCreditsSet, "Shared Credits");
-        var flexibleDelta = ResolveAdminDelta(account.FlexibleCredits, usage.Flexible, request.FlexibleCreditsDelta, request.FlexibleCreditsSet, "Flexible W/S Credits");
-        var writingDelta = ResolveAdminDelta(account.WritingOnlyCredits, usage.Writing, request.WritingOnlyCreditsDelta, request.WritingOnlyCreditsSet, "Writing Credits");
-        var speakingDelta = ResolveAdminDelta(account.SpeakingOnlyCredits, usage.Speaking, request.SpeakingOnlyCreditsDelta, request.SpeakingOnlyCreditsSet, "Speaking Credits");
-        var mockDelta = ResolveAdminDelta(account.MockExamsRemaining, usage.Mocks, request.MockExamsDelta, request.MockExamsSet, "Mock Attempts");
-        var listeningDelta = ResolveAdminDelta(account.ListeningTestsRemaining ?? 0, usage.Listening, request.ListeningTestsDelta, request.ListeningTestsSet, "Listening Credits");
-        var readingDelta = ResolveAdminDelta(account.ReadingTestsRemaining ?? 0, usage.Reading, request.ReadingTestsDelta, request.ReadingTestsSet, "Reading Credits");
-
-        ApplyAdminAdjustmentToLots(
-            account,
-            sharedDelta,
-            flexibleDelta,
-            writingDelta,
-            speakingDelta,
-            listeningDelta,
-            readingDelta,
-            mockDelta,
-            request.ExpiresAt);
-
-        // "Set exact" also replaces the expiry when explicitly provided; otherwise the
-        // pool expiry is retained. This is the only admin mutation that can rewrite
-        // ExpiresAt, and it is the "Edit dates" source of truth for linked credits.
-        account.ExpiresAt = request.ExpiresAt ?? account.ExpiresAt;
-        account.UpdatedAt = DateTimeOffset.UtcNow;
-        RebuildAccountFromLots(account);
-        // An explicit admin set-to-finite must be able to clear a stuck null
-        // sentinel left by a deleted source: with no live unlimited lot the
-        // null pool is a ghost, never an entitlement.
-        RepairNullSentinels(account);
-
-        AddTransaction(account, new AiPackageCreditTransaction
-        {
-            Id = NewId("aipkg-tx"),
-            SharedCreditsDelta = sharedDelta,
-            FlexibleCreditsDelta = flexibleDelta,
-            WritingOnlyCreditsDelta = writingDelta,
-            SpeakingOnlyCreditsDelta = speakingDelta,
-            ListeningTestsDelta = listeningDelta,
-            ReadingTestsDelta = readingDelta,
-            MockExamsDelta = mockDelta,
-            Reason = AiPackageCreditReason.AdminAdjustment,
-            ReferenceId = $"admin:{adminId}:{Guid.NewGuid():N}",
-            Description = string.IsNullOrWhiteSpace(request.Reason) ? "Admin AI package credit adjustment" : request.Reason,
-            ExpiresAt = request.ExpiresAt,
-            CreatedAt = DateTimeOffset.UtcNow,
-            CreatedByAdminId = adminId
-        });
-
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        return await ProjectSnapshotAsync(userId, 50, ct);
-    }
-
-    public async Task<AiPackageCreditSnapshot> RecordExamOutcomeAsync(string userId, LearnerExamOutcomeRequest request, string adminId, string adminName, CancellationToken ct)
-    {
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var now = DateTimeOffset.UtcNow;
-        db.LearnerExamOutcomes.Add(new LearnerExamOutcome
-        {
-            Id = NewId("exam-outcome"),
-            UserId = userId,
-            Passed = request.Passed,
-            ExamDate = request.ExamDate,
-            RecordedByAdminId = adminId,
-            RecordedByAdminName = string.IsNullOrWhiteSpace(adminName) ? adminId : adminName,
-            EvidenceNote = request.EvidenceNote,
-            RecordedAt = now
-        });
-
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        if (request.Passed)
-        {
-            var shared = -account.SharedCredits;
-            var flexible = -account.FlexibleCredits;
-            var writing = -account.WritingOnlyCredits;
-            var speaking = -account.SpeakingOnlyCredits;
-            var listening = -(account.ListeningTestsRemaining ?? 0);
-            var reading = -(account.ReadingTestsRemaining ?? 0);
-            var mocks = -account.MockExamsRemaining;
-            ZeroAllLots(account, now);
-            account.ExpiredBecausePassed = true;
-            account.PassedAt = request.ExamDate;
-            account.ExpiresAt = now;
-            account.UpdatedAt = now;
+            var reason = debit.Reason == AiPackageCreditReason.MockDeduct
+                ? AiPackageCreditReason.MockRefundOnFailure
+                : AiPackageCreditReason.RefundOnFailure;
+            RestoreAllocation(account, debit);
+            account.UpdatedAt = DateTimeOffset.UtcNow;
 
             AddTransaction(account, new AiPackageCreditTransaction
             {
                 Id = NewId("aipkg-tx"),
-                SharedCreditsDelta = shared,
-                FlexibleCreditsDelta = flexible,
-                WritingOnlyCreditsDelta = writing,
-                SpeakingOnlyCreditsDelta = speaking,
-                ListeningTestsDelta = listening,
-                ReadingTestsDelta = reading,
-                MockExamsDelta = mocks,
-                Reason = AiPackageCreditReason.PassExpiry,
-                ReferenceId = $"exam-pass:{request.ExamDate:yyyyMMdd}:{Guid.NewGuid():N}",
-                Description = "AI package expired because candidate passed OET.",
-                CreatedAt = now,
+                PackageType = debit.PackageType,
+                SharedCreditsDelta = Math.Abs(debit.SharedCreditsDelta),
+                FlexibleCreditsDelta = Math.Abs(debit.FlexibleCreditsDelta),
+                WritingOnlyCreditsDelta = Math.Abs(debit.WritingOnlyCreditsDelta),
+                SpeakingOnlyCreditsDelta = Math.Abs(debit.SpeakingOnlyCreditsDelta),
+                ListeningTestsDelta = Math.Abs(debit.ListeningTestsDelta),
+                ReadingTestsDelta = Math.Abs(debit.ReadingTestsDelta),
+                MockExamsDelta = Math.Abs(debit.MockExamsDelta),
+                AllocationJson = debit.AllocationJson,
+                Reason = reason,
+                ReferenceId = refundReferenceId,
+                JobId = debit.JobId,
+                Description = description,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+
+            await db.SaveChangesAsync(ct);
+            return true;
+        }, ct);
+    }
+
+    public async Task<AiPackageCreditSnapshot> AdjustAsync(string userId, AiPackageCreditAdjustmentRequest request, string adminId, CancellationToken ct)
+    {
+        return await InLedgerTransactionAsync<AiPackageCreditSnapshot>(async () =>
+        {
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+
+            // Genuine used-per-bucket so admin adjustments never mutate "Used" and the
+            // Total >= Used invariant can be validated. SetExact targets TOTAL:
+            // delta = (setTotal - used) - currentRemaining, i.e. Remaining = setTotal - Used.
+            var ledgerRows = await db.AiPackageCreditTransactions.AsNoTracking()
+                .Where(row => row.UserId == userId)
+                .Select(row => new LedgerRow(
+                    row.PackageId,
+                    row.Description,
+                    row.Reason,
+                    row.SharedCreditsDelta,
+                    row.FlexibleCreditsDelta,
+                    row.WritingOnlyCreditsDelta,
+                    row.SpeakingOnlyCreditsDelta,
+                     row.ListeningTestsDelta,
+                     row.ReadingTestsDelta,
+                     row.MockExamsDelta,
+                     row.ValidFrom,
+                     row.ExpiresAt,
+                     row.CreatedAt,
+                     row.ReferenceId,
+                     row.SourceReferenceId))
+                .ToListAsync(ct);
+            var usage = ComputeUsage(ledgerRows);
+
+            var sharedDelta = ResolveAdminDelta(account.SharedCredits, usage.Shared, request.SharedCreditsDelta, request.SharedCreditsSet, "Shared Credits");
+            var flexibleDelta = ResolveAdminDelta(account.FlexibleCredits, usage.Flexible, request.FlexibleCreditsDelta, request.FlexibleCreditsSet, "Flexible W/S Credits");
+            var writingDelta = ResolveAdminDelta(account.WritingOnlyCredits, usage.Writing, request.WritingOnlyCreditsDelta, request.WritingOnlyCreditsSet, "Writing Credits");
+            var speakingDelta = ResolveAdminDelta(account.SpeakingOnlyCredits, usage.Speaking, request.SpeakingOnlyCreditsDelta, request.SpeakingOnlyCreditsSet, "Speaking Credits");
+            var mockDelta = ResolveAdminDelta(account.MockExamsRemaining, usage.Mocks, request.MockExamsDelta, request.MockExamsSet, "Mock Attempts");
+            var listeningDelta = ResolveAdminDelta(account.ListeningTestsRemaining ?? 0, usage.Listening, request.ListeningTestsDelta, request.ListeningTestsSet, "Listening Credits");
+            var readingDelta = ResolveAdminDelta(account.ReadingTestsRemaining ?? 0, usage.Reading, request.ReadingTestsDelta, request.ReadingTestsSet, "Reading Credits");
+
+            ApplyAdminAdjustmentToLots(
+                account,
+                sharedDelta,
+                flexibleDelta,
+                writingDelta,
+                speakingDelta,
+                listeningDelta,
+                readingDelta,
+                mockDelta,
+                request.ExpiresAt);
+
+            // "Set exact" also replaces the expiry when explicitly provided; otherwise the
+            // pool expiry is retained. This is the only admin mutation that can rewrite
+            // ExpiresAt, and it is the "Edit dates" source of truth for linked credits.
+            account.ExpiresAt = request.ExpiresAt ?? account.ExpiresAt;
+            account.UpdatedAt = DateTimeOffset.UtcNow;
+            RebuildAccountFromLots(account);
+            // An explicit admin set-to-finite must be able to clear a stuck null
+            // sentinel left by a deleted source: with no live unlimited lot the
+            // null pool is a ghost, never an entitlement.
+            RepairNullSentinels(account);
+
+            AddTransaction(account, new AiPackageCreditTransaction
+            {
+                Id = NewId("aipkg-tx"),
+                SharedCreditsDelta = sharedDelta,
+                FlexibleCreditsDelta = flexibleDelta,
+                WritingOnlyCreditsDelta = writingDelta,
+                SpeakingOnlyCreditsDelta = speakingDelta,
+                ListeningTestsDelta = listeningDelta,
+                ReadingTestsDelta = readingDelta,
+                MockExamsDelta = mockDelta,
+                Reason = AiPackageCreditReason.AdminAdjustment,
+                ReferenceId = $"admin:{adminId}:{Guid.NewGuid():N}",
+                Description = string.IsNullOrWhiteSpace(request.Reason) ? "Admin AI package credit adjustment" : request.Reason,
+                ExpiresAt = request.ExpiresAt,
+                CreatedAt = DateTimeOffset.UtcNow,
                 CreatedByAdminId = adminId
             });
-        }
 
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        logger.LogInformation("Admin {AdminId} recorded OET exam outcome for learner {UserId}; passed={Passed}.", adminId, userId, request.Passed);
-        return await ProjectSnapshotAsync(userId, 50, ct);
+            await db.SaveChangesAsync(ct);
+            return await ProjectSnapshotAsync(userId, 50, ct);
+        }, ct);
+    }
+
+    public async Task<AiPackageCreditSnapshot> RecordExamOutcomeAsync(string userId, LearnerExamOutcomeRequest request, string adminId, string adminName, CancellationToken ct)
+    {
+        return await InLedgerTransactionAsync<AiPackageCreditSnapshot>(async () =>
+        {
+            var now = DateTimeOffset.UtcNow;
+            db.LearnerExamOutcomes.Add(new LearnerExamOutcome
+            {
+                Id = NewId("exam-outcome"),
+                UserId = userId,
+                Passed = request.Passed,
+                ExamDate = request.ExamDate,
+                RecordedByAdminId = adminId,
+                RecordedByAdminName = string.IsNullOrWhiteSpace(adminName) ? adminId : adminName,
+                EvidenceNote = request.EvidenceNote,
+                RecordedAt = now
+            });
+
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            if (request.Passed)
+            {
+                var shared = -account.SharedCredits;
+                var flexible = -account.FlexibleCredits;
+                var writing = -account.WritingOnlyCredits;
+                var speaking = -account.SpeakingOnlyCredits;
+                var listening = -(account.ListeningTestsRemaining ?? 0);
+                var reading = -(account.ReadingTestsRemaining ?? 0);
+                var mocks = -account.MockExamsRemaining;
+                ZeroAllLots(account, now);
+                account.ExpiredBecausePassed = true;
+                account.PassedAt = request.ExamDate;
+                account.ExpiresAt = now;
+                account.UpdatedAt = now;
+
+                AddTransaction(account, new AiPackageCreditTransaction
+                {
+                    Id = NewId("aipkg-tx"),
+                    SharedCreditsDelta = shared,
+                    FlexibleCreditsDelta = flexible,
+                    WritingOnlyCreditsDelta = writing,
+                    SpeakingOnlyCreditsDelta = speaking,
+                    ListeningTestsDelta = listening,
+                    ReadingTestsDelta = reading,
+                    MockExamsDelta = mocks,
+                    Reason = AiPackageCreditReason.PassExpiry,
+                    ReferenceId = $"exam-pass:{request.ExamDate:yyyyMMdd}:{Guid.NewGuid():N}",
+                    Description = "AI package expired because candidate passed OET.",
+                    CreatedAt = now,
+                    CreatedByAdminId = adminId
+                });
+            }
+
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation("Admin {AdminId} recorded OET exam outcome for learner {UserId}; passed={Passed}.", adminId, userId, request.Passed);
+            return await ProjectSnapshotAsync(userId, 50, ct);
+        }, ct);
     }
 
     private const string LegacySyntheticPackageId = "legacy";

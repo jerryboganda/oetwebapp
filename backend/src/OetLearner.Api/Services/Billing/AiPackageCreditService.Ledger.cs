@@ -82,7 +82,7 @@ public sealed partial class AiPackageCreditService
         {
             var referenceId = $"expiry:{lot.Id}:{lot.ExpiresAt:O}";
             if (await db.AiPackageCreditTransactions.AsNoTracking()
-                .AnyAsync(row => row.AccountId == account.Id && row.Reason == AiPackageCreditReason.Expiry && row.ReferenceId == referenceId, ct))
+                .AnyAsync(row => row.UserId == account.UserId && row.Reason == AiPackageCreditReason.Expiry && row.ReferenceId == referenceId, ct))
             {
                 lot.Expired = true;
                 lot.ExpiredAt ??= now;
@@ -162,123 +162,124 @@ public sealed partial class AiPackageCreditService
 
     private async Task<bool> ReverseOneGrantAsync(string userId, string sourceReferenceId, CancellationToken ct)
     {
-        await using var tx = await BeginTransactionIfNeededAsync(ct);
-        var account = await GetOrCreateAccountAsync(userId, ct);
-        await EnsureLotsLoadedAsync(account, ct);
-        var purchases = await db.AiPackageCreditTransactions.AsNoTracking()
-            .Where(row => row.UserId == userId
-                          && row.Reason == AiPackageCreditReason.Purchase
-                          && row.ReferenceId != null)
-            .OrderBy(row => row.CreatedAt)
-            .ThenBy(row => row.Id)
-            .ToListAsync(ct);
-        var reversedReferences = (await db.AiPackageCreditTransactions.AsNoTracking()
-            .Where(row => row.UserId == userId
-                          && row.Reason == AiPackageCreditReason.GrantReversed
-                          && row.ReferenceId != null)
-            .Select(row => row.ReferenceId!)
-            .ToListAsync(ct))
-            .ToHashSet(StringComparer.Ordinal);
-        var purchase = purchases.FirstOrDefault(row =>
-            SourceMatches(row, sourceReferenceId)
-            && !reversedReferences.Contains(row.ReferenceId!)
-            && !reversedReferences.Contains(AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{row.ReferenceId}")));
-        if (purchase is null)
+        return await InLedgerTransactionAsync<bool>(async () =>
         {
-            return false;
-        }
-
-        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
-        var matchingLots = AccountLots(account)
-            .Where(lot => !lot.Expired
-                && LotHasRemaining(lot)
-                && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
-                    || (purchase.SourceReferenceId is not null
-                        && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))))
-            .ToList();
-
-        if (matchingLots.Count == 0)
-        {
-            // Parked lots (suspended/cancelled-but-restorable sources) still
-            // carry value behind the Expired flag. Do NOT mark the purchase
-            // reversed: unpark (restore/reactivate/extend) must be able to
-            // revive them, and the later removal must still find the purchase
-            // unmarked so it reverses for real. Lots already contribute nothing
-            // while flagged, so there is nothing to reverse right now.
-            var hasParkedLots = AccountLots(account).Any(lot =>
-                lot.Expired
-                && LotRetainsValue(lot)
-                && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
-                    || (purchase.SourceReferenceId is not null
-                        && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))));
-            if (hasParkedLots)
+            var account = await GetOrCreateAccountAsync(userId, ct);
+            await EnsureLotsLoadedAsync(account, ct);
+            var purchases = await db.AiPackageCreditTransactions.AsNoTracking()
+                .Where(row => row.UserId == userId
+                              && row.Reason == AiPackageCreditReason.Purchase
+                              && row.ReferenceId != null)
+                .OrderBy(row => row.CreatedAt)
+                .ThenBy(row => row.Id)
+                .ToListAsync(ct);
+            var reversedReferences = (await db.AiPackageCreditTransactions.AsNoTracking()
+                .Where(row => row.UserId == userId
+                              && row.Reason == AiPackageCreditReason.GrantReversed
+                              && row.ReferenceId != null)
+                .Select(row => row.ReferenceId!)
+                .ToListAsync(ct))
+                .ToHashSet(StringComparer.Ordinal);
+            var purchase = purchases.FirstOrDefault(row =>
+                SourceMatches(row, sourceReferenceId)
+                && !reversedReferences.Contains(row.ReferenceId!)
+                && !reversedReferences.Contains(AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{row.ReferenceId}")));
+            if (purchase is null)
             {
                 return false;
             }
-        }
 
-        var shared = 0;
-        var flexible = 0;
-        var writing = 0;
-        var speaking = 0;
-        var mocks = 0;
-        var listening = 0;
-        var reading = 0;
-        foreach (var lot in matchingLots)
-        {
-            shared += -lot.SharedCredits;
-            flexible += -lot.FlexibleCredits;
-            writing += -lot.WritingOnlyCredits;
-            speaking += -lot.SpeakingOnlyCredits;
-            mocks += -lot.MockExamsRemaining;
-            if (lot.ListeningTestsRemaining is int listeningRemaining)
-            {
-                listening += -listeningRemaining;
-            }
-            if (lot.ReadingTestsRemaining is int readingRemaining)
-            {
-                reading += -readingRemaining;
-            }
-            lot.SharedCredits = 0;
-            lot.FlexibleCredits = 0;
-            lot.WritingOnlyCredits = 0;
-            lot.SpeakingOnlyCredits = 0;
-            lot.MockExamsRemaining = 0;
-            lot.ListeningTestsRemaining = lot.UnlimitedListening ? null : 0;
-            lot.ReadingTestsRemaining = lot.UnlimitedReading ? null : 0;
-            lot.UnlimitedGrading = false;
-            lot.UnlimitedListening = false;
-            lot.UnlimitedReading = false;
-            lot.Expired = true;
-            lot.ExpiredAt = DateTimeOffset.UtcNow;
-        }
+            await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+            var matchingLots = AccountLots(account)
+                .Where(lot => !lot.Expired
+                    && LotHasRemaining(lot)
+                    && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
+                        || (purchase.SourceReferenceId is not null
+                            && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
 
-        RebuildAccountFromLots(account);
-        account.UpdatedAt = DateTimeOffset.UtcNow;
-        var reverseReference = AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{purchase.ReferenceId}");
-        AddTransaction(account, new AiPackageCreditTransaction
-        {
-            Id = NewId("aipkg-tx"),
-            PackageId = purchase.PackageId,
-            PackageType = purchase.PackageType,
-            SharedCreditsDelta = shared,
-            FlexibleCreditsDelta = flexible,
-            WritingOnlyCreditsDelta = writing,
-            SpeakingOnlyCreditsDelta = speaking,
-            ListeningTestsDelta = listening,
-            ReadingTestsDelta = reading,
-            MockExamsDelta = mocks,
-            Reason = AiPackageCreditReason.GrantReversed,
-            ReferenceId = reverseReference,
-            SourceReferenceId = purchase.SourceReferenceId ?? sourceReferenceId,
-            Description = $"{purchase.PackageId} grant reversed",
-            ValidFrom = purchase.ValidFrom,
-            ExpiresAt = purchase.ExpiresAt,
-            CreatedAt = DateTimeOffset.UtcNow
-        });
-        await db.SaveChangesAsync(ct);
-        if (tx is not null) await tx.CommitAsync(ct);
-        return true;
+            if (matchingLots.Count == 0)
+            {
+                // Parked lots (suspended/cancelled-but-restorable sources) still
+                // carry value behind the Expired flag. Do NOT mark the purchase
+                // reversed: unpark (restore/reactivate/extend) must be able to
+                // revive them, and the later removal must still find the purchase
+                // unmarked so it reverses for real. Lots already contribute nothing
+                // while flagged, so there is nothing to reverse right now.
+                var hasParkedLots = AccountLots(account).Any(lot =>
+                    lot.Expired
+                    && LotRetainsValue(lot)
+                    && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
+                        || (purchase.SourceReferenceId is not null
+                            && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))));
+                if (hasParkedLots)
+                {
+                    return false;
+                }
+            }
+
+            var shared = 0;
+            var flexible = 0;
+            var writing = 0;
+            var speaking = 0;
+            var mocks = 0;
+            var listening = 0;
+            var reading = 0;
+            foreach (var lot in matchingLots)
+            {
+                shared += -lot.SharedCredits;
+                flexible += -lot.FlexibleCredits;
+                writing += -lot.WritingOnlyCredits;
+                speaking += -lot.SpeakingOnlyCredits;
+                mocks += -lot.MockExamsRemaining;
+                if (lot.ListeningTestsRemaining is int listeningRemaining)
+                {
+                    listening += -listeningRemaining;
+                }
+                if (lot.ReadingTestsRemaining is int readingRemaining)
+                {
+                    reading += -readingRemaining;
+                }
+                lot.SharedCredits = 0;
+                lot.FlexibleCredits = 0;
+                lot.WritingOnlyCredits = 0;
+                lot.SpeakingOnlyCredits = 0;
+                lot.MockExamsRemaining = 0;
+                lot.ListeningTestsRemaining = lot.UnlimitedListening ? null : 0;
+                lot.ReadingTestsRemaining = lot.UnlimitedReading ? null : 0;
+                lot.UnlimitedGrading = false;
+                lot.UnlimitedListening = false;
+                lot.UnlimitedReading = false;
+                lot.Expired = true;
+                lot.ExpiredAt = DateTimeOffset.UtcNow;
+            }
+
+            RebuildAccountFromLots(account);
+            account.UpdatedAt = DateTimeOffset.UtcNow;
+            var reverseReference = AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{purchase.ReferenceId}");
+            AddTransaction(account, new AiPackageCreditTransaction
+            {
+                Id = NewId("aipkg-tx"),
+                PackageId = purchase.PackageId,
+                PackageType = purchase.PackageType,
+                SharedCreditsDelta = shared,
+                FlexibleCreditsDelta = flexible,
+                WritingOnlyCreditsDelta = writing,
+                SpeakingOnlyCreditsDelta = speaking,
+                ListeningTestsDelta = listening,
+                ReadingTestsDelta = reading,
+                MockExamsDelta = mocks,
+                Reason = AiPackageCreditReason.GrantReversed,
+                ReferenceId = reverseReference,
+                SourceReferenceId = purchase.SourceReferenceId ?? sourceReferenceId,
+                Description = $"{purchase.PackageId} grant reversed",
+                ValidFrom = purchase.ValidFrom,
+                ExpiresAt = purchase.ExpiresAt,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync(ct);
+            return true;
+        }, ct);
     }
 
     private async Task ReverseOrphanedGrantsAsync(string userId, DateTimeOffset now, CancellationToken ct)
@@ -711,7 +712,7 @@ public sealed partial class AiPackageCreditService
         }
 
         return !await db.AiPackageCreditTransactions.AsNoTracking()
-            .AnyAsync(row => row.AccountId == account.Id
+            .AnyAsync(row => row.UserId == account.UserId
                              && (row.Reason == AiPackageCreditReason.Purchase
                                  || row.SharedCreditsDelta > 0
                                  || row.FlexibleCreditsDelta > 0
@@ -731,7 +732,7 @@ public sealed partial class AiPackageCreditService
         }
 
         return !await db.AiPackageCreditTransactions.AsNoTracking()
-            .AnyAsync(row => row.AccountId == account.Id
+            .AnyAsync(row => row.UserId == account.UserId
                              && (row.Reason == AiPackageCreditReason.Purchase
                                  || row.SharedCreditsDelta > 0
                                  || row.ListeningTestsDelta > 0
@@ -746,6 +747,6 @@ public sealed partial class AiPackageCreditService
         }
 
         return !await db.AiPackageCreditTransactions.AsNoTracking()
-            .AnyAsync(row => row.AccountId == account.Id && row.MockExamsDelta > 0, ct);
+            .AnyAsync(row => row.UserId == account.UserId && row.MockExamsDelta > 0, ct);
     }
 }
