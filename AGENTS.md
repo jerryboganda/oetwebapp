@@ -30,6 +30,9 @@ build input, rebuilds **only** the component whose inputs changed (the other is 
 `:<sha>` tags always exist), and `production-deploy.yml` stands down when a newer build run exists (one rollout
 per burst instead of N) or when this SHA has no images. A push that legitimately ships nothing ends the watcher
 with `SHIP-WATCH_NOTHING_TO_DEPLOY` and exit 0 — that is success, not a missing run.
+`qa-smoke.yml`'s 6-way backend matrix is **path-filtered** for the same reason: it runs only when a backend input
+(`backend/**`, `data/**`, `rulebooks/**`, `global.json`, NuGet props/config, or the workflow) changed, so a
+frontend-only push does not pay ~40 minutes of shards it cannot affect. `-f backend=always` forces it.
 
 Rollback: `gh workflow run production-deploy.yml -f sha=<previous-sha>` — images are already in GHCR, no rebuild.
 
@@ -149,7 +152,7 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 
 | Purpose | Workflow |
 | --- | --- |
-| Frontend unit (vitest + lint + tsc + build), backend `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached), placement-entry. **No e2e** (owner directive 2026-10-03) | `.github/workflows/qa-smoke.yml` |
+| Frontend unit (vitest + lint + tsc + build), backend `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached; **path-filtered** to backend inputs — skipped otherwise, `qa-gate` accepts the skip, `-f backend=always` forces it), placement-entry. **No e2e** (owner directive 2026-10-03) | `.github/workflows/qa-smoke.yml` |
 | Build all four images → GHCR. Parallel per SHA, no cross-SHA lock; a component whose inputs did not change is retagged from `:latest` instead of rebuilt | `.github/workflows/build-images.yml` (push to `main` only) |
 | Generate the migration SQL (only when `build-api` actually ran) + apply it, then blue/green VPS rollout with health gate. Serialized by the `production-deploy` concurrency group; `workflow_dispatch -f sha=<sha>` is the rollback path | `.github/workflows/production-deploy.yml` |
 | Mobile/Android build | `.github/workflows/mobile-ci.yml` |

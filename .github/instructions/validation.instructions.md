@@ -35,7 +35,7 @@ like `ship:watch` they are local tooling, not compute. See `scripts/agent/README
 | Check | Workflow / job |
 | --- | --- |
 | `pnpm exec tsc --noEmit`, `pnpm run check:encoding` (report-only), `pnpm run lint`, `vitest run`, `pnpm run build` | `qa-smoke.yml` / `frontend-unit` |
-| `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached) | `qa-smoke.yml` / `backend-tests` |
+| `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached) — **path-filtered**: runs only when `backend/**`, `data/**`, `rulebooks/**`, `global.json`, NuGet props/config or `qa-smoke.yml` itself changed; force with `gh workflow run qa-smoke.yml -f backend=always` | `qa-smoke.yml` / `backend-tests` |
 | Placement entry contracts | `qa-smoke.yml` / `placement-entry` |
 | ~~Playwright/e2e~~ | **Removed by owner directive 2026-10-03 (hard rule).** No e2e job runs on any trigger; `tests/e2e/**` is a manual tool. Bugs are reported by the owner and fixed on demand. |
 | Pending EF model changes, gitleaks (path-filtered) | `speaking-ci.yml` / `migrations-check`, `secrets-scan` |

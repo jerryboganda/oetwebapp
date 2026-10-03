@@ -4,6 +4,13 @@ name: QA Smoke
 # there are NO Playwright/e2e jobs in CI. The specs under tests/e2e/** stay in the
 # repo as manual tools; the owner reports a regression and the agent fixes it on
 # demand. Do not re-add e2e jobs, e2e images or a nightly e2e schedule here.
+#
+# Owner directive 2026-10-03 (minimum time from deploy to ship): the 6-way
+# backend matrix is PATH-FILTERED. It costs ~40 minutes of wall clock and holds
+# the repo public while it runs, so it only runs when a backend input actually
+# changed — a frontend-only push would otherwise pay for six .NET shards it
+# cannot affect. Force it with `gh workflow run qa-smoke.yml -f backend=always`
+# (or skip it on purpose with -f backend=skip).
 
 on:
   push:
@@ -22,6 +29,15 @@ on:
       - 'ops/**'
       - '.github/agent-state.local.md'
   workflow_dispatch:
+    inputs:
+      backend:
+        description: 'Backend .NET matrix: auto = only when backend inputs changed'
+        type: choice
+        default: auto
+        options:
+          - auto
+          - always
+          - skip
 
 permissions:
   contents: read
@@ -34,6 +50,64 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # One cheap classification job, same idiom as build-images.yml: the compare
+  # API answers in a second where a full-history clone takes ~30s, and the
+  # backend matrix waits on this one.
+  changes:
+    name: Detect what changed
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.detect.outputs.backend }}
+    steps:
+      - id: detect
+        name: Classify the push
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          all=0
+          BASE="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          elif [ "${{ github.event_name }}" != "push" ]; then
+            all=1
+          fi
+          if [ -z "$BASE" ] || printf '%s' "$BASE" | grep -qE '^0+$'; then all=1; fi
+          FILES=""
+          if [ "$all" = "0" ]; then
+            JSON="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${{ github.sha }}")"
+            FILES="$(printf '%s' "$JSON" | jq -r '.files[].filename')"
+            # The compare API truncates at 300 files; assume everything changed
+            # rather than under-report an input.
+            if [ "$(printf '%s' "$JSON" | jq -r '.files | length')" -ge 300 ]; then all=1; fi
+          fi
+          if [ "$all" = "1" ]; then
+            echo "No usable diff range (first push / manual dispatch / truncated compare) - treating every input as changed."
+            backend=true
+            FILES="(all)"
+          else
+            has() { printf '%s\n' "$FILES" | grep -Eq "$1"; }
+            # true/false strings on purpose: the job condition compares to 'true'.
+            backend=false
+            # Everything the .NET test host compiles or seeds with: the solution
+            # itself, the EF model inputs (global.json, Directory.*.props,
+            # NuGet.config), the seed/embedded data the API bakes
+            # (data/**, rulebooks/**), and this workflow, so a change to the
+            # matrix is always proven by the matrix.
+            if has '^(backend/|data/|rulebooks/|global\.json$|Directory\.[A-Za-z]+\.props$|NuGet\.config$|\.github/workflows/qa-smoke\.yml$)'; then backend=true; fi
+          fi
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend"
+          {
+            echo "### Change detection"
+            echo "- backend=$backend"
+            echo '```'
+            printf '%s\n' "$FILES" | head -n 200
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
   placement-entry:
     name: Placement entry contracts
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
@@ -51,6 +125,11 @@ jobs:
 
   backend-tests:
     name: Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}
+    needs: changes
+    # Path-filtered (owner directive 2026-10-03): a frontend-only push skips the
+    # whole matrix. `-f backend=always` forces it, `-f backend=skip` suppresses it
+    # — and qa-gate accepts a skipped matrix, never a failed one.
+    if: ${{ inputs.backend == 'always' || (inputs.backend != 'skip' && needs.changes.outputs.backend == 'true') }}
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     services:
       postgres:
@@ -225,12 +304,20 @@ jobs:
   qa-gate:
     name: QA gate (all suites green)
     if: always()
-    needs: [backend-tests, frontend-unit]
+    needs: [changes, backend-tests, frontend-unit]
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Verify all dependencies succeeded
         run: |
-          if [ "${{ needs.backend-tests.result }}" != "success" ]; then
+          # A broken detector must never read as "nothing changed": fail closed.
+          if [ "${{ needs.changes.result }}" != "success" ]; then
+            echo "::error::change detection failed"; exit 1
+          fi
+          # Skipped is not failed: the backend matrix is path-filtered and does
+          # not run when no backend input changed (see the `changes` job).
+          if [ "${{ needs.backend-tests.result }}" = "skipped" ]; then
+            echo "Backend matrix skipped - no backend input changed (detected backend=${{ needs.changes.outputs.backend }})."
+          elif [ "${{ needs.backend-tests.result }}" != "success" ]; then
             echo "::error::backend-tests failed"; exit 1
           fi
           if [ "${{ needs.frontend-unit.result }}" != "success" ]; then
