@@ -485,6 +485,18 @@ public static partial class SeedData
             })
         });
 
+        db.AiPackageCreditAccounts.Add(new AiPackageCreditAccount
+        {
+            Id = "aipkg-demo-001",
+            UserId = userId,
+            WritingOnlyCredits = 3,
+            ListeningTestsRemaining = 0,
+            ReadingTestsRemaining = 0,
+            ExpiresAt = now.AddMonths(1),
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
         db.Invoices.AddRange(
             new Invoice { Id = "inv-001", UserId = userId, IssuedAt = now.AddMonths(-2), Amount = 49.99m, Currency = "AUD", Status = "Paid", Description = "Premium Monthly subscription", Source = InvoiceSources.AdminGrant, ReconciledAt = now },
             new Invoice { Id = "inv-002", UserId = userId, IssuedAt = now.AddMonths(-1), Amount = 49.99m, Currency = "AUD", Status = "Paid", Description = "Premium Monthly subscription", Source = InvoiceSources.AdminGrant, ReconciledAt = now },
