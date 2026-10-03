@@ -677,7 +677,8 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
             return Task.FromResult(new WritingCanonDetectionResult(request.SubmissionId, Array.Empty<WritingCanonViolation>()));
         }
 
-        public Task<WritingCanonRuleTestResponse?> TestRuleAsync(string adminUserId, string ruleId, WritingCanonRuleTestRequest request, CancellationToken ct)
+        public Task<OetLearner.Api.Contracts.WritingCanonRuleTestResponse?> TestRuleAsync(
+            string adminUserId, string ruleId, OetLearner.Api.Contracts.WritingCanonRuleTestRequest request, CancellationToken ct)
             => throw new NotImplementedException();
     }
 
