@@ -254,7 +254,7 @@ describe('OpenCode adapter', () => {
       expect(permissionRequest).toHaveBeenCalledTimes(1);
       expect(events.map((item) => item.type)).toEqual(['tool_call', 'tool_output_delta', 'tool_result', 'text_delta', 'text', 'usage']);
       expect(events.find((item) => item.type === 'usage')).toMatchObject({ data: { inputTokens: 10, outputTokens: 5, costUsd: 0.01 } });
-      const sessionServer = spawned.find(({ args }) => args.includes('serve'));
+      const sessionServer = spawned.find(({ env }) => env.HTTPS_PROXY === 'http://session-proxy');
       expect(sessionServer?.args).toContain('--pure');
       expect(sessionServer?.args).toContain('127.0.0.1');
       expect(sessionServer?.args).not.toContain('--auto');
