@@ -22,6 +22,7 @@ export type EngineCapabilities = ConsoleStatus['engines'] | null | undefined;
 export const ENGINE_LABEL: Record<Engine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
+  opencode: 'OpenCode',
 };
 
 /** An engine is selectable only when signed in and reporting at least one model. */
@@ -108,7 +109,7 @@ export function EngineModelEffortPicker({
   if (!engines || !current) {
     return (
       <p className={cn('text-xs text-admin-fg-muted', className)} data-testid="picker-unavailable">
-        No engine is signed in yet. Connect Claude Code or Codex in Settings.
+        No engine is signed in yet. Connect Claude Code, Codex or OpenCode in Settings.
       </p>
     );
   }

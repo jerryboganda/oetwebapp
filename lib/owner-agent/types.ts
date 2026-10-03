@@ -12,7 +12,7 @@
 
 // ─── §1 Vocabulary ──────────────────────────────────────────────────────────
 
-export type Engine = 'claude' | 'codex';
+export type Engine = 'claude' | 'codex' | 'opencode';
 export type Mode = 'read_only' | 'guarded' | 'autopilot';
 export type SessionStatus =
   | 'idle'
@@ -23,11 +23,11 @@ export type SessionStatus =
   | 'archived';
 export type ApprovalDecision = 'approve' | 'deny' | 'approve_session';
 
-export const OWNER_AGENT_ENGINES: readonly Engine[] = ['claude', 'codex'];
+export const OWNER_AGENT_ENGINES: readonly Engine[] = ['claude', 'codex', 'opencode'];
 export const OWNER_AGENT_MODES: readonly Mode[] = ['read_only', 'guarded', 'autopilot'];
 
 export function isEngine(value: unknown): value is Engine {
-  return value === 'claude' || value === 'codex';
+  return value === 'claude' || value === 'codex' || value === 'opencode';
 }
 
 export function isMode(value: unknown): value is Mode {
@@ -58,6 +58,13 @@ export interface EngineAuth {
   detail?: string;
 }
 
+export interface EngineProvider {
+  id: string;
+  name: string;
+  connected: boolean;
+  oauthMethods: { index: number; label: string }[];
+}
+
 export interface EngineStatus {
   engine: Engine;
   version: string | null;
@@ -66,6 +73,7 @@ export interface EngineStatus {
   models: ModelInfo[];
   /** null = unknown yet. */
   rateLimits: RateLimit[] | null;
+  providers?: EngineProvider[];
 }
 
 export interface GithubStatus {
@@ -82,7 +90,7 @@ export interface ConsoleStatus {
   activeTurns: number;
   maxConcurrentTurns: number;
   lease: { expiresAt: string | null };
-  engines: { claude: EngineStatus; codex: EngineStatus };
+  engines: { claude: EngineStatus; codex: EngineStatus; opencode: EngineStatus };
   github: GithubStatus;
   /**
    * Additive to CONTRACT §3 (sidecar `src/contract.ts`): proxy approvals with no
@@ -105,6 +113,8 @@ export interface ConnectFlow {
   userCode?: string;
   expiresAt?: string;
   detail?: string;
+  providerId?: string;
+  providerName?: string;
 }
 
 export interface CreateSession {

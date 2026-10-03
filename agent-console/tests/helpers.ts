@@ -9,6 +9,7 @@ import type {
   Engine,
   EngineAdapter,
   EngineAuth,
+  EngineConnectOptions,
   EngineHooks,
   EngineSession,
   EngineStatus,
@@ -105,6 +106,7 @@ export class FakeAdapter implements EngineAdapter {
   readonly sessions: FakeEngineSession[] = [];
   script: TurnScript | null = null;
   authState: EngineAuth['state'] = 'signed_in';
+  connectOptions: EngineConnectOptions | undefined;
 
   constructor(readonly engine: Engine) {}
 
@@ -128,8 +130,9 @@ export class FakeAdapter implements EngineAdapter {
     return session;
   }
 
-  async connect(): Promise<ConnectFlow> {
-    return { flowId: 'flow-1', engine: this.engine, kind: this.engine === 'claude' ? 'paste_code' : 'device_code', state: 'pending' };
+  async connect(options?: EngineConnectOptions): Promise<ConnectFlow> {
+    this.connectOptions = options;
+    return { flowId: 'flow-1', engine: this.engine, kind: this.engine === 'claude' ? 'paste_code' : 'device_code', state: 'pending', ...(options?.providerId ? { providerId: options.providerId } : {}) };
   }
 
   getFlow(flowId: string): ConnectFlow | undefined {
@@ -219,7 +222,11 @@ export function createHarness(options: { maxConcurrentTurns?: number } = {}): Te
     },
     logger,
   });
-  const adapters: Record<Engine, FakeAdapter> = { claude: new FakeAdapter('claude'), codex: new FakeAdapter('codex') };
+  const adapters: Record<Engine, FakeAdapter> = {
+    claude: new FakeAdapter('claude'),
+    codex: new FakeAdapter('codex'),
+    opencode: new FakeAdapter('opencode'),
+  };
   const engines = {
     get: async (engine: Engine) => adapters[engine],
     status: async (engine: Engine) => adapters[engine].status(),

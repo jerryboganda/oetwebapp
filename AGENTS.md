@@ -114,9 +114,9 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 ## Owner Agent Console exception (owner directive 2026-09-27)
 
 The `oet-agent-console` sidecar on the production VPS (own compose project, `docker-compose.agent-console.yml`,
-images built only by `agent-console.yml`) is an **authorized environment for owner-initiated Claude Code / Codex
-sessions** started from `/admin/agent-console`. Nothing else in this file is relaxed for any other agent, host or
-user. Runbook: `docs/ops/OWNER-AGENT-CONSOLE.md` · wire contract: `agent-console/CONTRACT.md` · policy:
+images built only by `agent-console.yml`) is an **authorized environment for owner-initiated Claude Code / Codex /
+OpenCode sessions** started from `/admin/agent-console`. Nothing else in this file is relaxed for any other agent,
+host or user. Runbook: `docs/ops/OWNER-AGENT-CONSOLE.md` · wire contract: `agent-console/CONTRACT.md` · policy:
 `docs/AI-USAGE-POLICY.md` §20. **For console sessions only:**
 
 - **(a) No push to `main`.** Work on an `agent/*` branch + PR; merges happen only through the console's Ship
@@ -128,11 +128,13 @@ user. Runbook: `docs/ops/OWNER-AGENT-CONSOLE.md` · wire contract: `agent-consol
   `oetwebsite*` only (never co-tenants), `node scripts/ship/pre-push-gate.mjs`. **Forbidden:** `pnpm`/`npm`
   install/build/test, `dotnet`, `docker build` — dispatch `gh workflow run qa-smoke.yml` instead.
 - **(e)** Watch deploys with `gh run watch` (not `ship:watch` / `watch-deploy.ps1`).
-- **(f)** Carve-out from "one `AiUsageRecord` per physical provider call": subscription engines are not
-  `AiProvider`s and write no `AiUsageRecord`; evidence = `AuditEvent` (`OwnerAgent`) + session transcripts. The API does record an `AdminBatch` `AiUsageRecord` (`jev.development.triage`) for each Jev triage call it makes on an owner message, even though the sidecar writes none.
+- **(f)** Carve-out from "one `AiUsageRecord` per physical provider call": owner-console engines are not
+  product `AiProvider`s and their turns write no `AiUsageRecord`; evidence = `AuditEvent` (`OwnerAgent`) + session transcripts.
+  The API separately records an `AdminBatch` `AiUsageRecord` (`jev.development.triage`) for Jev triage calls on owner messages; the sidecar itself writes none.
 - **(g)** Continuity state lives in the sidecar session volume. Console sessions read and write neither `SESSION_STATE.md` / `TASKS.json` nor `PROGRESS.md`.
-- **(h)** SSH break-glass (`docker exec -it -u agent oet-agent-console claude auth login`, `docker stop
-  oet-agent-console`) is ops, not compute.
+- **(h)** SSH break-glass (`docker exec -it -u agent oet-agent-console claude auth login`,
+  `docker exec -it -u agent oet-agent-console opencode auth login`, `docker stop oet-agent-console`)
+  is ops, not compute.
 
 ## OET Writing Model Answers — COMPULSORY (owner directives 2026-09-13 + 2026-09-14)
 

@@ -6,7 +6,7 @@
 // The binary owns $CLAUDE_CONFIG_DIR/.credentials.json: this module never reads, copies, logs
 // or returns it (vendor terms: code.claude.com/docs/en/legal-and-compliance).
 //
-// Also hosts the small helpers shared by both engines' connect flows (flow registry, ULID
+// Also hosts the small helpers shared by all engine connect flows (flow registry, ULID
 // flow ids, AuthFlowError). Output parsers are pure and exported for tests.
 
 import { createRequire } from 'node:module';
@@ -45,7 +45,7 @@ export function isTerminalFlow(flow: Pick<ConnectFlow, 'state'>): boolean {
   return TERMINAL_STATES.has(flow.state);
 }
 
-type FlowPatch = Partial<Pick<ConnectFlow, 'state' | 'verificationUrl' | 'userCode' | 'expiresAt' | 'detail'>>;
+type FlowPatch = Partial<Pick<ConnectFlow, 'state' | 'verificationUrl' | 'userCode' | 'expiresAt' | 'detail' | 'providerId' | 'providerName'>>;
 
 /** In-memory connect flows for one engine. Terminal flows are immutable and kept for polling. */
 export class FlowRegistry {

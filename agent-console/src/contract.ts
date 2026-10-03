@@ -3,7 +3,7 @@
 
 import type { ApprovalDecision, EngineStatus, Engine, Mode } from './engines/types.js';
 
-export type { ApprovalDecision, ConnectFlow, Engine, EngineAuth, EngineStatus, Mode, ModelInfo, RateLimit } from './engines/types.js';
+export type { ApprovalDecision, ConnectFlow, Engine, EngineAuth, EngineConnectOptions, EngineProvider, EngineStatus, Mode, ModelInfo, RateLimit } from './engines/types.js';
 
 /**
  * Pseudo-session that carries the global "system" approval queue (CONTRACT.md §6:
@@ -14,7 +14,7 @@ export const SYSTEM_SESSION_ID = '00000000000000000000000000';
 
 export const ULID_PATTERN = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 
-export const ENGINES: readonly Engine[] = ['claude', 'codex'];
+export const ENGINES: readonly Engine[] = ['claude', 'codex', 'opencode'];
 export const MODES: readonly Mode[] = ['read_only', 'guarded', 'autopilot'];
 export const APPROVAL_DECISIONS: readonly ApprovalDecision[] = ['approve', 'deny', 'approve_session'];
 
@@ -51,7 +51,7 @@ export interface ConsoleStatus {
   activeTurns: number;
   maxConcurrentTurns: number;
   lease: { expiresAt: string | null };
-  engines: { claude: EngineStatus; codex: EngineStatus };
+  engines: { claude: EngineStatus; codex: EngineStatus; opencode: EngineStatus };
   github: GithubStatus;
   /**
    * Additive to CONTRACT.md §3: pending proxy approvals with no session attribution

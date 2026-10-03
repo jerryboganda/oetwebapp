@@ -33,9 +33,10 @@ export function isUpdatePending(file: string | null, fileExists: (file: string) 
 }
 
 export async function buildStatus(deps: StatusDeps): Promise<ConsoleStatus> {
-  const [claude, codex, github] = await Promise.all([
+  const [claude, codex, opencode, github] = await Promise.all([
     deps.engineStatus('claude'),
     deps.engineStatus('codex'),
+    deps.engineStatus('opencode'),
     deps.githubStatus().catch((error: unknown): GithubStatus => {
       deps.logger?.warn({ err: describeError(error) }, 'github status failed');
       return { agentTokenSet: false, shipTokenSet: false };
@@ -49,7 +50,7 @@ export async function buildStatus(deps: StatusDeps): Promise<ConsoleStatus> {
     activeTurns: deps.activeTurns(),
     maxConcurrentTurns: deps.maxConcurrentTurns,
     lease: { expiresAt: deps.lease.expiresAt() },
-    engines: { claude, codex },
+    engines: { claude, codex, opencode },
     github,
     systemApprovals: deps.systemApprovals(),
     systemSessionId: SYSTEM_SESSION_ID,

@@ -1,9 +1,10 @@
 # OET Owner Agent Console — sidecar
 
 Node 22 / TypeScript sidecar that runs **Claude Code** (via the Claude Agent
-SDK and its bundled CLI) and **OpenAI Codex** (`codex app-server`) for the
-**owner only**, behind `/admin/agent-console`. It is an operations tool, not a
-product AI feature: it is never an `AiProvider`, never reachable by learner
+SDK and its bundled CLI), **OpenAI Codex** (`codex app-server`), and **OpenCode**
+(`opencode serve` per session) for the **owner only**, behind
+`/admin/agent-console`. It is an operations tool, not a product AI feature: it
+is never an `AiProvider`, never reachable by learner
 traffic, and writes no `AiUsageRecord`.
 
 Read before changing anything here:
@@ -54,6 +55,8 @@ agent-console/
       claude.ts               Agent SDK query() adapter (PreToolUse hook → Guard)
       codex.ts                codex app-server JSON-RPC adapter (approval requests → Guard)
       codex-protocol.ts       hand-written app-server wire shapes + pure mappers
+      opencode.ts             per-session headless server + native permission mediation
+      opencode-protocol.ts    OpenCode permission/provider/model projections
     auth/
       claude.ts               PTY-driven `claude auth login` (URL + paste-back code)
       codex.ts                ChatGPT device-code login
@@ -93,7 +96,7 @@ Related files outside this folder: `docker-compose.agent-console.yml`,
 - **Control plane** (uid 0, capabilities dropped, `no-new-privileges`):
   HTTP server, Guard, session store, Ship executor. Only it can read the
   internal token, the proxy token, the Ship PAT and the session store.
-- **Agent** (uid/gid 10002): both engines and every tool subprocess, spawned
+- **Agent** (uid/gid 10002): all three engines and every tool subprocess, spawned
   through `/usr/local/bin/as-agent` with the env built by `src/env.ts`.
   Outbound HTTP only via `oet-agent-egress`; Docker only via
   `oet-agent-dockerproxy`; Postgres only via `oet-agent-dbproxy` as role
@@ -149,17 +152,21 @@ Never claim tests pass without quoting the Actions run, job and step.
   `OPENAI_API_KEY`, `CODEX_API_KEY` and `OWNER_AGENT_*` must stay stripped
   (a test asserts it).
 - **Credentials.** The engines own their credential files. Sidecar code never
-  reads, copies, logs or returns them; there is no API-key or paste-token
-  login path. GitHub tokens are write-only.
+  reads, copies, logs or returns them; OpenCode status projects safe OAuth
+  provider metadata only. There is no provider API-key or paste-token login
+  path. GitHub tokens are write-only.
 - **No secrets in code, tests, fixtures or examples.** Use obviously fake
   values; the redactor's own tests build token-shaped strings at runtime.
 - **Pinned versions.** Base image by digest; Agent SDK (with bundled CLI),
-  `@openai/codex`, gitleaks and apt packages are pinned; auto-updaters stay
+  `@openai/codex`, `opencode-ai` and `@opencode-ai/sdk` (both 1.18.34),
+  gitleaks and apt packages are pinned; the image asserts the OpenCode
+  version; auto-updaters stay
   disabled. Bumps go by PR. The Codex app-server wire shapes in
   `src/engines/codex-protocol.ts` are hand-written; before a `@openai/codex`
   bump, re-check every function marked VERIFY-ON-PIN against
   `codex app-server generate-ts` output of the new version (on Actions,
   never on a workstation).
 - **Resource budget.** Hard caps are 3 GiB RAM / 1.5 CPU / 512 pids, with at
-  most 2 live Claude queries + 1 Codex app-server. Don't add hosted
+  most 2 live turns across all engines. OpenCode's per-session servers close
+  after the configured idle timeout. Don't add hosted
   services to the .NET API for console work; it runs in three processes.

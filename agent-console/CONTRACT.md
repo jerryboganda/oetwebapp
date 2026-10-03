@@ -10,7 +10,7 @@ base32) unless stated otherwise.
 
 | Term | Values |
 |---|---|
-| `Engine` | `"claude"` \| `"codex"` |
+| `Engine` | `"claude"` \| `"codex"` \| `"opencode"` |
 | `Mode` | `"read_only"` \| `"guarded"` \| `"autopilot"` |
 | `SessionStatus` | `"idle"` \| `"running"` \| `"awaiting_approval"` \| `"interrupted"` \| `"error"` \| `"archived"` |
 | `ApprovalDecision` | `"approve"` \| `"deny"` \| `"approve_session"` |
@@ -21,12 +21,14 @@ base32) unless stated otherwise.
 | Identity | Container uid | Runs | Can read |
 |---|---|---|---|
 | control ("console") | `0` with `cap_drop: ALL` + `cap_add: SETUID, SETGID, KILL, CHOWN, FOWNER, DAC_OVERRIDE`, `no-new-privileges` | Fastify control server, Guard, session store, Ship executor | everything in the container |
-| agent | `10002:10002` | `claude` CLI (via Agent SDK), `codex app-server`, every tool subprocess | `/home/agent` (engine creds, agent PAT), `/workspace`, `/opt/oetwebapp` (ro) |
+| agent | `10002:10002` | `claude` CLI (via Agent SDK), `codex app-server`, per-session headless `opencode serve`, every tool subprocess | `/home/agent` (engine creds, agent PAT), `/workspace`, `/opt/oetwebapp` (ro) |
 
 - Engines are spawned through `/usr/local/bin/as-agent` (`setpriv --reuid=10002 --regid=10002 --clear-groups --reset-env`-style wrapper) with an allow-listed env (`src/env.ts`).
 - Control-only secrets: `/run/secrets/owner_agent_internal_token` (mode 0400 root), `/var/lib/oet-agent/ship-token` (0400 root), session store `/var/lib/oet-agent/sessions` (0700 root).
 - Networks: `oet_agent_ctl` (internal; API slots ↔ sidecar :8410) and `oet_agent_net` (internal; sidecar ↔ `oet-agent-egress:3128`, `oet-agent-dockerproxy:2375`, `oet-agent-dbproxy:5432`).
 - Agent env: `HTTPS_PROXY=HTTP_PROXY=http://oet-agent-egress:3128`, `NO_PROXY=oet-agent-dockerproxy,oet-agent-dbproxy,localhost,127.0.0.1`, `DOCKER_HOST=tcp://oet-agent-dockerproxy:2375`, `OET_AGENT_DATABASE_URL=postgres://oet_owner_agent:…@oet-agent-dbproxy:5432/<db>`.
+- OpenCode credentials remain in `/home/agent/.local/share/opencode/auth.json` on the existing `oet_agent_home` volume. The control API exposes provider IDs, names, connected state and OAuth method labels only; API keys and raw provider records are never returned.
+- Each OpenCode console session owns a loopback-only `opencode serve` process with that session's worktree and attributed allow-listed environment. The server runs `--pure`; every permission defaults to `ask`; each `permission.updated` request is mapped to `EngineHooks.onToolCall` and answered only after Guard/approval. Unsupported or incomplete permissions are rejected. `--auto` is never used.
 
 ## 3. Sidecar HTTP API (internal only)
 
@@ -43,9 +45,9 @@ Errors: `{ "error": { "code": string, "message": string } }` with 400/401/403/40
 | GET | `/healthz` | – | `{ ok: true, version, activeTurns, draining }` (no auth) |
 | GET | `/v1/status` | – | `ConsoleStatus` |
 | POST | `/v1/lease` | `{ expiresAt }` | `{ expiresAt }` (server clamps to now+3 min) |
-| POST | `/v1/auth/:engine/connect` | – | `ConnectFlow` |
+| POST | `/v1/auth/:engine/connect` | OpenCode: `{ providerId, methodIndex }`; Claude/Codex: – | `ConnectFlow` |
 | GET | `/v1/auth/:engine/flows/:flowId` | – | `ConnectFlow` |
-| POST | `/v1/auth/:engine/code` | `{ flowId, code }` | `ConnectFlow` (claude paste-code only) |
+| POST | `/v1/auth/:engine/code` | `{ flowId, code }` | `ConnectFlow` (Claude paste-code or OpenCode OAuth code flows only) |
 | POST | `/v1/auth/:engine/cancel` | `{ flowId }` | `ConnectFlow` |
 | POST | `/v1/auth/:engine/logout` | – | `EngineAuth` |
 | PUT | `/v1/github-tokens` | `{ agentToken?: string, shipToken?: string }` | `GithubStatus` (tokens are write-only, never returned) |
@@ -79,7 +81,7 @@ non-archived session, as before). Unknown keys are ignored; a bad value (or a re
 | Param | Values | Meaning |
 |---|---|---|
 | `q` | ≤ 100 chars after trim, no control characters | case-insensitive (ASCII) substring of `title` or `firstMessage`; empty = no filter |
-| `engine` | `claude` \| `codex` | only that engine |
+| `engine` | `claude` \| `codex` \| `opencode` | only that engine |
 | `status` | `idle` \| `running` \| `awaiting_approval` \| `interrupted` \| `error` \| `archived` | `archived` = archived sessions only (regardless of `includeArchived`); any other value = non-archived sessions in that status |
 | `includeArchived` | `true` \| `false` (case-insensitive) | also return archived sessions (default `false`) |
 | `before` | ISO-8601 timestamp | only sessions with `updatedAt` strictly earlier — pass the last item's `updatedAt` to fetch the next page |
@@ -112,7 +114,7 @@ type ConsoleStatus = {
   version: string; draining: boolean; killed: boolean; updatePending: boolean;
   activeTurns: number; maxConcurrentTurns: number;
   lease: { expiresAt: string | null };
-  engines: { claude: EngineStatus; codex: EngineStatus };
+  engines: { claude: EngineStatus; codex: EngineStatus; opencode: EngineStatus };
   github: GithubStatus;
 };
 type EngineStatus = {
@@ -120,6 +122,11 @@ type EngineStatus = {
   auth: EngineAuth;
   models: ModelInfo[];                 // empty until signed in
   rateLimits: RateLimit[] | null;      // null = unknown yet
+  providers?: EngineProvider[];        // OpenCode: safe provider names and OAuth methods only
+};
+type EngineProvider = {
+  id: string; name: string; connected: boolean;
+  oauthMethods: { index: number; label: string }[];
 };
 type EngineAuth = {
   state: "signed_out" | "signing_in" | "signed_in" | "error";
@@ -138,6 +145,7 @@ type ConnectFlow = {
   flowId: string; engine: Engine; kind: "paste_code" | "device_code";
   state: "pending" | "awaiting_code" | "completed" | "failed" | "cancelled" | "expired";
   verificationUrl?: string; userCode?: string; expiresAt?: string; detail?: string;
+  providerId?: string; providerName?: string; // OpenCode OAuth flow only
 };
 type GithubStatus = { agentTokenSet: boolean; shipTokenSet: boolean; login?: string };
 type CreateSession = {

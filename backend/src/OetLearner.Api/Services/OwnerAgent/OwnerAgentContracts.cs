@@ -12,6 +12,8 @@ public sealed record OwnerAgentLeaseRequest(DateTimeOffset? ExpiresAt);
 
 public sealed record OwnerAgentConnectCodeRequest(string? FlowId, string? Code);
 
+public sealed record OwnerAgentConnectRequest(string? ProviderId, int? MethodIndex);
+
 public sealed record OwnerAgentFlowRequest(string? FlowId);
 
 public sealed record OwnerAgentGithubTokensRequest(string? AgentToken, string? ShipToken);

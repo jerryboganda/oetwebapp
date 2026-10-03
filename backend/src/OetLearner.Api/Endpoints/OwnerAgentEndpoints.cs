@@ -308,18 +308,42 @@ public static partial class OwnerAgentEndpoints
 
     private static async Task<IResult> ConnectEngineAsync(
         string engine,
+        OwnerAgentConnectRequest? request,
         HttpContext http,
         OwnerAgentClient client,
         IOwnerAgentAuditService audit)
     {
         var validEngine = OwnerAgentIds.RequireEngine(engine);
-        var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.AuthConnect(validEngine), null);
-        await audit.WriteAsync(http.User, OwnerAgentAuditActions.EngineConnect, validEngine, new Dictionary<string, object?>
+        object? body = null;
+        if (validEngine == OwnerAgentIds.OpenCode)
+        {
+            var providerId = OwnerAgentIds.RequireOpaque(request?.ProviderId, "providerId", 128);
+            var methodIndex = request?.MethodIndex;
+            if (methodIndex is null or < 0 or > 100)
+            {
+                throw ApiException.Validation("invalid_method_index", "'methodIndex' must be from 0 through 100.");
+            }
+
+            body = new { providerId, methodIndex };
+        }
+        else if (request?.ProviderId is not null || request?.MethodIndex is not null)
+        {
+            throw ApiException.Validation("invalid_engine_auth", "Provider selection is only supported for OpenCode.");
+        }
+
+        var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.AuthConnect(validEngine), body);
+        var details = new Dictionary<string, object?>
         {
             ["engine"] = validEngine,
             ["status"] = relay.Status,
             ["flowId"] = ReadString(relay.Json, "flowId"),
-        }, http.RequestAborted);
+        };
+        if (body is not null)
+        {
+            details["providerId"] = request!.ProviderId;
+            details["methodIndex"] = request.MethodIndex;
+        }
+        await audit.WriteAsync(http.User, OwnerAgentAuditActions.EngineConnect, validEngine, details, http.RequestAborted);
         return relay.Result;
     }
 

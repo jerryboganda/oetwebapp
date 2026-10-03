@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# oet-agent-console — control plane + Claude Code / Codex engines of the Owner Agent Console
+# oet-agent-console — control plane + Claude Code / Codex / OpenCode engines of the Owner Agent Console
 # (agent-console/CONTRACT.md §2). Built only on GitHub Actions (.github/workflows/agent-console.yml,
 # context ./agent-console) and pulled by the VPS; never built there or on a workstation.
 #
@@ -101,7 +101,9 @@ ENV NODE_ENV=production \
     DISABLE_AUTOUPDATER=1 \
     DISABLE_UPDATES=1 \
     CLAUDE_CONFIG_DIR=/home/agent/.claude \
-    CODEX_HOME=/home/agent/.codex
+    CODEX_HOME=/home/agent/.codex \
+    OPENCODE_DISABLE_AUTOUPDATE=1 \
+    OPENCODE_DISABLE_PRUNE=1
 
 WORKDIR /app
 COPY --from=build /app/package.json ./package.json
@@ -115,7 +117,8 @@ COPY scripts/oet-env-edit /usr/local/bin/oet-env-edit
 # Wrappers + policy, and stable paths for the SDK-bundled engine binaries:
 #   /usr/local/lib/oet-agent/claude   the Agent SDK's bundled Claude Code (unmodified)
 #   /usr/local/lib/oet-agent/codex    the pinned @openai/codex native binary
-#   /usr/local/bin/{claude,codex}     same, for SSH break-glass `docker exec -u agent … claude auth login`
+#   /usr/local/lib/oet-agent/opencode pinned OpenCode npm wrapper/native binary (1.18.34)
+#   /usr/local/bin/{claude,codex,opencode} same stable paths for owner break-glass auth commands
 RUN set -eux; \
     for f in as-agent claude-as-agent oet-agent-entrypoint oet-env-edit oet-console-erase; do \
       sed -i 's/\r$//' "/usr/local/bin/$f"; \
@@ -133,11 +136,15 @@ RUN set -eux; \
     [ -n "$claude_bin" ] && [ -x "$claude_bin" ] || { echo "SDK-bundled Claude Code binary not found under $claude_pkg" >&2; exit 1; }; \
     codex_bin="$(find /app/node_modules/@openai -path '*linux*' -type f -name codex -perm -u+x | head -n 1)"; \
     [ -n "$codex_bin" ] || { echo "Codex native binary not found under node_modules/@openai" >&2; exit 1; }; \
+    opencode_bin="/app/node_modules/opencode-ai/bin/opencode.exe"; \
+    [ -x "$opencode_bin" ] || { echo "OpenCode 1.18.34 wrapper/native binary not found at $opencode_bin" >&2; exit 1; }; \
     install -d -m 0755 /usr/local/lib/oet-agent; \
     ln -sf "$claude_bin" /usr/local/lib/oet-agent/claude; \
     ln -sf "$codex_bin" /usr/local/lib/oet-agent/codex; \
+    ln -sf "$opencode_bin" /usr/local/lib/oet-agent/opencode; \
     ln -sf /usr/local/lib/oet-agent/claude /usr/local/bin/claude; \
     ln -sf /usr/local/lib/oet-agent/codex /usr/local/bin/codex; \
+    ln -sf /usr/local/lib/oet-agent/opencode /usr/local/bin/opencode; \
     install -d -m 0755 /etc/claude-code /etc/codex; \
     install -o root -g root -m 0644 /app/etc/managed-settings.json /etc/claude-code/managed-settings.json; \
     # Smoke-run both binaries with throwaway config dirs: nothing may be created under
@@ -145,7 +152,10 @@ RUN set -eux; \
     # root-owned files there would be unwritable for the agent).
     HOME=/tmp CLAUDE_CONFIG_DIR=/tmp/claude-version-check /usr/local/lib/oet-agent/claude --version; \
     HOME=/tmp CODEX_HOME=/tmp/codex-version-check /usr/local/lib/oet-agent/codex --version; \
-    rm -rf /tmp/.claude* /tmp/claude-version-check /tmp/codex-version-check; \
+    opencode_version="$(HOME=/tmp XDG_DATA_HOME=/tmp/opencode-data OPENCODE_CONFIG_DIR=/tmp/opencode-config /usr/local/lib/oet-agent/opencode --version)"; \
+    printf 'OpenCode version: %s\n' "$opencode_version"; \
+    printf '%s\n' "$opencode_version" | grep -Eq '(^|[^0-9])1\.18\.34([^0-9]|$)' || { echo "Expected OpenCode 1.18.34, got: $opencode_version" >&2; exit 1; }; \
+    rm -rf /tmp/.claude* /tmp/claude-version-check /tmp/codex-version-check /tmp/opencode-data /tmp/opencode-config; \
     [ ! -e /home/agent ] || { echo "/home/agent must not exist in the image" >&2; exit 1; }
 
 EXPOSE 8410

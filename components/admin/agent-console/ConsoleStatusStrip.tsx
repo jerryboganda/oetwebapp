@@ -159,7 +159,7 @@ export function ConsoleStatusStrip({
           </Button>
         ) : null}
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         {OWNER_AGENT_ENGINES.map((engine) => {
           const engineStatus = status?.engines?.[engine];
           const auth = engineStatus?.auth;

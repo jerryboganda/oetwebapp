@@ -18,6 +18,16 @@ import { VisibleText } from './VisibleText';
 const POLL_MS = 2_500;
 const TERMINAL_STATES: ReadonlySet<ConnectFlow['state']> = new Set(['completed', 'failed', 'cancelled', 'expired']);
 
+function safeOpenCodeAuthUrl(value: string | undefined): string | null {
+  if (!value || /[\u0000-\u001f\u007f]/.test(value)) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function isConnectFlowFinished(flow: ConnectFlow | null | undefined): boolean {
   return Boolean(flow && TERMINAL_STATES.has(flow.state));
 }
@@ -50,7 +60,9 @@ export interface ConnectEngineDialogProps {
  *   page shows back here; the CLI in the sidecar stores its own credentials.
  * - Codex (device_code): open the OpenAI verification URL and enter the user
  *   code before the countdown ends; completion is detected by polling.
- * Links are rendered only for https URLs on the vendor's own hosts.
+ * - OpenCode: opens an HTTPS provider OAuth URL; device-code flows complete by
+ *   polling and paste-code flows return through the native provider callback.
+ * Claude/Codex links use approved vendor hosts; OpenCode provider links must be HTTPS.
  */
 export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: ConnectEngineDialogProps) {
   const [flow, setFlow] = useState<ConnectFlow | null>(initialFlow);
@@ -101,8 +113,9 @@ export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: 
 
   if (!flow) return null;
 
-  const allowedHosts = flow.engine === 'claude' ? ANTHROPIC_SIGN_IN_HOSTS : OPENAI_SIGN_IN_HOSTS;
-  const safeUrl = safeExternalUrl(flow.verificationUrl, allowedHosts);
+  const safeUrl = flow.engine === 'opencode'
+    ? safeOpenCodeAuthUrl(flow.verificationUrl)
+    : safeExternalUrl(flow.verificationUrl, flow.engine === 'claude' ? ANTHROPIC_SIGN_IN_HOSTS : OPENAI_SIGN_IN_HOSTS);
 
   const close = () => {
     if (!finished) {
@@ -144,7 +157,9 @@ export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: 
         {flow.verificationUrl ? (
           <div className="space-y-1">
             <p className="font-medium text-admin-fg-strong">
-              1. {flow.kind === 'paste_code' ? 'Sign in with Anthropic' : 'Open the OpenAI device page'}
+              1. {flow.engine === 'opencode'
+                ? `Authorize ${flow.providerName ?? 'the OpenCode provider'}`
+                : flow.kind === 'paste_code' ? 'Sign in with Anthropic' : 'Open the OpenAI device page'}
             </p>
             {safeUrl ? (
               <a
@@ -158,7 +173,7 @@ export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: 
               </a>
             ) : (
               <p className="rounded-lg bg-red-50 p-2 text-xs text-red-800 dark:bg-red-950 dark:text-red-200" role="alert">
-                The sign-in URL is not an https link on the vendor&apos;s domain, so it is not clickable:{' '}
+                The sign-in URL is not an approved https link, so it is not clickable:{' '}
                 <span className="font-mono"><VisibleText text={flow.verificationUrl} /></span>
               </p>
             )}
@@ -193,7 +208,7 @@ export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: 
         {flow.kind === 'paste_code' && !finished ? (
           <form onSubmit={(event) => void submitCode(event)} className="space-y-1">
             <label htmlFor="owner-agent-connect-code" className="font-medium text-admin-fg-strong">
-              2. Paste the code shown after sign-in
+              2. {flow.engine === 'opencode' ? 'Paste the authorization code' : 'Paste the code shown after sign-in'}
             </label>
             <div className="flex gap-2">
               <input

@@ -1,8 +1,8 @@
 // Engine-neutral contract between the session layer (src/sessions.ts) and the
-// engine adapters (src/engines/claude.ts, src/engines/codex.ts).
+// engine adapters (src/engines/claude.ts, src/engines/codex.ts, src/engines/opencode.ts).
 // Wire shapes mirror agent-console/CONTRACT.md §3–§4; keep them in sync.
 
-export type Engine = 'claude' | 'codex';
+export type Engine = 'claude' | 'codex' | 'opencode';
 export type Mode = 'read_only' | 'guarded' | 'autopilot';
 export type ApprovalDecision = 'approve' | 'deny' | 'approve_session';
 
@@ -28,12 +28,20 @@ export interface EngineAuth {
   detail?: string;
 }
 
+export interface EngineProvider {
+  id: string;
+  name: string;
+  connected: boolean;
+  oauthMethods: { index: number; label: string }[];
+}
+
 export interface EngineStatus {
   engine: Engine;
   version: string | null;
   auth: EngineAuth;
   models: ModelInfo[];
   rateLimits: RateLimit[] | null;
+  providers?: EngineProvider[];
 }
 
 export interface ConnectFlow {
@@ -45,6 +53,13 @@ export interface ConnectFlow {
   userCode?: string;
   expiresAt?: string;
   detail?: string;
+  providerId?: string;
+  providerName?: string;
+}
+
+export interface EngineConnectOptions {
+  providerId?: string;
+  methodIndex?: number;
 }
 
 /** Result of the Guard for one tool call (src/guard.ts). */
@@ -93,8 +108,8 @@ export type EngineEvent =
 export interface EngineHooks {
   emit(event: EngineEvent): void;
   /**
-   * Called for EVERY tool call before it executes (Claude: PreToolUse hook; Codex: approval
-   * requests under approvalPolicy 'untrusted'). Resolves after Guard + (optional) owner
+  * Called for EVERY tool call before it executes (Claude: PreToolUse; Codex: untrusted approval;
+  * OpenCode: native permission request). Resolves after Guard + (optional) owner
    * approval + (optional) pre-snapshot. May take minutes.
    */
   onToolCall(req: ToolCallRequest, signal: AbortSignal): Promise<ToolDecision>;
@@ -107,7 +122,7 @@ export interface SessionEngineOptions {
   model: string;
   effort?: string;
   mode: Mode;
-  /** Engine-native id persisted by the session layer (Claude session_id / Codex threadId). */
+  /** Engine-native id persisted by the session layer (Claude session_id, Codex threadId, OpenCode session id). */
   resumeId?: string;
   /** Extra system instructions (etc/MANUAL.md + worktree AGENTS.md). */
   appendSystemPrompt: string;
@@ -136,7 +151,7 @@ export interface EngineAdapter {
   readonly engine: Engine;
   status(): Promise<EngineStatus>;
   openSession(opts: SessionEngineOptions): Promise<EngineSession>;
-  connect(): Promise<ConnectFlow>;
+  connect(options?: EngineConnectOptions): Promise<ConnectFlow>;
   getFlow(flowId: string): ConnectFlow | undefined;
   submitCode(flowId: string, code: string): Promise<ConnectFlow>;
   cancel(flowId: string): Promise<ConnectFlow>;

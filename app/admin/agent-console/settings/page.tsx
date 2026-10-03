@@ -27,6 +27,8 @@ const SIGN_IN_HELP: Record<Engine, string> = {
     'Signs the bundled Claude Code CLI in with your Claude subscription. You sign in on claude.ai and paste the code back here; the CLI keeps its own credentials inside the console container.',
   codex:
     'Signs Codex in with ChatGPT (device code). Open the OpenAI page, enter the code before it expires; Codex stores its own credentials inside the console container.',
+  opencode:
+    'Connects an OpenCode provider through its native OAuth flow. OpenCode keeps provider credentials in its own user data directory; API keys are not entered here.',
 };
 
 export default function AgentConsoleSettingsPage() {
@@ -34,14 +36,31 @@ export default function AgentConsoleSettingsPage() {
   const [flow, setFlow] = useState<ConnectFlow | null>(null);
   const [busyEngine, setBusyEngine] = useState<Engine | null>(null);
   const [confirmLogout, setConfirmLogout] = useState<Engine | null>(null);
+  const [selectedOpenCodeAuth, setSelectedOpenCodeAuth] = useState('');
   const [error, setError] = useState<string | null>(null);
   const status = consoleState.status;
+  const openCodeOAuthChoices = (status?.engines?.opencode?.providers ?? []).flatMap((provider) =>
+    provider.oauthMethods.map((method) => ({
+      value: `${provider.id}:${method.index}`,
+      providerId: provider.id,
+      providerName: provider.name,
+      methodIndex: method.index,
+      label: `${provider.name} · ${method.label}`,
+    })),
+  );
+  const openCodeAuth = openCodeOAuthChoices.find((choice) => choice.value === selectedOpenCodeAuth) ?? openCodeOAuthChoices[0];
 
   const connect = async (engine: Engine) => {
+    if (engine === 'opencode' && !openCodeAuth) {
+      setError('No OAuth sign-in methods are available for OpenCode.');
+      return;
+    }
     setBusyEngine(engine);
     setError(null);
     try {
-      setFlow(await connectEngine(engine));
+      setFlow(await connectEngine(engine, engine === 'opencode' && openCodeAuth
+        ? { providerId: openCodeAuth.providerId, methodIndex: openCodeAuth.methodIndex }
+        : undefined));
     } catch (err) {
       setError(describeOwnerAgentError(err, 'Could not start the sign-in.'));
     } finally {
@@ -116,6 +135,21 @@ export default function AgentConsoleSettingsPage() {
                   <CardDescription>{SIGN_IN_HELP[engine]}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-xs">
+                  {engine === 'opencode' ? (
+                    <label className="block space-y-1 text-xs font-medium text-admin-fg-muted" htmlFor="owner-agent-opencode-provider">
+                      <span>OAuth provider</span>
+                      <select
+                        id="owner-agent-opencode-provider"
+                        value={openCodeAuth?.value ?? ''}
+                        onChange={(event) => setSelectedOpenCodeAuth(event.target.value)}
+                        disabled={busyEngine !== null || openCodeOAuthChoices.length === 0}
+                        className="h-9 w-full rounded-lg border border-admin-border bg-admin-bg-surface px-2 text-xs text-admin-fg-default disabled:opacity-50"
+                      >
+                        {openCodeOAuthChoices.length === 0 ? <option value="">No OAuth providers available</option> : null}
+                        {openCodeOAuthChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                      </select>
+                    </label>
+                  ) : null}
                   <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                     <dt className="text-admin-fg-muted">Account</dt>
                     <dd className="truncate">{auth?.account?.email ?? '—'}</dd>
@@ -131,7 +165,13 @@ export default function AgentConsoleSettingsPage() {
                   {auth?.detail ? <p className="text-admin-fg-muted">{auth.detail}</p> : null}
                   <RateLimitBadge limits={engineStatus?.rateLimits} />
                   <div className="flex flex-wrap gap-2">
-                    <Button variant={signedIn ? 'outline' : 'primary'} size="sm" loading={busyEngine === engine} onClick={() => void connect(engine)}>
+                    <Button
+                      variant={signedIn ? 'outline' : 'primary'}
+                      size="sm"
+                      loading={busyEngine === engine}
+                      disabled={engine === 'opencode' && !openCodeAuth}
+                      onClick={() => void connect(engine)}
+                    >
                       <Plug className="h-4 w-4" aria-hidden="true" /> {signedIn ? 'Reconnect' : 'Connect'}
                     </Button>
                     {signedIn ? (

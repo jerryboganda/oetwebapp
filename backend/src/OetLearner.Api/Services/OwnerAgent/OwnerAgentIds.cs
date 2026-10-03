@@ -4,7 +4,7 @@ namespace OetLearner.Api.Services.OwnerAgent;
 
 /// <summary>
 /// Validation of every caller-supplied value that ends up in a sidecar URL
-/// (CONTRACT.md: ids are ULIDs; engines are <c>claude</c> | <c>codex</c>).
+/// (CONTRACT.md: ids are ULIDs; engines are <c>claude</c> | <c>codex</c> | <c>opencode</c>).
 /// Nothing reaches <see cref="OwnerAgentClient"/> path building unvalidated,
 /// so a crafted id can never traverse to another sidecar route.
 /// </summary>
@@ -12,8 +12,9 @@ public static partial class OwnerAgentIds
 {
     public const string Claude = "claude";
     public const string Codex = "codex";
+    public const string OpenCode = "opencode";
 
-    public static readonly IReadOnlySet<string> Engines = new HashSet<string>(StringComparer.Ordinal) { Claude, Codex };
+    public static readonly IReadOnlySet<string> Engines = new HashSet<string>(StringComparer.Ordinal) { Claude, Codex, OpenCode };
     public static readonly IReadOnlySet<string> Modes = new HashSet<string>(StringComparer.Ordinal) { "read_only", "guarded", "autopilot" };
     public static readonly IReadOnlySet<string> Decisions = new HashSet<string>(StringComparer.Ordinal) { "approve", "deny", "approve_session" };
 
@@ -36,7 +37,7 @@ public static partial class OwnerAgentIds
     public static string RequireEngine(string? value)
         => IsEngine(value)
             ? value!
-            : throw ApiException.Validation("invalid_engine", "Engine must be 'claude' or 'codex'.");
+            : throw ApiException.Validation("invalid_engine", "Engine must be 'claude', 'codex' or 'opencode'.");
 
     public static string RequireMode(string? value)
         => value is not null && Modes.Contains(value)

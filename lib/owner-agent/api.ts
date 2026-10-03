@@ -188,6 +188,13 @@ function opaqueSegment(value: string, label: string): string {
   return encodeURIComponent(value);
 }
 
+function providerSegment(value: string | undefined): string {
+  if (typeof value !== 'string' || value.length > 128 || !/^[A-Za-z0-9_.-]+$/.test(value)) {
+    throw new OwnerAgentClientError('Invalid OpenCode provider.');
+  }
+  return value;
+}
+
 function engineSegment(engine: Engine): Engine {
   if (!isEngine(engine)) throw new OwnerAgentClientError('Invalid engine.');
   return engine;
@@ -306,8 +313,18 @@ export async function listOwners(): Promise<{ accountId: string; email: string }
 
 // Helpers below are `async` so validation failures surface as rejected promises.
 
-export async function connectEngine(engine: Engine): Promise<ConnectFlow> {
-  return ownerAgentRequest<ConnectFlow>('POST', `/auth/${engineSegment(engine)}/connect`);
+export async function connectEngine(
+  engine: Engine,
+  options?: { providerId: string; methodIndex: number },
+): Promise<ConnectFlow> {
+  let body: { providerId: string; methodIndex: number } | undefined;
+  if (engine === 'opencode') {
+    if (!options || !Number.isInteger(options.methodIndex) || options.methodIndex < 0) {
+      throw new OwnerAgentClientError('Select an OpenCode OAuth method.');
+    }
+    body = { providerId: providerSegment(options.providerId), methodIndex: options.methodIndex };
+  }
+  return ownerAgentRequest<ConnectFlow>('POST', `/auth/${engineSegment(engine)}/connect`, body);
 }
 
 export async function getConnectFlow(engine: Engine, flowId: string): Promise<ConnectFlow> {

@@ -97,7 +97,7 @@ export interface SessionManagerDeps {
   /** Retention of engine-native transcripts (src/retention.ts); returns files removed. */
   pruneEngineTranscripts?: (days: number) => Promise<number>;
   /** Erasure of the engine-native transcripts of these engine session ids (src/retention.ts). */
-  removeEngineTranscripts?: (engineSessionIds: string[]) => Promise<number>;
+  removeEngineTranscripts?: (engineSessionIds: string[], engine: Engine, cwd: string) => Promise<number>;
   now?: () => number;
 }
 
@@ -650,14 +650,16 @@ export class SessionManager {
     }
     this.deps.approvals.cancelSession(id, 'owner');
     this.revokeProxyGrants(id);
+    const engineTranscripts =
+      row.resumeId && this.deps.removeEngineTranscripts
+        ? await this.deps.removeEngineTranscripts([row.resumeId], row.engine, row.worktree).catch(() => 0)
+        : 0;
     this.deps.store.deleteSession(id);
     if (this.deps.store.worktreeUsers(row.worktree, id).length === 0) {
       await this.deps.workspace.removeWorktree(row.worktree).catch((error: unknown) => {
         this.deps.logger.warn({ err: describeError(error), sessionId: id }, 'erase: worktree removal failed');
       });
     }
-    const engineTranscripts =
-      row.resumeId && this.deps.removeEngineTranscripts ? await this.deps.removeEngineTranscripts([row.resumeId]).catch(() => 0) : 0;
     this.deps.logger.warn({ sessionId: id, engineTranscripts }, 'session erased');
     return { erased: true, engineTranscripts };
   }

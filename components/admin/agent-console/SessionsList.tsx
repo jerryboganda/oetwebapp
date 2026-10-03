@@ -36,7 +36,7 @@ export function SessionsList({ sessions, loading = false, error, onCreate }: Ses
         size="sm"
         illustration={<Bot />}
         title="No sessions yet"
-        description="Start a session to have Claude Code or Codex work on the project."
+        description="Start a session to have Claude Code, Codex or OpenCode work on the project."
         primaryAction={onCreate ? { label: 'New session', onClick: onCreate } : undefined}
       />
     );

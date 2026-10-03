@@ -5,9 +5,9 @@ import {
   normalizePickerValue,
   type EngineCapabilities,
 } from '../EngineModelEffortPicker';
-import type { EngineStatus } from '@/lib/owner-agent/types';
+import type { Engine, EngineStatus } from '@/lib/owner-agent/types';
 
-function engineStatus(engine: 'claude' | 'codex', overrides: Partial<EngineStatus> = {}): EngineStatus {
+function engineStatus(engine: Engine, overrides: Partial<EngineStatus> = {}): EngineStatus {
   return {
     engine,
     version: '1.0.0',
@@ -30,6 +30,10 @@ const engines: EngineCapabilities = {
     auth: { state: 'signed_out' },
     models: [],
   }),
+  opencode: engineStatus('opencode', {
+    auth: { state: 'signed_out' },
+    models: [],
+  }),
 };
 
 function optionsOf(select: HTMLElement): string[] {
@@ -43,8 +47,9 @@ describe('EngineModelEffortPicker', () => {
     );
 
     const engine = screen.getByLabelText('Engine');
-    expect(optionsOf(engine)).toEqual(['Claude Code', 'Codex (not signed in)']);
+    expect(optionsOf(engine)).toEqual(['Claude Code', 'Codex (not signed in)', 'OpenCode (not signed in)']);
     expect((within(engine).getByRole('option', { name: 'Codex (not signed in)' }) as HTMLOptionElement).disabled).toBe(true);
+    expect((within(engine).getByRole('option', { name: 'OpenCode (not signed in)' }) as HTMLOptionElement).disabled).toBe(true);
 
     expect(optionsOf(screen.getByLabelText('Model'))).toEqual(['Alpha', 'Beta']);
     expect(optionsOf(screen.getByLabelText('Effort'))).toEqual(['low', 'medium (default)', 'high']);
@@ -83,6 +88,22 @@ describe('EngineModelEffortPicker', () => {
     expect(normalizePickerValue(null, { engine: 'claude' })).toBeNull();
   });
 
+  it('selects a connected OpenCode model without inventing an effort control', () => {
+    const onChange = vi.fn();
+    const capabilities: EngineCapabilities = {
+      ...engines,
+      opencode: engineStatus('opencode', {
+        models: [{ value: 'custom-provider/model/opaque', displayName: 'Provider · Model', supportsEffort: false, efforts: [] }],
+      }),
+    };
+    render(
+      <EngineModelEffortPicker engines={capabilities} value={{ engine: 'claude', model: 'model-alpha' }} onChange={onChange} />,
+    );
+
+    fireEvent.change(screen.getByLabelText('Engine'), { target: { value: 'opencode' } });
+    expect(onChange).toHaveBeenLastCalledWith({ engine: 'opencode', model: 'custom-provider/model/opaque' });
+  });
+
   it('warns about cache loss when switching model mid-session', () => {
     const { rerender } = render(
       <EngineModelEffortPicker
@@ -110,7 +131,7 @@ describe('EngineModelEffortPicker', () => {
   it('explains when no engine is signed in', () => {
     render(
       <EngineModelEffortPicker
-        engines={{ claude: engineStatus('claude', { auth: { state: 'signed_out' } }), codex: engineStatus('codex', { auth: { state: 'signed_out' } }) }}
+        engines={{ claude: engineStatus('claude', { auth: { state: 'signed_out' } }), codex: engineStatus('codex', { auth: { state: 'signed_out' } }), opencode: engineStatus('opencode', { auth: { state: 'signed_out' } }) }}
         value={null}
         onChange={vi.fn()}
       />,
