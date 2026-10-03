@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Security;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.OwnerAgent;
 
 namespace OetLearner.Api.Tests.OwnerAgent;
@@ -70,24 +71,152 @@ public sealed class OwnerAgentRelayTests
         Assert.Single(body.RootElement.EnumerateObject());
     }
 
-    [Fact]
-    public async Task Jev_Unavailable_PreventsOwnerMessageForwarding()
+    // ── Jev development triage is advice for the break-glass console, never a gate on it ──
+
+    private static async Task<(OwnerAgentWebApplicationFactory Factory, HttpClient Client, string Ticket)> JevUnlockedAsync()
     {
-        await using var factory = new OwnerAgentWebApplicationFactory { JevDevelopmentEnabled = true };
+        var factory = new OwnerAgentWebApplicationFactory { JevDevelopmentEnabled = true };
         await factory.SetFeatureFlagAsync(true);
         var owner = await factory.SeedOwnerAsync();
-        using var client = factory.CreateBearerClient(owner.AccessToken);
+        var client = factory.CreateBearerClient(owner.AccessToken);
         var ticket = await OwnerAgentWebApplicationFactory.UnlockAsync(client, owner);
+        return (factory, client, ticket);
+    }
 
+    private static async Task<HttpResponseMessage> PostMessageAsync(HttpClient client, string ticket, string text)
+    {
         using var request = OwnerAgentWebApplicationFactory.Unlocked(HttpMethod.Post,
             $"/v1/owner-agent/sessions/{FakeSidecarHandler.SessionId}/messages", ticket,
-            new { text = "Diagnose this grading exception", model = "owner-selected-model", effort = "high" });
-        var response = await client.SendAsync(request);
+            new { text, model = "owner-selected-model", effort = "high" });
+        return await client.SendAsync(request);
+    }
 
+    private static bool IsMessagePost(CapturedSidecarRequest call)
+        => call.Method == "POST" && call.PathAndQuery.EndsWith("/messages", StringComparison.Ordinal);
+
+    private static JsonElement ForwardedMessage(OwnerAgentWebApplicationFactory factory)
+    {
+        var call = Assert.Single(factory.Sidecar.Requests, IsMessagePost);
+        using var body = JsonDocument.Parse(call.Body!);
+        return body.RootElement.Clone();
+    }
+
+    /// <summary>A well-formed Ok triage result whose two Choice answers share <paramref name="confidence"/>.</summary>
+    private static JevJudgmentResult Triage(OwnerAgentWebApplicationFactory factory, string task, string risk, double confidence)
+    {
+        static JevAnswer Choice(string[] keys, string winner, double top)
+        {
+            var rest = (1 - top) / (keys.Length - 1);
+            var probabilities = keys.ToDictionary(key => key, key => key == winner ? top : rest);
+            return new JevAnswer(JevQuestionKind.Choice, null, new JevChoiceAnswer(winner, probabilities, top), null);
+        }
+
+        return new JevJudgmentResult(
+            JevCallStatus.Ok,
+            factory.Services.GetRequiredService<IOptions<TypeSafeOptions>>().Value.Model,
+            new Dictionary<string, JevAnswer>
+            {
+                ["task_kind"] = Choice(["implement", "debug", "review", "verify", "plan", "content", "other", "unclear"], task, confidence),
+                ["risk_level"] = Choice(["low", "elevated", "high", "unclear"], risk, confidence),
+            },
+            200, 10, null);
+    }
+
+    [Fact]
+    public async Task Jev_Unavailable_FailsOpen_AndForwardsTheMessageWithoutAdvice()
+    {
+        var (factory, client, ticket) = await JevUnlockedAsync();
+        await using var _ = factory;
+        using var __ = client;
+
+        // RecordingJevJudgments defaults to Unavailable("test_unavailable"): an outage / open breaker.
+        var response = await PostMessageAsync(client, ticket, "Diagnose this grading exception");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(1, factory.Judgments.Calls);
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
-        Assert.Equal("jev_unavailable", await OwnerAgentWebApplicationFactory.ReadCodeAsync(response));
-        Assert.DoesNotContain(factory.Sidecar.Requests, call => call.Method == "POST" && call.PathAndQuery.EndsWith("/messages", StringComparison.Ordinal));
+        var forwarded = ForwardedMessage(factory);
+        Assert.Equal("Diagnose this grading exception", forwarded.GetProperty("text").GetString());
+        Assert.Equal("owner-selected-model", forwarded.GetProperty("model").GetString());
+        Assert.False(forwarded.TryGetProperty("jevAdvisory", out var jevAdvisoryProp));
+    }
+
+    [Fact]
+    public async Task Jev_Disabled_NoKey_FailsOpen_AndForwardsTheMessageWithoutAdvice()
+    {
+        var (factory, client, ticket) = await JevUnlockedAsync();
+        await using var _ = factory;
+        using var __ = client;
+        factory.Judgments.Result = JevJudgmentResult.Disabled("typesafe_key_missing");
+
+        var response = await PostMessageAsync(client, ticket, "Diagnose this grading exception");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(ForwardedMessage(factory).TryGetProperty("jevAdvisory", out var jevAdvisoryProp));
+    }
+
+    [Fact]
+    public async Task Jev_ReviewRequired_BlocksASubstantiveMessage_AndNothingIsForwarded()
+    {
+        var (factory, client, ticket) = await JevUnlockedAsync();
+        await using var _ = factory;
+        using var __ = client;
+        factory.Judgments.Result = Triage(factory, "debug", "elevated", confidence: 0.55);
+
+        var response = await PostMessageAsync(client, ticket,
+            "Please look into the failing grading exception in the production API and tell me what you find.");
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal("jev_review_required", await OwnerAgentWebApplicationFactory.ReadCodeAsync(response));
+        Assert.DoesNotContain(factory.Sidecar.Requests, IsMessagePost);
+    }
+
+    [Fact]
+    public async Task Jev_ReviewRequired_OnATerseFollowUp_IsForwardedWithoutAdvice()
+    {
+        var (factory, client, ticket) = await JevUnlockedAsync();
+        await using var _ = factory;
+        using var __ = client;
+        factory.Judgments.Result = Triage(factory, "unclear", "unclear", confidence: 0.55);
+
+        var response = await PostMessageAsync(client, ticket, "continue");
+
+        // The real sidecar 409s any advisory that is not status "ok" / requiresHumanReview false.
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("continue", ForwardedMessage(factory).GetProperty("text").GetString());
+        Assert.False(ForwardedMessage(factory).TryGetProperty("jevAdvisory", out var jevAdvisoryProp));
+    }
+
+    [Theory]
+    [InlineData(59, HttpStatusCode.OK)]
+    [InlineData(60, HttpStatusCode.Conflict)]
+    public async Task Jev_ReviewRequired_BlocksFromSixtyCharacters(int length, HttpStatusCode expected)
+    {
+        var (factory, client, ticket) = await JevUnlockedAsync();
+        await using var _ = factory;
+        using var __ = client;
+        factory.Judgments.Result = Triage(factory, "debug", "elevated", confidence: 0.55);
+
+        var response = await PostMessageAsync(client, ticket, new string('a', length));
+
+        Assert.Equal(expected, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Jev_ConfidentTriage_IsForwardedWithTheAdviceAttached()
+    {
+        var (factory, client, ticket) = await JevUnlockedAsync();
+        await using var _ = factory;
+        using var __ = client;
+        factory.Judgments.Result = Triage(factory, "debug", "elevated", confidence: 0.95);
+
+        var response = await PostMessageAsync(client, ticket, "Diagnose this grading exception");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var advisory = ForwardedMessage(factory).GetProperty("jevAdvisory");
+        Assert.Equal("ok", advisory.GetProperty("status").GetString());
+        Assert.False(advisory.GetProperty("requiresHumanReview").GetBoolean());
+        Assert.Equal("debug", advisory.GetProperty("taskKind").GetString());
+        Assert.Equal("elevated", advisory.GetProperty("riskLevel").GetString());
     }
 
     [Theory]

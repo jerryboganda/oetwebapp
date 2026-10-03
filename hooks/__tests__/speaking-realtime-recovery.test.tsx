@@ -21,6 +21,7 @@ vi.mock('@/lib/api/speaking-live-voice', () => ({
 
 import {
   createSpeechTracker,
+  GEMINI_NUDGE_MS,
   GEMINI_STOP_DRAIN_MS,
   MAX_RECOVERIES,
   STALL_MS,
@@ -456,6 +457,57 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
       expect(result.current.connection).toBe('connected');
     });
 
+    it('sends one end-of-audio nudge to a silent Gemini patient before it restores the link', async () => {
+      const { result } = await mount();
+      await startVoice(result);
+      await candidateSpeaks(2_000);
+      const nudges = () => socket(0).sent.filter((frame) => frame.includes('audioStreamEnd')).length;
+
+      await advance(GEMINI_NUDGE_MS - 2_000);
+      expect(nudges()).toBe(0);
+      await advance(3_000);
+      expect(nudges()).toBe(1);
+      expect(result.current.recoveries).toBe(0);
+      await advance(3_000);
+      expect(nudges()).toBe(1); // one nudge per unanswered sentence
+
+      await advance(STALL_MS);
+      expect(result.current.recoveries).toBe(1);
+    });
+
+    it('times the first sentence of a restored Gemini session from its own audio, not from the words spoken into the dead link', async () => {
+      const { result } = await mount();
+      await startVoice(result);
+      await candidateSpeaks(2_000); // never transcribed: the provider is silent
+      await advance(9_000);
+      await candidateSpeaks(2_000); // "Hello? Can you hear me?", also lost
+      await advance(STALL_MS - 9_000);
+      expect(result.current.recoveries).toBe(1);
+
+      await mic('quiet', 500);
+      await mic('speech', 1_000);
+      await mic('quiet', 900);
+      await geminiSays(1, { inputTranscription: { text: 'Is it all right if I explain' } });
+      await geminiSays(1, { outputTranscription: { text: 'Yes please' }, turnComplete: true });
+      expect(await stopVoice(result)).toBe(true);
+
+      const candidate = savedSegments().find((segment) => segment.speaker === 'candidate');
+      expect(candidate).toBeDefined();
+      expect(candidate!.endMs - candidate!.startMs).toBeLessThanOrEqual(1_700);
+    });
+
+    it('restores the link as soon as Gemini announces its own disconnect (goAway)', async () => {
+      const { result } = await mount();
+      await startVoice(result);
+      await act(async () => {
+        socket(0).message({ goAway: { timeLeft: '10s' } });
+      });
+      await advance(0);
+
+      expect(mockToken).toHaveBeenCalledTimes(2);
+      expect(result.current.recoveries).toBe(1);
+    });
+
     it('counts the silence from the first sentence nobody answered, however much more the candidate says to a silent patient', async () => {
       // Production, 1 Oct 2026: the scripted candidate kept speaking every ~12 s to a stalled patient, each new
       // sentence restarted the 20 s clock, and the restore only came 94 s after the stall.
@@ -532,6 +584,27 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
       expect(mockOffer).toHaveBeenCalledTimes(2);
       expect(result.current.recoveries).toBe(1);
       expect(result.current.connection).toBe('connected');
+    });
+  });
+
+  describe('a Gemini disclaimer', () => {
+    it('is kept out of the saved transcript and the rest of the turn is not played', async () => {
+      const { result } = await mount();
+      await startVoice(result);
+      await mic('speech', 1_500);
+      await mic('quiet', 900);
+      await geminiSays(0, { inputTranscription: { text: 'How long did it last' } });
+      await geminiSays(0, { outputTranscription: { text: 'It lasted three days.' } });
+      const playedBefore = FakeAudioContext.instances.reduce((sum, context) => sum + context.sources.length, 0);
+      await geminiSays(0, { outputTranscription: { text: ' This information is not medical advice or diagnosis.' } });
+      await geminiSays(0, { modelTurn: { parts: [{ inlineData: { data: 'AAAA', mimeType: 'audio/pcm;rate=24000' } }] } });
+      await geminiSays(0, { turnComplete: true });
+      const playedAfter = FakeAudioContext.instances.reduce((sum, context) => sum + context.sources.length, 0);
+      expect(playedAfter).toBe(playedBefore); // nothing queued after the disclaimer began
+      expect(await stopVoice(result)).toBe(true);
+
+      const patient = savedSegments().find((segment) => segment.speaker === 'patient');
+      expect(patient?.text).toBe('It lasted three days.');
     });
   });
 

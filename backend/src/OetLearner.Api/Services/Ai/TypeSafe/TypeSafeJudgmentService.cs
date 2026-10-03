@@ -51,6 +51,10 @@ public sealed class TypeSafeJudgmentService(
     private const string Module = "jev";
     private const int MaxLoggedErrorMessageChars = 300;
 
+    /// <summary>Floor for the platform budget hold, so a tiny request never
+    /// holds a zero amount.</summary>
+    private const decimal MinReservationEstimateUsd = 0.000001m;
+
     public async Task<JevJudgmentResult> AskAsync(JevJudgmentRequest request, JevCallMetadata call, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -85,6 +89,14 @@ public sealed class TypeSafeJudgmentService(
         var payload = TypeSafeRequestBuilder.BuildPayload(request, opts.Model);
         var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload)));
 
+        // Hold what this call can really cost, not the flat default hold
+        // (~250x a Jev call, enough to exhaust the InteractiveLearning caps
+        // in a handful of calls): input tokens ~ wire chars / 4, doubled for
+        // tokenizer slack. Jev bills input tokens only.
+        var reservationEstimateUsd = Math.Max(
+            MinReservationEstimateUsd,
+            Math.Max(1, payload.Length / 4) * opts.CostPerInputTokenUsd * 2m);
+
         var lease = await recorder.BeginOperationAsync(new DirectAiOperationRequest
         {
             FeatureCode = call.FeatureCode,
@@ -98,8 +110,10 @@ public sealed class TypeSafeJudgmentService(
                 ? defaultPolicy.OperationClass
                 : AiOperationClass.InteractiveLearning,
             AllowRetryAfterFailure = true,
-        }, ct);
+        }, ct, reservationEstimateUsd);
 
+        // A refusal here includes the owner emergency levers (kill switch /
+        // per-feature kill list): fail-soft Unavailable, never an error.
         if (!lease.CanProceed)
             return JevJudgmentResult.Unavailable($"jev_lease_{lease.Disposition}:{lease.Reason}");
 
@@ -123,9 +137,15 @@ public sealed class TypeSafeJudgmentService(
                         StartedAt: clock.GetUtcNow());
 
                     var sw = System.Diagnostics.Stopwatch.StartNew();
+                    var sendStarted = false;
+                    var usageRecorded = false;
                     try
                     {
-                        var raw = await client.SendAsync(payload, ct);
+                        // Cancelled before dispatch = no provider call, so no
+                        // usage row; the reconciler closes the lease Cancelled.
+                        ct.ThrowIfCancellationRequested();
+                        sendStarted = true;
+                        var raw = await client.SendAsync(payload, ct, apiKey);
                         sw.Stop();
 
                         // Jev bills input tokens only; output tokens are free
@@ -145,9 +165,12 @@ public sealed class TypeSafeJudgmentService(
                             latencyMs: (int)sw.ElapsedMilliseconds,
                             policyTrace: $"jev.questions={request.Questions.Count}",
                             costEstimateUsd: costUsd,
-                            ct: ct,
+                            // The response was received (and billed): the row
+                            // must survive a caller cancelling right now.
+                            ct: CancellationToken.None,
                             operationId: lease.OperationId,
                             attemptNumber: lease.AttemptNumber);
+                        usageRecorded = true;
 
                         await recorder.CompleteOperationAsync(
                             lease.OperationId!,
@@ -163,6 +186,25 @@ public sealed class TypeSafeJudgmentService(
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested)
                     {
+                        // The caller walked away after the request was sent: it
+                        // may already be billed, so it must not go unrecorded.
+                        // CancellationToken.None because ct is already cancelled.
+                        if (sendStarted && !usageRecorded)
+                        {
+                            sw.Stop();
+                            await recorder.RecordFailureAsync(
+                                context,
+                                providerId: TypeSafeOptions.ProviderCode,
+                                model: null,
+                                outcome: AiCallOutcome.Cancelled,
+                                errorCode: "jev_cancelled",
+                                errorMessage: "Caller cancelled the judgment after the request was sent.",
+                                latencyMs: (int)sw.ElapsedMilliseconds,
+                                policyTrace: "jev.cancelled",
+                                ct: CancellationToken.None,
+                                operationId: lease.OperationId,
+                                attemptNumber: lease.AttemptNumber);
+                        }
                         throw;
                     }
                     catch (Exception ex)
@@ -177,7 +219,7 @@ public sealed class TypeSafeJudgmentService(
                             errorMessage: Truncate(ex.Message),
                             latencyMs: (int)sw.ElapsedMilliseconds,
                             policyTrace: "jev.failed",
-                            ct: ct,
+                            ct: CancellationToken.None,
                             operationId: lease.OperationId,
                             attemptNumber: lease.AttemptNumber);
                         throw;

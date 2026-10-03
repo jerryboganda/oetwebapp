@@ -100,6 +100,8 @@ public sealed class LiveVoiceInstructionBoundaryTests
         // Gemini appended "this is not medical advice ... see a healthcare professional" to its teach-back
         // replies in every full production run of 30 Sep 2026; the patient must never speak as an assistant.
         Assert.Contains("NO DISCLAIMERS: you are a person in a consultation, not an assistant", text, StringComparison.Ordinal);
+        // Restated as the very last line, after the card data.
+        Assert.EndsWith(LiveVoiceService.FinalPersonaReminder + Environment.NewLine, text, StringComparison.Ordinal);
         // Rule text precedes the card data label; no card content leaks above it.
         Assert.True(text.IndexOf("RULE_57", StringComparison.Ordinal) < text.IndexOf("FOR CONTEXT ONLY", StringComparison.Ordinal));
     }

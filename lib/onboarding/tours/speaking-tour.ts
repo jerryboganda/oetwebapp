@@ -35,7 +35,7 @@ export const speakingTour: TourDefinition = {
     },
     {
       title: 'How your answers are saved',
-      body: 'With the live AI patient, your conversation is saved as a text transcript, and no audio recording is stored. If live voice is unavailable, you record your answer instead and that recording is stored. Tutor or assessor feedback — on communication as well as language — is released afterward and appears with your past sessions.',
+      body: 'With the live AI patient, your conversation is saved as a text transcript and the audio is retained for a limited period. If live voice is unavailable, you record your answer instead and that recording is stored. Tutor or assessor feedback — on communication as well as language — is released afterward and appears with your past sessions.',
     },
   ],
 };

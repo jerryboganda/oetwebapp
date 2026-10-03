@@ -507,8 +507,150 @@ public sealed class TypeSafeJudgmentServiceTests
         Assert.Equal(1, recorder.BeginCalls);
         Assert.Equal(1, recorder.SuccessCalls);
         Assert.Equal(1, recorder.CompleteCalls);
-        Assert.Equal(2, registry.Reads);
+        // The service resolves the platform key once and hands it to the
+        // client: one registry read (and one Unprotect) per judgment.
+        Assert.Equal(1, registry.Reads);
         Assert.True(recorder.LastCostEstimateUsd > 0m);
+    }
+
+    [Fact]
+    public async Task Service_PassesItsResolvedKeyToTheClient_OneRegistryRead()
+    {
+        var registry = new MutableKeyRegistry { Key = "registry-key" };
+        var client = new CapturingClient();
+        var service = new TypeSafeJudgmentService(
+            client, new FakeRecorder(), Options.Create(EnabledOptions()),
+            TimeProvider.System, NullLogger<TypeSafeJudgmentService>.Instance, registry);
+
+        var result = await service.AskAsync(SampleRequest(), Call(), CancellationToken.None);
+
+        Assert.Equal(JevCallStatus.Ok, result.Status);
+        Assert.Equal("registry-key", client.LastPlatformKey);
+        Assert.Equal(1, registry.Reads);
+    }
+
+    [Fact]
+    public async Task Client_UsesAPassedKeyWithoutReadingTheRegistry()
+    {
+        var registry = new MutableKeyRegistry { Key = "registry-key" };
+        var sentKeys = new List<string>();
+        var handler = new StubHandler((request, _) =>
+        {
+            sentKeys.Add(request.Headers.Authorization!.Parameter!);
+            return Task.FromResult(JsonResponse(SuccessBody()));
+        });
+        using var services = new ServiceCollection()
+            .AddScoped<IAiProviderRegistry>(_ => registry)
+            .AddSingleton<IHttpClientFactory>(new SingleClientFactory(new HttpClient(handler)))
+            .AddSingleton<IOptions<TypeSafeOptions>>(Options.Create(EnabledOptions()))
+            .AddSingleton<ITypeSafeJudgmentClient, TypeSafeJudgmentClient>()
+            .BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        var client = services.GetRequiredService<ITypeSafeJudgmentClient>();
+
+        await client.SendAsync(
+            TypeSafeRequestBuilder.BuildPayload(SampleRequest(), "jev-1.13.0"), CancellationToken.None, "passed-key");
+
+        Assert.Equal(new[] { "passed-key" }, sentKeys);
+        Assert.Equal(0, registry.Reads);
+    }
+
+    [Fact]
+    public async Task Service_BudgetHoldIsSizedFromTheRequestNotTheFlatDefault()
+    {
+        var options = EnabledOptions();
+        var recorder = new FakeRecorder();
+        var service = new TypeSafeJudgmentService(
+            new CapturingClient(), recorder, Options.Create(options),
+            TimeProvider.System, NullLogger<TypeSafeJudgmentService>.Instance);
+
+        var result = await service.AskAsync(SampleRequest(), Call(), CancellationToken.None);
+
+        Assert.Equal(JevCallStatus.Ok, result.Status);
+        var payload = TypeSafeRequestBuilder.BuildPayload(SampleRequest(), options.Model);
+        var expected = Math.Max(1, payload.Length / 4) * options.CostPerInputTokenUsd * 2m;
+        Assert.Equal(expected, recorder.LastReservationEstimateUsd);
+        Assert.True(recorder.LastReservationEstimateUsd > 0.000001m);
+        Assert.True(recorder.LastReservationEstimateUsd < AiBudgetService.DefaultReservationEstimateUsd / 100m);
+    }
+
+    [Fact]
+    public async Task Service_BudgetHoldHasAFloor()
+    {
+        var options = EnabledOptions();
+        options.CostPerInputTokenUsd = 0m;
+        var recorder = new FakeRecorder();
+        var service = new TypeSafeJudgmentService(
+            new CapturingClient(), recorder, Options.Create(options),
+            TimeProvider.System, NullLogger<TypeSafeJudgmentService>.Instance);
+
+        await service.AskAsync(SampleRequest(), Call(), CancellationToken.None);
+
+        Assert.Equal(0.000001m, recorder.LastReservationEstimateUsd);
+    }
+
+    [Fact]
+    public async Task Service_OkPath_WritesExactlyOneUsageRowWithoutTheCallerToken()
+    {
+        var recorder = new FakeRecorder();
+        using var cts = new CancellationTokenSource();
+        var service = new TypeSafeJudgmentService(
+            new CapturingClient(), recorder, Options.Create(EnabledOptions()),
+            TimeProvider.System, NullLogger<TypeSafeJudgmentService>.Instance);
+
+        var result = await service.AskAsync(SampleRequest(), Call(), cts.Token);
+
+        Assert.Equal(JevCallStatus.Ok, result.Status);
+        Assert.Equal(1, recorder.SuccessCalls);
+        Assert.Equal(0, recorder.FailureCalls);
+        // The response was received and billed: the row must survive a caller
+        // cancelling right after it.
+        Assert.False(recorder.LastSuccessToken.CanBeCanceled);
+    }
+
+    // ── Cancellation accounting ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task Service_CancelledAfterDispatch_RecordsOneCancelledFailureThenRethrows()
+    {
+        var recorder = new FakeRecorder();
+        using var cts = new CancellationTokenSource();
+        var client = new CancellingClient(cts);
+        var service = new TypeSafeJudgmentService(
+            client, recorder, Options.Create(EnabledOptions()),
+            TimeProvider.System, NullLogger<TypeSafeJudgmentService>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.AskAsync(SampleRequest(), Call(), cts.Token));
+
+        Assert.Equal(1, client.Calls);
+        Assert.Equal(1, recorder.FailureCalls);
+        Assert.Equal(0, recorder.SuccessCalls);
+        Assert.Equal(AiCallOutcome.Cancelled, recorder.LastFailureOutcome);
+        Assert.Equal("jev_cancelled", recorder.LastFailureErrorCode);
+        // ct is already cancelled, so the write must not be bound to it.
+        Assert.False(recorder.LastFailureToken.CanBeCanceled);
+        Assert.Equal(1, recorder.CompleteCalls);
+        Assert.Equal(AiOperationState.Cancelled, recorder.LastCompletedState);
+    }
+
+    [Fact]
+    public async Task Service_CancelledBeforeDispatch_NeverSendsAndRecordsNoUsage()
+    {
+        var recorder = new FakeRecorder();
+        var client = new CapturingClient();
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var service = new TypeSafeJudgmentService(
+            client, recorder, Options.Create(EnabledOptions()),
+            TimeProvider.System, NullLogger<TypeSafeJudgmentService>.Instance);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.AskAsync(SampleRequest(), Call(), cts.Token));
+
+        Assert.Equal(0, client.Calls);
+        Assert.Equal(0, recorder.FailureCalls);
+        Assert.Equal(0, recorder.SuccessCalls);
+        Assert.Equal(AiOperationState.Cancelled, recorder.LastCompletedState);
     }
 
     [Theory]
@@ -596,8 +738,34 @@ public sealed class TypeSafeJudgmentServiceTests
 
     private sealed class FailingClient : ITypeSafeJudgmentClient
     {
-        public Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct)
+        public Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct, string? platformApiKey = null)
             => throw new InvalidOperationException("This test must not reach the transport.");
+    }
+
+    private sealed class CapturingClient : ITypeSafeJudgmentClient
+    {
+        public int Calls { get; private set; }
+        public string? LastPlatformKey { get; private set; }
+
+        public Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct, string? platformApiKey = null)
+        {
+            Calls++;
+            LastPlatformKey = platformApiKey;
+            return Task.FromResult(TypeSafeJudgmentClient.ParseResponse(SuccessBody()));
+        }
+    }
+
+    /// <summary>Simulates the caller cancelling while the request is in flight.</summary>
+    private sealed class CancellingClient(CancellationTokenSource cts) : ITypeSafeJudgmentClient
+    {
+        public int Calls { get; private set; }
+
+        public Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct, string? platformApiKey = null)
+        {
+            Calls++;
+            cts.Cancel();
+            throw new OperationCanceledException(ct);
+        }
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder)
@@ -637,10 +805,17 @@ public sealed class TypeSafeJudgmentServiceTests
         public int CompleteCalls { get; private set; }
         public AiOperationState? LastCompletedState { get; private set; }
         public decimal LastCostEstimateUsd { get; private set; }
+        public decimal? LastReservationEstimateUsd { get; private set; }
+        public AiCallOutcome? LastFailureOutcome { get; private set; }
+        public string? LastFailureErrorCode { get; private set; }
+        public CancellationToken LastSuccessToken { get; private set; }
+        public CancellationToken LastFailureToken { get; private set; }
 
-        public Task<DirectAiOperationLease> BeginOperationAsync(DirectAiOperationRequest request, CancellationToken ct)
+        public Task<DirectAiOperationLease> BeginOperationAsync(
+            DirectAiOperationRequest request, CancellationToken ct, decimal? reservationEstimateUsd = null)
         {
             BeginCalls++;
+            LastReservationEstimateUsd = reservationEstimateUsd;
             return Task.FromResult(lease ?? DirectAiOperationLease.Granted("op-1", 1));
         }
 
@@ -651,6 +826,7 @@ public sealed class TypeSafeJudgmentServiceTests
         {
             SuccessCalls++;
             LastCostEstimateUsd = costEstimateUsd;
+            LastSuccessToken = ct;
             return Task.FromResult<string?>("usage-1");
         }
 
@@ -660,6 +836,9 @@ public sealed class TypeSafeJudgmentServiceTests
             string? operationId = null, int? attemptNumber = null)
         {
             FailureCalls++;
+            LastFailureOutcome = outcome;
+            LastFailureErrorCode = errorCode;
+            LastFailureToken = ct;
             return Task.FromResult<string?>("usage-fail");
         }
 

@@ -1,5 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
@@ -24,8 +26,7 @@ public sealed record ConversationAiReply(
     string? ProviderName = null, string? ModelName = null,
     string? UsageRecordId = null, int LatencyMs = 0,
     decimal EstimatedCostUsd = 0m, int RetryCount = 0,
-    int PromptTokens = 0, int CompletionTokens = 0,
-    OetLearner.Api.Services.Ai.TypeSafe.ConversationTurnSignal? JevSignal = null);
+    int PromptTokens = 0, int CompletionTokens = 0);
 
 public sealed record ConversationAiCriterion(
     string Id, double Score06, string Evidence, IReadOnlyList<string> Quotes);
@@ -44,8 +45,12 @@ public sealed class ConversationAiOrchestrator(
     IAiGatewayService gateway,
     IConversationOptionsProvider optionsProvider,
     ILogger<ConversationAiOrchestrator> logger,
-    OetLearner.Api.Services.Ai.TypeSafe.IJevConversationAdvisor? jevAdvisor = null) : IConversationAiOrchestrator
+    IServiceScopeFactory? scopeFactory = null,
+    IOptions<TypeSafeOptions>? typeSafeOptions = null) : IConversationAiOrchestrator
 {
+    // Hard bound on one background advisory (the Jev client itself times out at 10 s per attempt).
+    private static readonly TimeSpan JevAdvisoryBudget = TimeSpan.FromSeconds(20);
+
     private Task<ConversationOptions> OptionsAsync(CancellationToken ct) => optionsProvider.GetAsync(ct);
 
     public Task<ConversationAiReply> GenerateOpeningAsync(ConversationAiContext ctx, CancellationToken ct)
@@ -73,18 +78,17 @@ public sealed class ConversationAiOrchestrator(
         var options = await OptionsAsync(ct);
 
         // Jev conversation advisory (Phase-2; TypeSafe:ConversationAdvisoryEnabled,
-        // default OFF). Judges the LEARNER's latest turn — advisory only; a
-        // null signal (flag off / unavailable / crash) changes nothing.
-        OetLearner.Api.Services.Ai.TypeSafe.ConversationTurnSignal? jevSignal = null;
-        if (jevAdvisor is not null && task == AiTaskMode.GenerateConversationReply && !string.IsNullOrWhiteSpace(ctx.TranscriptJson))
+        // default OFF). Judges the LEARNER's latest turn; the signal is only logged,
+        // so it runs OFF the turn path (the v1.1 turn latency SLA includes this
+        // method) in its own DI scope (the request scope's DbContext is not
+        // thread-safe). Flag off = no task, no scope, zero Jev calls.
+        if (task == AiTaskMode.GenerateConversationReply
+            && !string.IsNullOrWhiteSpace(ctx.TranscriptJson)
+            && scopeFactory is { } factory
+            && typeSafeOptions?.Value is { Enabled: true, ConversationAdvisoryEnabled: true })
         {
-            jevSignal = await jevAdvisor.AssessLatestTurnAsync(ctx.TranscriptJson, ctx.TurnIndex, ctx.UserId, ct);
-            if (jevSignal is { } s)
-            {
-                logger.LogInformation(
-                    "Jev conversation advisory turn {Turn} user {UserId}: inRole={InRole:F2} appropriate={Appropriate:F2} unsafe={Unsafe:F2}.",
-                    ctx.TurnIndex, ctx.UserId, s.StaysInRole, s.ClinicallyAppropriate, s.UnsafeContent);
-            }
+            var (transcriptJson, turnIndex, userId) = (ctx.TranscriptJson, ctx.TurnIndex, ctx.UserId);
+            _ = Task.Run(() => AssessJevAdvisoryAsync(factory, transcriptJson, turnIndex, userId));
         }
 
         var result = await gateway.CompleteAsync(new AiGatewayRequest
@@ -121,8 +125,32 @@ public sealed class ConversationAiOrchestrator(
             result.EstimatedCostUsd,
             result.RetryCount,
             result.Usage?.PromptTokens ?? 0,
-            result.Usage?.CompletionTokens ?? 0,
-            jevSignal);
+            result.Usage?.CompletionTokens ?? 0);
+    }
+
+    /// <summary>Fire-and-forget body: never throws, never touches the caller's scope.</summary>
+    private async Task AssessJevAdvisoryAsync(
+        IServiceScopeFactory factory, string transcriptJson, int turnIndex, string userId)
+    {
+        try
+        {
+            using var budget = new CancellationTokenSource(JevAdvisoryBudget);
+            using var scope = factory.CreateScope();
+            var advisor = scope.ServiceProvider.GetService<OetLearner.Api.Services.Ai.TypeSafe.IJevConversationAdvisor>();
+            if (advisor is null) return;
+
+            var signal = await advisor.AssessLatestTurnAsync(transcriptJson, turnIndex, userId, budget.Token);
+            if (signal is { } s)
+            {
+                logger.LogInformation(
+                    "Jev conversation advisory turn {Turn} user {UserId}: inRole={InRole:F2} appropriate={Appropriate:F2} unsafe={Unsafe:F2}.",
+                    turnIndex, userId, s.StaysInRole, s.ClinicallyAppropriate, s.UnsafeContent);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Jev conversation advisory failed for turn {Turn}; conversation unaffected.", turnIndex);
+        }
     }
 
     public async Task<ConversationAiEvaluation> EvaluateAsync(ConversationAiContext ctx, CancellationToken ct)

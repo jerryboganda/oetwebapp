@@ -23,6 +23,7 @@ public sealed class LiveVoiceContentReadinessService(
     private const string ProjectionGenerator = "server_visible_projection";
     private const string ProjectionGeneratorModel = "deterministic-visible-card-v1";
     private const string ProjectionProvenance = "role_play_card_visible_fields_projection";
+    private const string OwnerInputRequired = "jev_owner_input_required";
 
     public async Task<LiveVoiceContentReadiness> PrepareAsync(
         RolePlayCard card,
@@ -37,6 +38,13 @@ public sealed class LiveVoiceContentReadinessService(
         var sourceDigest = ComputeSourceDigest(card);
         var generated = BuildProjection(card);
         var validationStatus = await ValidateProjectionAsync(card, generated, ct);
+        if (validationStatus is not ("jev_validated" or OwnerInputRequired))
+        {
+            logger.LogInformation(
+                "Jev projection validation skipped ({Status}) for Speaking card {CardId}; voice start is not blocked.",
+                validationStatus, card.Id);
+        }
+
         var now = DateTimeOffset.UtcNow;
         var persisted = script ?? new InterlocutorScript
         {
@@ -65,7 +73,10 @@ public sealed class LiveVoiceContentReadinessService(
         persisted.Generator = ProjectionGenerator;
         persisted.GeneratorModel = ProjectionGeneratorModel;
         persisted.JevValidationStatus = validationStatus;
-        persisted.NeedsOwnerInput = validationStatus != "jev_validated";
+        // Only an explicit Jev negative verdict blocks the learner. Disabled / unavailable /
+        // timed-out Jev is "skipped": the projection is deterministic and built from the
+        // visible card, so a missing second opinion must never stop voice from starting.
+        persisted.NeedsOwnerInput = validationStatus == OwnerInputRequired;
         persisted.GeneratedAt ??= now;
         persisted.UpdatedAt = now;
 
@@ -85,7 +96,8 @@ public sealed class LiveVoiceContentReadinessService(
 
     /// <summary>
     /// Read-only half of <see cref="PrepareAsync"/>: the readiness of an authored
-    /// script, or of a still-current validated projection. Null when a projection
+    /// script, or of a still-current projection that is not waiting on owner input
+    /// (Jev-validated, or persisted while Jev was skipped). Null when a projection
     /// would have to be (re)generated, which writes and may call Jev, so the
     /// $0 corpus harness uses this and never generates.
     /// </summary>
@@ -106,9 +118,12 @@ public sealed class LiveVoiceContentReadinessService(
                 JevValidationStatus: script.JevValidationStatus ?? "not_required");
         }
 
+        // A projection saved while Jev was disabled/unavailable/slow is already usable
+        // (NeedsOwnerInput false); regenerating it on every voice call would rewrite the
+        // row and re-ask Jev each time. An explicit negative verdict keeps NeedsOwnerInput
+        // true, so it is still regenerated (and re-judged) until it passes or is authored.
         return string.Equals(script.SourceDigest, ComputeSourceDigest(card), StringComparison.Ordinal)
             && !script.NeedsOwnerInput
-            && string.Equals(script.JevValidationStatus, "jev_validated", StringComparison.Ordinal)
                 ? ProjectGenerated(script)
                 : null;
     }
@@ -188,8 +203,10 @@ public sealed class LiveVoiceContentReadinessService(
             {
                 JevCallStatus.Ok when IsPositive(result, "jev_live_voice_projection_grounded")
                     && IsPositive(result, "jev_live_voice_projection_consistent") => "jev_validated",
-                JevCallStatus.Ok => "jev_owner_input_required",
+                JevCallStatus.Ok when IsNegative(result, "jev_live_voice_projection_grounded")
+                    || IsNegative(result, "jev_live_voice_projection_consistent") => OwnerInputRequired,
                 JevCallStatus.Disabled => "jev_disabled",
+                // Unavailable, or an Ok result with no usable verdict: no judgment, carry on.
                 _ => "jev_unavailable",
             };
         }
@@ -257,4 +274,10 @@ public sealed class LiveVoiceContentReadinessService(
             && result.Answers.TryGetValue(id, out var answer)
             && answer.Noul is not null
             && answer.Noul.Probability >= 0.5;
+
+    private static bool IsNegative(JevJudgmentResult result, string id)
+        => result.Answers is not null
+            && result.Answers.TryGetValue(id, out var answer)
+            && answer.Noul is not null
+            && answer.Noul.Probability < 0.5;
 }

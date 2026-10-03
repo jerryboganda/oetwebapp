@@ -79,6 +79,8 @@ public sealed class AiBudgetClassesTests
     [InlineData(AiFeatureCodes.AdminContentGeneration, AiOperationClass.AdminBatch)]
     [InlineData(AiFeatureCodes.AdminWritingDraft, AiOperationClass.AdminBatch)]
     [InlineData(AiFeatureCodes.AiAssistantExpert, AiOperationClass.AdminBatch)]
+    [InlineData(AiFeatureCodes.JevDevelopmentTriage, AiOperationClass.AdminBatch)]
+    [InlineData(AiFeatureCodes.JevResponseVerify, AiOperationClass.InteractiveLearning)]
     [InlineData(AiFeatureCodes.AiAssistantLearner, AiOperationClass.InteractiveLearning)]
     [InlineData(AiFeatureCodes.OcrContentPdfFallback, AiOperationClass.AdminBatch)]
     [InlineData(AiFeatureCodes.OcrListeningPartA, AiOperationClass.AdminBatch)]

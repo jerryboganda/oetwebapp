@@ -1166,7 +1166,8 @@ public sealed class ListeningPartAAiScoringGuardTests
             return Task.FromResult<string?>("usage-failure-" + Failures.Count);
         }
 
-        public Task<DirectAiOperationLease> BeginOperationAsync(DirectAiOperationRequest request, CancellationToken ct)
+        public Task<DirectAiOperationLease> BeginOperationAsync(
+            DirectAiOperationRequest request, CancellationToken ct, decimal? reservationEstimateUsd = null)
         {
             BeginCalls++;
             return Task.FromResult(LeaseOverride

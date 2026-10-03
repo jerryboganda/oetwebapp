@@ -81,9 +81,13 @@ provider, or blocks an active turn.
 
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `TYPESAFE__ENABLED` | yes for generated-content readiness | `true` | Master TypeSafe switch. |
+| `TYPESAFE__ENABLED` | yes for generated-content readiness | `false` | Master TypeSafe switch. Off by default everywhere (class, `appsettings.json`, compose); production opts in explicitly. Every per-surface flag is a no-op until this is `true`. |
 | `TYPESAFE__APIKEY` | yes when enabled | — | Server-only TypeSafe credential. |
-| `TYPESAFE__CONVERSATIONADVISORYENABLED` | optional | `true` | Enables asynchronous Jev turn advisories. |
+| `TYPESAFE__CONVERSATIONADVISORYENABLED` | optional | `false` | Enables asynchronous Jev turn advisories. Needs `TYPESAFE__ENABLED=true`. |
+
+Every other TypeSafe variable (Writing, Companion, response-verify and
+development-triage flags, thresholds, retry and breaker settings), the key
+handling rules and the flag-flip order are in [typesafe.md](typesafe.md).
 
 ## ElevenLabs — TTS
 

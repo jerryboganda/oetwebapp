@@ -706,6 +706,17 @@ public sealed class AiProviderConnectionTester(
     {
         var baseUrl = provider.BaseUrl ?? string.Empty;
 
+        // TypeSafe Jev (Judgment category) is a typed-judgment API, not a chat endpoint:
+        // GET {base}/v1/models is the free auth + connectivity check (the same route the
+        // model-pin probe uses). Matched on dialect first so no chat/completions probe can
+        // ever be built for it, whatever category the row was saved under.
+        if (provider.Dialect == AiProviderDialect.TypeSafeJev)
+        {
+            var jevProbe = new HttpRequestMessage(HttpMethod.Get, new Uri(StripTrailingV1(baseUrl) + "/v1/models", UriKind.Absolute));
+            jevProbe.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            return new ProbePlan(jevProbe, null);
+        }
+
         // Keyless subscription sidecar rows: probe the sidecar's own health route. A real
         // completion would burn subscription quota, queue behind running grades on the sidecar's
         // single lane and outlive the 15 s probe timeout.

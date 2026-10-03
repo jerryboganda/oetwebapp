@@ -196,6 +196,36 @@ public static partial class SeedData
             UpdatedAt = now.AddDays(-30)
         });
 
+        var writingMarkingCaseNotes = new[]
+        {
+            "Mrs Eleanor Vance, 72 years old, was admitted on 2 June following a fall at home.",
+            "She had a fractured left neck of femur and underwent a hemiarthroplasty on 3 June.",
+            "Her recovery has been uncomplicated. She is mobilising with a frame and physiotherapy, and her wound is clean and dry.",
+            "Dr Patterson should review wound healing and anticoagulation in one week and arrange ongoing physiotherapy in the community."
+        };
+        for (var index = 0; index < writingMarkingCaseNotes.Length; index++)
+        {
+            db.WritingScenarioStructuredSentences.Add(new WritingScenarioStructuredSentence
+            {
+                Id = Guid.NewGuid(),
+                ScenarioId = writingMarkingScenarioId,
+                Ordinal = index + 1,
+                SentenceText = writingMarkingCaseNotes[index],
+                RelevanceLabel = "relevant",
+                CreatedAt = now.AddDays(-30)
+            });
+        }
+
+        db.WritingMocks.Add(new WritingMock
+        {
+            Id = Guid.NewGuid(),
+            ScenarioId = writingMarkingScenarioId,
+            Title = "Discharge referral - Mrs Eleanor Vance",
+            Difficulty = 3,
+            Status = "published",
+            CreatedAt = now.AddDays(-30)
+        });
+
         db.WritingSubmissions.Add(new WritingSubmission
         {
             Id = writingMarkingSubmissionId,
@@ -463,6 +493,18 @@ public static partial class SeedData
                 new { id = "wl-1", type = "credit_purchase", delta = 5, balanceAfter = 5, createdAt = now.AddDays(-14), note = "Purchased review credits" },
                 new { id = "wl-2", type = "credit_consumed", delta = -2, balanceAfter = 3, createdAt = now.AddDays(-7), note = "Tutor reviews requested" }
             })
+        });
+
+        db.AiPackageCreditAccounts.Add(new AiPackageCreditAccount
+        {
+            Id = "aipkg-demo-001",
+            UserId = userId,
+            WritingOnlyCredits = 3,
+            ListeningTestsRemaining = 0,
+            ReadingTestsRemaining = 0,
+            ExpiresAt = now.AddMonths(1),
+            CreatedAt = now,
+            UpdatedAt = now
         });
 
         db.Invoices.AddRange(

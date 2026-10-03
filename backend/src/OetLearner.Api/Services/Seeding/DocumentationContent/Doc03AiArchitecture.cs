@@ -30,8 +30,8 @@ internal static class Doc03AiArchitecture
                 "gateway fails over to the next by ascending priority under an atomic, race-safe SQL update " +
                 "(EV-AI-002)."),
             new DocumentationSectionBlock(
-                "The three canonical providers seeded at boot",
-                "An idempotent startup hook, `CoreAiProviderSeeder`, guarantees three canonical provider rows " +
+                "The four canonical providers seeded at boot",
+                "An idempotent startup hook, `CoreAiProviderSeeder`, guarantees four canonical provider rows " +
                 "exist on every deployment so an administrator only has to paste a key — never hand-create a row " +
                 "with a \"magic code\" (EV-AI-003). The seeded rows are real, named values read directly from the " +
                 "seeder source: `anthropic` (dialect Anthropic, category TextChat, default model " +
@@ -40,7 +40,9 @@ internal static class Doc03AiArchitecture
                 "Ocr, default model `mistral-ocr-latest`, used for Listening Part A extraction and as the " +
                 "scanned-PDF fallback across every content import); and `whisper-asr` (category Asr, default " +
                 "model `whisper-1`, one shared speech-to-text key covering Speaking, Pronunciation, and " +
-                "Conversation transcription) (EV-AI-003). Seeding is strictly additive — rows are created keyless " +
+                "Conversation transcription); and `typesafe-jev` (dialect TypeSafeJev, category Judgment, seeded " +
+                "inactive, holds the admin-pasted TypeSafe key and the GET /v1/models connectivity probe only — " +
+                "never a chat default or a feature-route target) (EV-AI-003). Seeding is strictly additive — rows are created keyless " +
                 "and are never overwritten once present, so an admin-pasted key, or a row already created by the " +
                 "voice-provider seeder from environment configuration, is preserved rather than clobbered on the " +
                 "next deploy (EV-AI-003)."),
@@ -135,7 +137,7 @@ internal static class Doc03AiArchitecture
                 "The AiProviderAccount entity and its atomic, race-safe SQL update contract for multi-credential failover under a monthly request cap.",
                 "backend/src/OetLearner.Api/Domain/AiProviderEntities.cs (AiProviderAccount, concurrency-contract doc comment)"),
             new DocumentationEvidenceSeed("EV-AI-003", DocumentationEvidenceType.Code,
-                "CoreAiProviderSeeder: the idempotent startup seeder that guarantees the anthropic (default model claude-sonnet-5), mistral-ocr (mistral-ocr-latest), and whisper-asr (whisper-1) provider rows exist, keyless and never overwritten.",
+                "CoreAiProviderSeeder: the idempotent startup seeder that guarantees the anthropic (default model claude-sonnet-5), mistral-ocr (mistral-ocr-latest), whisper-asr (whisper-1) and typesafe-jev (inactive, Judgment) provider rows exist, keyless and never overwritten.",
                 "backend/src/OetLearner.Api/Services/Ai/CoreAiProviderSeeder.cs"),
             new DocumentationEvidenceSeed("EV-AI-004", DocumentationEvidenceType.Architecture,
                 "Vendor-abstraction contract: IAiModelProvider as the single extension point; MockAiProvider and OpenAiCompatibleProvider as shipped implementations; adding a vendor is a single-class change.",

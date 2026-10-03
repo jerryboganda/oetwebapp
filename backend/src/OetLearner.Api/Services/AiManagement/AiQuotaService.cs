@@ -584,7 +584,8 @@ public sealed class AiQuotaService(
         return allowed.Any(a => string.Equals(a, featureCode, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool IsFeatureCodeInCsv(string csv, string featureCode)
+    // internal: DirectAiCallRecorder applies the same kill list to Jev features.
+    internal static bool IsFeatureCodeInCsv(string csv, string featureCode)
     {
         if (string.IsNullOrWhiteSpace(csv)) return false;
         var parts = csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

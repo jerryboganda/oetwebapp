@@ -59,11 +59,23 @@ public sealed class LiveVoiceService(
     // Appended to the instructions of a provider session minted after an earlier one (see
     // ComposeInstructionsAsync): the new session starts with no memory of the conversation.
     private const string ConversationSoFarHeader =
-        "CONVERSATION SO FAR: the live connection dropped and was restored. " +
+        "CONVERSATION SO FAR: the live connection was interrupted and restored. " +
         "Everything below was ALREADY said aloud in this consultation. " +
         "Continue seamlessly as the same patient: do not greet again, do not repeat anything already said, " +
-        "do not raise again a concern you already raised, and do not summarise. " +
-        "Wait for the candidate to speak next.";
+        "do not raise again a concern you already raised, and do not summarise.";
+    // Closes the replayed history (the history is the newest, densest text in the prompt, so the persona
+    // rules are restated after it). A restored session whose last saved turn is an unanswered candidate
+    // line must answer that line first: a stalled provider never did.
+    private const string RestoredPersonaReminder =
+        "END OF CONVERSATION SO FAR. You are still the patient: stay in role, never give medical advice or any " +
+        "disclaimer, use only the facts on your card, and in a teach-back repeat only what the doctor actually said.";
+    internal const string FinalPersonaReminder =
+        "FINAL REMINDER, APPLIES TO EVERY REPLY: you are the patient, never an assistant. Never say \"this is not medical advice\", " +
+        "never tell the candidate to consult or see a healthcare professional, and never add a disclaimer or safety note, " +
+        "not even when you repeat back what the candidate explained.";
+    private const string RestoredWaitForCandidate = "Wait for the candidate to speak next.";
+    private const string RestoredAnswerLastLineFirst =
+        "The candidate's last line above has NOT been answered yet: answer it first, in role, in one or two short sentences.";
     private const int MaxConversationSoFarChars = 4000;
     private const string ProviderUnavailableMessage = "The realtime voice provider could not start this conversation. Please retry.";
     private static readonly TimeSpan HangupTimeout = TimeSpan.FromSeconds(5);
@@ -550,6 +562,8 @@ public sealed class LiveVoiceService(
         var block = new List<string> { ConversationSoFarHeader };
         if (kept.Count < turns.Count) block.Add("(earlier turns omitted)");
         block.AddRange(kept);
+        var unanswered = kept.Count > 0 && kept[^1].Split('\n')[^1].StartsWith("Candidate:", StringComparison.Ordinal);
+        block.Add(RestoredPersonaReminder + " " + (unanswered ? RestoredAnswerLastLineFirst : RestoredWaitForCandidate));
         return $"{context.Instructions}\n{string.Join('\n', block)}";
     }
 
@@ -1247,6 +1261,10 @@ public sealed class LiveVoiceService(
         builder.AppendLine($"Closing cue: {script.ClosingCue}");
         builder.AppendLine($"Emotional state: {script.EmotionalState}");
         builder.AppendLine($"Role notes: {script.ProfessionRoleNotes ?? "not supplied"}");
+        // Restated last, where a live model weighs it most: Gemini kept appending a medical-advice disclaimer to
+        // its replies after the candidate explained something, with the NO DISCLAIMERS rule far above the card data.
+        builder.AppendLine();
+        builder.AppendLine(FinalPersonaReminder);
 
         return builder.ToString();
     }

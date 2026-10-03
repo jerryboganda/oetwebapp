@@ -39,6 +39,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(WidenSpeakingV11CardSlot), "20270102090300_WidenSpeakingV11CardSlot")]
     [InlineData(typeof(AddWritingDraftResumeState), "20270104090100_AddWritingDraftResumeState")]
     [InlineData(typeof(AddAiGlobalPolicyEnforceSpendCaps), "20270104090200_AddAiGlobalPolicyEnforceSpendCaps")]
+    [InlineData(typeof(AllowAiProviderCategoryJudgment), "20270105090000_AllowAiProviderCategoryJudgment")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

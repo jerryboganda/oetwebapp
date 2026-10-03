@@ -177,6 +177,72 @@ public sealed class AiUsageAdminEndpointsTests
         Assert.Equal(3, row.RetryCount);
     }
 
+    [Fact]
+    public async Task JevProvider_JudgmentRow_SavesWithoutADefaultModel_ButNeverAsChatOrAFeatureRoute()
+    {
+        using var env = DevAuthEnv.Enable();
+        using var factory = new TestWebApplicationFactory();
+        using var client = CreateAiConfigAdminClient(factory);
+
+        // A Jev dialect saved as TextChat could win the default chat pick with no adapter behind it,
+        // and a Judgment row on a chat dialect is meaningless: both pairings are refused.
+        foreach (var (dialect, category) in new[]
+        {
+            (AiProviderDialect.TypeSafeJev, AiProviderCategory.TextChat),
+            (AiProviderDialect.OpenAiCompatible, AiProviderCategory.Judgment),
+        })
+        {
+            var mismatched = await client.PostAsJsonAsync("/v1/admin/ai/providers", JevBody(dialect, category));
+            Assert.Equal(HttpStatusCode.BadRequest, mismatched.StatusCode);
+            Assert.Equal("ai_provider_judgment_pairing", await ErrorCodeAsync(mismatched));
+        }
+
+        // The real pairing saves active even with a blank DefaultModel (the pin is TypeSafeOptions.Model).
+        var created = await client.PostAsJsonAsync("/v1/admin/ai/providers",
+            JevBody(AiProviderDialect.TypeSafeJev, AiProviderCategory.Judgment, isActive: true, defaultModel: ""));
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
+
+        // Update path enforces the same pairing and accepts a valid edit.
+        var badUpdate = await client.PutAsJsonAsync($"/v1/admin/ai/providers/{id}",
+            JevBody(AiProviderDialect.TypeSafeJev, AiProviderCategory.TextChat, isActive: true));
+        Assert.Equal(HttpStatusCode.BadRequest, badUpdate.StatusCode);
+        Assert.Equal("ai_provider_judgment_pairing", await ErrorCodeAsync(badUpdate));
+        var goodUpdate = await client.PutAsJsonAsync($"/v1/admin/ai/providers/{id}",
+            JevBody(AiProviderDialect.TypeSafeJev, AiProviderCategory.Judgment, isActive: true));
+        Assert.Equal(HttpStatusCode.OK, goodUpdate.StatusCode);
+
+        // An active Jev row still cannot be a feature-route target (it would silently fall through).
+        var route = await client.PostAsJsonAsync("/v1/admin/ai/feature-routes",
+            new { featureCode = AiFeatureCodes.WritingGrade, providerCode = "typesafe-jev", model = (string?)null, isActive = true });
+        Assert.Equal(HttpStatusCode.BadRequest, route.StatusCode);
+        Assert.Equal("ai_provider_not_routable", await ErrorCodeAsync(route));
+    }
+
+    private static object JevBody(
+        AiProviderDialect dialect,
+        AiProviderCategory category,
+        bool isActive = false,
+        string defaultModel = "jev-1.13.0") => new
+    {
+        code = "typesafe-jev",
+        name = "TypeSafe Jev (typed judgments)",
+        dialect,
+        category,
+        baseUrl = "https://api.typesafe.ai",
+        apiKey = "test-jev-placeholder-0123456789",
+        defaultModel,
+        reasoningEffort = (string?)null,
+        allowedModelsCsv = "",
+        pricePer1kPromptTokens = 0m,
+        pricePer1kCompletionTokens = 0m,
+        retryCount = 2,
+        circuitBreakerThreshold = 5,
+        circuitBreakerWindowSeconds = 30,
+        failoverPriority = 28,
+        isActive,
+    };
+
     private static object ProviderBody(bool isActive, int retryCount) => new
     {
         code = WritingSubscriptionProviders.Claude,

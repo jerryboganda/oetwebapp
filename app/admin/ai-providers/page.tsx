@@ -315,6 +315,27 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     // before flipping live (or set UBAG_OET_PAT so the seeder keys the row).
     isActive: false,
   },
+  'typesafe-jev': {
+    // Code must stay `typesafe-jev` (TypeSafeOptions.ProviderCode): the backend
+    // reads the key from this row by that code. The startup seeder already
+    // creates it keyless + inactive, so normally you Edit that row instead.
+    code: 'typesafe-jev',
+    name: 'TypeSafe Jev (typed judgments)',
+    dialect: 'TypeSafeJev',
+    category: 'Judgment',
+    baseUrl: 'https://api.typesafe.ai',
+    // Pinned model (TypeSafeOptions.Model is the runtime pin; this is display only).
+    defaultModel: 'jev-1.13.0',
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 28,
+    // Default to inactive — paste the key here (never in files), Save, run
+    // "Test" (GET /v1/models) and only then tick Active.
+    isActive: false,
+  },
 };
 
 export default function AiProvidersPage() {
@@ -517,7 +538,7 @@ export default function AiProvidersPage() {
         banner={
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-admin-fg-muted">Filter by category:</span>
-            {(['All', 'TextChat', 'Tts', 'Asr', 'Phoneme', 'Ocr', 'PdfExtraction'] as const).map((cat) => (
+            {(['All', 'TextChat', 'Tts', 'Asr', 'Phoneme', 'Ocr', 'PdfExtraction', 'Judgment'] as const).map((cat) => (
               <Button
                 key={cat}
                 variant={categoryFilter === cat ? 'primary' : 'outline'}
@@ -585,12 +606,14 @@ export default function AiProvidersPage() {
                   { value: 'Anthropic', label: 'Anthropic (native)' },
                   { value: 'Cloudflare', label: 'Cloudflare Workers AI (native)' },
                   { value: 'Copilot', label: 'GitHub Copilot / Models' },
+                  { value: 'GeminiNative', label: 'Google Gemini (native)' },
                   { value: 'AzureTts', label: 'Azure Speech: TTS' },
                   { value: 'ElevenLabsTts', label: 'ElevenLabs: TTS' },
                   { value: 'AzureAsr', label: 'Azure Speech: ASR' },
                   { value: 'WhisperAsr', label: 'Whisper: ASR' },
                   { value: 'AzurePhoneme', label: 'Azure Pronunciation Assessment' },
                   { value: 'ElevenLabsStt', label: 'ElevenLabs Scribe: realtime STT' },
+                  { value: 'TypeSafeJev', label: 'TypeSafe Jev (typed judgments, not chat)' },
                   { value: 'Mock', label: 'Mock (dev only)' },
                 ]} />
               <Select label="Category" value={editing.category}
@@ -602,6 +625,7 @@ export default function AiProvidersPage() {
                   { value: 'Phoneme', label: 'Phoneme scoring' },
                   { value: 'Ocr', label: 'OCR (image / scanned PDF)' },
                   { value: 'PdfExtraction', label: 'PDF extraction (tables / forms / native text)' },
+                  { value: 'Judgment', label: 'Typed judgment (TypeSafe Jev)' },
                 ]} />
               <Input label="Base URL" value={editing.baseUrl} onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
               <Input label={creating ? 'API key' : 'API key (leave blank to keep)'} type="password" value={editing.apiKey ?? ''} onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })} />
@@ -620,7 +644,7 @@ export default function AiProvidersPage() {
                   <Button
                     variant="ghost"
                     onClick={() => void discoverModels()}
-                    disabled={creating || !editing.code || discoveringModels}
+                    disabled={creating || !editing.code || discoveringModels || editing.category === 'Judgment'}
                   >
                     {discoveringModels ? 'Discovering…' : 'Discover models'}
                   </Button>
@@ -648,6 +672,13 @@ export default function AiProvidersPage() {
                 <input type="checkbox" checked={editing.isActive} onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })} />
                 Active
               </label>
+              {editing.category === 'Judgment' && (
+                <p className="col-span-2 text-xs text-admin-fg-muted">
+                  Typed-judgment provider (not chat): it never answers learners or becomes a default or route target.
+                  Paste the API key here only; it is stored encrypted and shown as its last four characters, so never
+                  put it in files. Save, run Test (a GET on /v1/models), and only then tick Active.
+                </p>
+              )}
             </div>
             <div className="flex gap-3 mt-4">
               <Button variant="primary" onClick={() => void save()}>Save</Button>

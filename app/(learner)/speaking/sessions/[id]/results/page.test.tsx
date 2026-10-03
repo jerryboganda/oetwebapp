@@ -127,7 +127,7 @@ describe('Speaking session results: processing → result, never a dead end', ()
 
   describe('wording follows what the learner handed in', () => {
     const PROCESSING = { assessmentState: 'processing', retryable: false, failureReason: null };
-    const LIVE_NOTE = 'No audio recording is stored for live conversations, so there is nothing to play back. This transcript is what was marked.';
+    const LIVE_NOTE = 'Live conversations cannot be played back here. This transcript is what was marked.';
 
     it.each<[string | undefined, RegExp]>([
       ['live_voice', /^We saved the transcript of your live conversation on .+ and queued it for marking\.$/],

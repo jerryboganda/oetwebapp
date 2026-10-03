@@ -82,7 +82,7 @@ export default function SpeakingRecordingsPage() {
         icon={Mic}
         accent="speaking"
         title="My speaking recordings"
-        description="Manage the audio captured during your role-plays. No audio recording is stored for live AI patient conversations (only a text transcript is kept), so they are not listed here. You can delete a recording at any time. Recordings are also automatically removed after the retention window expires."
+        description="Manage the audio captured during your role-plays. Live AI patient conversations are not listed here; their audio is retained for a limited period and the transcript is what is marked. You can delete a recording at any time. Recordings are also automatically removed after the retention window expires."
       />
 
       {!rows ? (
@@ -95,7 +95,7 @@ export default function SpeakingRecordingsPage() {
             <EmptyState
               icon={<Mic className="h-8 w-8" />}
               title="You don't have any saved recordings."
-              description="No audio recording is stored for live AI patient conversations, so they don't appear here."
+              description="Live AI patient conversations don't appear here; their transcript is what is marked."
             />
           ) : (
             <ul className="space-y-3">

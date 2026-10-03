@@ -134,7 +134,7 @@ fi
 # Conversation). Backup settings are fail-closed separately unless the owner
 # sets the explicit break-glass acknowledgement. READING_SMOKE_* are CI test
 # fixtures, never runtime config.
-ADMIN_OPTIONAL_KEYS="AI__APIKEY AI__BASEURL AI__DEFAULTMODEL AI__PROVIDERID BREVO__APIKEY BREVO__EMAILVERIFICATIONTEMPLATEID BREVO__PASSWORDRESETTEMPLATEID CONVERSATION__ASRPROVIDER CONVERSATION__DEEPGRAMAPIKEY CONVERSATION__ELEVENLABSAPIKEY CONVERSATION__ENABLED CONVERSATION__TTSPROVIDER NEXT_PUBLIC_SENTRY_DSN PRONUNCIATION__AZURESPEECHKEY PRONUNCIATION__AZURESPEECHREGION PRONUNCIATION__PROVIDER READING_SMOKE_DISABLED_PAPER_ID READING_SMOKE_ENABLED_PAPER_ID READING_SMOKE_ENTITLED_MEDIA_ID READING_SMOKE_LEARNER_EMAIL READING_SMOKE_LEARNER_PASSWORD READING_SMOKE_PROTECTED_MEDIA_ID SENTRY_DSN"
+ADMIN_OPTIONAL_KEYS="AI__APIKEY AI__BASEURL AI__DEFAULTMODEL AI__PROVIDERID BREVO__APIKEY BREVO__EMAILVERIFICATIONTEMPLATEID BREVO__PASSWORDRESETTEMPLATEID CONVERSATION__ASRPROVIDER CONVERSATION__DEEPGRAMAPIKEY CONVERSATION__ELEVENLABSAPIKEY CONVERSATION__ENABLED CONVERSATION__TTSPROVIDER NEXT_PUBLIC_SENTRY_DSN PRONUNCIATION__AZURESPEECHKEY PRONUNCIATION__AZURESPEECHREGION PRONUNCIATION__PROVIDER READING_SMOKE_DISABLED_PAPER_ID READING_SMOKE_ENABLED_PAPER_ID READING_SMOKE_ENTITLED_MEDIA_ID READING_SMOKE_LEARNER_EMAIL READING_SMOKE_LEARNER_PASSWORD READING_SMOKE_PROTECTED_MEDIA_ID SENTRY_DSN TYPESAFE__APIKEY"
 is_admin_optional() {
   case " $ADMIN_OPTIONAL_KEYS " in *" $1 "*) return 0 ;; *) return 1 ;; esac
 }
@@ -533,10 +533,95 @@ case "$livekit_provider" in
     ;;
 esac
 
+# TypeSafe (Jev) tuning knobs are all optional: an unset key falls back to the
+# default docker-compose.production.yml forwards. A value that IS set must be
+# sane, because a bad threshold silently turns a judgment gate off (0) or makes
+# it unreachable (>1). Reference: docs/env/typesafe.md.
+require_unit_interval_if_set() {
+  local key="$1"
+  local value
+  value=$(read_env_value "$key" || true)
+  if [ -z "$value" ]; then
+    return 0
+  fi
+  if ! awk -v v="$value" 'BEGIN { exit !(v ~ /^([0-9]+([.][0-9]*)?|[.][0-9]+)$/ && v + 0 >= 0 && v + 0 <= 1) }' 2>/dev/null; then
+    echo "[env] $key must be a number between 0 and 1 when set" >&2
+    failed=1
+  fi
+}
+
+require_int_min_if_set() {
+  local key="$1"
+  local min="$2"
+  local value
+  value=$(read_env_value "$key" || true)
+  if [ -z "$value" ]; then
+    return 0
+  fi
+  case "$value" in
+    *[!0-9]*)
+      echo "[env] $key must be an integer >= $min when set" >&2
+      failed=1
+      return
+      ;;
+  esac
+  if [ "${#value}" -gt 9 ] || [ "$((10#$value))" -lt "$min" ]; then
+    echo "[env] $key must be an integer between $min and 999999999 when set" >&2
+    failed=1
+  fi
+}
+
+typesafe_surface_flags=(
+  TYPESAFE__WRITINGGUARDENABLED
+  TYPESAFE__WRITINGROUTEENABLED
+  TYPESAFE__WRITINGVERIFYENABLED
+  TYPESAFE__WRITINGCRITERIAENABLED
+  TYPESAFE__COMPANIONRERANKENABLED
+  TYPESAFE__CONVERSATIONADVISORYENABLED
+  TYPESAFE__RESPONSEVERIFYENABLED
+  TYPESAFE__DEVELOPMENTTRIAGEENABLED
+)
+for typesafe_bool in TYPESAFE__ENABLED "${typesafe_surface_flags[@]}"; do
+  # A malformed bool (on/yes/1) makes .NET option binding throw on first use, which is not fail-soft.
+  typesafe_bool_value=$(read_env_value "$typesafe_bool" || true)
+  case "$(printf '%s' "$typesafe_bool_value" | tr '[:upper:]' '[:lower:]')" in
+    ""|true|false) ;;
+    *)
+      echo "[env] $typesafe_bool must be true or false when set" >&2
+      failed=1
+      ;;
+  esac
+done
 typesafe_enabled=$(read_env_value TYPESAFE__ENABLED || true)
 if [ "$(printf '%s' "$typesafe_enabled" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
   require_min_length TYPESAFE__APIKEY 16
+else
+  # Warn only: every surface flag is a no-op until the master switch is on, so
+  # this is a mis-staged rollout, not a broken deploy.
+  for typesafe_flag in "${typesafe_surface_flags[@]}"; do
+    typesafe_flag_value=$(read_env_value "$typesafe_flag" || true)
+    if [ "$(printf '%s' "$typesafe_flag_value" | tr '[:upper:]' '[:lower:]')" = "true" ]; then
+      echo "[env] WARNING: $typesafe_flag=true has no effect while TYPESAFE__ENABLED is not true" >&2
+    fi
+  done
 fi
+# The six thresholds are probabilities; the per-token price is a USD fraction
+# (default 0.000000042), so anything above 1 is a typo there too.
+for typesafe_fraction in \
+  TYPESAFE__RESPONSECONFIDENCETHRESHOLD \
+  TYPESAFE__DEVELOPMENTCONFIDENCETHRESHOLD \
+  TYPESAFE__GUARDBLOCKTHRESHOLD \
+  TYPESAFE__GUARDREVIEWTHRESHOLD \
+  TYPESAFE__ROUTECONFIDENCETHRESHOLD \
+  TYPESAFE__VERIFYCONFIDENCETHRESHOLD \
+  TYPESAFE__COSTPERINPUTTOKENUSD; do
+  require_unit_interval_if_set "$typesafe_fraction"
+done
+require_int_min_if_set TYPESAFE__TIMEOUTSECONDS 1
+require_int_min_if_set TYPESAFE__MAXRETRIES 0
+require_int_min_if_set TYPESAFE__VERIFYMAXFINDINGSPERCALL 1
+require_int_min_if_set TYPESAFE__BREAKERFAILURETHRESHOLD 1
+require_int_min_if_set TYPESAFE__BREAKERCOOLDOWNSECONDS 1
 
 # GEPA placement engine connection is OPTIONAL in the env file (same owner
 # policy as live voice / LiveKit / TypeSafe): when both keys are empty the

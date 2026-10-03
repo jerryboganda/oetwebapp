@@ -217,7 +217,8 @@ public sealed class AiGatewayTurnAccountingTests : IAsyncDisposable
         var gateway = ActivatorUtilities.CreateInstance<AiGatewayService>(
             serviceProvider, _loader, new IAiModelProvider[] { provider });
 
-        var result = await gateway.CompleteAsync(NewRequest(gateway, operationId: null));
+        var result = await gateway.CompleteAsync(
+            NewRequest(gateway, operationId: null, AiFeatureCodes.ReadingExplanation));
 
         Assert.Equal(1, judgments.Calls);
         Assert.Equal(AiFeatureCodes.JevResponseVerify, judgments.LastCall?.FeatureCode);
@@ -229,7 +230,174 @@ public sealed class AiGatewayTurnAccountingTests : IAsyncDisposable
         Assert.Single(await db.AiUsageRecords.AsNoTracking().ToListAsync());
     }
 
+    /// <summary>Wave 1: the response review is scoped to the allowlisted
+    /// explanation features and attaches the advisory when ResponseVerify is on.</summary>
+    [Theory]
+    [InlineData(AiFeatureCodes.ReadingExplanation)]
+    [InlineData(AiFeatureCodes.ListeningExplanation)]
+    public async Task JevReview_AllowlistedExplanationFeature_GetsAdvisory_WhenResponseVerifyEnabled(string featureCode)
+    {
+        await using var db = new LearnerDbContext(_options);
+        var provider = new ScriptedMultiTurnProvider(Turn.Final("explanation text", 50, 5));
+        var judgments = new CapturingJudgments(_ => Task.FromResult(SupportedJudgment()));
+        var gateway = BuildJevGateway(db, provider, judgments);
+
+        var result = await gateway.CompleteAsync(NewRequest(gateway, operationId: null, featureCode));
+
+        Assert.Equal(1, judgments.Calls);
+        Assert.NotNull(result.JevAdvisory);
+        Assert.Equal("ok", result.JevAdvisory.Status);
+        Assert.False(result.JevAdvisory.RequiresHumanReview);
+        Assert.Equal("explanation text", result.Completion);
+    }
+
+    [Fact]
+    public async Task JevReview_AllowlistedFeature_MakesNoJevCall_WhenResponseVerifyDisabled()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var provider = new ScriptedMultiTurnProvider(Turn.Final("explanation text", 50, 5));
+        var judgments = new CapturingJudgments(_ => Task.FromResult(SupportedJudgment()));
+        var gateway = BuildJevGateway(db, provider, judgments, responseVerifyEnabled: false);
+
+        var result = await gateway.CompleteAsync(
+            NewRequest(gateway, operationId: null, AiFeatureCodes.ReadingExplanation));
+
+        Assert.Equal(0, judgments.Calls);
+        Assert.Null(result.JevAdvisory);
+        Assert.Equal("explanation text", result.Completion);
+    }
+
+    /// <summary>Wave 1: grading (each Claude Max attempt runs through this
+    /// gateway), conversation and pronunciation calls never pay a Jev review.</summary>
+    [Theory]
+    [InlineData(AiFeatureCodes.WritingGrade)]
+    [InlineData(AiFeatureCodes.SpeakingGrade)]
+    [InlineData(AiFeatureCodes.ConversationReply)]
+    [InlineData(AiFeatureCodes.PronunciationTip)]
+    [InlineData(AiFeatureCodes.AdminWritingDraft)]
+    public async Task JevReview_NeverRuns_ForGradingConversationPronunciationOrOtherFeatures(string featureCode)
+    {
+        await using var db = new LearnerDbContext(_options);
+        var provider = new ScriptedMultiTurnProvider(Turn.Final("graded", 50, 5));
+        var judgments = new CapturingJudgments(_ => Task.FromResult(SupportedJudgment()));
+        var gateway = BuildJevGateway(db, provider, judgments);
+
+        // A pre-made credit reservation skips the legacy token debit that
+        // writing.grade would otherwise require a credit service for.
+        var result = await gateway.CompleteAsync(
+            NewRequest(gateway, operationId: null, featureCode, creditReservationId: "reservation-1"));
+
+        Assert.Equal(0, judgments.Calls);
+        Assert.Null(result.JevAdvisory);
+        Assert.Equal("graded", result.Completion);
+        Assert.Equal(1, provider.Calls);
+    }
+
+    [Fact]
+    public async Task JevReview_ThrowingReviewer_StillReturnsCompletion()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var provider = new ScriptedMultiTurnProvider(Turn.Final("explanation text", 50, 5));
+        var judgments = new CapturingJudgments(
+            _ => Task.FromException<JevJudgmentResult>(new InvalidOperationException("jev exploded")));
+        var gateway = BuildJevGateway(db, provider, judgments);
+
+        var result = await gateway.CompleteAsync(
+            NewRequest(gateway, operationId: null, AiFeatureCodes.ReadingExplanation));
+
+        Assert.Equal(1, judgments.Calls);
+        Assert.Equal("explanation text", result.Completion);
+        Assert.True(result.JevAdvisory is null || result.JevAdvisory.Status == "unavailable");
+        Assert.Single(await db.AiUsageRecords.AsNoTracking().ToListAsync());
+    }
+
+    /// <summary>The caller's (attempt) token expiring while the review runs must
+    /// not discard the reply that was already served and billed.</summary>
+    [Fact]
+    public async Task JevReview_CallerTokenCancelledDuringReview_StillReturnsCompletion()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var provider = new ScriptedMultiTurnProvider(Turn.Final("explanation text", 50, 5));
+        using var callerCts = new CancellationTokenSource();
+        var judgments = new CapturingJudgments(ct =>
+        {
+            callerCts.Cancel();
+            ct.ThrowIfCancellationRequested();
+            return Task.FromResult(SupportedJudgment());
+        });
+        var gateway = BuildJevGateway(db, provider, judgments);
+
+        var result = await gateway.CompleteAsync(
+            NewRequest(gateway, operationId: null, AiFeatureCodes.ReadingExplanation), callerCts.Token);
+
+        Assert.Equal(1, judgments.Calls);
+        Assert.Equal("explanation text", result.Completion);
+        Assert.Null(result.JevAdvisory);
+        Assert.Single(await db.AiUsageRecords.AsNoTracking().ToListAsync());
+    }
+
+    /// <summary>A hung reviewer is cut off by the short linked timeout
+    /// (TypeSafe:TimeoutSeconds plus a 2 s margin, so about 3 s here) and cannot
+    /// delay the reply indefinitely.</summary>
+    [Fact]
+    public async Task JevReview_HungReviewer_TimesOut_AndStillReturnsCompletion()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var provider = new ScriptedMultiTurnProvider(Turn.Final("explanation text", 50, 5));
+        var judgments = new CapturingJudgments(async ct =>
+        {
+            await Task.Delay(System.Threading.Timeout.Infinite, ct);
+            return SupportedJudgment();
+        });
+        var gateway = BuildJevGateway(db, provider, judgments, timeoutSeconds: 1);
+
+        var result = await gateway.CompleteAsync(
+            NewRequest(gateway, operationId: null, AiFeatureCodes.ReadingExplanation));
+
+        Assert.Equal(1, judgments.Calls);
+        Assert.Equal("explanation text", result.Completion);
+        Assert.Null(result.JevAdvisory);
+    }
+
     private readonly RulebookLoader _loader = new();
+
+    private AiGatewayService BuildJevGateway(
+        LearnerDbContext db,
+        ScriptedMultiTurnProvider provider,
+        ITypeSafeJudgmentService judgments,
+        bool responseVerifyEnabled = true,
+        int timeoutSeconds = 10)
+        => new(
+            _loader,
+            new IAiModelProvider[] { provider },
+            usageRecorder: new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance),
+            logger: NullLogger<AiGatewayService>.Instance,
+            judgments: judgments,
+            judgmentOptions: Options.Create(new TypeSafeOptions
+            {
+                Enabled = true,
+                ApiKey = "apikey_test",
+                ResponseVerifyEnabled = responseVerifyEnabled,
+                TimeoutSeconds = timeoutSeconds,
+            }));
+
+    /// <summary>A contract-valid, fully supported response review.</summary>
+    private static JevJudgmentResult SupportedJudgment() => new(
+        JevCallStatus.Ok,
+        "jev-1.13.0",
+        new Dictionary<string, JevAnswer>
+        {
+            ["evidence_relation"] = new(JevQuestionKind.Choice, null,
+                new JevChoiceAnswer("supported", new Dictionary<string, double>
+                {
+                    ["supported"] = 1,
+                    ["contradicted"] = 0,
+                    ["insufficient_evidence"] = 0,
+                }, 1), null),
+            ["addresses_task"] = new(JevQuestionKind.Noul, new JevNoulAnswer(1), null, null),
+            ["unsafe_recommendation"] = new(JevQuestionKind.Noul, new JevNoulAnswer(0), null, null),
+        },
+        500, 85, null);
 
     private AiGatewayService BuildGateway(LearnerDbContext db, ScriptedMultiTurnProvider provider, int maxToolCalls = 4)
         => new(
@@ -241,11 +409,16 @@ public sealed class AiGatewayTurnAccountingTests : IAsyncDisposable
             toolOptions: Options.Create(new AiToolOptions { MaxToolCallsPerCompletion = maxToolCalls }),
             logger: NullLogger<AiGatewayService>.Instance);
 
-    private static AiGatewayRequest NewRequest(AiGatewayService gateway, string? operationId) => new()
+    private static AiGatewayRequest NewRequest(
+        AiGatewayService gateway,
+        string? operationId,
+        string featureCode = AiFeatureCodes.AdminWritingDraft,
+        string? creditReservationId = null) => new()
     {
-        FeatureCode = AiFeatureCodes.AdminWritingDraft,
+        FeatureCode = featureCode,
         UserId = "user-1",
         OperationId = operationId,
+        CreditReservationId = creditReservationId,
         UserInput = "draft me a letter",
         Prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
@@ -274,7 +447,8 @@ public sealed class AiGatewayTurnAccountingTests : IAsyncDisposable
         await db.SaveChangesAsync();
     }
 
-    private sealed class CapturingJudgments : ITypeSafeJudgmentService
+    private sealed class CapturingJudgments(Func<CancellationToken, Task<JevJudgmentResult>>? behavior = null)
+        : ITypeSafeJudgmentService
     {
         public int Calls { get; private set; }
         public JevCallMetadata? LastCall { get; private set; }
@@ -283,7 +457,9 @@ public sealed class AiGatewayTurnAccountingTests : IAsyncDisposable
         {
             Calls++;
             LastCall = call;
-            return Task.FromResult(JevJudgmentResult.Unavailable("fixture_unavailable"));
+            return behavior is null
+                ? Task.FromResult(JevJudgmentResult.Unavailable("fixture_unavailable"))
+                : behavior(ct);
         }
     }
 

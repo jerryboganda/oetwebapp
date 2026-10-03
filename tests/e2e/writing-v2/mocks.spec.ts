@@ -1,23 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { recoverBrowserSession } from '../fixtures/auth-bootstrap';
 
-/**
- * Writing V2 — mocks catalogue smoke (catalogue → start mock → session render).
- * Tags: @writing-v2 @smoke
- *
- * Validates:
- *  - /writing/mocks lists at least one published mock (per profession filter).
- *  - Clicking "Take this mock" opens a session, the case-notes panel renders,
- *    the editor mounts, and the strict-mode reading window is active.
- *
- * We do NOT submit the mock — mocks are 50 minutes and the smoke pack must
- * stay under 30s. Submission contract is covered by backend integration tests.
- *
- * Scope: chromium-learner only.
- */
-
 test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
-  test('mocks catalogue → start mock → session page renders', async ({
+  test('published mock starts with case notes and a locked reading phase', async ({
     page,
     request,
   }, testInfo) => {
@@ -33,51 +18,18 @@ test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
       }),
     ).toBeVisible({ timeout: 30_000 });
 
-    // The card CTA label is computed from the (default) Computer + Strict mode
-    // selection, so the button reads "Start strict mock" (it becomes "Start
-    // practice" / "Open paper mode" for the other modes). Match all variants.
-    const startButtons = page.getByRole('button', {
-      name: /(start strict mock|start practice|open paper mode|take this mock)/i,
-    });
-    const emptyState = page.getByText(/no mocks available yet/i);
-
-    // The catalogue hydrates asynchronously. Wait until it has settled into one
-    // of its two terminal states — at least one mock CTA, OR the empty-state
-    // message — before branching, so we never read `.count()` mid-load.
-    await expect(startButtons.first().or(emptyState)).toBeVisible({ timeout: 30_000 });
-
-    const startCount = await startButtons.count();
-    if (startCount === 0) {
-      // Empty seed for the learner's profession → spec describes this as
-      // "May show empty state if no mocks". Confirm the empty-state message
-      // and pass; the API contract is covered by backend tests.
-      await expect(emptyState).toBeVisible();
-      return;
-    }
-
-    expect(
-      startCount,
-      `Expected ≥1 mock for the learner's profession; got ${startCount}`,
-    ).toBeGreaterThanOrEqual(1);
+    const startButton = page.getByRole('button', { name: 'Start strict mock', exact: true }).first();
+    await expect(startButton).toBeVisible({ timeout: 30_000 });
 
     const startPromise = page.waitForResponse(
-      (r) =>
-        /\/v1\/writing\/mocks\/[^/]+\/start\b/.test(r.url())
-        && r.request().method() === 'POST',
+      (response) =>
+        new URL(response.url()).pathname.endsWith('/v1/writing/mocks/start')
+        && response.request().method() === 'POST',
       { timeout: 30_000 },
     );
-    await startButtons.first().click();
-
-    const startResponse = await startPromise.catch(() => null);
-    if (!startResponse || !startResponse.ok()) {
-      // 409 mock_already_active or 402 insufficient_credits or 404 mock_not_found.
-      // Surface as a skip rather than a fail because they signal environment
-      // state not the page contract.
-      const status = startResponse?.status() ?? 'no response';
-      const body = await startResponse?.text().catch(() => '');
-      test.skip(true, `Mock start did not succeed (${status}): ${body}`);
-      return;
-    }
+    await startButton.click();
+    const startResponse = await startPromise;
+    expect(startResponse.ok(), `Strict mock start returned HTTP ${startResponse.status()}`).toBe(true);
 
     await page.waitForURL(/\/writing\/mocks\/session\/[^/]+(?:\?.*)?$/, {
       timeout: 30_000,
@@ -89,12 +41,18 @@ test.describe('Writing V2 mocks @writing-v2 @smoke', () => {
       }),
     ).toBeVisible({ timeout: 30_000 });
 
-    // Editor surface mounts (id-less; locate by role textbox inside the
-    // writing-editor section). It is locked during the reading phase.
-    await expect(
-      page.getByRole('region', {
-        name: /writing editor/i,
-      }),
-    ).toBeVisible({ timeout: 30_000 });
+    const readingWindow = page.getByRole('dialog', { name: /^reading window/i });
+    await expect(readingWindow).toBeVisible({ timeout: 30_000 });
+    await expect(readingWindow.getByRole('heading', { name: 'Case notes', exact: true })).toBeVisible();
+    await expect(readingWindow.getByRole('list').first().getByRole('listitem').first()).toBeVisible();
+    await expect(readingWindow.getByRole('progressbar', { includeHidden: true }))
+      .toHaveAttribute('aria-valuenow', /^[1-9]\d*$/);
+    await expect(readingWindow.getByRole('button', { name: /skip|start writing/i })).toHaveCount(0);
+
+    const editor = page.locator('#mock-editor[contenteditable]');
+    await expect(editor).toBeAttached({ timeout: 30_000 });
+    await expect(editor).toHaveAttribute('contenteditable', 'false');
+    await page.keyboard.press('Escape');
+    await expect(readingWindow).toBeVisible();
   });
 });

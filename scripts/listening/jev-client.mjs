@@ -5,7 +5,7 @@
  * Wiring proven live 2026-09-19 (AGENT-HANDOFF-TYPESAFE-INTEGRATION.md §3/§4):
  *   POST https://api.typesafe.ai/v1/systemone
  *   Authorization: Bearer <TYPESAFE_API_KEY>
- *   { state, model: "jev-latest", questions: { id: {type, instructions, ...} } }
+ *   { state, model: "jev-1.13.0", questions: { id: {type, instructions, ...} } }
  *   → { model, answers: { id: <typed answer> }, usage }
  *
  * Contract (mirrors D:/Projects/chatgpt-jev/src/lib/judge.ts):
@@ -25,7 +25,10 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const API_URL = 'https://api.typesafe.ai/v1/systemone';
-const MODEL = 'jev-latest';
+// Pinned, never the `jev-latest` alias: thresholds are tuned against a fixed
+// version. Mirrors TypeSafeOptions.Model; bump deliberately and re-run the
+// jev-calibrate.yml workflow first.
+export const MODEL = 'jev-1.13.0';
 export const JEV_TIMEOUT_MS = 45_000;
 export const NOUL_YES = 0.7;
 export const NOUL_NO = 0.3;

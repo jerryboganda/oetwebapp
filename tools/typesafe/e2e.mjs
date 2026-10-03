@@ -8,9 +8,9 @@
  * key, model pin, or wire contract needs re-verification. Server-side only:
  * the key is read from the environment and never logged (masked report only).
  *
- * Usage (from OET Project Web App/):
- *   TYPESAFE_API_KEY=... node tools/typesafe/e2e.mjs
- *   TYPESAFE__APIKEY=... node tools/typesafe/e2e.mjs     (backend-style name)
+ * Runs on GitHub Actions only (repo AGENTS.md compute policy): dispatch
+ * .github/workflows/jev-calibrate.yml, which injects TYPESAFE_API_KEY from the
+ * repository secret. TYPESAFE__APIKEY (backend-style name) is also accepted.
  *
  * Env is read from process.env only — never CLI args, never files.
  */
@@ -78,8 +78,10 @@ const body = {
   },
 };
 
+// Actions logs on a public-when-working repo are world-readable: report only
+// the last 4 characters and the length, never any prefix of the key.
 function mask(key) {
-  return `${key.slice(0, 10)}…${key.slice(-4)} (len ${key.length})`;
+  return `…${key.slice(-4)} (len ${key.length})`;
 }
 
 async function main() {

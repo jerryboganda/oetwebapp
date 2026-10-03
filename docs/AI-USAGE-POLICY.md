@@ -168,7 +168,9 @@ Listening Part A Claude call are direct) but each writes exactly one
 
 **TypeSafe SystemOne (Jev):** judgments only — the model returns typed
 Choice/Noul/Score answers, never text. Provider code `typesafe-jev` resolves
-its key from `TypeSafe:ApiKey` (server-side only, never a client bundle);
+its key from the admin provider row first (category Judgment, seeded inactive,
+never a chat or feature-route target), falling back to `TypeSafe:ApiKey`
+(server-side only, never a client bundle; see `docs/env/typesafe.md`);
 calls flow through `TypeSafeJudgmentService` → `IDirectAiCallRecorder` like
 the other direct calls above and are budget-metered in the InteractiveLearning
 class. Jev output never overrides the rulebook-grounded gateway verdicts, the

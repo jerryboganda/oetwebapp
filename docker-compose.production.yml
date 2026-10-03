@@ -91,6 +91,27 @@ x-learner-api-slot: &learner-api-slot
     TypeSafe__ConversationAdvisoryEnabled: ${TYPESAFE__CONVERSATIONADVISORYENABLED:-false}
     TypeSafe__TimeoutSeconds: ${TYPESAFE__TIMEOUTSECONDS:-10}
     TypeSafe__MaxRetries: ${TYPESAFE__MAXRETRIES:-2}
+    TypeSafe__CostPerInputTokenUsd: ${TYPESAFE__COSTPERINPUTTOKENUSD:-0.000000042}
+    # Per-surface Jev switches (all OFF) and thresholds. The env list is closed
+    # (no env_file), so each TypeSafeOptions property is forwarded explicitly.
+    # A surface flag does nothing unless TYPESAFE__ENABLED is also true; see
+    # docs/env/typesafe.md for the flag-flip order.
+    TypeSafe__WritingGuardEnabled: ${TYPESAFE__WRITINGGUARDENABLED:-false}
+    TypeSafe__WritingRouteEnabled: ${TYPESAFE__WRITINGROUTEENABLED:-false}
+    TypeSafe__WritingVerifyEnabled: ${TYPESAFE__WRITINGVERIFYENABLED:-false}
+    TypeSafe__WritingCriteriaEnabled: ${TYPESAFE__WRITINGCRITERIAENABLED:-false}
+    TypeSafe__CompanionRerankEnabled: ${TYPESAFE__COMPANIONRERANKENABLED:-false}
+    TypeSafe__ResponseVerifyEnabled: ${TYPESAFE__RESPONSEVERIFYENABLED:-false}
+    TypeSafe__ResponseConfidenceThreshold: ${TYPESAFE__RESPONSECONFIDENCETHRESHOLD:-0.80}
+    TypeSafe__DevelopmentTriageEnabled: ${TYPESAFE__DEVELOPMENTTRIAGEENABLED:-false}
+    TypeSafe__DevelopmentConfidenceThreshold: ${TYPESAFE__DEVELOPMENTCONFIDENCETHRESHOLD:-0.80}
+    TypeSafe__GuardBlockThreshold: ${TYPESAFE__GUARDBLOCKTHRESHOLD:-0.80}
+    TypeSafe__GuardReviewThreshold: ${TYPESAFE__GUARDREVIEWTHRESHOLD:-0.50}
+    TypeSafe__RouteConfidenceThreshold: ${TYPESAFE__ROUTECONFIDENCETHRESHOLD:-0.70}
+    TypeSafe__VerifyConfidenceThreshold: ${TYPESAFE__VERIFYCONFIDENCETHRESHOLD:-0.60}
+    TypeSafe__VerifyMaxFindingsPerCall: ${TYPESAFE__VERIFYMAXFINDINGSPERCALL:-12}
+    TypeSafe__BreakerFailureThreshold: ${TYPESAFE__BREAKERFAILURETHRESHOLD:-5}
+    TypeSafe__BreakerCooldownSeconds: ${TYPESAFE__BREAKERCOOLDOWNSECONDS:-30}
     Speaking__Whisper__ApiKey: ${SPEAKING__WHISPER__APIKEY:-}
     Speaking__Whisper__BaseUrl: ${SPEAKING__WHISPER__BASEURL:-https://api.openai.com/v1}
     Speaking__Whisper__Model: ${SPEAKING__WHISPER__MODEL:-whisper-1}
