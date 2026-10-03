@@ -174,7 +174,10 @@ launcher is silent anywhere there is no ledger.
 5. **Push** — `git push origin HEAD:main` (never `--force`) with fetch/rebase/gate retry.
 6. **Watch** — `watch-deploy.ps1 -SkipPublic -SkipPrivateFlip`, supersede-aware: when a newer push
    replaced this SHA before its deploy ran, it adopts the newer run and prints
-   `SHIP-WATCH_SUPERSEDED_BY <sha>`.
+   `SHIP-WATCH_SUPERSEDED_BY <sha>`. The same applies after the rollout — if the router slot ends
+   up carrying a **descendant** of this SHA, it prints `SHIP-WATCH_SUPERSEDED_BY_LIVE <sha>` and
+   succeeds; `LIVE_SHA_MISMATCH` (exit 4) is reserved for a slot carrying neither this SHA nor a
+   descendant, i.e. traffic genuinely still on an older build.
 7. **Record** — `ax:record` on green (the evidence rule above still applies).
 
 Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--no-visibility`, `--sha <sha>`,

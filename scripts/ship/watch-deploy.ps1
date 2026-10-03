@@ -49,6 +49,26 @@ function Set-RepoVisibility {
     }
 }
 
+# Does $Candidate contain $Ancestor? Asked of GitHub, not of the local clone:
+# the live slot can be running a commit this workstation never fetched, and the
+# compare API's `.status` is remote truth ('ahead'/'identical' = contains).
+# Returns $false on any doubt - an unanswerable question must fail closed.
+function Test-ContainsSha {
+    param(
+        [Parameter(Mandatory = $true)][string]$Ancestor,
+        [Parameter(Mandatory = $true)][string]$Candidate
+    )
+    if ($Candidate -eq $Ancestor) { return $true }
+    $status = ''
+    try {
+        $status = (& gh api "repos/$Repo/compare/$Ancestor...$Candidate" --jq '.status' 2>$null | Out-String).Trim()
+    } catch {
+        return $false
+    }
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return ($status -eq 'ahead' -or $status -eq 'identical')
+}
+
 if (-not $Sha) {
     $Sha = 'HEAD'
 }
@@ -236,7 +256,6 @@ docker exec oet-api sh -c 'echo ROUTER_ACTIVE_SLOT=`$ACTIVE_SLOT' 2>/dev/null
         # array; leftover green lines would look like a miss even when blue
         # already carries this SHA.
         $inspectText = @($inspect | ForEach-Object { [string]$_ }) -join "`n"
-        $escaped = [regex]::Escape($Sha)
 
         # Root-cause fix (Writing Rule Enforcement Addendum Rev5, 10 Sep
         # 2026): checking "does EITHER blue or green carry this SHA" only
@@ -257,13 +276,35 @@ docker exec oet-api sh -c 'echo ROUTER_ACTIVE_SLOT=`$ACTIVE_SLOT' 2>/dev/null
             $healthFailed = $true
         } else {
             $activeSlot = $Matches[1]
-            $hasWeb = $inspectText -match ("NAME=/oet-web-$activeSlot.*" + $escaped)
-            $hasApi = $inspectText -match ("NAME=/oet-api-$activeSlot.*" + $escaped)
-            if (-not ($hasWeb -and $hasApi)) {
-                Write-Output "LIVE_SHA_MISMATCH router is serving slot '$activeSlot', which is not tagged $Sha - traffic is still on the OLD build"
-                $healthFailed = $true
-            } else {
+            # The tag of each image the router is actually pointing at: inspect
+            # prints `NAME=/oet-web-blue HEALTH=... IMAGE=ghcr.io/<repo>-web:<sha>`.
+            $slotImageShas = @('web', 'api') | ForEach-Object {
+                $match = [regex]::Match($inspectText, "NAME=/oet-$_-$activeSlot\b[^\n]*:([0-9a-f]{40})")
+                if ($match.Success) { $match.Groups[1].Value } else { $null }
+            }
+            $liveShas = @($slotImageShas | Where-Object { $_ })
+
+            if ($liveShas.Count -eq 2 -and $liveShas -notcontains $null -and @($liveShas | Where-Object { $_ -ne $Sha }).Count -eq 0) {
                 Write-Output "LIVE_SHA_OK $Sha (serving slot: $activeSlot)"
+            } else {
+                # Agents push in bursts, so OUR rollout can be followed by a
+                # descendant's rollout within minutes (GitHub keeps one pending
+                # run per group). Landing on a slot that carries a NEWER main
+                # commit is production moving FORWARD - the supersede pattern the
+                # run-selection loop above already tolerates - not a failed
+                # deploy of $Sha. Only a slot that carries neither $Sha nor a
+                # descendant is the real "traffic is still on the OLD build"
+                # failure this check exists for.
+                $successor = @(
+                    $liveShas | Where-Object { $_ -ne $Sha -and (Test-ContainsSha -Ancestor $Sha -Candidate $_) }
+                )[0]
+                if ($liveShas.Count -eq 2 -and $successor) {
+                    Write-Output "SHIP-WATCH_SUPERSEDED_BY_LIVE $successor (slot '$activeSlot' serves a newer main commit that contains $Sha - production moved forward, nothing to fix)"
+                    Write-Output "LIVE_SHA_OK $Sha via $successor"
+                } else {
+                    Write-Output "LIVE_SHA_MISMATCH router is serving slot '$activeSlot', which is not tagged $Sha - traffic is still on the OLD build"
+                    $healthFailed = $true
+                }
             }
         }
     } catch {
