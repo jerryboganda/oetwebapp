@@ -137,7 +137,7 @@ public sealed class OwnerAgentRelayTests
         var forwarded = ForwardedMessage(factory);
         Assert.Equal("Diagnose this grading exception", forwarded.GetProperty("text").GetString());
         Assert.Equal("owner-selected-model", forwarded.GetProperty("model").GetString());
-        Assert.False(forwarded.TryGetProperty("jevAdvisory", out _));
+        Assert.False(forwarded.TryGetProperty("jevAdvisory", out var jevAdvisoryProp));
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class OwnerAgentRelayTests
         var response = await PostMessageAsync(client, ticket, "Diagnose this grading exception");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.False(ForwardedMessage(factory).TryGetProperty("jevAdvisory", out _));
+        Assert.False(ForwardedMessage(factory).TryGetProperty("jevAdvisory", out var jevAdvisoryProp));
     }
 
     [Fact]
@@ -183,7 +183,7 @@ public sealed class OwnerAgentRelayTests
         // The real sidecar 409s any advisory that is not status "ok" / requiresHumanReview false.
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("continue", ForwardedMessage(factory).GetProperty("text").GetString());
-        Assert.False(ForwardedMessage(factory).TryGetProperty("jevAdvisory", out _));
+        Assert.False(ForwardedMessage(factory).TryGetProperty("jevAdvisory", out var jevAdvisoryProp));
     }
 
     [Theory]
