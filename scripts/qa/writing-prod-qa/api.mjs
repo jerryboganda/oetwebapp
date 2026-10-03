@@ -4,13 +4,18 @@
 import { API_URL, ENDPOINTS, FAULT_FLAGS, FREE_SAMPLES_FLAG, PROVIDERS } from './contract.mjs';
 
 export class ApiError extends Error {
-  constructor(method, path, status, code) {
+  constructor(method, path, status, code, detail = null) {
     super(`${method} ${path.split('?')[0]}: HTTP ${status} (${code})`);
     this.status = status;
     this.code = code;
+    this.detail = detail; // the API's own message/trace id, for the evidence (never a token)
   }
 }
 const errorCode = (json) => json?.errorCode ?? json?.code ?? json?.error?.code ?? json?.error ?? 'request_failed';
+const errorDetail = (json) => {
+  const parts = [json?.message, json?.title, json?.detail, json?.traceId, json?.correlationId].filter((v) => typeof v === 'string' && v);
+  return parts.length ? parts.join(' | ').slice(0, 300) : null;
+};
 
 /**
  * readOnly = the discover suite: any method other than GET throws before it reaches the network (the admin
@@ -54,7 +59,7 @@ export function createAdminClient({ email, password, readOnly = false, fetchImpl
       await signIn(used);
       r = await send(method, path, body, token);
     }
-    if (!r.ok) throw new ApiError(method, path, r.status, errorCode(r.json));
+    if (!r.ok) throw new ApiError(method, path, r.status, errorCode(r.json), errorDetail(r.json));
     return r.json;
   }
   return {

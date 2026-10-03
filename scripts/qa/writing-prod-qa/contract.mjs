@@ -133,9 +133,11 @@ export const SELECTORS = {
   bottomNav: 'nav[aria-label="Mobile navigation"]',
   handle: `[data-testid="${TEST_IDS.shellHandle}"], button[aria-label="Open quick access menu"]`,
   mobileMenuButton: 'button[aria-controls="mobile-menu"]',
-  signInEmail: 'input[name="email"]',
-  signInPassword: 'input[name="password"]',
-  signInSubmit: 'form button[type="submit"]',
+  // Scoped to the form that holds the password: a redirected sign-in page can render a second email input.
+  signInForm: 'form:has(input[name="password"])',
+  signInEmail: 'form:has(input[name="password"]) input[name="email"]',
+  signInPassword: 'form:has(input[name="password"]) input[name="password"]',
+  signInSubmit: 'form:has(input[name="password"]) button[type="submit"]',
 };
 
 export const DESKTOP_WIDTHS = [1280, 1366, 1440, 1536];

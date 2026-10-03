@@ -129,14 +129,14 @@ export const appUrl = (route) => `${APP_URL}${route}`;
 export async function signIn(session, { email, password }) {
   const { page } = session;
   await page.goto(appUrl(ROUTES.signIn), { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => {
-    const form = document.querySelector('form');
+  await page.waitForFunction((selector) => {
+    const form = document.querySelector(selector);
     return form && Object.keys(form).some((k) => k.startsWith('__reactProps$') && typeof form[k]?.onSubmit === 'function');
-  }, null, { timeout: 60_000 });
-  await page.locator(SELECTORS.signInEmail).fill(email);
-  await page.locator(SELECTORS.signInPassword).fill(password);
+  }, SELECTORS.signInForm, { timeout: 60_000 });
+  await page.locator(SELECTORS.signInEmail).first().fill(email);
+  await page.locator(SELECTORS.signInPassword).first().fill(password);
   const answer = page.waitForResponse((r) => new URL(r.url()).pathname.endsWith('/sign-in') && r.request().method() === 'POST', { timeout: 60_000 });
-  await page.locator(SELECTORS.signInSubmit).click();
+  await page.locator(SELECTORS.signInSubmit).first().click();
   const res = await answer;
   if (res.status() !== 200) {
     const json = await res.json().catch(() => null);
@@ -382,7 +382,7 @@ export async function resultsUiChecks(session, submissionId, facts, { shotPrefix
   const ids = [await gradeRes?.json().catch(() => null), await reportRes?.json().catch(() => null)].map((b) => b?.id ?? null);
   if (ids[0] !== facts.gradeId || ids[1] !== facts.reportId) problems.push(`a reload changed the grade/report ids (${ids.join(', ')})`);
   if (mobile) {
-    const m = await mobileChecks(context, appUrl(ROUTES.results(submissionId)), shotPrefix);
+    const m = await mobileChecks(session, appUrl(ROUTES.results(submissionId)), shotPrefix);
     problems.push(...m.problems);
     partials.push(...m.partials);
   }
@@ -395,8 +395,16 @@ export async function resultsUiChecks(session, submissionId, facts, { shotPrefix
  * >= 8 px clearance at the end of the page (content may scroll behind a fixed nav mid-page). Targets (section
  * headings, View all corrections, next actions, or `targets`) fully clear and top-most after scrollIntoView.
  */
-export async function mobileChecks(context, url, shotPrefix, targets = null) {
-  const page = await context.newPage();
+export async function mobileChecks(session, url, shotPrefix, targets = null) {
+  // A sign-in without "remember me" keeps its session snapshot in sessionStorage, which is per tab: a new page of
+  // the same context starts signed out. Carry the signed-in page's sessionStorage over (as a browser does when it
+  // duplicates a tab) so the emulated native-shell page is the SAME session, never a second sign-in.
+  const entries = await session.page.evaluate(() => Object.entries(sessionStorage));
+  const page = await session.context.newPage();
+  await page.addInitScript(({ origin, items }) => {
+    if (location.origin !== origin) return;
+    for (const [key, value] of items) if (sessionStorage.getItem(key) === null) sessionStorage.setItem(key, value);
+  }, { origin: APP_URL, items: entries });
   await page.addInitScript(stampNativeShell);
   const problems = [];
   const partials = [];

@@ -87,7 +87,16 @@ async function provisionLearner(ctx, { key, professionId, letters }) {
   ctx.state.learners.push({ key, userId: created.userId, email, purged: false });
   saveState(ctx.state);
   if (letters > 0) {
-    await api.setWritingCredits(ctx.admin, created.userId, letters * CREDITS_PER_PLANNED_LETTER, new Date(Date.now() + 3 * 86_400_000).toISOString());
+    // The adjust is an absolute set, so one retry is safe. Two 500s = a server defect: record the body, BLOCKED.
+    const set = () => api.setWritingCredits(ctx.admin, created.userId, letters * CREDITS_PER_PLANNED_LETTER, new Date(Date.now() + 3 * 86_400_000).toISOString());
+    await set().catch(async (first) => {
+      log(`credit adjust for ${key} failed (${first.message}; ${first.detail ?? 'no detail'}); retrying once in 5 s`);
+      await sleep(5_000);
+      await set().catch((second) => {
+        throw new Blocked(`credit adjust failed twice: ${first.message} [${first.detail ?? 'no detail'}] then ${second.message} [${second.detail ?? 'no detail'}]`);
+      });
+      log(`credit adjust for ${key} succeeded on the retry (first failure: ${first.message})`);
+    });
   }
   log(`provisioned ${key} learner ${created.userId}`);
   return { ...created, key, letters, deviceId: deriveDeviceId(`${RUN_KEY}:${key}`), lastScoringAt: 0 };
@@ -161,8 +170,12 @@ async function runTest(ctx, row, needs, fn) {
   if (ctx.halted) return { ...row, status: 'NOT_RUN', notes: `not started: run halted (${ctx.halted})` };
   const missing = needs.filter((group) => ctx.contractMissing[group]);
   if (missing.length) return { ...row, status: 'BLOCKED', notes: missing.map((g) => ctx.contractMissing[g]).join('; ') };
-  for (let waited = 0; ctx.deploy.busy && waited < 40 * 60_000; waited += 30_000) await sleep(30_000);
-  if (ctx.deploy.busy) return { ...row, status: 'NOT_RUN', notes: 'not started: a deploy ran for more than 40 minutes' };
+  // Peers deploy: wait (up to 100 min) for production to settle, then carry on with this test.
+  for (let waited = 0; ctx.deploy.busy && waited < 100 * 60_000; waited += 30_000) {
+    await sleep(30_000);
+    if (waited % (5 * 60_000) === 0) await ctx.guard?.tick();
+  }
+  if (ctx.deploy.busy) return { ...row, status: 'NOT_RUN', notes: 'not started: production deploys kept running for more than 100 minutes' };
   const epoch = ctx.deploy.epoch;
   // t.track(session) names the page the test is on, for the failure diagnostics below.
   const t = { problems: [], partials: [], blocked: [], notes: [], saved: row.saved ?? '-', provider: row.provider ?? '-', fallback: row.fallback ?? '-', page: null };
@@ -255,10 +268,11 @@ async function submitAndVerify(ctx, firstSession, learner, task, text, t, opts) 
   const { problems, facts } = await b.gradeFacts(session, submissionId, text);
   t.problems.push(...problems);
   const usage = (await api.usageRows(ctx.admin, { userId: learner.userId })).filter((r) => !opts.usageBefore.has(r.id));
-  const evidence = providerEvidence({ usage, modelUsed: facts.modelUsed, expectedFirst: opts.expectedFirst ?? PROVIDERS.claude });
+  const evidence = providerEvidence({ usage, modelUsed: facts.modelUsed, expectedFirst: opts.expectedFirst ?? PROVIDERS.claude, graded: facts.submissionStatus === 'graded' });
+  if (evidence.reused) t.notes.push(evidence.note);
   for (const r of usage) if (r.providerId === PROVIDERS.api) ctx.paidSpend.add(r.id);
   t.problems.push(...evidence.problems);
-  t.provider = evidence.finalProvider ? `${evidence.finalProvider} / ${evidence.finalModel}` : 'none';
+  t.provider = evidence.reused ? `reused grade (${evidence.finalModel})` : evidence.finalProvider ? `${evidence.finalProvider} / ${evidence.finalModel}` : 'none';
   t.fallback = evidence.fallback ? `yes: ${evidence.fallbackReasons.join(', ')}` : 'no';
   if (opts.faultFlag) t.notes.push(`fault flag ${opts.faultFlag} (first provider row ${evidence.firstProvider})`);
 
@@ -708,7 +722,7 @@ async function uiSuite(ctx, plan) {
       try {
         if (i === 0 && ctx.inputs.verifyCredits) await verifyFunding(ctx, session, learner, 'paid');
         const opened = await openAndType(ctx, session, learner, pick, '', t, { readingWindow: ctx.inputs.readingWindow });
-        const submitClear = await b.mobileChecks(session.context, b.appUrl(ROUTES.practice(pick.scenarioId)), path.join(MEDIA, slug(`ui-${d.name}-practice`)), [{ selector: tid(TEST_IDS.submit), label: 'practice Submit' }]);
+        const submitClear = await b.mobileChecks(session, b.appUrl(ROUTES.practice(pick.scenarioId)), path.join(MEDIA, slug(`ui-${d.name}-practice`)), [{ selector: tid(TEST_IDS.submit), label: 'practice Submit' }]);
         t.problems.push(...submitClear.problems);
         t.partials.push(...submitClear.partials);
         await b.typeText(session.page, script.text);
@@ -827,6 +841,7 @@ async function run() {
       if (suiteRuns(inputs.suite, 'matrix')) ctx.tables.qa2.push(...planRows(plan, ctx.labels).map((r) => (r.status === 'NOT_RUN' ? { ...r, notes: 'not started: preflight did not pass' } : r)));
     } else {
       guard = startGuard(ctx);
+      ctx.guard = guard;
       await guard.tick();
       if (suiteRuns(inputs.suite, 'acceptance')) await acceptanceSuite(ctx, plan).catch((e) => ctx.tables.acceptance.push({ profession: 'Medicine (acceptance)', task: '-', category: 'P0-3 acceptance', status: e instanceof Blocked ? 'BLOCKED' : 'FAIL', notes: `aborted: ${e.message}` }));
       if (suiteRuns(inputs.suite, 'ui')) await uiSuite(ctx, plan).catch((e) => ctx.tables.ui.push({ profession: 'Medicine (UI)', task: '-', category: 'UI suite', status: e instanceof Blocked ? 'BLOCKED' : 'FAIL', notes: `aborted: ${e.message}` }));

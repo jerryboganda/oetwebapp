@@ -338,8 +338,17 @@ export function timerVerdict({ before, after, window, mode = 'paused', elapsed =
  * fallback = any non-Success row, more than one provider, a failoverTrace, or a final provider other than
  * the primary. paidApiSpend = any anthropic row (an incident: zero expected).
  */
-export function providerEvidence({ usage, modelUsed, expectedFirst = PROVIDERS.claude, primary = PROVIDERS.claude }) {
+export function providerEvidence({ usage, modelUsed, expectedFirst = PROVIDERS.claude, primary = PROVIDERS.claude, graded = false }) {
   const rows = [...(usage ?? [])].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+  // The platform reuses an existing grade for identical letter text (the handoff scripts are the same for every
+  // run): graded, a real model on the grade, and no AI call at all. Nothing to judge for Max-first then.
+  if (!rows.length && graded && modelUsed && modelUsed !== EMPTY_MODEL) {
+    return {
+      firstProvider: null, finalProvider: null, finalModel: modelUsed, fallback: false, fallbackReasons: [],
+      paidApiCalls: 0, calls: 0, problems: [], reused: true,
+      note: `grade reused for identical text (no AI call; grade model ${modelUsed})`,
+    };
+  }
   const final = rows.filter((r) => r.outcome === 'Success').at(-1) ?? null;
   const fallbackReasons = [];
   if (rows.some((r) => r.outcome !== 'Success')) fallbackReasons.push('a non-success grading call');
