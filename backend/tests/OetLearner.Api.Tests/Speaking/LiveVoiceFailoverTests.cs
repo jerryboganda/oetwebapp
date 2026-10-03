@@ -1307,7 +1307,7 @@ public sealed class LiveVoiceFailoverTests
         await MintGeminiAsync(rig, session);
 
         var recovered = MintedInstructions(rig)[1];
-        Assert.EndsWith("' + NL + 'Candidate: When did it start?' + NL + '" + AnswerLastLineFirst, recovered, StringComparison.Ordinal);
+        Assert.EndsWith("\nCandidate: When did it start?\n" + AnswerLastLineFirst, recovered, StringComparison.Ordinal);
         Assert.DoesNotContain("Wait for the candidate to speak next.", recovered, StringComparison.Ordinal);
     }
 
