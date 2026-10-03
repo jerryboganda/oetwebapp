@@ -214,9 +214,10 @@ from 30 Sep to 7 Oct and the paid API served every grade.
 - Enforced by tests that fail the build: the selector matrix (`WritingMaxAlwaysOnTests`), the source-scan guard, the
   circuit-store exemption tests (`AiCircuitBreakerTests`), the admin endpoint refusals, and the live QA harness
   (`writing-prod-qa.yml`: first hop of every graded letter is `writing-claude-sub`, marker stays null).
-- Speaking uses the same Max route, pinned by configuration (`Speaking:Grading:PinnedProviderCode` =
-  `writing-claude-sub`; an empty value would switch that pin off). **Never clear or change that pin**; Writing is the
-  part enforced in code, Speaking is enforced by keeping the configuration.
+- Speaking uses the same Max route via `Speaking:Grading:PinnedProviderCode`, now **enforced in code**:
+  `SpeakingGradingOptions` defaults the pin to `writing-claude-sub` and an empty/whitespace value resolves to it too,
+  so no configuration can switch the Max-first attempt off (guarded by `SpeakingMaxAlwaysOnTests`). **Never change
+  that pin to another provider.**
 - Not covered on purpose (the ONLY exceptions, both owner-approved, both visible in code review): (1) the global
   emergency kill switch / per-feature kill list stop ALL AI and stay an owner-only emergency lever; (2) the QA-only
   fault switch (`WritingQaFault`, FeatureFlag rows `writing_grade_fault:{userId}` / `writing_grade_fault_l1l2:{userId}`,

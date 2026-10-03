@@ -12,8 +12,8 @@ namespace OetLearner.Api.Tests.Speaking;
 /// <summary>
 /// Owner directive 2026-09-30: Speaking grading tries the pinned Claude subscription
 /// sidecar first and falls back to the ORIGINAL unpinned request (today's default route).
-/// With no pinned provider it must be exactly one unpinned call, so every existing
-/// construction of the assessors keeps its behaviour.
+/// The pin can never be blank (RULE MAX-ALWAYS-ON); only a null options object (a test
+/// construction of the assessors without DI) is one unpinned call.
 /// </summary>
 public sealed class SpeakingGradeChainTests
 {
@@ -60,16 +60,16 @@ public sealed class SpeakingGradeChainTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task NoPinnedProvider_MakesOneUnpinnedCall(string pinnedProvider)
+    public async Task BlankPinnedProvider_StillStartsOnMax(string pinnedProvider)
     {
+        // RULE MAX-ALWAYS-ON: a blank pin is NOT "off" any more; it resolves to the Max route.
         var gateway = new RecordingGateway(Ok);
-        var template = Template();
         var options = new SpeakingGradingOptions { PinnedProviderCode = pinnedProvider, PinnedModel = PinnedModel };
 
-        var result = await SpeakingGradeChain.CompleteAsync(gateway, template, options, NullLogger.Instance, default);
+        var result = await SpeakingGradeChain.CompleteAsync(gateway, Template(), options, NullLogger.Instance, default);
 
-        Assert.Same(template, Assert.Single(gateway.Requests));
-        Assert.Equal(string.Empty, result.ResolvedProvider);
+        Assert.Equal(PinnedProvider, Assert.Single(gateway.Requests).Provider);
+        Assert.Equal(PinnedProvider, result.ResolvedProvider);
     }
 
     [Fact]
