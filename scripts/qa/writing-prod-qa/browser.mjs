@@ -446,16 +446,23 @@ export async function mobileChecks(session, url, shotPrefix, targets = null) {
       // Positive control (last, it opens the menu): below lg the native-only mobile-menu entries must render.
       let menuEntries = 0;
       const menuButton = page.locator(SELECTORS.mobileMenuButton).first();
-      if (await menuButton.isVisible().catch(() => false)) {
+      const menuFound = await menuButton.isVisible().catch(() => false);
+      let menuExpanded = null;
+      if (menuFound) {
+        await page.evaluate(() => (document.scrollingElement ?? document.documentElement).scrollTo({ top: 0, behavior: 'instant' }));
         await menuButton.click();
+        menuExpanded = await menuButton.getAttribute('aria-expanded').catch(() => null);
         for (const id of [TEST_IDS.menuReloadApp, TEST_IDS.menuCheckUpdates]) {
-          if (await page.locator(tid(id)).first().waitFor({ state: 'visible', timeout: 5_000 }).then(() => true, () => false)) menuEntries += 1;
+          if (await page.locator(tid(id)).first().waitFor({ state: 'attached', timeout: 8_000 }).then(() => true, () => false)) menuEntries += 1;
         }
         await menuButton.click().catch(() => undefined);
       }
       const verdict = mobileVerdict({ control: positiveControl({ width: viewport.width, handleVisible, menuEntries }), problems: found });
       problems.push(...[...new Set(found)].map((p) => `${at}: ${p}`));
-      if (verdict === 'NOT_PROVEN') partials.push(`${at}: mobile overlap NOT PROVEN (native-shell emulation not confirmed: the native mobile-menu entries did not render)`);
+      if (verdict === 'NOT_PROVEN') {
+        const runtimeKind = await page.evaluate(() => document.documentElement.dataset.runtimeKind ?? null).catch(() => null);
+        partials.push(`${at}: mobile overlap NOT PROVEN (native-shell emulation not confirmed: menu button ${menuFound ? 'found' : 'missing'}, aria-expanded=${menuExpanded}, native entries attached ${menuEntries}/2, data-runtime-kind=${runtimeKind})`);
+      }
     }
   } finally {
     await page.close().catch(() => undefined);

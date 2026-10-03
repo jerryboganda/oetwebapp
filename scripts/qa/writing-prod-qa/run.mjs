@@ -326,10 +326,22 @@ async function submitAndVerify(ctx, firstSession, learner, task, text, t, opts) 
   return { submissionId, facts };
 }
 
+/**
+ * A fresh learner still holds its profession's free sample: opening THAT task is granted by the sample before any
+ * credit is looked at (WritingEntitlementService.AuthorizeStartAsync), so its credit rule is the free-sample one.
+ */
+async function creditKindFor(session, scenarioId) {
+  const offers = (await session.api(ENDPOINTS.freeSamples)).body;
+  const offer = (Array.isArray(offers) ? offers : []).find((o) => String(o.contentId).toLowerCase() === String(scenarioId).toLowerCase());
+  return offer && ['available', 'retry_available', 'grading_failed', 'in_progress'].includes(offer.state) ? 'free_sample' : 'paid';
+}
+
 /** Opens a task like a candidate and types the script (C0/C1 ledger snapshots around the task-open debit). */
 async function openAndType(ctx, session, learner, task, text, t, { readingWindow }) {
   const b = await import('./browser.mjs');
   t.track(session);
+  const kind = await creditKindFor(session, task.scenarioId);
+  if (kind === 'free_sample') t.notes.push("this task is the learner's free sample, so no credit is charged");
   const c0 = ctx.inputs.verifyCredits ? await api.creditSnapshot(ctx.admin, learner.userId) : null;
   const usageBefore = new Set((await api.usageRows(ctx.admin, { userId: learner.userId })).map((r) => r.id));
   await b.openTaskFromLibrary(session, task);
@@ -345,7 +357,7 @@ async function openAndType(ctx, session, learner, task, text, t, { readingWindow
     const draft = await b.waitDraftEquals(session, task.scenarioId, text, 15_000);
     if (!draft.ok) t.problems.push('the server draft did not equal the typed text within 15 s');
   }
-  return { c0, c1, usageBefore };
+  return { c0, c1, usageBefore, kind };
 }
 
 // ---- Suites ---------------------------------------------------------------------------------------------------------
@@ -375,7 +387,7 @@ async function matrixSuite(ctx, plan) {
       const script = scriptFor(ctx.scripts, prof.profession, pick.category);
       const attempt = () => runTest(ctx, rows[i], ['editor', 'grading', 'results', 'postSubmissions'], async (t) => {
         const opened = await openAndType(ctx, session, learner, pick, script.text, t, { readingWindow: ctx.inputs.readingWindow });
-        await submitAndVerify(ctx, session, learner, pick, script.text, t, { ...opened, kind: 'paid' });
+        await submitAndVerify(ctx, session, learner, pick, script.text, t, { kind: 'paid', ...opened });
       });
       let result = await attempt();
       if (result.status === 'VOID_DEPLOY' && !ctx.halted) {
@@ -522,7 +534,7 @@ async function acceptanceSuite(ctx, plan) {
     await typePart(t, parts.slice(4).join(''));
     if (typed !== script.text) t.problems.push('the typed parts do not rebuild the script');
     if (!(await b.waitDraftEquals(session, task.scenarioId, typed, 15_000)).ok) t.problems.push('the final draft differs from the typed text');
-    await submitAndVerify(ctx, session, learner, task, typed, t, { ...opened, kind: 'paid' });
+    await submitAndVerify(ctx, session, learner, task, typed, t, { kind: 'paid', ...opened });
   });
 
   // ---- S6/S7: a real failed grade (fault flag, N=1), visible later in Post Submissions, Retry from the row ----
@@ -543,7 +555,7 @@ async function acceptanceSuite(ctx, plan) {
       const flag = client ? null : await enableFlag(ctx, 'all', learner.userId);
       try {
         await submitAndVerify(ctx, session, learner, urgent, urgentScript.text, t, {
-          ...opened6, kind: 'paid', expectFailure: true, clientFault: client, faultFlag: flag?.key ?? 'client route',
+          kind: 'paid', ...opened6, expectFailure: true, clientFault: client, faultFlag: flag?.key ?? 'client route',
           // client mode only fakes the page's status poll: the server row never fails, so Post Submissions
           // cannot show it and the Retry is pressed on the grading page instead.
           retryWhere: client ? 'grading' : 'post-submissions',
@@ -587,6 +599,7 @@ async function acceptanceSuite(ctx, plan) {
   const rrResult = await runTest(ctx, rr, editorNeeds, async (t) => {
     t.track(session);
     rrOpened = {
+      kind: await creditKindFor(session, discharge.scenarioId),
       c0: ctx.inputs.verifyCredits ? await api.creditSnapshot(ctx.admin, learner.userId) : null,
       usageBefore: new Set((await api.usageRows(ctx.admin, { userId: learner.userId })).map((r) => r.id)),
     };
@@ -612,7 +625,7 @@ async function acceptanceSuite(ctx, plan) {
     const flag = ctx.inputs.faultMode === 'flag' ? await enableFlag(ctx, 'l1l2', learner.userId) : null;
     try {
       await submitAndVerify(ctx, session, learner, discharge, dischargeScript.text, t, {
-        ...rrOpened, kind: 'paid', expectedFirst: flag ? PROVIDERS.codex : PROVIDERS.claude, faultFlag: flag?.key,
+        kind: 'paid', ...rrOpened, expectedFirst: flag ? PROVIDERS.codex : PROVIDERS.claude, faultFlag: flag?.key,
       });
     } finally {
       if (flag) await disableFlag(ctx, flag);
@@ -727,7 +740,7 @@ async function uiSuite(ctx, plan) {
         t.partials.push(...submitClear.partials);
         await b.typeText(session.page, script.text);
         if (!(await b.waitDraftEquals(session, pick.scenarioId, script.text, 15_000)).ok) t.problems.push('the draft did not equal the typed text within 15 s');
-        await submitAndVerify(ctx, session, learner, pick, script.text, t, { ...opened, kind: 'paid', ui: { desktop: false, mobile: true } });
+        await submitAndVerify(ctx, session, learner, pick, script.text, t, { kind: 'paid', ...opened, ui: { desktop: false, mobile: true } });
       } finally {
         await session.close();
       }
