@@ -17,11 +17,11 @@ Every production deploy must, at minimum, attach:
 2. Latest SBOM + SCA workflow artifacts for the deploying SHA, with any accepted
    vulnerability risk explicitly owned and time-bounded.
 3. Successful **Build images** (`.github/workflows/build-images.yml`) run for the
-   deploying SHA — `build-web`, `build-api`, `build-backup`,
-   `build-agent-gateway`, `migrate-sql` all green, with the `:<sha>` images in
-   GHCR — plus a green **Deploy production**
-   (`.github/workflows/production-deploy.yml`) run
-   (`apply-migrations`, `deploy`).
+   deploying SHA — `build-web`, `build-api` (or a documented retag from
+   `:latest`), `build-backup`, `build-agent-gateway` all green, with the `:<sha>`
+   images in GHCR — plus a green **Deploy production**
+   (`.github/workflows/production-deploy.yml`) run (`apply-migrations` only when
+   the API image was rebuilt, then `deploy`).
 4. Pre-flight script success: `scripts/deploy/pre-flight.sh` against the
    target host. Only the manual `deploy-prod.sh` path runs it automatically.
 5. `.env.production` validation — no missing keys, no `__placeholder__`

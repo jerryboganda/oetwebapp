@@ -150,8 +150,8 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 | Purpose | Workflow |
 | --- | --- |
 | Frontend unit (vitest + lint + tsc + build), backend `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached), placement-entry. **No e2e** (owner directive 2026-10-03) | `.github/workflows/qa-smoke.yml` |
-| Build all four images → GHCR + generate the migration SQL artifact. Parallel per SHA, no cross-SHA lock | `.github/workflows/build-images.yml` (push to `main` only) |
-| Apply migrations + blue/green VPS rollout with health gate. Serialized by the `production-deploy` concurrency group; `workflow_dispatch -f sha=<sha>` is the rollback path | `.github/workflows/production-deploy.yml` |
+| Build all four images → GHCR. Parallel per SHA, no cross-SHA lock; a component whose inputs did not change is retagged from `:latest` instead of rebuilt | `.github/workflows/build-images.yml` (push to `main` only) |
+| Generate the migration SQL (only when `build-api` actually ran) + apply it, then blue/green VPS rollout with health gate. Serialized by the `production-deploy` concurrency group; `workflow_dispatch -f sha=<sha>` is the rollback path | `.github/workflows/production-deploy.yml` |
 | Mobile/Android build | `.github/workflows/mobile-ci.yml` |
 | Owner Agent Console sidecar + proxy images (unit tests, build → GHCR → pull-only VPS rollout of `docker-compose.agent-console.yml`) | `.github/workflows/agent-console.yml` (`workflow_dispatch`, `apply=true` to recreate) |
 

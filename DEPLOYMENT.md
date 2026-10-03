@@ -144,15 +144,16 @@ parallel while production rollouts serialize):
      Writing model-answer dotnet regression runs only when Writing changed.
   3. `build-web`, `build-api`, `build-backup`, `build-agent-gateway` — build the
      images on Actions and push them to GHCR tagged `:<sha>` (and `:latest`).
-  4. `migrate-sql` — generates the idempotent EF migration SQL on Actions and
-     uploads it as an artifact (`oet-production-migrations-<sha>`). Migrations
-     are forward-only.
+  4. A component whose inputs did not change is **retagged from `:latest`**
+     instead of rebuilt, so `:<sha>` tags always exist while the expensive build
+     is skipped.
 - `.github/workflows/production-deploy.yml` (**Deploy production**) — starts when
   a Build images run on `main` succeeds (or `workflow_dispatch -f sha=<sha>` for
   a rollback); serialized by the `production-deploy` concurrency group:
-  5. `apply-migrations` — applies the SQL through the production PostgreSQL
-     container (`scripts/deploy/apply-migrations-from-ci.sh`); regenerates it
-     in-workflow if the artifact is missing.
+  5. `apply-migrations` — only when `build-api` actually ran: generates the
+     idempotent EF migration SQL on Actions and applies it through the
+     production PostgreSQL container (`scripts/deploy/apply-migrations-from-ci.sh`).
+     Migrations are forward-only.
   6. `deploy` — streams `scripts/deploy/auto-deploy-ghcr.sh`,
    `docker-compose.production.yml`, `validate-production-env.sh` and the nginx
    router templates to the VPS and runs the script with the `:<sha>` image

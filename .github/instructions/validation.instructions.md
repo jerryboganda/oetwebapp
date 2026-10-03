@@ -39,8 +39,8 @@ like `ship:watch` they are local tooling, not compute. See `scripts/agent/README
 | Placement entry contracts | `qa-smoke.yml` / `placement-entry` |
 | ~~Playwright/e2e~~ | **Removed by owner directive 2026-10-03 (hard rule).** No e2e job runs on any trigger; `tests/e2e/**` is a manual tool. Bugs are reported by the owner and fixed on demand. |
 | Pending EF model changes, gitleaks (path-filtered) | `speaking-ci.yml` / `migrations-check`, `secrets-scan` |
-| Images → GHCR + migration SQL artifact. Runs only for pushes touching a build input; rebuilds only the changed component (the rest are retagged from `:latest`); parallel per SHA, no cross-SHA lock | `build-images.yml` (push to `main` only) |
-| Migrations apply + blue/green rollout with health gate (serialized `production-deploy`); stands down when superseded or when the SHA has no images; dispatch with `sha` = rollback | `production-deploy.yml` |
+| Images → GHCR. Runs only for pushes touching a build input; rebuilds only the changed component (the rest are retagged from `:latest`); parallel per SHA, no cross-SHA lock | `build-images.yml` (push to `main` only) |
+| Migration SQL generation (only when `build-api` ran) + apply, then blue/green rollout with health gate (serialized `production-deploy`); stands down when superseded or when the SHA has no images; dispatch with `sha` = rollback | `production-deploy.yml` |
 | Android / iOS builds | `mobile-ci.yml` |
 | Tauri desktop (fmt, clippy, cargo test) | `tauri-ci.yml` |
 
