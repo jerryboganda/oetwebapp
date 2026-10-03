@@ -5,7 +5,7 @@ Goal: Every learner-dashboard header element is functional for all learners: tru
 Mode: done
 Updated: 2026-10-04T00:00:00Z
 Branch: main
-HEAD: 58ba842e (deployed live)
+HEAD: 1705bb5d0
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -63,12 +63,14 @@ Continue and finish the interrupted "learner dashboard non-functional" round (op
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| ship-gate | pnpm run ship:gate | local:ship:gate (files=98 typescript=yes) | PASS |
-| images (api+web rebuilt) | build-images.yml | run 37159346852 (sha 58ba842e) | PASS |
-| deploy | production-deploy.yml | run 37159617346 (sha 58ba842e, green slot) | PASS |
-| live confirmation | watcher + health + VPS | LIVE_SHA_OK 58ba842e serving green; VPS oet-web-green/oet-api-green on 58ba842e; app /api/health 200, api /health/ready 200, /health/live 200 | PASS |
-| frontend tsc + vitest + build | qa-smoke.yml | run 37159346891 (sha 58ba842e) — Frontend unit success | PASS |
-| backend compile + tests | qa-smoke.yml backend matrix | run 37159346891 (sha 58ba842e) — all 6 shards + QA gate success | PASS |
+| ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
+| images (api+web rebuilt) | build-images.yml | 37159346852 | PASS |
+| deploy | production-deploy.yml | 37159617346 | PASS |
+| frontend tsc + vitest + build | qa-smoke.yml | 37159346891 | PASS |
+| backend compile + tests | qa-smoke.yml backend matrix | 37159346891 | PASS |
+| live confirmation | production-deploy.yml + health probe | 37159617346 | PASS |
+
+Live SHA: 58ba842eafb7d6de2d6b522285775e1e08a6f1ce (green slot). Round-trip log (fix-forward, no local compute):
 
 Round-trip log (fix-forward, no local compute):
 - run 37151640283 (483606e15): CS1061 — the interrupted session added the inbox
