@@ -209,10 +209,10 @@ public partial class LearnerService
     public async Task<object> GetOnboardingStateAsync(string userId, CancellationToken cancellationToken)
     {
         var user = await EnsureUserAsync(userId, cancellationToken);
+        // Any row, not SingleOrDefault: learners created before the per-learner creation
+        // lock can hold duplicate Goal rows (parallel first visits), which made this 500.
         var examDateSetByUser = await db.Goals.AsNoTracking()
-            .Where(g => g.UserId == userId)
-            .Select(g => (bool?)g.TargetExamDateSetByUser)
-            .SingleOrDefaultAsync(cancellationToken) ?? false;
+            .AnyAsync(g => g.UserId == userId && g.TargetExamDateSetByUser, cancellationToken);
         return BuildOnboardingStateDto(user, examDateRequired: !examDateSetByUser);
     }
 

@@ -212,7 +212,14 @@ public partial class LearnerService(
             ? canonicalRegisteredTargetCountry
             : "Australia";
         var changed = false;
-        var goal = loaded.Goal;
+        // No unique index guards Goals/Settings/Wallets.UserId, so parallel first-visit
+        // requests each inserted their own rows (prod 3 Oct 2026: duplicate Goals made
+        // GET /v1/learner/onboarding/state 500). Creation is serialized per learner and
+        // every missing row is re-read under the lock before it is created.
+        await using var createLock = loaded.Goal is null || loaded.Settings is null || loaded.Wallet is null
+            ? await LockLearnerProfileCreationAsync(userId, cancellationToken)
+            : null;
+        var goal = loaded.Goal ?? await db.Goals.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         if (goal is null)
         {
             goal = CreateDefaultGoal(
@@ -238,7 +245,7 @@ public partial class LearnerService(
             changed = true;
         }
 
-        var settings = loaded.Settings;
+        var settings = loaded.Settings ?? await db.Settings.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         if (settings is null)
         {
             settings = CreateDefaultSettings(loaded.User, goal);
@@ -246,7 +253,7 @@ public partial class LearnerService(
             changed = true;
         }
 
-        var wallet = loaded.Wallet;
+        var wallet = loaded.Wallet ?? await db.Wallets.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         if (wallet is null)
         {
             wallet = CreateDefaultWallet(loaded.User.Id, now);
@@ -259,9 +266,11 @@ public partial class LearnerService(
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
+                if (createLock is not null) await createLock.CommitAsync(cancellationToken);
             }
             catch (DbUpdateException)
             {
+                if (createLock is not null) await createLock.RollbackAsync(cancellationToken);
                 foreach (var entry in db.ChangeTracker.Entries().Where(entry => entry.State == EntityState.Added).ToList())
                 {
                     entry.State = EntityState.Detached;
@@ -475,6 +484,19 @@ public partial class LearnerService(
         var registeredTargetExamDate = await ResolveRegisteredTargetExamDateAsync(userId, cancellationToken);
 
         var goal = await db.Goals.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        var settings = await db.Settings.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        var wallet = await db.Wallets.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        // Same per-learner creation lock as EnsureLearnerProfileStateAsync (no unique index on UserId).
+        await using var createLock = goal is null || settings is null || wallet is null
+            ? await LockLearnerProfileCreationAsync(userId, cancellationToken)
+            : null;
+        if (goal is null || settings is null || wallet is null)
+        {
+            goal ??= await db.Goals.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+            settings ??= await db.Settings.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+            wallet ??= await db.Wallets.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        }
+
         if (goal is null)
         {
             goal = CreateDefaultGoal(userId, user.ActiveProfessionId, registeredTargetCountry, registeredTargetExamDate, now);
@@ -495,7 +517,6 @@ public partial class LearnerService(
             changed = true;
         }
 
-        var settings = await db.Settings.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         if (settings is null)
         {
             settings = CreateDefaultSettings(user, goal);
@@ -503,7 +524,6 @@ public partial class LearnerService(
             changed = true;
         }
 
-        var wallet = await db.Wallets.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
         if (wallet is null)
         {
             wallet = CreateDefaultWallet(userId, now);
@@ -516,12 +536,12 @@ public partial class LearnerService(
             try
             {
                 await db.SaveChangesAsync(cancellationToken);
+                if (createLock is not null) await createLock.CommitAsync(cancellationToken);
             }
             catch (DbUpdateException)
             {
-                // Concurrent first-visit requests race to create the same profile rows
-                // (Wallets.UserId is unique). The loser drops its pending inserts — the
-                // winner's rows already exist and every caller re-reads per request.
+                if (createLock is not null) await createLock.RollbackAsync(cancellationToken);
+                // A failed insert drops its pending rows; every caller re-reads per request.
                 foreach (var entry in db.ChangeTracker.Entries().Where(e => e.State == EntityState.Added).ToList())
                 {
                     entry.State = EntityState.Detached;
@@ -530,6 +550,23 @@ public partial class LearnerService(
         }
 
         return user;
+    }
+
+    /// <summary>
+    /// PostgreSQL: a per-learner advisory lock for creating the lazily-made profile rows
+    /// (Goal, Settings, Wallet), held until the returned transaction ends. Inside a
+    /// caller's transaction the lock joins it (null returned, the caller commits).
+    /// Other providers (tests) need no lock: null.
+    /// </summary>
+    private async Task<IDbContextTransaction?> LockLearnerProfileCreationAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (!db.Database.IsNpgsql()) return null;
+        var tx = db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        var key = $"learner-profile:{userId}";
+        await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({key}, 0));", cancellationToken);
+        return tx;
     }
 
     private async Task<string> ResolveRegisteredTargetCountryAsync(string userId, CancellationToken cancellationToken)
