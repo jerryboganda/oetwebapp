@@ -292,6 +292,11 @@ async function submitAndVerify(ctx, firstSession, learner, task, text, t, opts) 
   // Post Submissions: API (exactly once, graded) and UI row.
   const work = await session.api(ENDPOINTS.myWork);
   const apiRow = myWorkProblems({ items: work.body?.items, submissionId, state: 'graded' });
+  // A zero-debit letter is only right when it IS the bound free sample; every other letter keeps the 2-credit rule.
+  const workItem = (work.body?.items ?? []).find((i) => String(i.submissionId).toLowerCase() === String(submissionId).toLowerCase());
+  t.notes.push(`credit rule: ${opts.kind ?? 'paid'} (my-work isFreeSample=${workItem?.isFreeSample ?? 'n/a'})`);
+  if ((opts.kind ?? 'paid') === 'free_sample' && workItem && workItem.isFreeSample !== true) t.problems.push('free-sample task, but the submission is not bound to the free sample (isFreeSample false)');
+  if ((opts.kind ?? 'paid') === 'paid' && workItem?.isFreeSample === true) t.problems.push('the submission is bound to the free sample although the task was not the offered sample');
   if (!ctx.contractChecked?.postSubmissions) {
     await page.goto(b.appUrl(ROUTES.postSubmissions), { waitUntil: 'domcontentloaded' });
     await page.locator(tid(TEST_IDS.postSubmissionsList)).first().waitFor({ state: 'visible', timeout: 60_000 }).catch(() => undefined);
