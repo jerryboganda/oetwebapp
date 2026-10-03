@@ -196,6 +196,26 @@ public static partial class SeedData
             UpdatedAt = now.AddDays(-30)
         });
 
+        var writingMarkingCaseNotes = new[]
+        {
+            "Mrs Eleanor Vance, 72 years old, was admitted on 2 June following a fall at home.",
+            "She had a fractured left neck of femur and underwent a hemiarthroplasty on 3 June.",
+            "Her recovery has been uncomplicated. She is mobilising with a frame and physiotherapy, and her wound is clean and dry.",
+            "Dr Patterson should review wound healing and anticoagulation in one week and arrange ongoing physiotherapy in the community."
+        };
+        for (var index = 0; index < writingMarkingCaseNotes.Length; index++)
+        {
+            db.WritingScenarioStructuredSentences.Add(new WritingScenarioStructuredSentence
+            {
+                Id = Guid.NewGuid(),
+                ScenarioId = writingMarkingScenarioId,
+                Ordinal = index + 1,
+                SentenceText = writingMarkingCaseNotes[index],
+                RelevanceLabel = "relevant",
+                CreatedAt = now.AddDays(-30)
+            });
+        }
+
         db.WritingSubmissions.Add(new WritingSubmission
         {
             Id = writingMarkingSubmissionId,
