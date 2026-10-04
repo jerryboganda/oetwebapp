@@ -208,11 +208,19 @@ a genuine changed-web/reused-API release (build `37174218390`, deploy `371744024
 The latter used a 5.7-second cached Next compilation and skipped API compilation
 and already-applied SQL, but still spent 91.524 seconds pulling images and
 94.649 seconds on actual target readiness. The web ownership-layer follow-up
-requires its own native image-build and live timing evidence.
+(SHA `0689edfd0`, build `37176154885`, deploy `37176403559`) passed all original
+standalone checksum/owner assertions and measured **529.552 seconds** inclusive
+to verified physical serving, or **491.713 seconds** to the driver's public-live
+marker. Native API/config reuse reduced its target readiness to 14.482 seconds;
+image pulling took 54.659 seconds and runtime-layer export took 2.2 seconds.
+Next compilation was cold at 89 seconds after the Dockerfile cache input changed.
+These are different observed release conditions, not isolated causal benchmarks.
 Cold forced-Writing benchmark `37173946904` verified the opt-in 3-source/default
 666-source boundary and ran all 26 required tests successfully in a **310-second
 build-only workflow**. It did not publish or promote a release. These results do
 not establish a five-minute guarantee or cold-live acceptance on free runners.
+Required gates remain intact. Long-running full QA is separate from public-live
+acceptance; a superseded pending QA run with zero jobs is not test evidence.
 
 Migrations normally come from the build API publish artifact. Startup migration
 is an opt-in (`AUTO_MIGRATE` → `Bootstrap__AutoMigrate`, default `false`).

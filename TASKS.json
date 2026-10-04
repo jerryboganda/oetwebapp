@@ -242,7 +242,7 @@
     {
       "id": "DEPLOY-06",
       "title": "Measure genuine warm/cold and Writing paths on Actions and record exact live evidence or target misses",
-      "status": "pending",
+      "status": "in_progress",
       "owner": "deployment-latency",
       "blockedBy": ["DEPLOY-05", "DEPLOY-07"],
       "verify": "build-images.yml benchmark/Writing dispatch and production-deploy.yml",
@@ -257,14 +257,19 @@
         "Cold forced-Writing build-only benchmark 37173946904 passed exact evaluated 3/666 source sets and 26/26 real tests in 310 workflow seconds; no cold-live claim",
         "Genuine changed-web/reused-API e96e762ac: build 37174218390 restored the Next cache (5.7s compilation), reused exact f13 component digests and passed; production 37174402463 skipped proven already-applied SQL and verified green physical serving images",
         "E96 inclusive watcher elapsed 582.880 seconds; driver public-live elapsed 528.521 seconds. Measured image pull 91.524s and actual target readiness 94.649s; target remains unmet",
-        "Final native web ownership/stable-layer release and final continuity/privacy disposition remain"
+        "Corrected 0689edfd0 build 37176154885 passed 38 tests and actual original-byte/owner marker; production 37176403559 verified blue physical serving at 529.552s inclusive, driver 491.713s",
+        "Actual final conditions: cold Next compilation 89s after Dockerfile cache input change; native API/config reuse, 54.659s image pull, 14.482s target readiness and 2.2s layer export; no isolated causal benchmark or five-minute guarantee",
+        "QA 37175518536 and 37176154904 preserved frontend tsc/encoding/lint/vitest/build passed; backend skipped. One backend=always dispatch follows the final docs push so pending replacement does not lose repair evidence",
+        "Final ax:verify matched 78 recorded rows and 14 cited gate run IDs to native GitHub; ax:check and owned diff whitespace check passed",
+        "Specific deletion approval for sole empty stale queued run 25907015352 was requested; owner unavailable, no authorization granted and no history deleted. Ship lock/lease free at 04:26Z; public state remains guarded",
+        "Owned doc/evidence push and one preserved-backend dispatch remain; privacy closure is explicitly authorization-blocked"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md"]
     },
     {
       "id": "DEPLOY-07",
       "title": "Remove measured web runtime ownership copy-up with unchanged standalone bytes and permissions",
-      "status": "in_progress",
+      "status": "done",
       "owner": "deployment-latency",
       "blockedBy": ["DEPLOY-05"],
       "verify": "build-images.yml / guards + build-web and production-deploy.yml",
@@ -272,7 +277,8 @@
         "Live validated Jev selected native copy-time ownership and stable dependency partition after a genuine 91.524-second changed-web image pull (p .99/confidence .99)",
         "Dockerfile retains root-owned dependencies/server.js and nextjs-owned .next/public; native checksum/ownership assertions and one protocol regression written",
         "F6 build 37175518557 passed 38 protocol checks and native COPY partition; failed before image publication because Alpine BusyBox rejects GNU sha256sum --check/--quiet. No rollout or five-minute result",
-        "Literal correction uses the native advertised -c/-s flags and keeps every checksum/owner assertion; successful image execution, exact physical serving proof and new inclusive timing remain"
+        "Literal correction uses native advertised -c/-s flags; 0689edfd0 build 37176154885 passed 38 tests and actual WEB_RUNTIME_BYTES_AND_OWNERS_OK; every original byte/owner assertion retained",
+        "Production 37176403559 verified blue HTTP 200/release headers and exact physical images at 529.552s inclusive (driver 491.713s), target missed; native unchanged API reused, pull 54.659s/readiness 14.482s"
       ],
       "files": ["Dockerfile", "scripts/deploy/release-manifest.test.mjs", "DEPLOYMENT.md"]
     }

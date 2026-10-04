@@ -13,8 +13,7 @@ Last updated: 2026-10-04
 
 ## Active checkpoint - Deployment acceleration, measured free-runner target misses (2026-10-04)
 
-- Wrote immutable component reuse, same-publish SQL/Writing references, persisted caches, lean contexts and health/config-aware service reuse.
-- Bound prepare/promote, durable paired router recovery and exact serving identity remain enforced.
+- Wrote immutable component reuse, same-publish SQL/Writing references, persisted caches, lean contexts and health/config-aware service reuse; bound paired router recovery/serving identity remain enforced.
 - Added inclusive ship timing, actual-promotion/no-op proof and offline provenance/driver/watcher/registry regressions.
 - Existing owner authentication is verified process-scoped; shared CLI defaults/credentials remain unchanged.
 - SHA 66458ca821: Build images 37170176749 passed 31 protocol checks and 26 real Writing tests; production 37170535406 served exact images in green.
@@ -22,7 +21,8 @@ Last updated: 2026-10-04
 - Follow-up f13b93bd4: build 37172887015 passed 37 protocol tests, native cache persistence and complete runtime bytes; deploy 37173143817 served blue at 569.457 seconds inclusive (driver 543.109).
 - AX 37174084749 passed actual-source cases on native Windows 5.1/Linux 7.6.6; forced-Writing benchmark 37173946904 passed 3/666 evaluated sources and 26 tests in 310 seconds build-only.
 - Genuine changed-web/reused-API e96: build 37174218390 passed, deploy 37174402463 verified green at 582.880 seconds inclusive (driver 528.521); Next compile 5.7s, image pull 91.524s, native readiness 94.649s.
-- Web copy-time ownership/stable-layer native execution remains; private restoration still faces active Actions and an inconsistent empty May queue.
+- Corrected web-layer release 0689edfd0: build 37176154885 passed 38 tests and actual byte/owner assertions; deploy 37176403559 verified blue at 529.552s inclusive (driver 491.713s). Cold Next 89s, pull 54.659s, reused-API readiness 14.482s.
+- Frontend QA 37176154904 passed; preserved backend fixtures still need one forced evidence run. Target unmet and full cold/Writing-live unmeasured; private restoration faces the inconsistent empty May queue.
 
 ## Previous checkpoint — AX: externalized agent working memory (2026-10-01)
 

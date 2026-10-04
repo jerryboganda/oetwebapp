@@ -6,6 +6,13 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 04:19 | CI triage | CI triage | 37176665371 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 0689edfd0 |
+| 2026-10-04 04:08 | QA Smoke | QA Smoke | 37176154904 | Placement entry contracts=success Detect what changed=success Frontend unit (vitest + lint + tsc + build)=success Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}=skipped QA gate (all suites green)=success | SUCCESS | 0689edfd0 |
+| 2026-10-04 04:17 | CI triage | CI triage | 37176564768 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 0689edfd0 |
+| 2026-10-04 04:14 | CI triage | CI triage | 37176403547 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 0689edfd0 |
+| 2026-10-04 04:14 | Deploy production | Deploy production | 37176403559 | Resolve the build to deploy=success Roll out to the VPS=success Apply migration SQL (if the API changed)=skipped | SUCCESS | 0689edfd0 |
+| 2026-10-04 04:08 | SBOM and SCA | SBOM and SCA | 37176154890 | sbom-sca=success | SUCCESS | 0689edfd0 |
+| 2026-10-04 04:08 | Build images | Build images | 37176154885 | Syntax gate (seconds)=success Detect what changed=success Deployment contract guards=success Writing grader regression (on change)=skipped Retag unchanged agent-gateway=success Retag unchanged db-backup=success Retag unchanged api=success build-web=success build-backup=skipped build-agent-gateway=skipped Writing model-answer gate (on change)=skipped build-api=skipped Publish verified release prove | SUCCESS | 0689edfd0 |
 | 2026-10-04 03:59 | CI triage | CI triage | 37175679848 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | f6e8381e8 |
 | 2026-10-04 03:59 | CI triage | CI triage | 37175668851 | Classify the failed run (jev-1.13.0)=success | SUCCESS | f6e8381e8 |
 | 2026-10-04 03:59 | Deploy production | Deploy production | 37175668864 | Resolve the build to deploy=skipped Apply migration SQL (if the API changed)=skipped Roll out to the VPS=skipped | SKIPPED | f6e8381e8 |

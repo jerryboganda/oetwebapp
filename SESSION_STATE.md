@@ -2,10 +2,10 @@
 
 Session: deployment-latency
 Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
-Mode: execute
-Updated: 2026-10-04T04:06:40Z
+Mode: verify
+Updated: 2026-10-04T04:20:10Z
 Branch: main
-HEAD: f6e8381e892d71fe1f8f7a6c401e2373829b5f1e
+HEAD: 0689edfd042684923c09b4c4ec3c8082b8833763
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -37,7 +37,7 @@ release provenance, protected storage, readiness or rollback.
 - [x] AC-2 API SQL comes from the same publish compilation; required Writing tests really execute.
 - [x] AC-3 Unchanged healthy services stay running; router cutover is durable and rolls back as a pair.
 - [x] AC-4 Actions regression/build/deploy evidence and exact serving-image proof are recorded.
-- [ ] AC-5 Inclusive elapsed measurements disclose cold/Writing/queue misses and unmeasured categories.
+- [x] AC-5 Inclusive elapsed measurements disclose cold/Writing/queue misses and unmeasured categories; no 300-second guarantee claimed.
 
 ## Decisions (do not revisit)
 
@@ -59,7 +59,11 @@ release provenance, protected storage, readiness or rollback.
 - D-16 Forced-Writing cold build-only benchmark 37173946904 evaluated 3 gate sources versus 666 default sources, reused apphost-consistent API references and executed 26/26 tests. Workflow elapsed was 310 seconds; no promotion or cold-live result.
 - D-17 Genuine changed-web release e96e762ac: build 37174218390 reused the exact f13 API/backup/gateway digests, cached Next compilation took 5.7 seconds, and production 37174402463 verified green physical serving images. Inclusive timing was 582.880 seconds; driver public-live was 528.521 seconds. SQL was actually skipped on deployed-API proof.
 - D-18 Live Jev selected native web copy-time ownership and stable dependency layers (p .99, confidence .99) after a measured 91.524-second image pull. Preserve original bytes, root-owned dependencies, nextjs-owned .next/public, entrypoint and health gates; native image assertions and live timing remain required.
-- D-19 F6 build 37175518557 passed 38 protocol checks and native copy partition but failed before publication: Alpine BusyBox rejects GNU sha256sum --check/--quiet. Use its natively advertised -c/-s flags, retain checksum/owner assertions and rerun on Actions. Production was not promoted; e96 remains live.
+- D-19 F6 build 37175518557 passed 38 protocol checks and native copy partition but failed before publication: Alpine BusyBox rejects GNU sha256sum --check/--quiet. Its supported -c/-s correction retained every assertion; e96 stayed live until the corrected 068 release.
+- D-20 Corrected 0689edfd0 build 37176154885 passed 38 tests and actual WEB_RUNTIME_BYTES_AND_OWNERS_OK. Production 37176403559 verified blue physical images/public HTTP 200. Inclusive watcher 529.552s, driver 491.713s; target unmet. Native API reused; pull 54.659s/readiness 14.482s/layer export 2.2s. Next was cold at 89s after the Dockerfile cache input changed.
+- D-21 QA 37175518536 and 37176154904 passed preserved frontend repairs (tsc/encoding/lint/vitest/build); backend skipped. E96 pending QA was superseded with zero jobs, not evidence. Preserve one backend=always evidence run after the final documentation push, followed by the Speaking owner.
+- D-22 Live validated Jev selected truthful measured free-runner closeout (p/confidence 1): no speculative boot rewrite or weakened gates; report target misses, retain repaired-backend evidence and require specific authorization/native safety for privacy closure.
+- D-23 Final ax:verify matched 78 recorded rows and 14 cited gate run IDs to native GitHub; ax:check and owned diff whitespace check passed. No local build/test workload ran.
 
 ## Touched files
 
@@ -92,16 +96,19 @@ release provenance, protected storage, readiness or rollback.
 | native PowerShell 5.1/7 actual-source cases | ax-check.yml / self-test matrix | 37174084749 | PASS |
 | follow-up serving/timing | production-deploy.yml + ship watcher | 37173143817 | PASS |
 | genuine changed-web/reused-API serving/timing | build-images.yml + production-deploy.yml + ship watcher | 37174402463 | PASS |
-| web stable layers, original bytes and ownership | build-images.yml / build-web | 37175518557 | FAIL |
+| 38 protocol tests and actual web bytes/owners | build-images.yml / guards + build-web | 37176154885 | PASS |
+| final serving/timing and native API reuse | production-deploy.yml + ship watcher | 37176403559 | PASS |
+| preserved frontend repairs, backend explicitly skipped | qa-smoke.yml / frontend-unit | 37176154904 | PASS |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
-- The first inclusive result missed 300 seconds. API publish was 181 seconds, Writing 72 seconds, parallel image pulls 88.621 seconds and actual API readiness 76.594 seconds. Direct HTTP readiness already polls every three seconds; changing Docker health intervals would not address it.
-- The 300-second target remains unmet: f13 measured 569.457 seconds; changed-web/reused-API e96 measured 582.880. Its pull was 91.524 seconds and native target readiness was 94.649 seconds. Do not replace measured safety gates with optimistic timing. Web partition executed, but the BusyBox checksum flag correction needs a successful native image build/live measurement.
+- The 300-second target remains unmet. Verified inclusive releases measured 744.784 -> 569.457 -> 582.880 -> 529.552 seconds. The final release was cold web compilation with healthy API reuse, not a full cold/Writing-live release. Cold forced-Writing build-only took 310 seconds. Direct HTTP readiness already polls every three seconds; do not remove gates or claim warm projections as measured acceptance.
+- Preserved backend fixtures still need the final one-time backend=always evidence run because the repaired pending QA was superseded; frontend and actual runtime image/build/deploy evidence are green. Speaking peer owns changed-fixture triage.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
+- At 04:26Z, it was the only queued/in-progress record, the ship lock/lease were free and the repository was PUBLIC. Specific deletion approval was requested; the owner was unavailable, so no authorization was granted and no history was deleted.
 
 ## Next action
 
-1. Commit only the literal BusyBox checksum correction, its regression and genuine failed-build evidence/state; ship through the lease and verify the original-byte/owner assertions plus exact serving. Then dispatch the existing QA backend=always path once for the descendant's preserved fixture repairs, record actual timings and finalize continuity/privacy under the native guard.
+1. Verify the real cited gates with ax:verify, commit/ship only final measurement/doc/state/evidence paths (no runtime input change), dispatch QA backend=always once on the resulting main SHA and give its exact ID to the Speaking owner. Restore privacy only when the native guard permits; otherwise record the exact missing authorization/queue blocker without deleting history or bypassing it.
