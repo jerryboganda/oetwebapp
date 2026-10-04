@@ -38,9 +38,9 @@ public sealed partial class SpeakingAiAssessmentService(
     ILogger<SpeakingAiAssessmentService> logger,
     SpeakingSimulationV11EvidenceCaptureService? v11EvidenceCapture = null,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null,
+    ISpeakingAudioEvidenceService? audioEvidence = null,
     ITypeSafeJudgmentService? judgments = null,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
-    ISpeakingAudioEvidenceService? audioEvidence = null)
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null)
 {
     // v3 (4 Oct 2026): the system prompt now carries the official OET band descriptors and the
     // "rules guide, never deduct" principles; the model is no longer asked for a readiness band

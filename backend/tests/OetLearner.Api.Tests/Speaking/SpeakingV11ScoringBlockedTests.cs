@@ -22,9 +22,12 @@ public sealed class SpeakingV11ScoringBlockedTests
             var source = File.ReadAllText(file);
 
             // The combined v1.1 grade has no caller at all any more (the endpoint only reads an existing report).
+            // The classic assessor has its own RunCombinedAssessmentAsync (one judgement for a Full Mock), so match the v1.1 receivers.
             if (name != "SpeakingSimulationV11AssessmentService.cs")
             {
-                Assert.DoesNotContain("RunCombinedAssessmentAsync(", source, StringComparison.Ordinal);
+                Assert.False(
+                    Regex.IsMatch(source, @"\b(v11|v11Assessor|simulationAssessor)\.RunCombinedAssessmentAsync\("),
+                    $"{name} starts a v1.1 combined grade");
             }
 
             // A v1.1 card grade is started only by the canonical router, which gates it on an existing report.

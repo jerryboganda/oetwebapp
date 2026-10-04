@@ -37,16 +37,24 @@ public sealed class JevSpeakingV11PlacementTests
     [Fact]
     public void Classic_ReadinessRunsBeforeTheGradeChain_AndTheCrosscheckAfterTheGradeIsScaled()
     {
+        // The grade itself lives in GradeCoreAsync (shared by the card grade, the combined Full Mock and the calibration
+        // harness): the chain, then the scaled score. RunAssessmentAsync wraps it: readiness, the core, then the cross-check.
         var source = Source("SpeakingAiAssessmentService.cs");
         var readiness = source.IndexOf("JevSpeakingAdvisor.CheckReadinessAsync(", StringComparison.Ordinal);
+        var coreCall = source.IndexOf("await GradeCoreAsync(", StringComparison.Ordinal);
+        var crosscheck = source.IndexOf("JevSpeakingAdvisor.CrosscheckAsync(", StringComparison.Ordinal);
+        var coreStart = source.IndexOf("Task<SpeakingGradeOutcome> GradeCoreAsync(", StringComparison.Ordinal);
         var chain = source.IndexOf("SpeakingGradeChain.CompleteAsync(", StringComparison.Ordinal);
         var scaled = source.IndexOf("OetScoring.SpeakingReportedScaled(rubricScores)", StringComparison.Ordinal);
-        var crosscheck = source.IndexOf("JevSpeakingAdvisor.CrosscheckAsync(", StringComparison.Ordinal);
 
-        Assert.True(readiness > 0 && crosscheck > 0);
+        Assert.True(readiness > 0 && crosscheck > 0 && coreStart > 0);
         Assert.True(
-            readiness < chain && chain < scaled && scaled < crosscheck,
-            $"order was readiness={readiness} chain={chain} scaled={scaled} crosscheck={crosscheck}");
+            readiness < coreCall && coreCall < crosscheck,
+            $"order was readiness={readiness} core={coreCall} crosscheck={crosscheck}");
+        Assert.True(
+            coreStart < chain && chain < scaled,
+            $"order was core={coreStart} chain={chain} scaled={scaled}");
+        Assert.DoesNotContain("JevSpeakingAdvisor", source[coreStart..], StringComparison.Ordinal);
     }
 
     [Theory]
