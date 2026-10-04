@@ -23,10 +23,11 @@ import { CriterionScoreRow } from '@/components/domain/results/criterion-score-r
 import { cn } from '@/lib/utils';
 import {
   getSpeakingExamResults,
+  retrySpeakingExamCombinedAssessment,
   type SpeakingExamResults,
 } from '@/lib/api/speaking-exams';
 import { ApiError } from '@/lib/api';
-import { readinessBandLabel } from '@/lib/api/speaking-assessments';
+import { CRITERION_LABEL, readinessBandLabel } from '@/lib/api/speaking-assessments';
 import {
   getSpeakingSessionResults,
   getSpeakingSessionTranscript,
@@ -41,6 +42,7 @@ import {
   type SpeakingSimulationV11AssessmentResponse,
 } from '@/lib/api/speaking-simulation-v11';
 import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
+import { DualAssessmentColumn } from '@/components/domain/speaking/DualAssessmentColumn';
 import {
   commonInputKind,
   gradeFailedSavedCopy,
@@ -60,6 +62,11 @@ const POLL_INTERVAL_MS = 4_000;
 const MAX_POLLS = 150;
 
 const bandLabel = (code: string) => readinessBandLabel(code);
+
+/** The criterion's name as a candidate knows it, never a camel-case code. */
+const criterionName = (code: string) =>
+  (CRITERION_LABEL as Record<string, string>)[code]
+  ?? code.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase()).trim();
 
 /** Same tones as the per-attempt result page: green from the pass line up, amber just under it, red below. */
 const bandTone = (code: string): 'success' | 'warning' | 'danger' =>
@@ -93,6 +100,8 @@ export default function SpeakingExamResultsPage() {
   const [retryError, setRetryError] = useState<{ sessionId: string; message: string } | null>(null);
   const requestedCardAssessmentsRef = useRef(new Set<string>());
   const requestedCombinedRef = useRef(false);
+  const [retryingCombined, setRetryingCombined] = useState(false);
+  const [combinedRetryError, setCombinedRetryError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!examId) return;
@@ -204,6 +213,21 @@ export default function SpeakingExamResultsPage() {
     }));
     setPollCount(0);
     setRetryingSessionId(null);
+  };
+
+  // The whole-test judgement failed: put it back in the queue (no charge) and watch for it again.
+  const retryCombined = async () => {
+    setRetryingCombined(true);
+    setCombinedRetryError(null);
+    try {
+      await retrySpeakingExamCombinedAssessment(examId);
+      setPollCount(0);
+      void refresh();
+    } catch (err) {
+      setCombinedRetryError(err instanceof ApiError ? err.userMessage : 'Could not restart grading. Please try again.');
+    } finally {
+      setRetryingCombined(false);
+    }
   };
 
   // What a card handed in decides its wording; a tutor room is always recorded.
@@ -325,6 +349,12 @@ export default function SpeakingExamResultsPage() {
 
   const pending = results.overallStatus !== 'scored';
   const awaitingTutor = results.overallStatus === 'awaiting_tutor';
+  // Owner spec 4 Oct 2026: a Full Mock is judged as ONE performance. While that judgement is running (or has failed)
+  // the role-plays' own numbers are not shown, so a card number is never mistaken for the result.
+  const combinedState = results.combinedState ?? null;
+  const combinedPending = combinedState === 'pending';
+  const combinedFailed = combinedState === 'failed';
+  const showCardScores = !combinedPending && !combinedFailed;
   const band = results.readinessBand || null;
   const bandColour = band ? bandTone(band) : 'success';
   // The badge is the OET letter for the reported score (never B+), not the readiness band.
@@ -338,13 +368,31 @@ export default function SpeakingExamResultsPage() {
       {pending ? <h1 className="text-xl font-semibold text-foreground">Speaking exam results</h1> : null}
       <div className="mt-4">{gradingNotices}</div>
 
-      {pending ? (
+      {combinedFailed ? (
+        <div
+          className="mt-4 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-navy"
+          role="alert"
+          data-testid="speaking-exam-combined-failed"
+        >
+          <p className="font-semibold">We couldn&apos;t finish assessing your whole test</p>
+          <p className="mt-1">Both role-plays are saved and graded. You won&apos;t be charged again.</p>
+          <Button className="mt-3" size="sm" onClick={() => void retryCombined()} disabled={retryingCombined}>
+            {retryingCombined ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+            Try again
+          </Button>
+          {combinedRetryError ? <p className="mt-2 font-medium text-danger-strong">{combinedRetryError}</p> : null}
+        </div>
+      ) : null}
+
+      {pending && combinedFailed ? null : pending ? (
         <div className="mt-4 rounded-xl border border-border bg-surface p-5">
           <div className="flex items-center gap-2 text-sm text-muted">
             <Loader2 className="h-4 w-4 animate-spin" />
             {awaitingTutor
               ? 'Your tutor is marking this exam. Your result will appear here once marking is complete.'
-              : 'Scoring your exam… this can take a few minutes. This page refreshes automatically.'}
+              : combinedPending
+                ? 'Both role-plays are graded. We are now assessing them together as one test… this can take a few minutes. This page refreshes automatically.'
+                : 'Scoring your exam… this can take a few minutes. This page refreshes automatically.'}
           </div>
         </div>
       ) : (
@@ -365,7 +413,7 @@ export default function SpeakingExamResultsPage() {
             grade={gradeLetter ? { label: `Grade ${gradeLetter}`, tone: bandColour } : null}
             stats={results.cards.map((card) => ({
               label: `Card ${card.cardNumber === 1 ? 'A' : 'B'}`,
-              value: card.assessment ? `${card.assessment.estimatedScaledScore}/500` : '—',
+              value: card.assessment && showCardScores ? `${card.assessment.estimatedScaledScore}/500` : '—',
               tone: 'info' as const,
             }))}
           />
@@ -387,6 +435,17 @@ export default function SpeakingExamResultsPage() {
               </p>
             ) : null}
           </div>
+          {results.combinedAssessment ? (
+            <div className="mt-4" data-testid="speaking-exam-combined-assessment">
+              <DualAssessmentColumn
+                kind="ai"
+                title="Your whole test"
+                assessment={results.combinedAssessment}
+                showScore={false}
+                showReadinessBand={false}
+              />
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -413,7 +472,7 @@ export default function SpeakingExamResultsPage() {
               </span>
             </div>
 
-            {card.assessment ? (
+            {card.assessment && showCardScores ? (
               <div className="mt-3 space-y-3">
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-bold tabular-nums text-foreground">
@@ -433,7 +492,7 @@ export default function SpeakingExamResultsPage() {
                   {Object.entries(card.assessment.criterionScores).map(([code, c]) => (
                     <CriterionScoreRow
                       key={code}
-                      label={code.replace(/([A-Z])/g, ' $1').replace(/^./, (m) => m.toUpperCase()).trim()}
+                      label={criterionName(code)}
                       score={c.score}
                       max={c.maxScore}
                     />
@@ -441,7 +500,11 @@ export default function SpeakingExamResultsPage() {
                 </div>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-muted">Not yet available.</p>
+              <p className="mt-3 text-sm text-muted">
+                {card.status === 'scored' && !showCardScores
+                  ? 'Graded. Its numbers appear here once your whole test has been assessed.'
+                  : 'Not yet available.'}
+              </p>
             )}
 
             {card.sessionId ? (

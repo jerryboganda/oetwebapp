@@ -50,6 +50,8 @@ export interface DualAssessmentColumnProps {
   placeholderCta?: ReactNode;
   showFullCriteria?: boolean;
   showReadinessBand?: boolean;
+  /** False when the page already leads with the score and grade (the Full Mock result). Default true. */
+  showScore?: boolean;
 }
 
 const KIND_STYLES: Record<DualAssessmentColumnKind, { header: string; ring: string; bar: string; chip: string; icon: ReactNode; tooltip: string }> = {
@@ -266,6 +268,7 @@ export function DualAssessmentColumn({
   placeholderCta,
   showFullCriteria = true,
   showReadinessBand = true,
+  showScore = true,
 }: DualAssessmentColumnProps) {
   const styles = KIND_STYLES[kind];
   // Both sides report the same way: 0–500 in 10-point steps with the OET letter grade (no B+).
@@ -316,6 +319,7 @@ export function DualAssessmentColumn({
         ) : (
           <>
             {/* Scaled score + readiness band */}
+            {showScore ? (
             <div className="flex flex-col items-start gap-2 rounded-2xl border border-border bg-background-light/60 p-4">
               <span className="eyebrow text-muted">
                 Estimated scaled score
@@ -345,6 +349,7 @@ export function DualAssessmentColumn({
                 <p className="text-xs text-muted">Confidence: {assessment.confidenceBand}</p>
               )}
             </div>
+            ) : null}
 
             {/* Overall summary (AI) or feedback markdown (Tutor) */}
             {isAiAssessment(assessment) && assessment.overallSummary && (

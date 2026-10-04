@@ -611,10 +611,22 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         await canonical.AssessNowAsync(sessionB, default);
         await canonical.AssessNowAsync(sessionB, default);
         var cardScore = (await _db.SpeakingAiAssessments.AsNoTracking().FirstAsync(a => a.SpeakingSessionId == sessionA)).EstimatedScaledScore;
+
+        // Both cards are graded: the overall result waits for the ONE combined judgement (never an average), which the
+        // second card's grade queued for the worker.
+        var waiting = await exams.GetResultsAsync(UserId, examId, default);
+        Assert.Equal("pending", waiting.OverallStatus);
+        Assert.Equal(SpeakingExamCombinedStates.Pending, waiting.CombinedState);
+        Assert.Null(waiting.CombinedScaledScore);
+        var examOperation = await _db.AiOperations.AsNoTracking()
+            .SingleAsync(o => o.ResourceType == SpeakingCanonicalAssessmentService.ExamResourceType);
+        await canonical.ExecuteQueuedAsync(examOperation.Id, default);
+
         for (var read = 0; read < 3; read++)
         {
             var results = await exams.GetResultsAsync(UserId, examId, default);
             Assert.Equal("scored", results.OverallStatus);
+            Assert.Equal(SpeakingExamCombinedStates.Ready, results.CombinedState);
             Assert.Equal(OetScoring.OetReportedScaledScore(cardScore), results.CombinedScaledScore);
         }
         Assert.Equal(cardScore, (await _db.SpeakingExamSessions.AsNoTracking()

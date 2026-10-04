@@ -99,12 +99,14 @@ stored audio judgement — stage off, or an older grade — is labelled the same
 
 **Release gate.** The stage is dark until a probe passes. `POST /v1/admin/speaking/audio-assess/probe` (admin, multipart:
 `audio` + `phrase`) runs a clip through the same pipeline and reports what the model heard, the similarity to the phrase,
-the score and observations; the manual workflow `speaking-audio-probe.yml` sends a clean synthetic clip and three deliberately accented ones
-(German, Spanish and French voices reading the English phrase) and requires: the model heard the clean clip
-(similarity ≥ 0.6) and judged it, at least one accented clip is judged from its audio, and a judged one scores 4 or
-lower with at least one observation and below the clean clip. Only then is the flag turned on. The probe is plumbing and sanity evidence; accuracy
-against human experts is what [calibration](#calibration) measures (audio-sourced Intelligibility error is one of its
-pass criteria).
+the score and observations; the manual workflow `speaking-audio-probe.yml` sends synthetic clips (no learner audio) and
+requires: the model heard the clean clip (similarity ≥ 0.6) and judged it; a clip with **no speech** is not accepted as a
+judgement (the judge invents nothing); and the same speech buried in noise is not trusted like the clean one (refused,
+flagged as a weaker recording, or scored lower). Only then is the flag turned on. Accented synthetic voices are printed for
+information only: the first live probe (4 Oct 2026, `gpt-audio-1.5`) judged German-, Spanish- and French-voice renderings
+of English as 6/6 like the clean voice, because a synthetic voice is fully intelligible, so Intelligibility discrimination on
+real accented speech is **not** established by the probe. The probe is plumbing and sanity evidence; accuracy against human
+experts is what [calibration](#calibration) measures (audio-sourced Intelligibility error is one of its pass criteria).
 
 ### Grader version
 
@@ -159,10 +161,34 @@ progress" beside the number while it is provisional.
 
 ## Full Mock
 
-A Full Speaking Mock covers Card A and Card B and reports **one** final score out of 500 with **one**
-grade; card breakdowns sit beside it. Today the combined number is the average of the two cards'
-stored scores, reported in 10-point steps (`SpeakingExamService.GetResultsAsync`); it moves to a single
-combined two-card criterion judgement in a later increment.
+A Full Speaking Mock covers Card A and Card B and is assessed as **one performance**: one set of nine criterion scores for
+the whole test, one reported score out of 500, one grade. It is **never** the average of two card scores.
+
+1. Each card is graded as before (`speaking.grade`, with its own audio stage when that is on). Those grades carry the
+   per-card breakdown, the stored audio evidence and the credit settlement: the held credits are committed as soon as both
+   cards are graded, whether or not step 2 has finished.
+2. When the second card's grade lands, one durable operation is queued (`AiOperation`, resource type `speaking_exam`,
+   idempotency key `speaking.assess.exam:{examId}`). The worker runs `SpeakingAiAssessmentService.RunCombinedAssessmentAsync`:
+   the same grader core (`GradeCoreAsync`), prompt rubric, band descriptors and reply schema, with **both** transcripts in
+   one user message (connection-check chatter removed) and the instruction to score each criterion once for the whole test.
+   Neither card's score is in the prompt. It goes through the same pinned Claude Max chain as a card grade.
+3. Audio: no extra audio call. The grader gets the one acoustic evidence built from the two card grades' stored
+   `_acoustic` blocks. Both cards judged from audio: Intelligibility is the mean of the two judgements, a half rounding up
+   (`OetScoring.SpeakingCombinedIntelligibility`), the observations of both are kept (marked "Role-play 1/2") and confidence is
+   the weaker of the two. Anything less (audio for one card only, none, or the stage off) is labelled "estimated from the
+   transcript only (limited evidence)" with low confidence, never half an audio judgement presented as audio.
+4. The result is stored on `SpeakingExamSessions.CombinedAssessmentJson` in the shape of a card's assessment row, so one
+   projection reads both; `CombinedScaledSnapshot` / `ReadinessBandSnapshot` hold the reported number and band for History.
+   Its grader version is `speaking.score.v3-combined|…`: a different prompt is a different grader, so the combined judgement
+   stays "provisional" until it has been calibrated on its own.
+
+`GET /v1/speaking/exams/{id}/results` returns `combinedAssessment` (the same projection a card has: nine criteria with
+explanations, report, evidence, grade, label) and `combinedState`: `ready`, `pending` (both cards graded, the whole test is
+being judged; no overall number yet and the cards' own numbers are not shown, so a card number is never mistaken for the
+result), `failed` (`POST /v1/speaking/exams/{id}/combined-assess` re-queues it, no charge) or `legacy` (an exam that
+finished before this existed keeps its averaged number; v1.1-graded exams are averaged as they always were). Live-tutor exams
+are human-marked and unchanged. History shows the same stored number, or "Marking in progress" while the combined judgement is
+running: it never averages two cards.
 
 ## Readiness band
 

@@ -267,8 +267,8 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
                 examDebit?.Source,
                 examDebit?.Credits ?? 0,
                 finished ? $"{examRoute}/results" : examRoute,
-                ExamResultLabel(examRow, cardScores, failedGrades),
-                GradeLetter(ExamScaledScore(examRow, cardScores))));
+                ExamResultLabel(examRow, failedGrades),
+                GradeLetter(ExamScaledScore(examRow))));
         }
 
         foreach (var row in readingAttempts)
@@ -360,9 +360,10 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
         return scores;
     }
 
-    /// <summary>The same number the exam results page shows: the persisted combined snapshot, else the
-    /// rounded average of the two graded cards (<c>(int)Math.Round((a + b) / 2.0)</c>).</summary>
-    private static int? ExamScaledScore(ExamRow exam, IReadOnlyDictionary<string, int> cardScores)
+    /// <summary>The same number the exam results page shows: the persisted combined snapshot (the single judgement of
+    /// both cards; an exam finished before that existed keeps its averaged one). While the combined grade has not
+    /// finished there is NO number: two card scores are never averaged into one here.</summary>
+    private static int? ExamScaledScore(ExamRow exam)
     {
         // A live-tutor exam is human-marked: there is never an AI number to show or to wait for.
         if (exam.Mode != SpeakingExamMode.Ai)
@@ -370,26 +371,17 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
             return null;
         }
 
-        if (exam.CombinedScaledSnapshot is { } combined)
-        {
-            return OetScoring.OetReportedScaledScore(combined);
-        }
-
-        return exam.SessionAId is { } cardA
-            && exam.SessionBId is { } cardB
-            && cardScores.TryGetValue(cardA, out var scoreA)
-            && cardScores.TryGetValue(cardB, out var scoreB)
-                ? OetScoring.OetReportedScaledScore((scoreA + scoreB) / 2.0)
-                : null;
+        return exam.CombinedScaledSnapshot is { } combined
+            ? OetScoring.OetReportedScaledScore(combined)
+            : null;
     }
 
     private static string? GradeLetter(int? scaled)
         => scaled is { } value ? OetScoring.OetGradeLetterFromScaled(value) : null;
 
-    private static string? ExamResultLabel(
-        ExamRow exam, IReadOnlyDictionary<string, int> cardScores, IReadOnlySet<string> failedGrades)
+    private static string? ExamResultLabel(ExamRow exam, IReadOnlySet<string> failedGrades)
     {
-        if (ExamScaledScore(exam, cardScores) is { } scaled)
+        if (ExamScaledScore(exam) is { } scaled)
         {
             return $"{scaled}/500";
         }

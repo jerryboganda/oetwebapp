@@ -82,7 +82,21 @@ public record SpeakingExamResults(
     string? ReadinessBand,
     IReadOnlyList<SpeakingExamCardResult> Cards,
     string? Grade = null,
-    string? ScoreLabel = null);
+    string? ScoreLabel = null,
+    SpeakingAiAssessmentProjection? CombinedAssessment = null,
+    string? CombinedState = null);
+
+/// <summary>How an AI exam's single combined judgement stands, as the results page sees it: <c>ready</c> (the
+/// combined result is in <c>CombinedAssessment</c>), <c>pending</c> (both cards graded, the combined grade is running),
+/// <c>failed</c> (it ended in a terminal failure: "Try again", no charge) or <c>legacy</c> (an exam finished before the
+/// combined judgement existed keeps its averaged number).</summary>
+public static class SpeakingExamCombinedStates
+{
+    public const string Ready = "ready";
+    public const string Pending = "pending";
+    public const string Failed = "failed";
+    public const string Legacy = "legacy";
+}
 
 // ── Live-tutor exam (2026-06-11 rebuild) — TUTOR-ONLY views ─────────────────
 // The roleplayer (patient) card the human tutor plays. NEVER returned by any

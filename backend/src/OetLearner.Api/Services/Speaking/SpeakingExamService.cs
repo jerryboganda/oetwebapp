@@ -632,62 +632,96 @@ public sealed class SpeakingExamService(
         cards.Add(cardA.Result);
         cards.Add(cardB.Result);
 
-        // Aggregate once both cards are scored.
-        string overall;
-        int? combined = null;
-        string? band = null;
         // Only a live-tutor booking is human-marked. A curated mock-set may be
         // an AI exam; its child sessions are routed to the released v1.1
         // assessor and must never be mislabeled as awaiting tutor review.
         var humanMarked = exam.Mode == SpeakingExamMode.LiveTutor;
+        var cardsScored = cards.All(c => c.Status == "scored");
+
+        string overall;
+        int? combined = null;
+        string? band = null;
+        string? combinedState = null;
+        SpeakingAiAssessmentProjection? combinedAssessment = null;
+
+        // A human-marked exam (two tutor marks) and an exam graded by the retired v1.1 assessor have no single
+        // judgement of the whole test: their two card scores are averaged, as they always were.
+        async Task AverageCardsAsync()
+        {
+            if (cardA.RawScaledScore is not { } scaledA || cardB.RawScaledScore is not { } scaledB) return;
+            combined = (int)Math.Round((scaledA + scaledB) / 2.0);
+            // The readiness band follows the reported (10-point) score the learner sees,
+            // never the unrounded average: a combined 345 is shown as 350 and must not read "Borderline".
+            band = OetScoring.SpeakingReadinessBandCode(
+                OetScoring.SpeakingReadinessBandFromScaled(OetScoring.OetReportedScaledScore(combined.Value)));
+            if (exam.CombinedScaledSnapshot is null)
+            {
+                exam.CombinedScaledSnapshot = combined;
+                exam.ReadinessBandSnapshot = band;
+                exam.UpdatedAt = now;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+
         if (humanMarked)
         {
-            overall = cards.All(c => c.Status == "scored") ? "scored" : "awaiting_tutor";
+            overall = cardsScored ? "scored" : "awaiting_tutor";
+            if (cardsScored) await AverageCardsAsync();
         }
         else
         {
-            overall = cards.All(c => c.Status == "scored") ? "scored" : "pending";
+            // Owner spec 4 Oct 2026: a Full Mock is assessed as ONE performance. The overall score, grade and
+            // criterion scores come from the combined judgement of both role-plays together, never from averaging
+            // the two card scores. An exam that finished before that existed keeps the number it was given then.
+            combinedAssessment = SpeakingAiAssessmentService.ProjectCombinedJson(exam.CombinedAssessmentJson);
+            if (combinedAssessment is not null)
+            {
+                overall = "scored";
+                combinedState = SpeakingExamCombinedStates.Ready;
+            }
+            else if (cardsScored && (cardA.UsesV11 || cardB.UsesV11))
+            {
+                // Graded by the retired v1.1 assessor: there is no classic grade to judge as one test.
+                overall = "scored";
+                combinedState = SpeakingExamCombinedStates.Legacy;
+                await AverageCardsAsync();
+            }
+            else if (exam.CombinedScaledSnapshot is not null)
+            {
+                overall = "scored";
+                combinedState = SpeakingExamCombinedStates.Legacy;
+            }
+            else
+            {
+                // Both cards graded but no overall result yet: the combined judgement runs in the background.
+                overall = "pending";
+                if (cardsScored) combinedState = await QueueCombinedAsync(exam.Id, ct);
+            }
         }
 
-        if (overall == "scored")
+        if (!humanMarked && cardsScored && creditReservations is not null)
         {
-            var scaledA = cardA.RawScaledScore;
-            var scaledB = cardB.RawScaledScore;
-            if (scaledA is not null && scaledB is not null)
-            {
-                combined = (int)Math.Round((scaledA.Value + scaledB.Value) / 2.0);
-                // The readiness band follows the reported (10-point) score the learner sees,
-                // never the unrounded average: a combined 345 is shown as 350 and must not read "Borderline".
-                band = OetScoring.SpeakingReadinessBandCode(
-                    OetScoring.SpeakingReadinessBandFromScaled(OetScoring.OetReportedScaledScore(combined.Value)));
-                if (exam.CombinedScaledSnapshot is null)
-                {
-                    exam.CombinedScaledSnapshot = combined;
-                    exam.ReadinessBandSnapshot = band;
-                    exam.UpdatedAt = now;
-                    await db.SaveChangesAsync(ct);
-                }
-            }
-
-            // The exam result is complete: settle the held card credits.
-            if (creditReservations is not null)
-            {
-                await SpeakingCreditSettlement.CommitExamIfGradedAsync(db, creditReservations, exam, ct);
-            }
+            // The card grades are what the held credits paid for: settle them once both cards are graded,
+            // whether or not the combined judgement has finished.
+            await SpeakingCreditSettlement.CommitExamIfGradedAsync(db, creditReservations, exam, ct);
         }
 
         // One reported score (10-point steps) for the whole exam, and the grade, readiness band and
         // label all derive from it: a stored snapshot from before the reported score existed is
         // re-derived here, never shown with a band that was computed on an unrounded number.
-        int? reportedScore = combined is { } liveCombined
-            ? OetScoring.OetReportedScaledScore(liveCombined)
-            : exam.CombinedScaledSnapshot is { } snapshot
-                ? OetScoring.OetReportedScaledScore(snapshot)
-                : null;
-        var examLabel = cards.Count > 0
-            && cards.All(c => c.Assessment?.ScoreLabel == OetScoring.SpeakingScoreLabelPracticeEstimate)
-                ? OetScoring.SpeakingScoreLabelPracticeEstimate
-                : OetScoring.SpeakingScoreLabelProvisional;
+        int? reportedScore = combinedAssessment is not null
+            ? combinedAssessment.EstimatedScaledScore
+            : combined is { } liveCombined
+                ? OetScoring.OetReportedScaledScore(liveCombined)
+                : exam.CombinedScaledSnapshot is { } snapshot
+                    ? OetScoring.OetReportedScaledScore(snapshot)
+                    : null;
+        var examLabel = combinedAssessment is not null
+            ? combinedAssessment.ScoreLabel ?? OetScoring.SpeakingScoreLabelProvisional
+            : cards.Count > 0
+                && cards.All(c => c.Assessment?.ScoreLabel == OetScoring.SpeakingScoreLabelPracticeEstimate)
+                    ? OetScoring.SpeakingScoreLabelPracticeEstimate
+                    : OetScoring.SpeakingScoreLabelProvisional;
 
         return new SpeakingExamResults(
             ExamId: exam.Id,
@@ -700,15 +734,53 @@ public sealed class SpeakingExamService(
                 : exam.ReadinessBandSnapshot,
             Cards: cards,
             Grade: reportedScore is { } reportedForGrade ? OetScoring.OetGradeLetterFromScaled(reportedForGrade) : null,
-            ScoreLabel: examLabel);
+            ScoreLabel: examLabel,
+            CombinedAssessment: combinedAssessment,
+            CombinedState: combinedState);
     }
 
-    private async Task<(SpeakingExamCardResult Result, int? RawScaledScore)> ResultForCardAsync(
+    /// <summary>Makes sure the combined judgement of a fully graded AI exam is queued, and says whether it is still
+    /// coming or has failed. Never fails the results read.</summary>
+    private async Task<string> QueueCombinedAsync(string examId, CancellationToken ct)
+    {
+        if (canonical is null) return SpeakingExamCombinedStates.Pending;
+        try
+        {
+            await canonical.EnqueueExamCombinedAsync(examId, ct);
+            return await canonical.GetExamCombinedStateAsync(examId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not queue the combined judgement for exam {ExamId}.", examId);
+            return SpeakingExamCombinedStates.Pending;
+        }
+    }
+
+    /// <summary>The learner's "Try again" for a combined judgement that failed: re-queues it (no charge; the credits were
+    /// settled by the card grades) and returns the new state.</summary>
+    public async Task<string> RetryCombinedAssessmentAsync(string userId, string examId, CancellationToken ct)
+    {
+        var exam = await LoadOwnedAsync(userId, examId, ct, tracking: false);
+        if (exam.Mode != SpeakingExamMode.Ai)
+        {
+            throw ApiException.Conflict("speaking_exam_not_ai", "Only an AI exam is graded as one test.");
+        }
+
+        if (canonical is null)
+        {
+            throw ApiException.Conflict("speaking_grading_unavailable", "Grading is not available right now. Please try again shortly.");
+        }
+
+        await canonical.RetryExamCombinedAsync(examId, ct);
+        return await canonical.GetExamCombinedStateAsync(examId, ct);
+    }
+
+    private async Task<(SpeakingExamCardResult Result, int? RawScaledScore, bool UsesV11)> ResultForCardAsync(
         SpeakingExamSession exam, string? sessionId, int cardNumber, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            return (new SpeakingExamCardResult(cardNumber, string.Empty, "pending", null), null);
+            return (new SpeakingExamCardResult(cardNumber, string.Empty, "pending", null), null, false);
         }
 
         // Human-marked only for a live-tutor booking. AI curated mock-set
@@ -720,7 +792,7 @@ public sealed class SpeakingExamService(
                 .OrderByDescending(t => t.SubmittedAt)
                 .FirstOrDefaultAsync(ct);
             return (new SpeakingExamCardResult(
-                cardNumber, sessionId, tutor is null ? "awaiting_tutor" : "scored", null), null);
+                cardNumber, sessionId, tutor is null ? "awaiting_tutor" : "scored", null), null, false);
         }
 
         // A session with a captured v1.1 persona is owned by the released
@@ -778,7 +850,7 @@ public sealed class SpeakingExamService(
         }
 
         return (new SpeakingExamCardResult(
-            cardNumber, sessionId, latest is null ? "pending" : "scored", latest), rawScaledScore);
+            cardNumber, sessionId, latest is null ? "pending" : "scored", latest), rawScaledScore, usesSimulationV11);
     }
 
     /// <summary>Summary projection of a complete v1.1 card report into the

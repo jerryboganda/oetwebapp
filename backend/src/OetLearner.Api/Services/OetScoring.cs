@@ -592,6 +592,14 @@ public static class OetScoring
     public static int SpeakingReportedScaled(SpeakingCriterionScores scores)
         => SpeakingRawToReportedTable[SpeakingRawTotal(scores)];
 
+    /// <summary>
+    /// Intelligibility for a Full Mock whose two role-plays were each judged from the candidate's audio: the mean of the
+    /// two 0–6 judgements, a half rounding up (a 3 and a 4 is a 4). A platform heuristic like the raw→reported map
+    /// (the real assessor gives one Intelligibility for the whole test), part of the combined grader version.
+    /// </summary>
+    public static int SpeakingCombinedIntelligibility(int roleplayOne, int roleplayTwo)
+        => (ClampInt(roleplayOne, 0, 6) + ClampInt(roleplayTwo, 0, 6) + 1) / 2;
+
     /// <summary>Score label codes: how far the reported number can be trusted.</summary>
     public const string SpeakingScoreLabelProvisional = "provisional";
     public const string SpeakingScoreLabelPracticeEstimate = "ai_practice_estimate";

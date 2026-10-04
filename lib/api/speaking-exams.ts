@@ -17,7 +17,7 @@
  * (patient) card, the hidden card type, or any interlocutor field.
  */
 import { apiClient } from '@/lib/api';
-import type { SpeakingIntelligibilityEvidence } from '@/lib/api/speaking-assessments';
+import type { AiAssessment, SpeakingIntelligibilityEvidence } from '@/lib/api/speaking-assessments';
 
 export type SpeakingExamMode = 'ai' | 'live_tutor';
 
@@ -130,11 +130,30 @@ export interface SpeakingExamResults {
   cards: SpeakingExamCardResult[];
   /** OET letter for `combinedScaledScore`; there is no B+. */
   grade?: string | null;
-  /** `provisional` until every card was graded by a calibrated grader. Missing = provisional. */
+  /** `provisional` until the graders involved were calibrated. Missing = provisional. */
   scoreLabel?: string | null;
+  /**
+   * The ONE judgement of both role-plays together (owner spec 4 Oct 2026): a single set of nine criterion scores, one
+   * score out of 500 and one grade, with the coaching report and what Intelligibility was judged from.
+   */
+  combinedAssessment?: AiAssessment | null;
+  /**
+   * `ready` (the combined result is in `combinedAssessment`), `pending` (both cards graded, the whole test is being
+   * judged), `failed` (try again, no charge) or `legacy` (an older exam keeps its averaged number). Missing for a
+   * tutor exam, or while a card is still being graded.
+   */
+  combinedState?: 'ready' | 'pending' | 'failed' | 'legacy' | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** "Try again" for the combined judgement of a Full Mock that failed: re-queues it, no charge. */
+export function retrySpeakingExamCombinedAssessment(examId: string) {
+  return apiClient.post<{ combinedState: string }>(
+    `/v1/speaking/exams/${encodeURIComponent(examId)}/combined-assess`,
+    {},
+  );
+}
 
 export function createSpeakingExam(input: CreateSpeakingExamInput) {
   return apiClient.post<SpeakingExamDetail>('/v1/speaking/exams', input);

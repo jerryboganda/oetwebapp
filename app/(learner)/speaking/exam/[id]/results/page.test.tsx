@@ -8,6 +8,7 @@ const {
   mockRunAssessment,
   mockV11Assessment,
   mockV11Combined,
+  mockRetryCombined,
 } = vi.hoisted(() => {
   class ApiErrorMock extends Error {
     status: number;
@@ -29,12 +30,16 @@ const {
     mockRunAssessment: vi.fn(),
     mockV11Assessment: vi.fn(),
     mockV11Combined: vi.fn(),
+    mockRetryCombined: vi.fn(),
   };
 });
 
 vi.mock('next/navigation', () => ({ useParams: () => ({ id: 'exam-1' }) }));
 vi.mock('@/lib/api', () => ({ ApiError: ApiErrorMock }));
-vi.mock('@/lib/api/speaking-exams', () => ({ getSpeakingExamResults: mockGetExamResults }));
+vi.mock('@/lib/api/speaking-exams', () => ({
+  getSpeakingExamResults: mockGetExamResults,
+  retrySpeakingExamCombinedAssessment: mockRetryCombined,
+}));
 vi.mock('@/lib/api/speaking-sessions', () => ({
   getSpeakingSessionResults: mockGetCardStatus,
   getSpeakingSessionTranscript: vi.fn().mockResolvedValue(null),
@@ -45,8 +50,25 @@ vi.mock('@/lib/api/speaking-simulation-v11', () => ({
   getSpeakingSimulationV11CombinedAssessment: mockV11Combined,
   runSpeakingSimulationV11CombinedAssessment: vi.fn().mockResolvedValue(null),
 }));
-// Same labels as the real map.
+// Same labels and criteria as the real module (the whole-test column renders the nine criteria).
 vi.mock('@/lib/api/speaking-assessments', () => ({
+  LINGUISTIC_CRITERIA: ['intelligibility', 'fluency', 'appropriateness', 'grammarExpression'],
+  CLINICAL_CRITERIA: ['relationshipBuilding', 'patientPerspective', 'structure', 'informationGathering', 'informationGiving'],
+  CRITERION_MAX: {
+    intelligibility: 6, fluency: 6, appropriateness: 6, grammarExpression: 6,
+    relationshipBuilding: 3, patientPerspective: 3, structure: 3, informationGathering: 3, informationGiving: 3,
+  },
+  CRITERION_LABEL: {
+    intelligibility: 'Intelligibility',
+    fluency: 'Fluency',
+    appropriateness: 'Appropriateness of language',
+    grammarExpression: 'Resources of grammar & expression',
+    relationshipBuilding: 'Relationship building',
+    patientPerspective: 'Understanding patient perspective',
+    structure: 'Providing structure',
+    informationGathering: 'Information gathering',
+    informationGiving: 'Information giving',
+  },
   readinessBandLabel: (band: string) => {
     const labels: Record<string, string> = {
       not_ready: 'Not yet ready',
@@ -151,6 +173,7 @@ describe('Speaking exam results page', () => {
     mockRunAssessment.mockResolvedValue({ state: 'processing' });
     mockV11Assessment.mockResolvedValue(null);
     mockV11Combined.mockResolvedValue(null);
+    mockRetryCombined.mockResolvedValue({ combinedState: 'pending' });
   });
 
   describe('a scored exam', () => {
@@ -369,6 +392,110 @@ describe('Speaking exam results page', () => {
       render(<SpeakingExamResultsPage />);
 
       expect(await screen.findByTestId('v11-report')).toHaveAttribute('data-input-kind', expected);
+    });
+  });
+
+  describe('the whole-test (combined) judgement', () => {
+    const cardsWithScores = [scoredCard(1, 'sess-a', 300, 'borderline'), scoredCard(2, 'sess-b', 320, 'borderline')];
+    const combinedAssessment = () => ({
+      assessmentId: 'spa_exam_exam-1',
+      provider: 'writing-claude-sub',
+      modelId: 'claude-opus-5-5',
+      promptTemplateId: 'speaking.score.v3-combined',
+      criterionScores: {
+        intelligibility: { score: 4, maxScore: 6, rationale: 'Role-play 1: mostly clear.', evidenceQuotes: [] as string[] },
+        grammarExpression: { score: 5, maxScore: 6, rationale: 'Accurate across both role-plays.', evidenceQuotes: [] as string[] },
+      },
+      estimatedScaledScore: 310,
+      readinessBand: 'borderline',
+      overallSummary: 'One consistent performance across both role-plays.',
+      confidenceBand: 'medium',
+      generatedAt: '2026-10-04T10:00:00Z',
+      isAdvisory: true,
+      grade: 'C+',
+      scoreLabel: 'provisional',
+      intelligibilityEvidence: { source: 'audio', confidence: 'high', observations: [{ clip: 1, approxSecond: 12, issue: 'Role-play 1: dropped endings.', example: null }] },
+    });
+
+    it('shows the one combined result: hero score, then the nine criteria of the whole test with what Intelligibility rests on', async () => {
+      mockGetExamResults.mockResolvedValue(scoredResults({
+        cards: cardsWithScores,
+        combinedState: 'ready',
+        combinedAssessment: combinedAssessment(),
+      }));
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByTestId('speaking-exam-combined-assessment')).toBeInTheDocument();
+      expect(screen.getByText('Your whole test')).toBeInTheDocument();
+      expect(screen.getByTestId('grade-value')).toHaveTextContent('310');
+      expect(screen.getByText('Accurate across both role-plays.')).toBeInTheDocument();
+      expect(screen.getByTestId('intelligibility-evidence-label')).toHaveTextContent('Judged from your recording');
+      // The score is led by the hero panel once, not repeated in the whole-test column.
+      expect(screen.queryByText('Estimated scaled score')).not.toBeInTheDocument();
+      // The role-plays keep their own breakdown beside it.
+      expect(screen.getByText('300/500')).toBeInTheDocument();
+      expect(screen.getByText('320/500')).toBeInTheDocument();
+    });
+
+    it('names the criteria as a candidate knows them, never as camel-case codes', async () => {
+      const card = scoredCard(1, 'sess-a', 300, 'borderline');
+      card.assessment.criterionScores = {
+        intelligibility: { score: 5, maxScore: 6, rationale: 'Clear.', evidenceQuotes: [] },
+        grammarExpression: { score: 4, maxScore: 6, rationale: 'Accurate.', evidenceQuotes: [] },
+      } as typeof card.assessment.criterionScores;
+      mockGetExamResults.mockResolvedValue(scoredResults({ cards: [card, scoredCard(2, 'sess-b', 320, 'borderline')] }));
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByText('Resources of grammar & expression')).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('Grammar Expression');
+    });
+
+    it('waits for the one combined result and does not show the role-plays\' own numbers meanwhile', async () => {
+      mockGetExamResults.mockResolvedValue(pendingResults({
+        cards: cardsWithScores,
+        combinedState: 'pending',
+      }));
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByText(/assessing them together as one test/)).toBeInTheDocument();
+      expect(screen.queryByText('300/500')).not.toBeInTheDocument();
+      expect(screen.queryByText('320/500')).not.toBeInTheDocument();
+      expect(screen.getAllByText('Graded. Its numbers appear here once your whole test has been assessed.')).toHaveLength(2);
+      expect(screen.queryByTestId('speaking-exam-combined-assessment')).not.toBeInTheDocument();
+    });
+
+    it('offers "Try again" when assessing the whole test failed, and watches for the result afterwards', async () => {
+      const user = userEvent.setup();
+      mockGetExamResults.mockResolvedValue(pendingResults({ cards: cardsWithScores, combinedState: 'failed' }));
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByText('We couldn\'t finish assessing your whole test')).toBeInTheDocument();
+      expect(screen.getByText('Both role-plays are saved and graded. You won\'t be charged again.')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(mockRetryCombined).toHaveBeenCalledWith('exam-1');
+      await waitFor(() => expect(mockGetExamResults.mock.calls.length).toBeGreaterThan(1));
+    });
+
+    it('shows why "Try again" did not work instead of hiding it', async () => {
+      const user = userEvent.setup();
+      mockGetExamResults.mockResolvedValue(pendingResults({ cards: cardsWithScores, combinedState: 'failed' }));
+      mockRetryCombined.mockRejectedValue(new ApiErrorMock(429, 'rate_limited', 'Too many requests. Please wait a moment and try again.'));
+      render(<SpeakingExamResultsPage />);
+
+      await user.click(await screen.findByRole('button', { name: 'Try again' }));
+
+      expect(await screen.findByText('Too many requests. Please wait a moment and try again.')).toBeInTheDocument();
+      expect(screen.getByTestId('speaking-exam-combined-failed')).toBeInTheDocument();
+    });
+
+    it('keeps showing an older exam\'s averaged number and grade as before (legacy)', async () => {
+      mockGetExamResults.mockResolvedValue(scoredResults({ combinedState: 'legacy' }));
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByText('Grade C+')).toBeInTheDocument();
+      expect(screen.getByText('300/500')).toBeInTheDocument();
+      expect(screen.queryByTestId('speaking-exam-combined-assessment')).not.toBeInTheDocument();
     });
   });
 });

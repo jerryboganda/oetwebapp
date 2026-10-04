@@ -8,17 +8,18 @@
  *
  *   1. clean clip      the model heard THIS recording (what it heard matches the phrase, similarity >= 0.6)
  *   2. clean clip      it came back as a verified, scored judgement from a named model
- *   3. accented clips  at least one was judged from its audio (not discarded as unverified) ...
- *   4. accented clips  ... and a judged one got Intelligibility 4 or lower, at least one observation, and a score
- *                      below the clean clip's (the judge can tell a clear speaker from an accented one)
+ *   3. noise only      a clip with no speech in it is NOT accepted as a judgement (the judge invents nothing)
+ *   4. degraded speech the same speech buried in noise is not trusted like the clean one: refused, or flagged as a
+ *                      weaker recording, or scored below the clean clip
  *
- * The clips are synthetic (a speech synthesiser reading the phrase; a different-language voice reading the English
- * phrase gives an accented one), so no learner audio is involved. Every variant's numbers are printed. This is
- * plumbing and sanity evidence; accuracy against human experts is what the calibration harness measures.
+ * The clips are synthetic (a speech synthesiser reading the phrase; ffmpeg makes the noise and the degraded copy),
+ * so no learner audio is involved. Optional accented clips (a different-language voice reading the English phrase)
+ * are printed for information only: a synthetic voice is usually fully intelligible, so they cannot gate anything.
+ * This is plumbing and sanity evidence; accuracy against human experts is what the calibration harness measures.
  *
  * Usage:
  *   OET_ADMIN_EMAIL=... OET_ADMIN_PASSWORD=... node scripts/speaking/audio-probe.mjs \
- *     --clean clean.wav --accented a.wav,b.wav,c.wav --phrase "Good afternoon, my name is ..."
+ *     --clean clean.wav --noise noise.wav --degraded degraded.wav [--accented a.wav,b.wav] --phrase "Good afternoon, ..."
  *
  * Env: OET_API_BASE (default https://api.oetwithdrhesham.co.uk), OET_ADMIN_EMAIL + OET_ADMIN_PASSWORD.
  * Credentials are read from the environment only and never printed. Output: a table on stdout, `audio-probe-result.json`,
@@ -36,10 +37,12 @@ function arg(name) {
 }
 
 const cleanFile = arg('clean');
+const noiseFile = arg('noise');
+const degradedFile = arg('degraded');
 const accentedFiles = arg('accented').split(',').map((f) => f.trim()).filter(Boolean);
 const phrase = arg('phrase');
-if (!cleanFile || accentedFiles.length === 0 || !phrase) {
-  console.error('Usage: audio-probe.mjs --clean <file> --accented <file>[,<file>...] --phrase "<what was said>"');
+if (!cleanFile || !noiseFile || !degradedFile || !phrase) {
+  console.error('Usage: audio-probe.mjs --clean <file> --noise <file> --degraded <file> [--accented <file>[,<file>...]] --phrase "<what was said>"');
   process.exit(2);
 }
 
@@ -80,6 +83,8 @@ async function probe(token, file) {
 
 const token = await signIn();
 const clean = await probe(token, cleanFile);
+const noise = await probe(token, noiseFile);
+const degraded = await probe(token, degradedFile);
 const accented = [];
 for (const file of accentedFiles) accented.push(await probe(token, file));
 
@@ -87,22 +92,28 @@ const judged = (r) => r.http === 200 && r.status === 'audio';
 const checks = [
   ['clean clip: the model heard this recording (similarity >= 0.6)', judged(clean) && clean.openingSimilarity >= 0.6],
   ['clean clip: a verified, scored judgement from a named model', judged(clean) && Number.isInteger(clean.intelligibilityScore) && !!clean.model],
-  ['an accented clip was judged from its audio', accented.some(judged)],
+  // A clip with no speech must never come back as a verified judgement: this is the "invents nothing" property.
+  ['a clip with no speech is not accepted as a judgement', noise.http === 200 && noise.status !== 'audio'],
   [
-    'a judged accented clip scored 4 or lower with at least one observation, below the clean clip',
-    judged(clean)
-      && accented.some((r) => judged(r) && r.intelligibilityScore <= 4 && (r.observations?.length ?? 0) >= 1 && r.intelligibilityScore < clean.intelligibilityScore),
+    'the same speech buried in noise is not trusted like the clean clip (refused, flagged weaker, or scored lower)',
+    degraded.http === 200
+      && judged(clean)
+      && (!judged(degraded)
+        || degraded.audioQuality !== 'good'
+        || degraded.confidence !== 'high'
+        || degraded.intelligibilityScore < clean.intelligibilityScore),
   ],
 ];
 
 const row = (label, r) =>
   `${label.padEnd(18)} http=${r.http} status=${r.status ?? r.error ?? '?'}` +
+  `${r.audioQuality ? ` quality=${r.audioQuality}` : ''}` +
   `${r.reason ? ` reason=${r.reason}` : ''}` +
   ` similarity=${r.openingSimilarity ?? '-'} intelligibility=${r.intelligibilityScore ?? '-'}` +
   ` observations=${r.observations?.length ?? '-'} confidence=${r.confidence ?? '-'}` +
   ` model=${r.model ?? '-'} audioMs=${r.durationMs ?? '-'} latencyMs=${r.latencyMs ?? '-'}`;
 
-const all = [['clean', clean], ...accented.map((r) => [r.file, r])];
+const all = [['clean', clean], ['noise-only', noise], ['degraded', degraded], ...accented.map((r) => [r.file, r])];
 for (const [label, r] of all) {
   console.log(row(label, r));
   console.log(`${' '.repeat(18)} heard: ${JSON.stringify(r.heardOpening ?? null)}${r.message ? ` | error: ${r.message}` : ''}`);
@@ -117,7 +128,7 @@ for (const [name, ok] of checks) {
 
 writeFileSync(
   'audio-probe-result.json',
-  JSON.stringify({ phrase, clean, accented, checks: checks.map(([name, ok]) => ({ name, ok })) }, null, 2),
+  JSON.stringify({ phrase, clean, noise, degraded, accented, checks: checks.map(([name, ok]) => ({ name, ok })) }, null, 2),
 );
 if (process.env.GITHUB_STEP_SUMMARY) {
   const lines = [

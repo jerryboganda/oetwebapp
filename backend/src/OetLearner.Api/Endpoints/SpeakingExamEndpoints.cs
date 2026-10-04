@@ -21,6 +21,7 @@ namespace OetLearner.Api.Endpoints;
 ///   * POST   /{id}/cancel             abandon the exam
 ///   * POST   /{id}/technical-issue    flag a technical issue (never affects scoring)
 ///   * GET    /{id}/results            per-card + combined results
+///   * POST   /{id}/combined-assess    re-queue a failed combined judgement (no charge)
 /// </summary>
 public static class SpeakingExamEndpoints
 {
@@ -81,6 +82,12 @@ public static class SpeakingExamEndpoints
             .WithSummary("Flag a technical issue on the exam (never affects scoring).")
             .Produces<SpeakingExamDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
+
+        learner.MapPost("/{id}/combined-assess", CombinedAssessAsync)
+            .WithSummary("Re-queue the combined judgement of both cards after it failed. Returns the combined state (pending|failed); no charge.")
+            .Produces(StatusCodes.Status202Accepted)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         learner.MapGet("/{id}/results", ResultsAsync)
             .WithSummary("Per-card and combined exam results.")
@@ -153,6 +160,13 @@ public static class SpeakingExamEndpoints
     {
         var userId = ResolveUserId(http);
         return Results.Ok(await exams.ReportTechnicalIssueAsync(userId, id, body?.Note, ct));
+    }
+
+    private static async Task<IResult> CombinedAssessAsync(
+        HttpContext http, string id, SpeakingExamService exams, CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        return Results.Accepted(value: new { combinedState = await exams.RetryCombinedAssessmentAsync(userId, id, ct) });
     }
 
     private static async Task<IResult> ResultsAsync(

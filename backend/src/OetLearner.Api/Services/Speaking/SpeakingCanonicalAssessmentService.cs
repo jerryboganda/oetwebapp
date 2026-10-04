@@ -23,6 +23,16 @@ public interface ISpeakingCanonicalAssessmentService
 
     Task AssessNowAsync(string sessionId, CancellationToken ct);
 
+    /// <summary>Queues the one combined judgement of a finished AI Full Mock: one durable operation per exam (idempotent).
+    /// The ticket's <c>SessionId</c> carries the exam id.</summary>
+    Task<SpeakingFinalizationTicket> EnqueueExamCombinedAsync(string examId, CancellationToken ct);
+
+    /// <summary>Puts a failed combined judgement back in the worker's queue; a no-op while it is queued, running or done.</summary>
+    Task RetryExamCombinedAsync(string examId, CancellationToken ct);
+
+    /// <summary><c>failed</c> when the combined judgement ended in a terminal failure, otherwise <c>pending</c>.</summary>
+    Task<string> GetExamCombinedStateAsync(string examId, CancellationToken ct);
+
     /// <summary>True only when the session already carries a complete v1.1
     /// report (history); every new session is scored by the classic assessor.</summary>
     Task<bool> UsesV11Async(string sessionId, CancellationToken ct);
@@ -57,6 +67,9 @@ public sealed class SpeakingCanonicalAssessmentService(
 {
     public const string FeatureCode = AiFeatureCodes.SpeakingGrade;
     public const string PromptVersion = SpeakingAiAssessmentService.PromptTemplateId;
+
+    /// <summary>Resource type of the one durable operation that grades a Full Mock as a single performance.</summary>
+    public const string ExamResourceType = "speaking_exam";
 
     private const string NoTranscriptErrorCode = "speaking_session_no_transcript";
     // Mode-neutral on purpose: a live voice role-play has no recording to point at.
@@ -171,7 +184,14 @@ public sealed class SpeakingCanonicalAssessmentService(
             // The worker already holds this operation's lease: run it directly,
             // never through the direct-run claim (which would see that live
             // lease and decline, leaving the session ungraded).
-            await AssessCoreAsync(row.ResourceId, claim: false, ct);
+            if (string.Equals(row.ResourceType, ExamResourceType, StringComparison.Ordinal))
+            {
+                await AssessExamCoreAsync(row.ResourceId, ct);
+            }
+            else
+            {
+                await AssessCoreAsync(row.ResourceId, claim: false, ct);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -183,6 +203,162 @@ public sealed class SpeakingCanonicalAssessmentService(
 
     public Task AssessNowAsync(string sessionId, CancellationToken ct)
         => AssessCoreAsync(sessionId, claim: true, ct);
+
+    // ── The combined Full Mock judgement (one durable operation per exam) ─────────────────
+
+    public async Task<SpeakingFinalizationTicket> EnqueueExamCombinedAsync(string examId, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(examId);
+
+        var exam = await db.SpeakingExamSessions.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == examId, ct)
+            ?? throw ApiException.NotFound("speaking_exam_not_found", "That Speaking exam does not exist.");
+
+        var existing = await FindExamOperationAsync(examId, ct);
+        if (existing is not null)
+        {
+            return new SpeakingFinalizationTicket(existing.Id, examId, true, existing.State);
+        }
+
+        var now = clock.GetUtcNow();
+        var operation = new AiOperation
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Module = "speaking",
+            FeatureCode = FeatureCode,
+            UserId = exam.UserId,
+            ResourceType = ExamResourceType,
+            ResourceId = examId,
+            IdempotencyKey = $"speaking.assess.exam:{examId}",
+            ResourceSlotKey = AiOperationResourceSlot.Build(
+                FeatureCode, "speaking", exam.UserId, examId, ExamResourceType,
+                resourceVersion: null, SpeakingAiAssessmentService.CombinedPromptTemplateId, exam.RulebookVersion),
+            State = AiOperationState.Queued,
+            OperationClass = AiOperationClass.ScoringCritical,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.AiOperations.Add(operation);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            // Another caller queued it first. Only this row is detached: the caller may hold other tracked entities.
+            db.Entry(operation).State = EntityState.Detached;
+            var raced = await FindExamOperationAsync(examId, ct);
+            if (raced is not null)
+            {
+                return new SpeakingFinalizationTicket(raced.Id, examId, true, raced.State);
+            }
+
+            throw;
+        }
+
+        return new SpeakingFinalizationTicket(operation.Id, examId, false, operation.State);
+    }
+
+    public async Task RetryExamCombinedAsync(string examId, CancellationToken ct)
+    {
+        var operation = await FindExamOperationAsync(examId, ct);
+        if (operation is null)
+        {
+            await EnqueueExamCombinedAsync(examId, ct);
+            return;
+        }
+
+        // Only a finished-and-failed operation is put back in the queue; queued, running or done ones are left alone.
+        if (operation.State is AiOperationState.FailedTerminal or AiOperationState.Indeterminate)
+        {
+            operation.State = AiOperationState.Queued;
+            operation.NextAttemptAt = null;
+            operation.LeaseOwner = null;
+            operation.LeaseExpiresAt = null;
+            operation.UpdatedAt = clock.GetUtcNow();
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task<string> GetExamCombinedStateAsync(string examId, CancellationToken ct)
+    {
+        var state = await db.AiOperations.AsNoTracking()
+            .Where(o => o.FeatureCode == FeatureCode && o.ResourceType == ExamResourceType && o.ResourceId == examId)
+            .Select(o => (AiOperationState?)o.State)
+            .FirstOrDefaultAsync(ct);
+        return state == AiOperationState.FailedTerminal ? SpeakingExamCombinedStates.Failed : SpeakingExamCombinedStates.Pending;
+    }
+
+    private Task<AiOperation?> FindExamOperationAsync(string examId, CancellationToken ct)
+        => db.AiOperations.FirstOrDefaultAsync(
+            o => o.FeatureCode == FeatureCode && o.ResourceType == ExamResourceType && o.ResourceId == examId, ct);
+
+    private async Task AssessExamCoreAsync(string examId, CancellationToken ct)
+    {
+        var ticket = await EnqueueExamCombinedAsync(examId, ct);
+        try
+        {
+            await classic.RunCombinedAssessmentAsync(examId, ct);
+            await MarkOperationAsync(ticket.OperationId, AiOperationState.Completed, nextAttemptAt: null, CancellationToken.None);
+        }
+        catch (ApiException ex) when (ex.ErrorCode is NoTranscriptErrorCode or SpeakingAiAssessmentService.ExamCardsNotGradedCode)
+        {
+            // A card's transcript or grade is still on its way: look again shortly, and give up after an hour.
+            var op = await db.AiOperations.AsNoTracking().FirstOrDefaultAsync(o => o.Id == ticket.OperationId, ct);
+            var expired = op is not null && clock.GetUtcNow() - op.CreatedAt > TranscriptWait;
+            await MarkOperationAsync(
+                ticket.OperationId,
+                expired ? AiOperationState.FailedTerminal : AiOperationState.RetryScheduled,
+                expired ? null : clock.GetUtcNow().AddMinutes(1),
+                ct);
+            throw;
+        }
+        catch (Exception ex) when (ct.IsCancellationRequested)
+        {
+            logger.LogWarning(ex, "Combined Speaking assessment interrupted for exam {ExamId}; requeued.", examId);
+            await MarkOperationAsync(ticket.OperationId, AiOperationState.RetryScheduled, clock.GetUtcNow(), CancellationToken.None);
+            throw;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Combined Speaking assessment failed for exam {ExamId}.", examId);
+            // Terminal for this run but learner-retryable (the results page offers "Try again", no charge).
+            await MarkOperationAsync(ticket.OperationId, AiOperationState.FailedTerminal, nextAttemptAt: null, CancellationToken.None);
+            throw;
+        }
+    }
+
+    /// <summary>After a card is graded: when it belongs to an AI exam whose two cards are now both graded by the classic
+    /// assessor, queue the combined judgement. Never fails the card's own grade.</summary>
+    private async Task TryEnqueueExamCombinedAsync(string sessionId, CancellationToken ct)
+    {
+        try
+        {
+            var exam = await db.SpeakingExamSessions.AsNoTracking()
+                .Where(e => e.Mode == SpeakingExamMode.Ai && (e.SessionAId == sessionId || e.SessionBId == sessionId))
+                .Select(e => new { e.Id, e.SessionAId, e.SessionBId, e.CombinedAssessmentJson })
+                .FirstOrDefaultAsync(ct);
+            if (exam is null
+                || !string.IsNullOrEmpty(exam.CombinedAssessmentJson)
+                || string.IsNullOrWhiteSpace(exam.SessionAId)
+                || string.IsNullOrWhiteSpace(exam.SessionBId))
+            {
+                return;
+            }
+
+            var graded = await db.SpeakingAiAssessments.AsNoTracking()
+                .Where(a => a.SpeakingSessionId == exam.SessionAId || a.SpeakingSessionId == exam.SessionBId)
+                .Select(a => a.SpeakingSessionId)
+                .Distinct()
+                .CountAsync(ct);
+            if (graded == 2) await EnqueueExamCombinedAsync(exam.Id, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not queue the combined Full Mock judgement after session {SessionId}.", sessionId);
+        }
+    }
+
 
     private async Task AssessCoreAsync(string sessionId, bool claim, CancellationToken ct)
     {
@@ -208,6 +384,9 @@ public sealed class SpeakingCanonicalAssessmentService(
             {
                 await SpeakingCreditSettlement.CommitIfGradedAsync(db, creditReservations, sessionId, ct);
             }
+
+            // The second card of a Full Mock: queue the one combined judgement of the whole test.
+            await TryEnqueueExamCombinedAsync(sessionId, ct);
         }
         catch (ApiException ex) when (ex.ErrorCode == NoTranscriptErrorCode)
         {

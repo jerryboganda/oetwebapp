@@ -133,6 +133,14 @@ public class SpeakingExamSession
     // ── Aggregate snapshot, computed once both cards are scored. ──
     public double? CombinedScaledSnapshot { get; set; }
 
+    /// <summary>
+    /// The single two-card judgement of a Full Mock (owner spec 4 Oct 2026): ONE set of nine criterion scores for the
+    /// whole test, stored in the shape of a card's <see cref="SpeakingAiAssessment"/> row so one projection reads both.
+    /// Null until the combined grade has run, and on exams completed before it existed (those keep their averaged
+    /// <see cref="CombinedScaledSnapshot"/>).
+    /// </summary>
+    public string? CombinedAssessmentJson { get; set; }
+
     [MaxLength(32)]
     public string? ReadinessBandSnapshot { get; set; }
 

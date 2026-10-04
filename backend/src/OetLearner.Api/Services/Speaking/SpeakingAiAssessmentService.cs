@@ -32,7 +32,7 @@ namespace OetLearner.Api.Services.Speaking;
 /// review; no score, band or scaled score is ever changed. Skipped for mocks;
 /// <c>judgments</c> null (e.g. the corpus harness) means no Jev call at all.
 /// </summary>
-public sealed class SpeakingAiAssessmentService(
+public sealed partial class SpeakingAiAssessmentService(
     LearnerDbContext db,
     IAiGatewayService aiGateway,
     ILogger<SpeakingAiAssessmentService> logger,
@@ -307,108 +307,23 @@ Scoring rules:
                 judgments!, jevOptions!, jevTranscript, jevCard, session.UserId, sessionId, ct, logger: logger);
         }
 
-        // ── Invoke gateway (mirror SpeakingEvaluationPipeline pattern) ──
-        // SpeakingGradeChain pins the Claude subscription sidecar first and falls back to the
-        // default route; with no pinned provider configured it is one plain gateway call.
-        AiGatewayResult aiResult;
-        try
-        {
-            aiResult = await SpeakingGradeChain.CompleteAsync(aiGateway, new AiGatewayRequest
-            {
-                Prompt = prompt,
-                UserInput = userInput,
-                Model = string.Empty,
-                Temperature = 0.1,
-                MaxTokens = 4096,
-                FeatureCode = AiFeatureCodes.SpeakingGrade,
-                FreeSampleGrant = gradeGrant,
-                UserId = session.UserId,
-                PromptTemplateId = PromptTemplateId,
-                // Tag the assessment context for the audit trail + gateway
-                // backstop. ONLY a genuine mock (curated Mock Set / full mock
-                // bundle — MockSetId/MockSessionId set) is Mock context; a plain
-                // ExamSessionId does NOT make a session a mock (every two-card
-                // exam card has one), so random AI exams are Practice and keep AI
-                // marking. Mock Speaking never reaches here (it is human-marked
-                // above) — this tag just arms the gateway's mock_assessment_
-                // forbidden backstop if a future caller ever bypasses the guard.
-                AssessmentContext = assessmentContext,
-            }, gradingOptions?.Value, logger, ct);
-        }
-        catch (PromptNotGroundedException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex,
-                "Speaking AI assessment failed for session {SessionId}; surfacing retryable error.",
-                sessionId);
-            // Fail loud so the caller can retry. The free-tier counter is
-            // not consumed because the AI gateway records the failure as
-            // AiUsageRecord.Outcome=ProviderError (mirrors Q3 fail-loud in
-            // SpeakingEvaluationPipeline). DO NOT swallow.
-            throw ApiException.Conflict("speaking_ai_unavailable",
-                "We couldn't reach the AI scoring service. Please retry shortly — your free-tier counter has not been consumed.");
-        }
-
-        // ── Parse, clamp, and validate evidence quotes ──
-        var parsed = ParseAssessment(aiResult.Completion);
-        if (parsed is null)
-        {
-            logger.LogWarning(
-                "Speaking AI assessment returned an unparseable or incomplete payload for session {SessionId}.",
-                sessionId);
-            throw ApiException.Conflict("speaking_ai_unparseable",
-                "The AI scoring service returned an invalid response. Please retry.");
-        }
-
-        var transcriptText = ExtractTranscriptText(SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson));
-        foreach (var (code, criterion) in parsed.CriterionScores)
-        {
-            foreach (var quote in criterion.EvidenceQuotes)
-            {
-                if (!ContainsNormalised(transcriptText, quote))
-                {
-                    logger.LogWarning(
-                        "Speaking AI assessment quote not found in transcript for session {SessionId} criterion {Criterion}: {Quote}",
-                        sessionId, code, quote);
-                }
-            }
-        }
-
-        // The audio judge's verified Intelligibility replaces the grader's text-only estimate: it was reached
-        // from the sound of the recording (and only that), against the same official band descriptors.
-        if (audio is { IsAudio: true, IntelligibilityScore: { } audioIntelligibility })
-        {
-            parsed.CriterionScores["intelligibility"] = new CriterionScore(
-                Math.Clamp(audioIntelligibility, 0, 6),
-                6,
-                audio.IntelligibilityRationale ?? "Judged from the sound of your recording.",
-                Array.Empty<string>());
-        }
-
-        // ── Canonical scaled score: ALWAYS recomputed via OetScoring ──
-        var rubricScores = new OetScoring.SpeakingCriterionScores(
-            Intelligibility:      ScoreOf(parsed, "intelligibility",      0, 6),
-            Fluency:              ScoreOf(parsed, "fluency",              0, 6),
-            Appropriateness:      ScoreOf(parsed, "appropriateness",      0, 6),
-            GrammarExpression:    ScoreOf(parsed, "grammarExpression",    0, 6),
-            RelationshipBuilding: ScoreOf(parsed, "relationshipBuilding", 0, 3),
-            PatientPerspective:   ScoreOf(parsed, "patientPerspective",   0, 3),
-            Structure:            ScoreOf(parsed, "structure",            0, 3),
-            InformationGathering: ScoreOf(parsed, "informationGathering", 0, 3),
-            InformationGiving:    ScoreOf(parsed, "informationGiving",    0, 3));
-
-        // The REPORTED score (0–500, multiple of 10): the one number the grade, readiness band
-        // and pass line all derive from, so a score shown as 350 can never read "Borderline".
-        var scaled = OetScoring.SpeakingReportedScaled(rubricScores);
-        var readinessBand = OetScoring.SpeakingReadinessBandCode(
-            OetScoring.SpeakingReadinessBandFromScaled(scaled));
-        var confidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand);
-        // Owner decision 4 Oct 2026: when the audio stage ran but there was no usable audio, the grade is still
-        // given, Intelligibility is labelled as estimated from the transcript, and confidence is low.
-        if (audio is not null && (!audio.IsAudio || audio.Confidence == "low")) confidenceBand = "low";
+        // ── Grade (the shared core: the combined Full Mock judgement uses the same one) ──
+        // SpeakingGradeChain pins the Claude subscription sidecar first and falls back to the default route;
+        // with no pinned provider configured it is one plain gateway call.
+        var outcome = await GradeCoreAsync(new SpeakingGradeInput(
+            LogKey: sessionId,
+            UserId: session.UserId,
+            Prompt: prompt,
+            TemplateId: PromptTemplateId,
+            UserInput: userInput,
+            TranscriptText: ExtractTranscriptText(SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson)),
+            FreeSampleGrant: gradeGrant,
+            Context: assessmentContext,
+            Audio: audio), ct);
+        var rubricScores = outcome.Scores;
+        var scaled = outcome.ReportedScaled;
+        var readinessBand = outcome.ReadinessBand;
+        var confidenceBand = outcome.ConfidenceBand;
 
         // ── Jev cross-check (advisory, flag-gated, fail-soft, <= 3 s) ──
         // After the grade is parsed and scaled, never inside the grade chain. It can only lower the
@@ -420,10 +335,10 @@ Scoring rules:
         {
             jevCrosscheck = await JevSpeakingAdvisor.CrosscheckAsync(
                 judgments!, jevOptions!, SpeakingCrosscheckSchema.Classic, jevTranscript, jevCard,
-                parsed.CriterionScores
+                outcome.CriterionScores
                     .Select(kv => new SpeakingCrosscheckCriterion(
                         kv.Key,
-                        ScoreOf(parsed, kv.Key, 0, IsLinguisticCriterion(kv.Key) ? 6 : 3),
+                        Math.Clamp(kv.Value.Score, 0, IsLinguisticCriterion(kv.Key) ? 6 : 3),
                         kv.Value.Rationale,
                         kv.Value.EvidenceQuotes))
                     .ToList(),
@@ -435,33 +350,13 @@ Scoring rules:
         var now = DateTimeOffset.UtcNow;
         var assessmentId = $"spa_{Guid.NewGuid():N}";
 
-        var rationalesPayload = new Dictionary<string, object?>();
-        foreach (var (code, criterion) in parsed.CriterionScores)
-        {
-            rationalesPayload[code] = new
-            {
-                rationale = criterion.Rationale,
-                evidenceQuotes = criterion.EvidenceQuotes,
-            };
-        }
-
-        // Advisory lives beside the rationales (RulebookFindingsJson is a List<string> read by
-        // analytics, so it cannot hold it). ReadRationales and the projection only look up the
-        // nine criterion codes, so the extra entry is inert.
-        if (audio is not null) rationalesPayload[AcousticKey] = JsonSerializer.SerializeToElement(AcousticPayload(audio), ReportJson);
-
+        // The criterion rationales, the acoustic evidence and the coaching report ride in one JSON object (built by the
+        // grader core); the Jev advisory lives beside them (RulebookFindingsJson is a List<string> read by analytics, so
+        // it cannot hold it). ReadRationales and the projection only look up the nine criterion codes, so the extra
+        // entries are inert.
+        var rationalesPayload = outcome.RationalesPayload;
         var jevPayload = JevSpeakingAdvisor.AdvisoryPayload(jevReadiness, jevCrosscheck);
         if (jevPayload is not null) rationalesPayload[JevSpeakingAdvisor.AdvisoryKey] = jevPayload;
-
-        // The coaching report (strengths, priority weaknesses, drills) rides in the same JSON under a
-        // reserved key, exactly as stored here; it is scrubbed of internal IDs only when a candidate reads it.
-        var report = parsed.Report;
-        if (report.Strengths.Count > 0 || report.PriorityWeaknesses.Count > 0 || report.Drills.Count > 0)
-        {
-            rationalesPayload[ReportKey] = JsonSerializer.SerializeToElement(
-                new { version = 1, strengths = report.Strengths, priorityWeaknesses = report.PriorityWeaknesses, drills = report.Drills },
-                ReportJson);
-        }
 
         var row = new SpeakingAiAssessment
         {
@@ -469,10 +364,10 @@ Scoring rules:
             SpeakingSessionId = sessionId,
             TranscriptId = transcript.Id,
             // Real provenance (which grader actually ran), cut to the column limits (32 / 96).
-            Provider = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedProvider) ? ProviderName : aiResult.ResolvedProvider.Trim(), 32),
-            ModelId = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedModel) ? ModelId : aiResult.ResolvedModel.Trim(), 96),
+            Provider = outcome.Provider,
+            ModelId = outcome.ModelId,
             PromptTemplateId = PromptTemplateId,
-            GraderVersion = audio is { IsAudio: true } ? GraderVersionWithAudio(audio.Model) : GraderVersion,
+            GraderVersion = outcome.GraderVersion,
             Intelligibility = rubricScores.Intelligibility,
             Fluency = rubricScores.Fluency,
             Appropriateness = rubricScores.Appropriateness,
@@ -485,7 +380,7 @@ Scoring rules:
             EstimatedScaledScore = scaled,
             ReadinessBand = readinessBand,
             PerCriterionRationalesJson = JsonSerializer.Serialize(rationalesPayload),
-            OverallSummary = parsed.OverallSummary ?? string.Empty,
+            OverallSummary = outcome.OverallSummary ?? string.Empty,
             ConfidenceBand = confidenceBand,
             GeneratedAt = now,
             RulebookFindingsJson = "[]",
@@ -541,6 +436,189 @@ Scoring rules:
         // every later read shows (clamped scores, internal rule IDs scrubbed from the text).
         return ProjectAssessment(row, RehydrateCriterionScores(row));
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Grader core: one performance in, one graded outcome out, nothing persisted
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Everything the grader needs to grade ONE performance: a single card, or a whole two-card test.</summary>
+    /// <param name="LogKey">The session or exam id, for log lines.</param>
+    /// <param name="UserId">The learner; null for a harness run (no learner, no plan gate).</param>
+    /// <param name="Prompt">The grounded system prompt, built first so an ungrounded prompt fails before any audio spend.</param>
+    /// <param name="TemplateId">The prompt template id: the card template, or its combined variant.</param>
+    /// <param name="UserInput">The full user message: template, card(s), transcript(s) and acoustic evidence.</param>
+    /// <param name="TranscriptText">The transcript text the grader's verbatim quotes are checked against.</param>
+    /// <param name="Audio">The acoustic evidence the grader was given; null = the audio stage did not run.</param>
+    internal sealed record SpeakingGradeInput(
+        string LogKey,
+        string? UserId,
+        AiGroundedPrompt Prompt,
+        string TemplateId,
+        string UserInput,
+        string TranscriptText,
+        bool FreeSampleGrant,
+        AiAssessmentContext Context,
+        SpeakingAudioEvidence? Audio);
+
+    /// <summary>A graded performance, ready to persist or to report. <c>RationalesPayload</c> is the JSON object a
+    /// card row stores in <c>PerCriterionRationalesJson</c>: the criterion rationales, the acoustic evidence and the
+    /// coaching report.</summary>
+    internal sealed record SpeakingGradeOutcome(
+        IReadOnlyDictionary<string, CriterionScore> CriterionScores,
+        string? OverallSummary,
+        string ConfidenceBand,
+        SpeakingFeedbackReport Report,
+        OetScoring.SpeakingCriterionScores Scores,
+        int ReportedScaled,
+        string ReadinessBand,
+        string Provider,
+        string ModelId,
+        string GraderVersion,
+        Dictionary<string, object?> RationalesPayload);
+
+    internal async Task<SpeakingGradeOutcome> GradeCoreAsync(SpeakingGradeInput input, CancellationToken ct)
+    {
+        var audio = input.Audio;
+
+        // ── Invoke gateway (mirror SpeakingEvaluationPipeline pattern) ──
+        AiGatewayResult aiResult;
+        try
+        {
+            aiResult = await SpeakingGradeChain.CompleteAsync(aiGateway, new AiGatewayRequest
+            {
+                Prompt = input.Prompt,
+                UserInput = input.UserInput,
+                Model = string.Empty,
+                Temperature = 0.1,
+                MaxTokens = 4096,
+                FeatureCode = AiFeatureCodes.SpeakingGrade,
+                FreeSampleGrant = input.FreeSampleGrant,
+                UserId = input.UserId,
+                PromptTemplateId = input.TemplateId,
+                // Tag the assessment context for the audit trail + gateway backstop. ONLY a genuine mock (curated Mock
+                // Set / full mock bundle: MockSetId/MockSessionId set) is Mock context; a plain ExamSessionId does NOT
+                // make a session a mock (every two-card exam card has one), so random AI exams are Practice and keep
+                // AI marking. Mock Speaking never reaches here (it is human-marked above) — this tag just arms the
+                // gateway's mock_assessment_forbidden backstop if a future caller ever bypasses the guard.
+                AssessmentContext = input.Context,
+            }, gradingOptions?.Value, logger, ct);
+        }
+        catch (PromptNotGroundedException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "Speaking AI assessment failed for {LogKey}; surfacing retryable error.",
+                input.LogKey);
+            // Fail loud so the caller can retry. The free-tier counter is
+            // not consumed because the AI gateway records the failure as
+            // AiUsageRecord.Outcome=ProviderError (mirrors Q3 fail-loud in
+            // SpeakingEvaluationPipeline). DO NOT swallow.
+            throw ApiException.Conflict("speaking_ai_unavailable",
+                "We couldn't reach the AI scoring service. Please retry shortly — your free-tier counter has not been consumed.");
+        }
+
+        // ── Parse, clamp, and validate evidence quotes ──
+        var parsed = ParseAssessment(aiResult.Completion);
+        if (parsed is null)
+        {
+            logger.LogWarning(
+                "Speaking AI assessment returned an unparseable or incomplete payload for {LogKey}.",
+                input.LogKey);
+            throw ApiException.Conflict("speaking_ai_unparseable",
+                "The AI scoring service returned an invalid response. Please retry.");
+        }
+
+        foreach (var (code, criterion) in parsed.CriterionScores)
+        {
+            foreach (var quote in criterion.EvidenceQuotes)
+            {
+                if (!ContainsNormalised(input.TranscriptText, quote))
+                {
+                    logger.LogWarning(
+                        "Speaking AI assessment quote not found in transcript for {LogKey} criterion {Criterion}: {Quote}",
+                        input.LogKey, code, quote);
+                }
+            }
+        }
+
+        // The audio judge's verified Intelligibility replaces the grader's text-only estimate: it was reached
+        // from the sound of the recording (and only that), against the same official band descriptors.
+        if (audio is { IsAudio: true, IntelligibilityScore: { } audioIntelligibility })
+        {
+            parsed.CriterionScores["intelligibility"] = new CriterionScore(
+                Math.Clamp(audioIntelligibility, 0, 6),
+                6,
+                audio.IntelligibilityRationale ?? "Judged from the sound of your recording.",
+                Array.Empty<string>());
+        }
+
+        // ── Canonical scaled score: ALWAYS recomputed via OetScoring ──
+        var rubricScores = new OetScoring.SpeakingCriterionScores(
+            Intelligibility:      ScoreOf(parsed, "intelligibility",      0, 6),
+            Fluency:              ScoreOf(parsed, "fluency",              0, 6),
+            Appropriateness:      ScoreOf(parsed, "appropriateness",      0, 6),
+            GrammarExpression:    ScoreOf(parsed, "grammarExpression",    0, 6),
+            RelationshipBuilding: ScoreOf(parsed, "relationshipBuilding", 0, 3),
+            PatientPerspective:   ScoreOf(parsed, "patientPerspective",   0, 3),
+            Structure:            ScoreOf(parsed, "structure",            0, 3),
+            InformationGathering: ScoreOf(parsed, "informationGathering", 0, 3),
+            InformationGiving:    ScoreOf(parsed, "informationGiving",    0, 3));
+
+        // The REPORTED score (0–500, multiple of 10): the one number the grade, readiness band
+        // and pass line all derive from, so a score shown as 350 can never read "Borderline".
+        var scaled = OetScoring.SpeakingReportedScaled(rubricScores);
+        var readinessBand = OetScoring.SpeakingReadinessBandCode(
+            OetScoring.SpeakingReadinessBandFromScaled(scaled));
+        var confidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand);
+        // Owner decision 4 Oct 2026: when the audio stage ran but there was no usable audio, the grade is still
+        // given, Intelligibility is labelled as estimated from the transcript, and confidence is low.
+        if (audio is not null && (!audio.IsAudio || audio.Confidence == "low")) confidenceBand = "low";
+
+        var rationalesPayload = new Dictionary<string, object?>();
+        foreach (var (code, criterion) in parsed.CriterionScores)
+        {
+            rationalesPayload[code] = new
+            {
+                rationale = criterion.Rationale,
+                evidenceQuotes = criterion.EvidenceQuotes,
+            };
+        }
+
+        // What the audio judge heard, or why there was no audio evidence, lives beside the rationales under a
+        // reserved key (no migration); nothing that looks up a criterion code sees it.
+        if (audio is not null) rationalesPayload[AcousticKey] = JsonSerializer.SerializeToElement(AcousticPayload(audio), ReportJson);
+
+        // The coaching report (strengths, priority weaknesses, drills) rides in the same JSON under a
+        // reserved key, exactly as stored here; it is scrubbed of internal IDs only when a candidate reads it.
+        var report = parsed.Report;
+        if (report.Strengths.Count > 0 || report.PriorityWeaknesses.Count > 0 || report.Drills.Count > 0)
+        {
+            rationalesPayload[ReportKey] = JsonSerializer.SerializeToElement(
+                new { version = 1, strengths = report.Strengths, priorityWeaknesses = report.PriorityWeaknesses, drills = report.Drills },
+                ReportJson);
+        }
+
+        return new SpeakingGradeOutcome(
+            parsed.CriterionScores,
+            parsed.OverallSummary,
+            confidenceBand,
+            report,
+            rubricScores,
+            scaled,
+            readinessBand,
+            // Real provenance (which grader actually ran), cut to the column limits (32 / 96).
+            Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedProvider) ? ProviderName : aiResult.ResolvedProvider.Trim(), 32),
+            Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedModel) ? ModelId : aiResult.ResolvedModel.Trim(), 96),
+            GraderVersionFor(input.TemplateId, audio),
+            rationalesPayload);
+    }
+
+    /// <summary><c>{template}|{mapping}|{audio stage}</c> for any prompt template (the card grader or its combined variant).</summary>
+    private static string GraderVersionFor(string templateId, SpeakingAudioEvidence? audio)
+        => $"{templateId}|{OetScoring.SpeakingMappingVersion}|{(audio is { IsAudio: true } ? SpeakingAudioEvidenceService.StageVersion(audio.Model) : AudioStageVersion)}";
 
     /// <summary>
     /// The rulebook's card-scoped rule token for a card. The Speaking rulebooks scope some rules to
@@ -701,6 +779,23 @@ Scoring rules:
         var sb = new StringBuilder();
         sb.AppendLine(PROMPT_TEMPLATE_V3);
         sb.AppendLine();
+        AppendCardSections(sb, card, script, cardType);
+        AppendEvidenceNote(sb, IsLiveVoiceTranscript(transcript), plural: false, audio);
+        AppendTranscriptSections(sb, transcript, string.Empty);
+        sb.AppendLine("Now produce the strict JSON object specified above.");
+        return sb.ToString();
+    }
+
+    private static bool IsLiveVoiceTranscript(SpeakingTranscript transcript)
+        => transcript.Provider.StartsWith(LiveVoiceService.TranscriptProviderPrefix, StringComparison.Ordinal);
+
+    /// <summary>The hidden card type (marking guidance), the candidate-facing card and the hidden patient script.</summary>
+    private static void AppendCardSections(
+        StringBuilder sb,
+        RolePlayCard card,
+        InterlocutorScript? script,
+        SpeakingCardType? cardType)
+    {
         // Hidden card type — marking guidance only. NEVER shown to the learner.
         if (cardType is not null)
         {
@@ -746,14 +841,22 @@ Scoring rules:
                 closingCue = script.ClosingCue,
             }));
         sb.AppendLine();
+    }
+
+    /// <summary>What the grader may rely on for Intelligibility: the audio judge's findings, or the plain statement
+    /// that it has none (and so must say its estimate comes from the transcript).</summary>
+    private static void AppendEvidenceNote(StringBuilder sb, bool liveVoiceTranscript, bool plural, SpeakingAudioEvidence? audio)
+    {
         if (audio is null)
         {
             // The audio stage did not run. A live voice role-play then has no audio the grader can use, so the
             // feedback must not send the candidate to a recording. Added to the input only: the template, rubric
             // and schema are unchanged.
-            if (transcript.Provider.StartsWith(LiveVoiceService.TranscriptProviderPrefix, StringComparison.Ordinal))
+            if (liveVoiceTranscript)
             {
-                sb.AppendLine("NOTE: This role-play was a live voice conversation with no audio recording (transcript only), so the feedback text must never tell the candidate to listen to or check a recording.");
+                sb.AppendLine(plural
+                    ? "NOTE: These role-plays were live voice conversations with no audio recording (transcripts only), so the feedback text must never tell the candidate to listen to or check a recording."
+                    : "NOTE: This role-play was a live voice conversation with no audio recording (transcript only), so the feedback text must never tell the candidate to listen to or check a recording.");
                 sb.AppendLine();
             }
         }
@@ -767,24 +870,28 @@ Scoring rules:
             sb.AppendLine($"NOTE: No audio evidence could be used for this attempt ({SpeakingAudioEvidenceService.ReasonText(audio.Reason)}). Estimate Intelligibility from the transcript alone, say in its rationale that no audio evidence was available, and keep its score within what a transcript can support. The feedback text must never tell the candidate to listen to or check a recording.");
             sb.AppendLine();
         }
+    }
+
+    /// <summary>The graded transcript and the server-computed interaction signals. <paramref name="label"/> names the
+    /// role-play in a combined test (empty for a single card).</summary>
+    private static void AppendTranscriptSections(StringBuilder sb, SpeakingTranscript transcript, string label)
+    {
         // The graded evidence starts at the real role-play: the opening connection check ("can you hear
         // me" / "go ahead") is stripped here, while the stored segments and their hash are untouched.
         var gradedSegments = SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson);
-        sb.AppendLine("---- TRANSCRIPT (latest revision) ----");
+        sb.AppendLine($"---- TRANSCRIPT{label} (latest revision) ----");
         sb.AppendLine(gradedSegments);
         sb.AppendLine();
         // Server-computed so sparse per-segment flags cannot be overlooked
         // in a long transcript.
         var (interruptionCount, interruptedAtMs) = ComputeInteractionSignals(gradedSegments);
-        sb.AppendLine("---- INTERACTION SIGNALS (server-computed) ----");
+        sb.AppendLine($"---- INTERACTION SIGNALS{label} (server-computed) ----");
         sb.AppendLine(JsonSerializer.Serialize(new
         {
             interruptionCount,
             interruptedAtMs,
         }));
         sb.AppendLine();
-        sb.AppendLine("Now produce the strict JSON object specified above.");
-        return sb.ToString();
     }
 
     /// <summary>Scans the transcript segments for candidate turns flagged
