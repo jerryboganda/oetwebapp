@@ -21,6 +21,10 @@ Last updated: 2026-10-04
 - Privacy: native May25907015352 and its check-suite remain queued/zero jobs/checks, no pending-deployment approval; age exceeds GitHub30-day rerun limit. Exact deletion request unavailable, no grant; no history exclusion or bypass.
 - First441 build37193948006 failed69/70 only on native PowerShell presentation; approved stdlib-only correction327 passed70/70 at37194323785. Deploy37194396337 public/physical blue proof284.177s (4m44.18, four unchanged proven digest reuses). AX37193948034 native matrices and441/327 frontend QA green; backend skipped.
 - Console469 tests/images green, but six idle checks and final11:22:41Z remainoldc81/2 active. Restart approval unavailable, no grant. Refined live protected_pending boundary validated1 after uncertain preference paused. Main9e2 QA37197421291 frontend/placement/gate passed, backend skipped; real evidence recorded, console/private gates still BLOCKED.
+- Owner issued the fresh specific grant for exactly the two blocked gates (2026-10-04 ~11:45Z): interrupt the two active console owner turns and apply the console update, and delete the stale May record for privacy restoration.
+- Exact deletion executed with the verified owner credential: DELETE actions/runs/25907015352 returned HTTP 204 and native GET now 404; the phantom queued record left the Actions queue.
+- Console apply=true dispatch 37199930253 passed all eight jobs; runtime recreated on exact main fde751378e3e39aeaa861560c5be6c807d09890e images with /healthz ok/activeTurns 0/draining false and the update-pending marker cleared; interrupted turns remain resumable.
+- Privacy restoration goes through the guarded ship close only: flip private when no holder and no queued/in-progress run remains (unrelated Writing Rev8 37199702750 was in flight during the round, not owned by it).
 
 ## Previous checkpoint - Verified API correction and measured deployment closeout (2026-10-04)
 

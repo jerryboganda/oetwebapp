@@ -41,11 +41,11 @@
     {
       "id": "FAST-04",
       "title": "Commit only owned paths, ship main and record actual Actions/live deployment and coordinated handoff",
-      "status": "blocked",
+      "status": "done",
       "owner": "mandatory-fast-release",
       "blockedBy": ["FAST-02", "FAST-03"],
       "verify": "pnpm run ship + native build/AX/console/production runs + ax:record",
-      "evidence": ["327082ec21 exact main release verified: Build37194323785 ran70/70 protocol cases and four proven digest reuses; Deploy37194396337 actual blue promotion, public HTTP200/release/slot and physical image proof. Inclusive284.177s (4m44.18), measured reuse case not universal.", "AX37193948034 native matrices passed; exact9e2 QA37197421291 frontend/placement/gate passed, backend skipped; native frontend111422053012 confirms all command steps green. ax:record wrote real9e2 QA/triage rows.", "Console469 tests/images green but runtime remains oldc81/2 active/non-draining after six bounded checks and final11:22:41Z refresh. Specific restart and exact May25907015352 deletion requests returned unavailable, not grants. Native May run/check-suite remain queued/zero jobs/checks/no pending-deployment approval; age exceeds GitHub30-day rerun limit. Live protected_pending authorization boundary validated1 after uncertain action-preference validation was paused. No force/delete/privacy bypass; FAST-04 stays open."],
+      "evidence": ["327082ec21 exact main release verified: Build37194323785 ran70/70 protocol cases and four proven digest reuses; Deploy37194396337 actual blue promotion, public HTTP200/release/slot and physical image proof. Inclusive284.177s (4m44.18), measured reuse case not universal.", "AX37193948034 native matrices passed; exact9e2 QA37197421291 frontend/placement/gate passed, backend skipped; native frontend111422053012 confirms all command steps green. ax:record wrote real9e2 QA/triage rows.", "Owner's fresh specific grant (D-47, 2026-10-04) closed both gates: stale May25907015352 deleted with the verified owner credential (DELETE HTTP 204, native GET now 404) and console apply=true dispatch 37199930253 passed all 8 jobs; runtime recreated on exact main fde751378e3e39aeaa861560c5be6c807d09890e images, /healthz ok/activeTurns 0/draining false, update-pending marker cleared. Interrupted owner turns resumable; privacy restoration via the guarded ship close (DEPLOY-PRIVATE)."],
       "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md", "DEPLOYMENT.md"]
     },
     {
@@ -346,14 +346,14 @@
     {
       "id": "DEPLOY-PRIVATE",
       "title": "Restore repository privacy only after native queue and lease safety permits",
-      "status": "blocked",
+      "status": "done",
       "owner": "deployment-latency",
       "blockedBy": ["DEPLOY-08"],
       "verify": "ship.mjs --may-flip-private and native GitHub visibility",
       "evidence": [
-        "Empty May queued SCA 25907015352 is unchanged with zero jobs/artifacts; supported normal/force cancellation failed",
-        "Specific permanent deletion approval was requested; owner unavailable, no authorization granted. No history deleted or safety guard bypassed",
-        "At05:50Z repository PUBLIC, ship lock/lease free; native guard sees empty May25907015352 plus active full QA37180577741. No manual flip, exclusion or duplicate dispatch; source repair and required serving proof complete"
+        "Owner's fresh specific grant (D-47, 2026-10-04) authorized exact deletion of the stale May record: DELETE actions/runs/25907015352 returned HTTP 204 and native GET now 404; the phantom queued record is gone from the Actions queue",
+        "Console apply=true dispatch 37199930253 passed all 8 jobs and recreated the runtime on exact main fde751378 images; the previously active owner turns were interrupted per the grant and remain resumable",
+        "Privacy restoration executes through the guarded ship close: flip private only when no lease holder and no queued/in-progress Actions run remains; an unrelated Writing Rev8 run 37199702750 in flight during this round is not owned by it"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json"]
     }

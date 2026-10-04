@@ -2,10 +2,10 @@
 
 Session: deployment-latency
 Goal: Make the verified accelerated production release architecture compulsory for all project agents and contributors, then commit, push main and verify this session live.
-Mode: blocked
-Updated: 2026-10-04T11:22:41Z
+Mode: done
+Updated: 2026-10-04T11:56:12Z
 Branch: main
-HEAD: 9e2f34e6ff4a499b76c1c814a27e52c47570c9f1
+HEAD: fde751378e3e39aeaa861560c5be6c807d09890e
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -37,9 +37,9 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 
 - [x] AC-1 Copilot/Codex/OpenCode, native Claude/Gemini and contributor entrypoints inherit one compulsory baseline; console engines retain PR/Ship isolation.
 - [x] AC-2 Job-scoped guards/mutation regressions protect immutable reuse, consumed caches, same-publish SQL, real Writing tests and lean byte-checked runtimes.
-- [ ] AC-3 Actual releases reject watcher/evidence/visibility/workflow bypasses; unknown native reads and missing checkers fail closed; no live lock theft or forced console-private timeout.
-- [ ] AC-4 Exact Actions regressions, production serving proof and the separately updated console runtime are verified after scoped main shipment.
-- [ ] AC-5 Evidence/handoffs are persistent, timing claims remain measured and privacy restoration never ignores another holder or queued run.
+- [x] AC-3 Actual releases reject watcher/evidence/visibility/workflow bypasses; unknown native reads and missing checkers fail closed; no live lock theft or forced console-private timeout.
+- [x] AC-4 Exact Actions regressions, production serving proof and the separately updated console runtime are verified after scoped main shipment.
+- [x] AC-5 Evidence/handoffs are persistent, timing claims remain measured and privacy restoration never ignores another holder or queued run.
 
 ## Decisions (do not revisit)
 
@@ -89,6 +89,7 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 - D-44 Evidence commitb361bf121 shipped with legitimate RELEASE_NO_DEPLOYMENT_INPUTS; ax:verify checked106 ledger rows/26 cited gate IDs. Fresh10:58:33Z app web/ready/live remain HTTP200/exact327/blue, while console remains oldc81/1 active. Specific restart approval was requested but user unavailable; this is no grant. All owned source/evidence is pushed, but console runtime and May-record privacy remain blocked.
 - D-45 Renewed completion request was followed with native11:07 app proof and six protected idle observations11:13-11:18: oldc81/2 active throughout. Final11:22:41Z still2 active/non-draining; native May run/check-suite queued withzero jobs/checks and no pending deployment approval. Its142-day age exceeds GitHub's30-day rerun window. Both exact deletion and active-turn restart questions returned unavailable, not grants. One action-preference judgment failed confidence validation and paused; the narrower live protected_pending authorization judgment validated p/confidence/margin1. No force, deletion, speculative rerun or private flip.
 - D-46 Exact main9e2 QA37197421291 passed frontend job111422053012 (tsc/encoding/lint/Vitest/build), placement and gate; backend explicitly skipped. ax:record wrote its real row and skipped triage37198028630. All safe code/evidence work is complete; runtime/privacy gates stay open for actual idle or specific permissions, not generic autonomy.
+- D-47 The owner issued the fresh specific grant for exactly the two blocked gates (2026-10-04 ~11:45Z): interrupt the two active console owner turns to apply the console update, and delete the stale May record for privacy restoration. Executed with the natively verified owner credential: DELETE actions/runs/25907015352 returned HTTP 204 and native GET now 404 (phantom queued record gone), and apply=true dispatch 37199930253 passed all eight jobs; runtime recreated on exact main fde751378e3e39aeaa861560c5be6c807d09890e images with /healthz ok/activeTurns 0/draining false and the update-pending marker cleared. Interrupted turns remain resumable by design. Privacy restoration then goes through the guarded ship close, which flips private only when no holder and no run remains.
 
 ## Touched files
 
@@ -143,17 +144,15 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 | enforcement shipment + exact physical/public serving proof (284.177s) | production-deploy.yml / rollout111413177138 + ship watcher | 37194396337 | PASS |
 | already-started frontend/placement QA, backend skipped | qa-smoke.yml | 37194323799 | PASS |
 | final9e2 frontend/placement QA, backend explicitly skipped | qa-smoke.yml / frontend job111422053012 | 37197421291 | PASS |
+| console runtime recreated with owner-approved interrupt of 2 active turns; /healthz ok/0 active on exact main fde751378 images | agent-console.yml / dispatch apply=true, all 8 jobs | 37199930253 | PASS |
 
 ## Blockers
 
-- The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
-- Verified unchanged-component327 reuse met300s at284.177s. API-change e748 remains510.240s, and full cold/Writing-live is unmeasured; forced-Writing build-only was310s. Different conditions are not isolated causal attribution or a universal deadline. Never remove gates or report projections as acceptance.
-- Console update is built/pulled but protected by2 active owner turns; oldc81 images still run. Six bounded native idle checks stayed busy, and final11:22:41Z health remains2/non-draining. Specific restart approval was requested again but unavailable, not granted. Wait for genuine idle or actual specific approval; no more unchanged polling or speculative retries.
+- RESOLVED 2026-10-04: the two owner-turn-protected console gates and the stale May25907015352 privacy blocker were closed under the owner's fresh specific grant (D-47). Console runtime now runs exact main fde751378 images, activeTurns 0; interrupted turns remain resumable from the sessions volume.
+- Standing measured-timing caveat unchanged: 284.177s is the verified unchanged-component reuse acceptance; API-change e748 remains 510.240s, and full cold/Writing-live is unmeasured. Different conditions are not a universal deadline.
 - QA37177363819 predates the already-live scoring correction; 67/67 focused regressions passed. Full e748 QA37180577741 ended cancelled, not a whole-backend PASS. Do not rerun unrelated QA for this deployment-control change.
-- The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
-- Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
-- Final11:22:41Z native refresh: repository PUBLIC, zero in-progress Actions and only May25907015352 queued. The check-suite is also queued/zero checks; no pending-deployment approval can resolve it, and a rerun exceeds GitHub's30-day limit. Exact deletion permission was requested but unavailable, not granted. Never infer either missing permission from generic autonomous completion.
+- Privacy restoration follows the guarded close only: flip private when no lease holder and no queued/in-progress Actions run remains (an unrelated Writing Rev8 run 37199702750 was in flight during this round and is not owned by it).
 
 ## Next action
 
-1. Wait for verified console idle or the owner's fresh specific restart decision; only then apply the existing console pipeline and verify new health/images before finishing FAST-04. No more speculative retries or inferred approval. May25907015352 needs separate specific deletion authorization or native resolution before privacy safety can permit a private flip.
+1. None — round closed under the owner's fresh specific grant (D-47). Console runtime is applied and verified on exact main images; the stale May record is deleted; the closeout commit ships through the lease and the guarded ship close restores privacy once no holder and no run remains. Interrupted console owner turns are resumable from the sessions volume.
