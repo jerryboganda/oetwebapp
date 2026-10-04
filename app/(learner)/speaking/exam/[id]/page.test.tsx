@@ -65,7 +65,8 @@ const NOW = '2026-09-30T12:00:00.000Z';
 
 // What the shared client throws when a proxy answers with an HTML 502: the raw text stays in `message` for logs,
 // the learner-facing `userMessage` is plain words (lib/api/client.ts).
-const proxyBadGateway = () => Object.assign(new ApiError('Request failed: 502'), {
+// `@/lib/api` is mocked above with a message-only ApiError, so it is built through that shape.
+const proxyBadGateway = () => Object.assign(new (ApiError as unknown as new (message: string) => Error)('Request failed: 502'), {
   status: 502,
   userMessage: 'Something went wrong on our side. Please try again in a moment.',
 });

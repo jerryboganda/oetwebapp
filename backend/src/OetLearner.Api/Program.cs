@@ -1195,6 +1195,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminServic
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.IWritingRulebookCoverageValidator,
     OetLearner.Api.Services.Rulebooks.WritingRulebookCoverageValidator>();
 builder.Services.AddScoped<SpeakingTutorCalibrationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingGraderCalibrationService>();
 builder.Services.AddScoped<IIeltsMockEngine, IeltsMockEngine>();
 builder.Services.AddScoped<OetLearner.Api.Services.Entitlements.IEffectiveEntitlementResolver, OetLearner.Api.Services.Entitlements.EffectiveEntitlementResolver>();
 // 15 service interfaces consumed by endpoint handlers but missing from DI;
@@ -3081,6 +3082,7 @@ app.MapSpeakingAliasEndpoints();
 app.MapLiveClassEndpoints();
 app.MapTutorEndpoints();
 app.MapSpeakingCalibrationEndpoints();
+app.MapSpeakingGraderCalibrationEndpoints();
 
 // ── OET Speaking module (Phase 1+ role-play cards, sessions, compliance) ──
 app.MapAdminSpeakingContentEndpoints();

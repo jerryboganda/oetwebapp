@@ -93,6 +93,7 @@ describe('sidebarPermissionMap', () => {
     ]);
     expect(sidebarPermissionMap['/admin/writing/result-visibility']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/speaking/result-visibility']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/speaking/grader-calibration']).toEqual([AdminPermission.ContentWrite]);
   });
 
   it('keeps consolidated content hub child workflows mapped to granular permissions', () => {

@@ -793,7 +793,7 @@ Scoring rules:
     private static readonly SpeakingFeedbackReport EmptyReport = new(
         Array.Empty<SpeakingFeedbackItem>(),
         Array.Empty<SpeakingFeedbackItem>(),
-        Array.Empty<SpeakingDrillItem>());
+        Array.Empty<SpeakingReportDrill>());
 
     private static readonly JsonSerializerOptions ReportJson = new(JsonSerializerDefaults.Web);
 
@@ -848,9 +848,9 @@ Scoring rules:
         return items;
     }
 
-    private static List<SpeakingDrillItem> ReadDrills(JsonElement root, string property, int max)
+    private static List<SpeakingReportDrill> ReadDrills(JsonElement root, string property, int max)
     {
-        var drills = new List<SpeakingDrillItem>();
+        var drills = new List<SpeakingReportDrill>();
         if (root.ValueKind != JsonValueKind.Object
             || !root.TryGetProperty(property, out var array)
             || array.ValueKind != JsonValueKind.Array)
@@ -868,7 +868,7 @@ Scoring rules:
             if (weakPoint is null || practise is null) continue;
 
             var title = Clip(TryReadString(element, "title"), 120) ?? Clip(practise, 80)!;
-            drills.Add(new SpeakingDrillItem(
+            drills.Add(new SpeakingReportDrill(
                 title,
                 ReportCriterion(TryReadString(element, "criterion")),
                 weakPoint,

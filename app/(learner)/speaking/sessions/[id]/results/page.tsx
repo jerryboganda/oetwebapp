@@ -39,7 +39,7 @@ import { ApiError } from '@/lib/api';
 import {
   learnerGetDualAssessment,
   type DualAssessmentResponse,
-  type SpeakingDrillItem,
+  type SpeakingReportDrill,
 } from '@/lib/api/speaking-assessments';
 import {
   getSpeakingSession,
@@ -311,7 +311,7 @@ export default function SpeakingSessionResultsPage() {
   }), [transcript]);
 
   // Personalised drills built by the AI from THIS attempt (weak point, what to rehearse, an example to say).
-  const drills = useMemo<SpeakingDrillItem[]>(
+  const drills = useMemo<SpeakingReportDrill[]>(
     () => (showRecommendedDrills ? visibleData?.ai?.report?.drills ?? [] : []),
     [showRecommendedDrills, visibleData],
   );

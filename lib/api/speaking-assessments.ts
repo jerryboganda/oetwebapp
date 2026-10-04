@@ -169,7 +169,7 @@ export interface SpeakingFeedbackItem {
 }
 
 /** One personalised practice drill built from this attempt. */
-export interface SpeakingDrillItem {
+export interface SpeakingReportDrill {
   title: string;
   criterion: string;
   /** What the candidate did in this attempt. */
@@ -184,7 +184,7 @@ export interface SpeakingDrillItem {
 export interface SpeakingFeedbackReport {
   strengths: SpeakingFeedbackItem[];
   priorityWeaknesses: SpeakingFeedbackItem[];
-  drills: SpeakingDrillItem[];
+  drills: SpeakingReportDrill[];
 }
 
 export interface AiAssessment {

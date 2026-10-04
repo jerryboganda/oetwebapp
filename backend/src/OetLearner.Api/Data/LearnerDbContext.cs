@@ -482,6 +482,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<SpeakingCalibrationScore> SpeakingCalibrationScores => Set<SpeakingCalibrationScore>();
     public DbSet<SpeakingFeedbackComment> SpeakingFeedbackComments => Set<SpeakingFeedbackComment>();
 
+    // Expert-labelled performances the AI Speaking grader is calibrated against (spec 4 Oct 2026).
+    public DbSet<SpeakingGraderCalibrationSample> SpeakingGraderCalibrationSamples => Set<SpeakingGraderCalibrationSample>();
+
     // Writing module runtime-mutable settings (singleton row, id="global").
     // See WritingOptionsProvider; bootstrapped lazily on first read.
     public DbSet<WritingOptions> WritingOptions => Set<WritingOptions>();
