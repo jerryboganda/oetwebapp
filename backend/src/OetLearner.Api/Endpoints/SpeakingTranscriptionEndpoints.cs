@@ -203,7 +203,9 @@ public static class SpeakingTranscriptionEndpoints
                 Id: latest.Id,
                 Provider: latest.Provider,
                 Language: latest.Language,
-                Segments: SafeParseSegments(latest.SegmentsJson),
+                // The marked transcript starts at the real role-play: the opening connection check is
+                // not shown (the stored segments keep it for technical logs).
+                Segments: SafeParseSegments(SpeakingTranscriptEvidence.StripConnectivityChatter(latest.SegmentsJson)),
                 WordCount: latest.WordCount,
                 MeanConfidence: latest.MeanConfidence,
                 GeneratedAt: latest.GeneratedAt));

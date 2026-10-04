@@ -56,7 +56,7 @@ public sealed class SpeakingCanonicalAssessmentService(
     IAiCreditReservationService? creditReservations = null) : ISpeakingCanonicalAssessmentService
 {
     public const string FeatureCode = AiFeatureCodes.SpeakingGrade;
-    public const string PromptVersion = "speaking.score.v2";
+    public const string PromptVersion = SpeakingAiAssessmentService.PromptTemplateId;
 
     private const string NoTranscriptErrorCode = "speaking_session_no_transcript";
     // Mode-neutral on purpose: a live voice role-play has no recording to point at.

@@ -707,11 +707,11 @@ public sealed class TutorAssessmentService(
             InformationGiving: row.InformationGiving,
             EstimatedScaledScore: reported,
             ReadinessBand: BandOf(reported),
-            OverallSummary: row.OverallSummary,
+            OverallSummary: SpeakingLearnerText.ScrubRuleIds(row.OverallSummary),
             ConfidenceBand: row.ConfidenceBand,
             GeneratedAt: row.GeneratedAt,
             Grade: OetScoring.OetGradeLetterFromScaled(reported),
-            ScoreLabel: OetScoring.SpeakingScoreLabel(null, row.ModelId));
+            ScoreLabel: OetScoring.SpeakingScoreLabel(row.GraderVersion, row.ModelId));
     }
 
     private static TutorAssessmentProjection ProjectTutor(SpeakingTutorAssessment row, string? tutorName)

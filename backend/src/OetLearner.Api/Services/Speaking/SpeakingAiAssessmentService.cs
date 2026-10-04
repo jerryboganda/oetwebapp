@@ -41,7 +41,22 @@ public sealed class SpeakingAiAssessmentService(
     ITypeSafeJudgmentService? judgments = null,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null)
 {
-    private const string PromptTemplateId = "speaking.score.v2";
+    // v3 (4 Oct 2026): the system prompt now carries the official OET band descriptors and the
+    // "rules guide, never deduct" principles; the model is no longer asked for a readiness band
+    // (the server derives it, with the score and grade, from the nine criterion scores).
+    internal const string PromptTemplateId = "speaking.score.v3";
+
+    /// <summary>Version of the audio stage that fed Intelligibility; "audio-none" = transcript only.</summary>
+    internal const string AudioStageVersion = "audio-none";
+
+    /// <summary>
+    /// The exact grader behind a score: prompt template | raw→reported mapping | audio stage. A score is
+    /// provisional until THIS string (with the grading model) has passed calibration, so changing any of the
+    /// three starts an uncalibrated version.
+    /// </summary>
+    internal static string GraderVersion
+        => $"{PromptTemplateId}|{OetScoring.SpeakingMappingVersion}|{AudioStageVersion}";
+
     private const string ProviderName = "ai_gateway";
     private const string ModelId = "gateway-default";
 
@@ -51,8 +66,9 @@ public sealed class SpeakingAiAssessmentService(
     // header so this template focuses on the JSON contract the AI must
     // return for the speaking-grade feature.
     // ---------------------------------------------------------------------
-    private const string PROMPT_TEMPLATE_V2 = """
-You are an OET Speaking examiner scoring a single role-play session.
+    private const string PROMPT_TEMPLATE_V3 = """
+You are an OET Speaking examiner scoring a single role-play session against the official
+OET band descriptors given in the system prompt.
 Return ONLY a strict JSON object with this exact shape (no markdown, no
 prose, no code fences):
 
@@ -68,7 +84,6 @@ prose, no code fences):
     "informationGathering": { "score": 0, "rationale": "", "evidenceQuotes": [] },
     "informationGiving":    { "score": 0, "rationale": "", "evidenceQuotes": [] }
   },
-  "readinessBand": "not_ready|developing|borderline|exam_ready|strong",
   "overallSummary": "",
   "confidenceBand": "low|medium|high",
   "strengths": [],
@@ -82,12 +97,18 @@ Scoring rules:
   * Clinical communication criteria (relationshipBuilding,
     patientPerspective, structure, informationGathering,
     informationGiving) use the OET 0–3 band scale.
+  * For each criterion pick the band whose descriptor best fits the WHOLE
+    performance. One event lowers at most one criterion.
   * Each `evidenceQuotes` entry MUST be a verbatim substring of the
     candidate's transcript turns. Quote 3–10 words.
-  * `rationale` must explain WHY the score was awarded, citing the
-    relevant criterion descriptor.
+  * `rationale` must explain WHY the score was awarded, in plain language the
+    candidate can read, citing what the band descriptor expects. Never write
+    rule IDs or internal codes in it.
   * `overallSummary` is 2–4 sentences of advisory feedback. Never claim
-    this is an official OET score.
+    this is an official OET score, and never state a score out of 500 or a
+    grade: the server derives both from your nine criterion scores.
+  * Anything said before the role-play begins, or about the connection or
+    equipment, is not part of the performance — ignore it.
   * Candidate transcript segments marked `"interrupted": true` mean the
     candidate started speaking BEFORE the patient had finished their
     response (they cut the patient off). Weigh repeated or abrupt
@@ -201,7 +222,7 @@ Scoring rules:
                 Kind = RuleKind.Speaking,
                 Profession = profession,
                 Task = AiTaskMode.Score,
-                CardType = "role_play",
+                CardType = RulebookCardToken(card),
             });
         }
         catch (PromptNotGroundedException)
@@ -225,7 +246,9 @@ Scoring rules:
         // sessions returned above), and `judgments` null (corpus harness) means zero Jev calls.
         var jevOptions = isMock ? null : typeSafeOptions?.Value;
         var jevActive = judgments is not null && JevSpeakingAdvisor.AnyActive(jevOptions);
-        var jevTranscript = jevActive ? JevSpeakingAdvisor.TranscriptFromSegmentsJson(transcript.SegmentsJson) : string.Empty;
+        var jevTranscript = jevActive
+            ? JevSpeakingAdvisor.TranscriptFromSegmentsJson(SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson))
+            : string.Empty;
         var jevCard = jevActive
             ? JevSpeakingAdvisor.CardSummary(card.ScenarioTitle, card.Setting, card.CandidateRole, card.ClinicalTopic, card.Tasks)
             : string.Empty;
@@ -298,7 +321,7 @@ Scoring rules:
                 "The AI scoring service returned an invalid response. Please retry.");
         }
 
-        var transcriptText = ExtractTranscriptText(transcript.SegmentsJson);
+        var transcriptText = ExtractTranscriptText(SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson));
         foreach (var (code, criterion) in parsed.CriterionScores)
         {
             foreach (var quote in criterion.EvidenceQuotes)
@@ -381,6 +404,7 @@ Scoring rules:
             Provider = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedProvider) ? ProviderName : aiResult.ResolvedProvider.Trim(), 32),
             ModelId = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedModel) ? ModelId : aiResult.ResolvedModel.Trim(), 96),
             PromptTemplateId = PromptTemplateId,
+            GraderVersion = GraderVersion,
             Intelligibility = rubricScores.Intelligibility,
             Fluency = rubricScores.Fluency,
             Appropriateness = rubricScores.Appropriateness,
@@ -445,7 +469,42 @@ Scoring rules:
             throw;
         }
 
-        return ProjectAssessment(row, parsed.CriterionScores);
+        // Project from the stored row so the response a learner gets straight after grading is exactly what
+        // every later read shows (clamped scores, internal rule IDs scrubbed from the text).
+        return ProjectAssessment(row, RehydrateCriterionScores(row));
+    }
+
+    /// <summary>
+    /// The rulebook's card-scoped rule token for a card. The Speaking rulebooks scope some rules to
+    /// <c>breaking_bad_news</c>, <c>follow_up</c> and <c>already_known_patient</c> cards; the grader
+    /// always passed the generic <c>role_play</c> token, so those rules never reached the cards they
+    /// describe. Everything else keeps <c>role_play</c> (the rules that apply to every card).
+    /// </summary>
+    internal static string RulebookCardToken(RolePlayCard card)
+    {
+        static bool Is(string? value, string expected)
+            => string.Equals(value?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
+
+        if (Is(card.PrimaryCategory, "Breaking Bad News") || HasSecondaryTag(card.SecondaryTagsJson, "Breaking Bad News"))
+            return "breaking_bad_news";
+        if (Is(card.PrimaryCategory, "Second Visit / Follow-up")) return "follow_up";
+        if (Is(card.PrimaryCategory, "Already Known Patient")) return "already_known_patient";
+        return "role_play";
+    }
+
+    private static bool HasSecondaryTag(string? secondaryTagsJson, string tag)
+    {
+        if (string.IsNullOrWhiteSpace(secondaryTagsJson)) return false;
+        try
+        {
+            var tags = JsonSerializer.Deserialize<string[]>(secondaryTagsJson);
+            return tags is not null
+                && tags.Any(t => string.Equals(t?.Trim(), tag, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     public async Task<SpeakingAiAssessmentProjection?> GetLatestAsync(
@@ -481,13 +540,15 @@ Scoring rules:
             CriterionScores: criterionScores,
             EstimatedScaledScore: reported,
             ReadinessBand: OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(reported)),
-            OverallSummary: row.OverallSummary,
+            // Internal rule IDs never reach a candidate (the stored text stays as the model wrote it).
+            OverallSummary: SpeakingLearnerText.ScrubRuleIds(row.OverallSummary),
             ConfidenceBand: row.ConfidenceBand,
             GeneratedAt: row.GeneratedAt,
             IsAdvisory: row.IsAdvisory,
             Grade: OetScoring.OetGradeLetterFromScaled(reported),
-            // No grader version is persisted yet, so every score is provisional until calibration passes.
-            ScoreLabel: OetScoring.SpeakingScoreLabel(null, row.ModelId));
+            // Provisional until this exact grader version (with its model) has passed calibration;
+            // a legacy row has no version and is always provisional.
+            ScoreLabel: OetScoring.SpeakingScoreLabel(row.GraderVersion, row.ModelId));
     }
 
     private static IDictionary<string, CriterionScore> RehydrateCriterionScores(SpeakingAiAssessment row)
@@ -513,7 +574,7 @@ Scoring rules:
             return new CriterionScore(
                 Score: score,
                 MaxScore: max,
-                Rationale: found ? (packed.Rationale ?? string.Empty) : string.Empty,
+                Rationale: found ? SpeakingLearnerText.ScrubRuleIds(packed.Rationale) : string.Empty,
                 EvidenceQuotes: found ? (packed.EvidenceQuotes ?? Array.Empty<string>()) : Array.Empty<string>());
         }
     }
@@ -567,7 +628,7 @@ Scoring rules:
         SpeakingCardType? cardType)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(PROMPT_TEMPLATE_V2);
+        sb.AppendLine(PROMPT_TEMPLATE_V3);
         sb.AppendLine();
         // Hidden card type — marking guidance only. NEVER shown to the learner.
         if (cardType is not null)
@@ -621,12 +682,15 @@ Scoring rules:
             sb.AppendLine("NOTE: This role-play was a live voice conversation with no audio recording (transcript only), so the feedback text must never tell the candidate to listen to or check a recording.");
             sb.AppendLine();
         }
+        // The graded evidence starts at the real role-play: the opening connection check ("can you hear
+        // me" / "go ahead") is stripped here, while the stored segments and their hash are untouched.
+        var gradedSegments = SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson);
         sb.AppendLine("---- TRANSCRIPT (latest revision) ----");
-        sb.AppendLine(transcript.SegmentsJson);
+        sb.AppendLine(gradedSegments);
         sb.AppendLine();
         // Server-computed so sparse per-segment flags cannot be overlooked
         // in a long transcript.
-        var (interruptionCount, interruptedAtMs) = ComputeInteractionSignals(transcript.SegmentsJson);
+        var (interruptionCount, interruptedAtMs) = ComputeInteractionSignals(gradedSegments);
         sb.AppendLine("---- INTERACTION SIGNALS (server-computed) ----");
         sb.AppendLine(JsonSerializer.Serialize(new
         {
