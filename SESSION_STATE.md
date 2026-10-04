@@ -3,9 +3,9 @@
 Session: deployment-latency
 Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
 Mode: blocked
-Updated: 2026-10-04T05:55:54Z
+Updated: 2026-10-04T06:03:05Z
 Branch: main
-HEAD: e7485ce2fec757c158e1b381d271f65f4d136478
+HEAD: 60ad4a75d28f6b671e12a87079eea2546d80c874
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -72,6 +72,7 @@ release provenance, protected storage, readiness or rollback.
 - D-29 E748 build 37180577765 passed 38 protocol cases and original API byte verification; new same-publish SQL was verified/applied in production 37180764537. Green physical web/API images, aliases and all three public HTTP 200/release headers verified. Inclusive watcher 510.240s, driver 460.272s; pull 22.908s, initial readiness 68.965s, recheck 13.755s and cutover 7.464s. Target unmet.
 - D-30 Native 37180640839 TRX executed/passed 67/67 with zero skipped/failed, including original raw397/public400 and all three hold/clean/classic selectors. Whole-solution compile job 111372344831 and frontend 111372344713 passed; scoped Vitest executed only the report-view file's 12 cases, not hook tests inferred from inputs. This lane regenerates canonical rulebooks and is separate from production-byte proof.
 - D-31 Source owner received and independently confirmed exact e748 serving/regression proof; no further Speaking edits needed. New full QA 37180577741 remains active at 05:55Z (frontend/placement and shard5 passed); never claim whole-QA green. Live validated Jev selected verified best effort with blocked privacy (p/confidence 1), not speculative boot rewrites, weakened gates or unmeasured five-minute claims.
+- D-32 Final five-path documentation/evidence commit 60ad4a75d shipped through the normal lease at 06:03Z with bound NOTHING_TO_DEPLOY proof; e748 remains the verified runtime release. Final ax:verify matched 88 ledger rows/19 gate run IDs to native GitHub; ax:check and owned whitespace checks passed. Remaining blocker is guarded privacy, not unshipped runtime work.
 
 ## Touched files
 
@@ -125,4 +126,4 @@ release provenance, protected storage, readiness or rollback.
 
 ## Next action
 
-1. Persist the final owned documentation/evidence through the normal documentation-only ship; e748 is already the verified runtime release. Do not redispatch or rewrite runtime code. Privacy remains blocked: obtain specific authorization for the empty May record or wait for native resolution, let active QA finish, then require ship.mjs --may-flip-private before restoring PRIVATE. Do not delete history or bypass the guard.
+1. Privacy remains blocked: obtain specific authorization for empty May record 25907015352 or wait for native resolution, let active QA finish, then require ship.mjs --may-flip-private before restoring PRIVATE. E748 is already verified live and final docs shipped in 60ad4a75d; do not redispatch, push a redundant runtime build, rewrite unrelated code, delete history or bypass the guard. The owner-approved free-runner closeout is measured best effort, not five-minute acceptance.

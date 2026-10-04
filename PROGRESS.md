@@ -34,6 +34,17 @@ Last updated: 2026-10-04
 - Corrected web-layer release 0689edfd0: build 37176154885 passed 38 tests and actual byte/owner assertions; deploy 37176403559 verified blue at 529.552s inclusive (driver 491.713s). Cold Next 89s, pull 54.659s, reused-API readiness 14.482s.
 - Frontend QA 37176154904 passed; preserved backend correction evidence is now recorded above. Target unmet and full cold/Writing-live unmeasured; private restoration faces the inconsistent empty May queue.
 
+## Previous checkpoint - Writing journey repairs (2026-10-03)
+
+- Fixed canon detail links and E2E session recovery through inert `/api/health` before fresh auth hydration; application auth remains unchanged.
+- Completed the isolated demo's existing authored case notes, finite expiring three-credit Writing package and published mock; first-creation guards prevent replenishment or real-user backfills.
+- Strict browser run `37084164663`, job `111090886562`, at `b17603b10`: nine passed (auth setup plus all six Writing journeys), zero skips/retries; drills cover selection/feedback/reset and mocks require a real locked-reading start.
+- Scoped Writing/critical-flow backend, whole-solution compile, canonical rulebooks and frontend checks passed in `37084166890` at the same code SHA.
+- CountUp exposed an intermediate score to the live check; exact-text waiting alone fixed it. Final code `fbcc5943236dc69a7f6f61eb768dcf74dce33e63` deployed successfully in `37087118739`, job `111102432795`; exact web/API images are healthy and all three public health endpoints return 200.
+- Final post-deploy read-only browser `37088569322`, job `111103802960`: normal sign-in, grading-to-results redirect, six criteria, same saved grade/report on desktop and mobile refresh, zero Writing mutations.
+- Removed both owned temporary learner secrets and verified their names absent; unrelated credentials and the other session's goal/tasks remain untouched.
+- No further assessment, paid call, provider forcing or production data mutation; original submission untouched and current Max-always-on policy preserved.
+
 ## Previous checkpoint — AX: externalized agent working memory (2026-10-01)
 
 - `.github/agent-state.local.md` was named as the current-task handoff in 21 files but did not
