@@ -17,7 +17,7 @@ namespace OetLearner.Api.Services.Speaking;
 /// rulebook-grounded <see cref="IAiGatewayService"/>. The output is an
 /// advisory <see cref="SpeakingAiAssessment"/> row — the canonical
 /// scaled score is ALWAYS recomputed via
-/// <see cref="OetScoring.SpeakingProjectedScaled(OetScoring.SpeakingCriterionScores)"/>
+/// <see cref="OetScoring.SpeakingReportedScaled(OetScoring.SpeakingCriterionScores)"/>
 /// rather than trusting the AI's own number. Per-criterion scores are
 /// clamped to the OET rubric (linguistic 0–6, clinical 0–3).
 ///
@@ -324,7 +324,9 @@ Scoring rules:
             InformationGathering: ScoreOf(parsed, "informationGathering", 0, 3),
             InformationGiving:    ScoreOf(parsed, "informationGiving",    0, 3));
 
-        var scaled = OetScoring.SpeakingProjectedScaled(rubricScores);
+        // The REPORTED score (0–500, multiple of 10): the one number the grade, readiness band
+        // and pass line all derive from, so a score shown as 350 can never read "Borderline".
+        var scaled = OetScoring.SpeakingReportedScaled(rubricScores);
         var readinessBand = OetScoring.SpeakingReadinessBandCode(
             OetScoring.SpeakingReadinessBandFromScaled(scaled));
         var confidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand);
@@ -467,18 +469,25 @@ Scoring rules:
         SpeakingAiAssessment row,
         IDictionary<string, CriterionScore> criterionScores)
     {
+        // A legacy row stored the unrounded heuristic number (e.g. 345 → shown as 350) and a band
+        // computed on it; the grade and band are always recomputed from the reported value so the
+        // three can never disagree.
+        var reported = OetScoring.OetReportedScaledScore(row.EstimatedScaledScore);
         return new SpeakingAiAssessmentProjection(
             AssessmentId: row.Id,
             Provider: row.Provider,
             ModelId: row.ModelId,
             PromptTemplateId: row.PromptTemplateId,
             CriterionScores: criterionScores,
-            EstimatedScaledScore: OetScoring.OetReportedScaledScore(row.EstimatedScaledScore),
-            ReadinessBand: row.ReadinessBand,
+            EstimatedScaledScore: reported,
+            ReadinessBand: OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(reported)),
             OverallSummary: row.OverallSummary,
             ConfidenceBand: row.ConfidenceBand,
             GeneratedAt: row.GeneratedAt,
-            IsAdvisory: row.IsAdvisory);
+            IsAdvisory: row.IsAdvisory,
+            Grade: OetScoring.OetGradeLetterFromScaled(reported),
+            // No grader version is persisted yet, so every score is provisional until calibration passes.
+            ScoreLabel: OetScoring.SpeakingScoreLabel(null, row.ModelId));
     }
 
     private static IDictionary<string, CriterionScore> RehydrateCriterionScores(SpeakingAiAssessment row)

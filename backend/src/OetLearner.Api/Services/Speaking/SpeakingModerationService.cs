@@ -409,7 +409,7 @@ public sealed class SpeakingModerationService(
         string[]? recommendedDrills,
         DateTimeOffset now)
     {
-        var scaled = OetScoring.SpeakingProjectedScaled(scores);
+        var scaled = OetScoring.SpeakingReportedScaled(scores);
         var band = OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(scaled));
         return new SpeakingTutorAssessment
         {

@@ -479,8 +479,10 @@ public static class OetScoring
     public const int SpeakingRubricMax = 24 + 15;
 
     /// <summary>
-    /// Project full Speaking criterion scores onto the 0–500 scaled scale
-    /// using the canonical 70% ≡ 350 anchor.
+    /// The uncalibrated platform heuristic: raw total → percentage → 70% ≡ 350 anchor table. It
+    /// is NOT the OET conversion formula and is not rounded to 10. Kept as the calibration
+    /// baseline and for the legacy v1.1 path; candidate-facing code uses
+    /// <see cref="SpeakingReportedScaled"/>.
     /// </summary>
     public static int SpeakingProjectedScaled(SpeakingCriterionScores scores)
     {
@@ -540,6 +542,81 @@ public static class OetScoring
             ScaledMin,
             ScaledMax);
     }
+
+    // -----------------------------------------------------------------------
+    // Speaking REPORTED score — the one candidate-facing number
+    // -----------------------------------------------------------------------
+    //
+    // Owner spec 4 Oct 2026 §2: a Speaking result is 0–500 in 10-point steps with the OET
+    // letter grade, and display, grade, readiness and pass all derive from that ONE number.
+    //
+    // The raw → reported mapping is a PLATFORM HEURISTIC, not the OET conversion formula. It
+    // stays labelled "provisional" until a calibration run against expert-labelled
+    // performances passes (see docs/speaking/scoring.md). The v0 table below is exactly the
+    // former heuristic — the anchor table above is linear (scaled = 5 × percentage), so
+    // reported = round-to-10(round(500 × raw / 39)) — written out as a literal so the C# and
+    // TypeScript copies can be compared entry by entry. A calibration fit replaces the
+    // literal in both files and bumps <see cref="SpeakingMappingVersion"/>.
+
+    /// <summary>Version of the raw → reported Speaking mapping; bump with every table change.</summary>
+    public const string SpeakingMappingVersion = "speaking-map.v0-heuristic";
+
+    /// <summary>Reported score for a raw rubric total of 0..39 (index = raw total).</summary>
+    private static readonly int[] SpeakingRawToReportedTable =
+    {
+        0, 10, 30, 40, 50, 60, 80, 90, 100, 120,
+        130, 140, 150, 170, 180, 190, 210, 220, 230, 240,
+        260, 270, 280, 300, 310, 320, 330, 350, 360, 370,
+        390, 400, 410, 420, 440, 450, 460, 470, 490, 500,
+    };
+
+    /// <summary>The raw → reported table, read-only (for the parity test and the calibration report).</summary>
+    public static IReadOnlyList<int> SpeakingRawToReported => SpeakingRawToReportedTable;
+
+    /// <summary>Clamped raw rubric total 0..39 (four 0–6 linguistic + five 0–3 clinical criteria).</summary>
+    public static int SpeakingRawTotal(SpeakingCriterionScores scores)
+        => ClampInt(scores.Intelligibility, 0, 6)
+         + ClampInt(scores.Fluency, 0, 6)
+         + ClampInt(scores.Appropriateness, 0, 6)
+         + ClampInt(scores.GrammarExpression, 0, 6)
+         + ClampInt(scores.RelationshipBuilding, 0, 3)
+         + ClampInt(scores.PatientPerspective, 0, 3)
+         + ClampInt(scores.Structure, 0, 3)
+         + ClampInt(scores.InformationGathering, 0, 3)
+         + ClampInt(scores.InformationGiving, 0, 3);
+
+    /// <summary>
+    /// The candidate-facing Speaking score: 0–500, always a multiple of 10. Every learner
+    /// surface, the letter grade, the readiness band and the pass line use this value.
+    /// </summary>
+    public static int SpeakingReportedScaled(SpeakingCriterionScores scores)
+        => SpeakingRawToReportedTable[SpeakingRawTotal(scores)];
+
+    /// <summary>Score label codes: how far the reported number can be trusted.</summary>
+    public const string SpeakingScoreLabelProvisional = "provisional";
+    public const string SpeakingScoreLabelPracticeEstimate = "ai_practice_estimate";
+
+    /// <summary>
+    /// Grader versions (<c>"{prompt}|{mapping}|{audio stage}"</c>) whose scores passed calibration
+    /// against expert-labelled performances, keyed together with the grading model id. Empty
+    /// until a calibration report passes; adding an entry is a reviewed code change.
+    /// </summary>
+    private static readonly HashSet<string> SpeakingCalibratedGraders = new(StringComparer.Ordinal);
+
+    /// <summary>True only when this exact grader version ran on a calibrated model.</summary>
+    public static bool IsSpeakingGraderCalibrated(string? graderVersion, string? modelId)
+        => !string.IsNullOrWhiteSpace(graderVersion)
+           && !string.IsNullOrWhiteSpace(modelId)
+           && SpeakingCalibratedGraders.Contains($"{graderVersion}|{modelId}");
+
+    /// <summary>
+    /// <c>ai_practice_estimate</c> once calibrated, otherwise <c>provisional</c>. A legacy row with
+    /// no recorded grader version is always provisional.
+    /// </summary>
+    public static string SpeakingScoreLabel(string? graderVersion, string? modelId)
+        => IsSpeakingGraderCalibrated(graderVersion, modelId)
+            ? SpeakingScoreLabelPracticeEstimate
+            : SpeakingScoreLabelProvisional;
 
     /// <summary>
     /// Project full Speaking criterion scores into a Speaking pass/fail result.

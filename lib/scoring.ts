@@ -741,8 +741,10 @@ export function speakingProjectedScaledFromPercentage(pct0To100: number): number
 }
 
 /**
- * Project full Speaking criterion scores onto the 0–500 scaled scale
- * using the canonical 70% ≡ 350 anchor.
+ * The uncalibrated platform heuristic: raw total → percentage → 70% ≡ 350
+ * anchor table. NOT the OET conversion formula and not rounded to 10. Kept as
+ * the calibration baseline; candidate-facing code uses
+ * {@link speakingReportedScaled}.
  */
 export function speakingProjectedScaled(scores: SpeakingCriterionScores): number {
   const c6 = (v: number) => Math.max(0, Math.min(6, Number.isFinite(v) ? v : 0));
@@ -760,6 +762,50 @@ export function speakingProjectedScaled(scores: SpeakingCriterionScores): number
     c3(scores.informationGiving);
   const pct = ((linguistic + clinical) * 100) / SPEAKING_RUBRIC_MAX;
   return speakingProjectedScaledFromPercentage(pct);
+}
+
+// ---------------------------------------------------------------------------
+// Speaking REPORTED score — the one candidate-facing number
+// ---------------------------------------------------------------------------
+//
+// Mirror of OetScoring.SpeakingReportedScaled (backend). Owner spec 4 Oct
+// 2026 §2: 0–500 in 10-point steps; display, grade, readiness and pass all use
+// this single number. The raw → reported mapping is a PLATFORM HEURISTIC, not
+// the OET formula, and stays "provisional" until calibrated against
+// expert-labelled performances. A backend parity test compares this table with
+// the C# one entry by entry — change both together and bump the version.
+
+/** Version of the raw → reported Speaking mapping; bump with every table change. */
+export const SPEAKING_MAPPING_VERSION = 'speaking-map.v0-heuristic';
+
+/** Reported score for a raw rubric total of 0..39 (index = raw total). */
+export const SPEAKING_RAW_TO_REPORTED: readonly number[] = [
+  0, 10, 30, 40, 50, 60, 80, 90, 100, 120,
+  130, 140, 150, 170, 180, 190, 210, 220, 230, 240,
+  260, 270, 280, 300, 310, 320, 330, 350, 360, 370,
+  390, 400, 410, 420, 440, 450, 460, 470, 490, 500,
+];
+
+/** Clamped raw rubric total 0..39 (four 0–6 linguistic + five 0–3 clinical criteria). */
+export function speakingRawTotal(scores: SpeakingCriterionScores): number {
+  const c6 = (v: number) => Math.max(0, Math.min(6, Number.isFinite(v) ? Math.trunc(v) : 0));
+  const c3 = (v: number) => Math.max(0, Math.min(3, Number.isFinite(v) ? Math.trunc(v) : 0));
+  return (
+    c6(scores.intelligibility) +
+    c6(scores.fluency) +
+    c6(scores.appropriateness) +
+    c6(scores.grammarExpression) +
+    c3(scores.relationshipBuilding) +
+    c3(scores.patientPerspective) +
+    c3(scores.structure) +
+    c3(scores.informationGathering) +
+    c3(scores.informationGiving)
+  );
+}
+
+/** The candidate-facing Speaking score: 0–500, always a multiple of 10. */
+export function speakingReportedScaled(scores: SpeakingCriterionScores): number {
+  return SPEAKING_RAW_TO_REPORTED[speakingRawTotal(scores)];
 }
 
 /** Project full Speaking criterion scores into a PassFailResult. */

@@ -180,4 +180,111 @@ public class SpeakingProjectionTests
         Assert.Equal(-20, divergence.ScaledDelta);
         Assert.Equal("moderate", divergence.AgreementBand);
     }
+
+    // ── The reported score: the ONE candidate-facing number (owner spec 4 Oct 2026) ──
+
+    [Fact]
+    public void ReportedTable_HasOneEntryPerRawTotal_IsMonotone_AndEveryEntryIsAMultipleOfTen()
+    {
+        var table = OetScoring.SpeakingRawToReported;
+        Assert.Equal(OetScoring.SpeakingRubricMax + 1, table.Count);
+        Assert.Equal(0, table[0]);
+        Assert.Equal(500, table[^1]);
+        for (var raw = 0; raw < table.Count; raw++)
+        {
+            Assert.Equal(0, table[raw] % 10);
+            if (raw > 0) Assert.True(table[raw] >= table[raw - 1], $"the table decreases at raw {raw}");
+        }
+    }
+
+    [Fact]
+    public void ReportedTable_V0_IsExactlyTheFormerHeuristicRoundedToTen()
+    {
+        // v0 must not move any number a learner has already seen: it is the heuristic
+        // (linear 500 x raw / 39) rounded to 10. A calibration fit changes the literal AND the version.
+        for (var raw = 0; raw <= OetScoring.SpeakingRubricMax; raw++)
+        {
+            var heuristic = OetScoring.SpeakingProjectedScaledFromPercentage(raw * 100.0 / OetScoring.SpeakingRubricMax);
+            Assert.Equal(OetScoring.OetReportedScaledScore(heuristic), OetScoring.SpeakingRawToReported[raw]);
+        }
+        Assert.Equal("speaking-map.v0-heuristic", OetScoring.SpeakingMappingVersion);
+    }
+
+    [Theory]
+    [InlineData(4, 4, 4, 4, 2, 2, 1, 2, 1, 310)] // 16/24 + 8/15 = 24/39: production showed 308
+    [InlineData(4, 3, 3, 3, 1, 1, 1, 1, 1, 230)] // 13/24 + 5/15 = 18/39: production showed 231
+    [InlineData(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)]
+    [InlineData(6, 6, 6, 6, 3, 3, 3, 3, 3, 500)]
+    [InlineData(99, 99, 99, 99, 99, 99, 99, 99, 99, 500)] // out-of-range input is clamped, never trusted
+    public void ReportedScaled_IsAlwaysTheTenPointNumber(
+        int intelligibility, int fluency, int appropriateness, int grammar,
+        int relationship, int perspective, int structure, int gathering, int giving, int expected)
+    {
+        var scores = new SpeakingCriterionScores(
+            intelligibility, fluency, appropriateness, grammar, relationship, perspective, structure, gathering, giving);
+
+        Assert.Equal(expected, OetScoring.SpeakingReportedScaled(scores));
+        Assert.Equal(0, OetScoring.SpeakingReportedScaled(scores) % 10);
+    }
+
+    [Fact]
+    public void ReportedScore_DrivesGradeReadinessAndPass_SoTheyCanNeverDisagree()
+    {
+        // Raw 27/39 = 346 on the unrounded heuristic. The learner is shown 350 (Grade B), so the
+        // readiness band and the pass line must say "at the pass line" too, not "Borderline".
+        var scores = new SpeakingCriterionScores(6, 6, 6, 0, 3, 3, 3, 0, 0);
+        Assert.Equal(27, OetScoring.SpeakingRawTotal(scores));
+        var reported = OetScoring.SpeakingReportedScaled(scores);
+        Assert.Equal(350, reported);
+        Assert.Equal("B", OetScoring.OetGradeLetterFromScaled(reported));
+        Assert.Equal(SpeakingReadinessBand.ExamReady, OetScoring.SpeakingReadinessBandFromScaled(reported));
+        Assert.True(OetScoring.IsSpeakingPass(reported));
+
+        // One criterion point lower is 330: Grade C+, Borderline, not a pass.
+        var below = new SpeakingCriterionScores(5, 6, 6, 0, 3, 3, 3, 0, 0);
+        var belowReported = OetScoring.SpeakingReportedScaled(below);
+        Assert.Equal(330, belowReported);
+        Assert.Equal("C+", OetScoring.OetGradeLetterFromScaled(belowReported));
+        Assert.Equal(SpeakingReadinessBand.Borderline, OetScoring.SpeakingReadinessBandFromScaled(belowReported));
+        Assert.False(OetScoring.IsSpeakingPass(belowReported));
+    }
+
+    [Theory]
+    [InlineData(500, "A")]
+    [InlineData(450, "A")]
+    [InlineData(440, "B")]
+    [InlineData(430, "B")]
+    [InlineData(400, "B")]
+    [InlineData(350, "B")]
+    [InlineData(340, "C+")]
+    [InlineData(300, "C+")]
+    [InlineData(290, "C")]
+    [InlineData(200, "C")]
+    [InlineData(190, "D")]
+    [InlineData(100, "D")]
+    [InlineData(90, "E")]
+    [InlineData(0, "E")]
+    public void GradeLetter_FollowsTheOetReportingTable_AndThereIsNoBPlus(int reported, string grade)
+    {
+        Assert.Equal(grade, OetScoring.OetGradeLetterFromScaled(reported));
+        Assert.NotEqual("B+", OetScoring.OetGradeLetterFromScaled(reported));
+    }
+
+    [Fact]
+    public void EveryReportedScoreMapsToOneOfTheSixOfficialLetters()
+    {
+        var letters = new HashSet<string>(StringComparer.Ordinal) { "A", "B", "C+", "C", "D", "E" };
+        foreach (var reported in OetScoring.SpeakingRawToReported)
+            Assert.Contains(OetScoring.OetGradeLetterFromScaled(reported), letters);
+    }
+
+    [Fact]
+    public void ScoreLabel_IsProvisional_UntilTheGraderVersionHasPassedCalibration()
+    {
+        Assert.False(OetScoring.IsSpeakingGraderCalibrated(null, null));
+        Assert.False(OetScoring.IsSpeakingGraderCalibrated("speaking.score.v3|speaking-map.v0-heuristic|none", "claude-opus-5-5"));
+        Assert.Equal(OetScoring.SpeakingScoreLabelProvisional, OetScoring.SpeakingScoreLabel(null, "claude-opus-5-5"));
+        Assert.Equal("provisional", OetScoring.SpeakingScoreLabelProvisional);
+        Assert.Equal("ai_practice_estimate", OetScoring.SpeakingScoreLabelPracticeEstimate);
+    }
 }

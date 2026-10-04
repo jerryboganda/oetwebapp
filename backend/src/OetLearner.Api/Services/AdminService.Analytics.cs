@@ -19,6 +19,18 @@ namespace OetLearner.Api.Services;
 
 public partial class AdminService
 {
+    /// <summary>
+    /// Bounds of an evaluation's score string: a range ("330-360") or a single reported score ("350",
+    /// the Speaking format — one number, no range). Null when it has no leading number.
+    /// </summary>
+    private static (int Low, int High)? ParseScoreRangeBounds(string? scoreRange)
+    {
+        var parts = scoreRange?.Split('-');
+        if (parts is null) return null;
+        if (parts.Length == 2 && int.TryParse(parts[0], out var low) && int.TryParse(parts[1], out var high))
+            return (low, high);
+        return parts.Length == 1 && int.TryParse(parts[0], out var single) ? (single, single) : null;
+    }
 
     public async Task<object> GetDashboardSummaryAsync(CancellationToken ct)
     {
@@ -413,12 +425,8 @@ public partial class AdminService
 
         // Score distribution
         var scores = evaluations
-            .Select(e =>
-            {
-                var parts = e.ScoreRange?.Split('-');
-                return parts?.Length == 2 && int.TryParse(parts[0], out var lo) && int.TryParse(parts[1], out var hi)
-                    ? (lo + hi) / 2.0 : (double?)null;
-            })
+            .Select(e => ParseScoreRangeBounds(e.ScoreRange) is { } bounds
+                ? (bounds.Low + bounds.High) / 2.0 : (double?)null)
             .Where(s => s.HasValue)
             .Select(s => s!.Value)
             .OrderBy(s => s)
@@ -622,7 +630,7 @@ public partial class AdminService
                     .ToListAsync(ct);
 
                 var avgScores = evals
-                    .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
+                    .Select(e => ParseScoreRangeBounds(e.ScoreRange)?.Low)
                     .Where(s => s.HasValue).Select(s => (double)s!.Value).ToList();
 
                 cohorts.Add(new
@@ -652,7 +660,7 @@ public partial class AdminService
                     .ToListAsync(ct);
 
                 var avgScores = evals
-                    .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
+                    .Select(e => ParseScoreRangeBounds(e.ScoreRange)?.Low)
                     .Where(s => s.HasValue).Select(s => (double)s!.Value).ToList();
 
                 cohorts.Add(new
@@ -697,7 +705,7 @@ public partial class AdminService
                 .ToListAsync(ct);
 
             var scores = evals
-                .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
+                .Select(e => ParseScoreRangeBounds(e.ScoreRange)?.Low)
                 .Where(s => s.HasValue).Select(s => (double)s!.Value).ToList();
 
             results.Add(new
