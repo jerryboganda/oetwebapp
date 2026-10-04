@@ -175,8 +175,7 @@ export function parseCriterionScore(scoreRange: string | null | undefined): numb
  * Never use this for pass/fail display on Statement-of-Results surfaces.
  */
 export function scoreToGrade(score: number): string {
-  if (score >= 5) return 'B+';
-  if (score >= 4) return 'B';
+  if (score >= 4) return 'B'; // OET has no "B+" grade (owner spec 4 Oct 2026)
   if (score >= 3) return 'C+';
   if (score >= 2) return 'C';
   return 'D';

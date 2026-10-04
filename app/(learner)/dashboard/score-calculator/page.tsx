@@ -33,7 +33,6 @@ const apiRequest = apiClient.request;
 /* ── grade colour helpers ──────────────────────── */
 const GRADE_VARIANTS: Record<string, BadgeProps['variant']> = {
   'A':  'success',
-  'B+': 'success',
   'B':  'info',
   'C+': 'warning',
   'C':  'warning',
@@ -68,7 +67,7 @@ export default function ScoreCalculatorPage() {
   }, [load]);
 
   /* find matching row for the score input */
-  const matchedRow = data?.equivalences.find(e => oetScore >= e.oetScoreMin && oetScore <= e.oetScoreMax);
+  const matchedRow = [...(data?.equivalences ?? [])].sort((x, y) => y.oetScoreMin - x.oetScoreMin).find(e => oetScore >= e.oetScoreMin);
 
   /* filter requirements */
   const countries = data ? Array.from(new Set(data.commonRequirements.map(r => r.country))).sort() : [];

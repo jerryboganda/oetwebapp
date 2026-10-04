@@ -333,7 +333,6 @@ public sealed class WritingHeuristicPreAssessmentService(
     private static string ComputeBandLabel(int rawTotal)
     {
         if (rawTotal >= 38) return "A";
-        if (rawTotal >= 34) return "B+";
         if (rawTotal >= 30) return "B";
         if (rawTotal >= 24) return "C+";
         if (rawTotal >= 18) return "C";

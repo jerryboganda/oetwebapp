@@ -173,16 +173,13 @@ public partial class LearnerService
         // Official OET equivalence table (publicly available from OET website)
         var equivalences = new[]
         {
+            // Grade bands as OET reports them (owner spec 4 Oct 2026): ten-point scores, no "B+".
             new { oetGrade = "A",   oetScoreMin = 450, oetScoreMax = 500, ielts = 9.0,  pte = 88,  cefr = "C2" },
-            new { oetGrade = "A",   oetScoreMin = 400, oetScoreMax = 449, ielts = 8.5,  pte = 83,  cefr = "C2" },
-            new { oetGrade = "B+",  oetScoreMin = 370, oetScoreMax = 399, ielts = 8.0,  pte = 79,  cefr = "C1+" },
-            new { oetGrade = "B",   oetScoreMin = 350, oetScoreMax = 369, ielts = 7.5,  pte = 73,  cefr = "C1" },
-            new { oetGrade = "B",   oetScoreMin = 300, oetScoreMax = 349, ielts = 7.0,  pte = 65,  cefr = "B2+" },
-            new { oetGrade = "C+",  oetScoreMin = 250, oetScoreMax = 299, ielts = 6.5,  pte = 58,  cefr = "B2" },
-            new { oetGrade = "C",   oetScoreMin = 200, oetScoreMax = 249, ielts = 6.0,  pte = 50,  cefr = "B1+" },
-            new { oetGrade = "C",   oetScoreMin = 150, oetScoreMax = 199, ielts = 5.5,  pte = 43,  cefr = "B1" },
-            new { oetGrade = "D",   oetScoreMin = 100, oetScoreMax = 149, ielts = 5.0,  pte = 36,  cefr = "A2+" },
-            new { oetGrade = "E",   oetScoreMin = 0,   oetScoreMax = 99,  ielts = 4.5,  pte = 30,  cefr = "A2" }
+            new { oetGrade = "B",   oetScoreMin = 350, oetScoreMax = 440, ielts = 7.5,  pte = 73,  cefr = "C1" },
+            new { oetGrade = "C+",  oetScoreMin = 300, oetScoreMax = 340, ielts = 7.0,  pte = 65,  cefr = "B2+" },
+            new { oetGrade = "C",   oetScoreMin = 200, oetScoreMax = 290, ielts = 6.0,  pte = 50,  cefr = "B1+" },
+            new { oetGrade = "D",   oetScoreMin = 100, oetScoreMax = 190, ielts = 5.0,  pte = 36,  cefr = "A2+" },
+            new { oetGrade = "E",   oetScoreMin = 0,   oetScoreMax = 90,  ielts = 4.5,  pte = 30,  cefr = "A2" }
         };
 
         var commonRequirements = new[]

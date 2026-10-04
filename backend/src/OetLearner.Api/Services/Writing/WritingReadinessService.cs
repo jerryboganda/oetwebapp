@@ -222,7 +222,6 @@ public sealed class WritingReadinessService(
     private static string? PredictBandLabel(decimal mockAverage)
     {
         if (mockAverage >= 38) return "A";
-        if (mockAverage >= 34) return "B+";
         if (mockAverage >= 30) return "B";
         if (mockAverage >= 24) return "C+";
         if (mockAverage >= 18) return "C";

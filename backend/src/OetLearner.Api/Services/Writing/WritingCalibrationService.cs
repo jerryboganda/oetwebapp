@@ -398,7 +398,6 @@ public sealed class WritingCalibrationService(
     private static string RawBandLabel(int rawTotal)
     {
         if (rawTotal >= 38) return "A";
-        if (rawTotal >= 34) return "B+";
         if (rawTotal >= 30) return "B";
         if (rawTotal >= 24) return "C+";
         if (rawTotal >= 18) return "C";
