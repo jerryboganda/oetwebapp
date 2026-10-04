@@ -38,9 +38,9 @@ class FakeMediaRecorder {
   static instances: FakeMediaRecorder[] = [];
   state: RecordingState = 'inactive';
   mimeType = 'audio/webm;codecs=opus';
-  ondataavailable: MediaRecorder['ondataavailable'] = null;
-  onstop: MediaRecorder['onstop'] = null;
-  onerror: MediaRecorder['onerror'] = null;
+  ondataavailable: ((event: BlobEvent) => void) | null = null;
+  onstop: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
 
   constructor(_stream: MediaStream) {
     FakeMediaRecorder.instances.push(this);

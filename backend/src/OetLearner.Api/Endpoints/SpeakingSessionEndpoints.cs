@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Speaking;
 
