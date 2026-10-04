@@ -76,3 +76,36 @@ jobs:
       # Pure functions only - no git, no gh, no network.
       - name: Ship wrapper self-test
         run: node scripts/ship/ship.mjs --self-test
+
+      - name: Watcher build selection on the native PowerShell engine
+        shell: ${{ runner.os == 'Windows' && 'powershell' || 'pwsh' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tokens = $null
+          $errors = $null
+          $path = Join-Path (Join-Path (Join-Path $pwd scripts) ship) watch-deploy.ps1
+          $ast = [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { throw 'Watcher parse failed.' }
+          $assignment = $ast.Find({ param($node)
+            $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$builds'
+          }, $true)
+          if (-not $assignment) { throw 'Actual watcher build selection missing.' }
+          $release = '{"databaseId":1,"displayTitle":"Build images abc","status":"completed","conclusion":"success"}'
+          $failed = $release.Replace('success', 'failure')
+          $benchmark = $release.Replace('Build images', 'Benchmark build')
+          $cases = @(
+            @{ Raw = '[]'; Count = 0 },
+            @{ Raw = "[$release]"; Count = 1; Conclusion = 'success' },
+            @{ Raw = "[$benchmark]"; Count = 0 },
+            @{ Raw = "[$($benchmark.Replace('success', 'failure')),$release]"; Count = 1; Conclusion = 'success' },
+            @{ Raw = "[$benchmark,$failed]"; Count = 1; Conclusion = 'failure' }
+          )
+          foreach ($case in $cases) {
+            $buildRaw = $case.Raw
+            Invoke-Expression $assignment.Extent.Text
+            if ($builds.Count -ne $case.Count) { throw 'Incorrect eligible build count.' }
+            if ($case.Count -and ($builds[0].databaseId -ne 1 -or $builds[0].status -ne 'completed' -or $builds[0].conclusion -ne $case.Conclusion)) {
+              throw 'Benchmark masked the actual release result.'
+            }
+          }
+          Write-Output "WATCHER_BUILD_FILTER_OK engine=$($PSVersionTable.PSVersion) cases=$($cases.Count)"

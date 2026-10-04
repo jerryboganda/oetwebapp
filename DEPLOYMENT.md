@@ -145,6 +145,11 @@ parallel while production rollouts serialize):
   3. Component jobs build only changed inputs and publish immutable image digests
      plus per-SHA aliases. API publish generates idempotent SQL with `--no-build`
      and optional same-build references for the real required Writing tests.
+     Its runtime separates stable published dependencies/content from the changing
+     application assembly so a code change does not retransmit the full publish tree.
+     The existing test project opts into `DeploymentWritingGateOnly` for this gate
+     only: unchanged gate/fixture/assembly sources, unchanged real test filter and TRX
+     assertions. Actions checks the evaluated source sets; default full QA is unchanged.
   4. Unchanged components reuse a verified successful ancestor's immutable digest
      through registry-only aliases, never `:latest`. The final release manifest
      binds all components and original API SQL provenance after required gates.
@@ -187,6 +192,10 @@ Writing gates. The ship watcher reports conservative before-first-push-attempt
 to verified-live elapsed; `DEPLOY_LIVE` marks the earlier public-health/image
 observation. See `docs/ops/deploy-gate.md` for measurement and guarded benchmark
 dispatch. Never claim the target from unrelated QA duration or unrun checks.
+Next's trusted cache remains enabled: measured compilation fell from 75 seconds
+to 2.9 seconds. Cache persistence uses a native local-directory export instead of
+loading a cache-only Docker image; only ephemeral hosted web builders skip explicit
+teardown. Transfer costs and end-to-end elapsed remain part of acceptance.
 
 Migrations normally come from the build API publish artifact. Startup migration
 is an opt-in (`AUTO_MIGRATE` → `Bootstrap__AutoMigrate`, default `false`).

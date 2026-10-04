@@ -23,6 +23,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(DeploymentWritingGateOnly)' == 'true'">
+    <Compile Remove="@(Compile)" />
+    <Compile Include="AssemblyInfo.cs;Writing\WritingRev8ModelAnswerGateTests.cs;Writing\WritingModelAnswerBatchTests.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\OetLearner.Api\OetLearner.Api.csproj" />
     <!--

@@ -126,6 +126,55 @@ test('Writing reference reuse preserves the executable settings of the API publi
   assert.match(workflow, /\/p:UseAppHost=false/);
 });
 
+test('deployment Writing compilation is opt-in and Actions checks the default and required source sets', () => {
+  const project = readFileSync(join(root, 'backend', 'tests', 'OetLearner.Api.Tests', 'OetLearner.Api.Tests.csproj'), 'utf8');
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'build-images.yml'), 'utf8');
+  assert.match(project, /<ItemGroup Condition="'\$\(DeploymentWritingGateOnly\)' == 'true'">/);
+  assert.match(project, /<Compile Remove="@\(Compile\)" \/>/);
+  assert.match(project, /<Compile Include="AssemblyInfo\.cs;Writing\\WritingRev8ModelAnswerGateTests\.cs;Writing\\WritingModelAnswerBatchTests\.cs" \/>/);
+  assert.match(workflow, /-getItem:Compile > output\/writing-default-compile\.json/);
+  assert.match(workflow, /-getItem:Compile -p:DeploymentWritingGateOnly=true > output\/writing-gate-compile\.json/);
+  assert.match(workflow, /assert gate == expected and expected < default/);
+  assert.match(workflow, /dotnet test "\$test_project"[^\n]*-p:DeploymentWritingGateOnly=true/);
+  assert.match(workflow, /FullyQualifiedName~WritingRev8ModelAnswerGateTests/);
+  assert.match(workflow, /int\(c\.attrib\["executed"\]\) > 0 and int\(c\.attrib\["failed"\]\) == 0/);
+  assert.doesNotMatch(readFileSync(join(root, '.github', 'workflows', 'qa-smoke.yml'), 'utf8'), /DeploymentWritingGateOnly/);
+});
+
+test('API runtime separates stable dependencies without omitting published bytes', () => {
+  const dockerfile = readFileSync(join(root, 'backend', 'Dockerfile.runtime'), 'utf8');
+  assert.match(dockerfile, /^# syntax=docker\/dockerfile:1\.19\r?$/m);
+  assert.match(dockerfile, /COPY --exclude=OetLearner\.Api\.\* backend\/publish \.\/\r?\nRUN test ! -e \/app\/OetLearner\.Api\.dll\r?\nCOPY backend\/publish\/OetLearner\.Api\.\* \.\//);
+  assert.match(dockerfile, /RUN --mount=type=bind,source=backend\/publish,target=\/published/);
+  assert.match(dockerfile, /find \. -type f -exec sha256sum \{\} \+ > \/tmp\/published\.sha256/);
+  assert.match(dockerfile, /sha256sum --check --quiet \/tmp\/published\.sha256/);
+  assert.match(dockerfile, /USER appuser/);
+  assert.match(dockerfile, /ENTRYPOINT \["dotnet", "OetLearner\.Api\.dll"\]/);
+});
+
+test('web cache exports fresh files directly and only skips cleanup on ephemeral hosted runners', () => {
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'build-images.yml'), 'utf8');
+  const web = workflow.match(/^  build-web:\n([\s\S]*?)(?=^  build-api:)/m)?.[1];
+  assert.ok(web);
+  assert.match(web, /setup-buildx-action@v3\s+with:\s+cleanup: \$\{\{ runner\.environment != 'github-hosted' \}\}/);
+  const nextInjection = web.match(/cache-source: \.build-cache\/next([\s\S]*?)(?=\n      - uses:)/)?.[0];
+  assert.ok(nextInjection);
+  assert.match(nextInjection, /cache-target: \/app\/\.next\/cache/);
+  assert.match(nextInjection, /scratch-dir: \.buildkit-next/);
+  assert.match(nextInjection, /skip-extraction: true/);
+  const exportStep = web.match(/      - name: Export Next cache directly\n([\s\S]*)/)?.[1];
+  assert.ok(exportStep);
+  assert.match(exportStep, /if: \$\{\{ github\.event_name != 'pull_request' && !inputs\.benchmark && steps\.mount-cache\.outputs\.cache-hit != 'true' \}\}/);
+  assert.match(exportStep, /date --iso=ns > \.buildkit-next\/buildstamp/);
+  assert.match(exportStep, /COPY buildstamp buildstamp\n\s*RUN --mount=type=cache,target=\/app\/\.next\/cache/);
+  assert.match(exportStep, /FROM scratch\n\s*COPY --from=cache-export \/cache\/ \//);
+  assert.match(exportStep, /--file \.buildkit-next\/Dancefile.export/);
+  assert.match(exportStep, /--output type=local,dest=\.build-cache\/next,platform-split=false/);
+  assert.match(exportStep, /\n\s+\.buildkit-next\s*$/);
+  assert.doesNotMatch(exportStep, /--load|--push|docker (?:create|cp)|\|\| true/);
+  assert.match(web, /push: \$\{\{ github\.event_name != 'pull_request' && !inputs\.benchmark \}\}/);
+});
+
 // Explicit offline Docker/HTTP fixtures exercise driver control flow only.
 // Real image builds, nginx validation and serving proof remain Actions/live gates.
 function rolloutFixture(mode) {
@@ -283,7 +332,8 @@ for (const mode of ['reuse', 'stale', 'config', 'unhealthy', 'first', 'partial',
   });
 }
 
-for (const mode of ['failed-descendant', 'redirect', 'missing-runtime-build', 'proven-docs-only']) {
+for (const mode of ['failed-descendant', 'redirect', 'missing-runtime-build', 'proven-docs-only',
+  'benchmark-failed', 'benchmark-only', 'release-failed']) {
   test(`offline watcher: ${mode} requires actual promotion, direct health and proven no-op`, () => {
     const dir = mkdtempSync(join(tmpdir(), 'oet-watch-test-'));
     try {
@@ -292,13 +342,23 @@ for (const mode of ['failed-descendant', 'redirect', 'missing-runtime-build', 'p
         status: 'completed', conclusion: 'success', url: 'https://example.test/101', workflowName: 'Deploy production' };
       const failed = { ...own, databaseId: 103, headSha: 'c'.repeat(40),
         displayTitle: `Deploy production ${'c'.repeat(40)}`, conclusion: 'failure', url: 'https://example.test/103' };
-      const missing = ['missing-runtime-build', 'proven-docs-only'].includes(mode);
+      const benchmark = { ...own, databaseId: 104, displayTitle: `Benchmark build ${sha}`,
+        conclusion: mode === 'benchmark-failed' ? 'failure' : 'success' };
+      const build = { ...own, databaseId: 100, displayTitle: `Build images ${sha}`,
+        conclusion: mode === 'release-failed' ? 'failure' : 'success' };
+      const waiting = ['benchmark-failed', 'release-failed'].includes(mode);
+      const missing = ['missing-runtime-build', 'proven-docs-only', 'benchmark-only'].includes(mode);
       const comparison = { status: 'ahead', merge_base_commit: { sha: missing ? base : sha },
         files: [{ filename: mode === 'proven-docs-only' ? 'docs/example.md' : 'app/page.tsx' }] };
       writeFileSync(join(dir, 'git'), `#!/usr/bin/env bash\nprintf '%s\\n' '${sha}'\n`);
       writeFileSync(join(dir, 'gh'), `#!/usr/bin/env bash
 set -eu
 if [ "$1" = run ] && [ "$2" = list ]; then
+  if [[ "$*" == *build-images.yml* ]]; then
+    touch '${join(dir, 'build-observed')}'
+    printf '%s\\n' '${JSON.stringify(missing ? (mode === 'benchmark-only' ? [benchmark] : []) : [benchmark, build])}'; exit 0
+  fi
+  if [ '${waiting}' = true ] && [ ! -f '${join(dir, 'build-observed')}' ]; then echo '[]'; exit 0; fi
   printf '%s\\n' '${JSON.stringify(missing ? [] : [failed, own])}'; exit 0
 fi
 if [ "$1" = api ] && [[ "$2" == *compare/* ]]; then
@@ -322,16 +382,23 @@ exit 1
       if (mode === 'redirect') {
         assert.equal(result.status, 4, result.stdout + result.stderr);
         assert.match(result.stdout, /Public health must return direct HTTP 200/);
-      } else if (mode === 'missing-runtime-build') {
+      } else if (['missing-runtime-build', 'benchmark-only'].includes(mode)) {
         assert.equal(result.status, 2, result.stdout + result.stderr);
         assert.match(result.stdout, /SHIP-WATCH_MISSING_BUILD/);
         assert.doesNotMatch(result.stdout, /SHIP-WATCH_NOTHING_TO_DEPLOY/);
+      } else if (mode === 'release-failed') {
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assert.match(result.stdout, /SHIP-WATCH_BUILD_FAILED/);
       } else {
         assert.equal(result.status, 0, result.stdout + result.stderr);
         if (mode === 'proven-docs-only') assert.match(result.stdout, /SHIP-WATCH_NOTHING_TO_DEPLOY/);
         else {
           assert.match(result.stdout, /SHIP-WATCH_RUN 101/);
           assert.match(result.stdout, /LIVE_SHA_OK/);
+          if (mode === 'benchmark-failed') {
+            assert.match(result.stdout, /SHIP-WATCH_BUILD_OK/);
+            assert.doesNotMatch(result.stdout, /SHIP-WATCH_BUILD_FAILED/);
+          }
         }
       }
     } finally {

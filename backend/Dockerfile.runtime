@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.19
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 
 # - curl: required for the container HEALTHCHECK
@@ -22,7 +22,16 @@ RUN groupadd --gid 10001 appgroup \
 
 # The publish directory is produced and checked by the preceding Actions-host
 # step. The VPS never receives source code or performs a source build.
-COPY backend/publish ./
+# Keep unchanged dependency/content bytes out of each new application layer.
+COPY --exclude=OetLearner.Api.* backend/publish ./
+RUN test ! -e /app/OetLearner.Api.dll
+COPY backend/publish/OetLearner.Api.* ./
+RUN --mount=type=bind,source=backend/publish,target=/published \
+    cd /published \
+    && find . -type f -exec sha256sum {} + > /tmp/published.sha256 \
+    && cd /app \
+    && sha256sum --check --quiet /tmp/published.sha256 \
+    && rm /tmp/published.sha256
 
 ENV ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_URLS=http://+:8080 \

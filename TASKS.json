@@ -226,7 +226,7 @@
     {
       "id": "DEPLOY-05",
       "title": "Run static ship gate, commit only owned paths and verify production through the shipping lease",
-      "status": "in_progress",
+      "status": "done",
       "owner": "deployment-latency",
       "blockedBy": ["DEPLOY-04", "DEPLOY-AUTH"],
       "verify": "build-images.yml and production-deploy.yml",
@@ -234,19 +234,23 @@
         "Static gate passed; deployment draft persisted in d6f7e0104 above Speaking ancestor 092e9434dc",
         "DEPLOY-AUTH resolved with process-scoped native admin verification; shared default unchanged",
         "37169434286: 30/30 protocol tests and component builds passed; required Writing compilation failed MSB3030 before execution",
-        "Live Jev validated matching UseAppHost=false in the verified reuse branch; correction plus permanent regression awaiting Actions"
+        "Apphost correction verified at 66458ca821e6fb0cca7b40d695d14662eeb5d6fc: build 37170176749, 31 protocol regressions and 26 required Writing tests passed",
+        "Deploy 37170535406 succeeded with HTTP 200, release/green-slot headers and exact physical web/API image and alias proof; inclusive elapsed 744.784 seconds (target missed)"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json", "VERIFICATION.md"]
     },
     {
       "id": "DEPLOY-06",
       "title": "Measure genuine warm/cold and Writing paths on Actions and record exact live evidence or target misses",
-      "status": "pending",
+      "status": "in_progress",
       "owner": "deployment-latency",
       "blockedBy": ["DEPLOY-05"],
       "verify": "build-images.yml benchmark/Writing dispatch and production-deploy.yml",
       "evidence": [
-        "No new Actions, production or timing evidence yet; measure after DEPLOY-05"
+        "First actual promotion 37170535406 verified at 744.784 seconds inclusive; target missed honestly",
+        "Cold build-only benchmark 37170735127 succeeded in about 322 seconds with 26 real Writing tests; no deployment or cold-live result claimed",
+        "Measured Next compilation improved 75 seconds to 2.9 seconds; remove 67-second cache extraction/20-second hosted cleanup overhead without discarding useful persistence",
+        "Live Jev approved native cache export, exact opt-in Writing compilation, stable API layer partition and watcher benchmark-purpose filtering; follow-up Actions/live acceptance remains"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md"]
     }

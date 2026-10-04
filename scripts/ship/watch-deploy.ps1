@@ -173,10 +173,14 @@ while (-not $runId) {
             '--repo', $Repo,
             '--workflow', 'build-images.yml',
             '--commit', $Sha,
-            '--limit', '1',
-            '--json', 'databaseId,status,conclusion,url'
+            '--branch', 'main',
+            '--limit', '20',
+            '--json', 'databaseId,status,conclusion,url,displayTitle'
         )
-        if (-not $buildRaw -or $buildRaw -eq '[]') {
+        $builds = @(foreach ($candidateBuild in ($buildRaw | ConvertFrom-Json)) {
+            if ($candidateBuild.displayTitle -notlike 'Benchmark build *') { $candidateBuild }
+        })
+        if ($builds.Count -eq 0) {
             if ($null -eq $missingBuildProof -and $PushBaseSha) {
                 $oldRepo = $env:GITHUB_REPOSITORY
                 $oldSha = $env:RELEASE_SHA
@@ -204,7 +208,7 @@ while (-not $runId) {
                 exit 2
             }
         } else {
-            $build = @($buildRaw | ConvertFrom-Json)[0]
+            $build = $builds[0]
             $buildStatus = [string]$build.status
             $buildConclusion = [string]$build.conclusion
             if ($buildStatus -ne 'completed') {

@@ -11,15 +11,16 @@ Last updated: 2026-10-04
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
-## Draft checkpoint - Deployment acceleration, shipping blocked (2026-10-04)
+## Active checkpoint - Deployment acceleration, live but target missed (2026-10-04)
 
 - Wrote immutable component reuse, same-publish SQL/Writing references, persisted build caches and lean contexts.
 - Wrote health/config-aware service reuse, bound prepare/promote, durable paired router reload/recovery and serving identity.
 - Added inclusive ship timing, actual-promotion/no-op proof and offline provenance/driver/watcher/registry regressions.
-- Independent source review and live typed Jev triage complete; local static gates passed. No new Actions/runtime/timing evidence.
-- Speaking ancestor 092e9434dc is local only. Active GitHub identity lacks admin; required public flip failed before push.
-- Account-switch authorization is unavailable. Keep private; resume through pnpm run ship after explicit owner authorization.
-- The 300-second target is unproven; cold/Writing/queue and actual live measurements remain open.
+- Existing owner authentication is verified process-scoped; shared CLI defaults/credentials remain unchanged.
+- SHA 66458ca821: Build images 37170176749 passed 31 protocol checks and 26 real Writing tests; production 37170535406 served exact images in green.
+- Inclusive push-to-verified-live was 744.784 seconds, not 300; cold build-only benchmark 37170735127 passed in about 322 seconds without promotion.
+- Measured follow-up keeps useful Next caching, removes image-based export/hosted teardown, limits only deployment Writing compilation and partitions stable API publish bytes.
+- Follow-up edits and the released eleven-path Speaking repair await separate coordinated shipments; private restoration waits for all Actions/leases.
 
 ## Previous checkpoint — AX: externalized agent working memory (2026-10-01)
 
