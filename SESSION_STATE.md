@@ -2,10 +2,10 @@
 
 Session: deployment-latency
 Goal: Make the verified accelerated production release architecture compulsory for all project agents and contributors, then commit, push main and verify this session live.
-Mode: verify
-Updated: 2026-10-04T10:36:12Z
+Mode: blocked
+Updated: 2026-10-04T10:58:33Z
 Branch: main
-HEAD: 327082ec21b8be2f951f3b08a929f46c638a053d
+HEAD: b361bf121942d921516c65f89d49ba2153db120f
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -86,6 +86,7 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 - D-41 Console37193947969 actually passed469 cases/24 files, tsc and execpolicy, built/pulled all images but did NOT apply: an active owner turn protected the oldc81 runtime. Fresh native health confirmed1 active/non-draining. Live Jev idle_gated_retry p/confidence/margin1 approved existing apply=false retry37195228166 at exact327, never force/restart active work or treat update-pending as applied.
 - D-42 Both already-started QA37193947973 (441) and37194323799 (327) passed frontend/placement/gate; backend legitimately skipped. Wrapper ax:record/verify succeeded for327. Peer received user-directed inherited contract and exact descendant/physical proof; parent retains HEAD/index/ledger ownership until console/evidence closeout.
 - D-43 Idle-only retry37195228166 completed its tests/images successfully but again safely deferred recreation; fresh10:36:12Z native health/image read still shows1 active/non-draining and all three oldc81 images. Console runtime completion is externally blocked, not green. No more duplicate retries or forced interruption without fresh specific owner approval.
+- D-44 Evidence commitb361bf121 shipped with legitimate RELEASE_NO_DEPLOYMENT_INPUTS; ax:verify checked106 ledger rows/26 cited gate IDs. Fresh10:58:33Z app web/ready/live remain HTTP200/exact327/blue, while console remains oldc81/1 active. Specific restart approval was requested but user unavailable; this is no grant. All owned source/evidence is pushed, but console runtime and May-record privacy remain blocked.
 
 ## Touched files
 
@@ -144,7 +145,7 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
 - Verified unchanged-component327 reuse met300s at284.177s. API-change e748 remains510.240s, and full cold/Writing-live is unmeasured; forced-Writing build-only was310s. Different conditions are not isolated causal attribution or a universal deadline. Never remove gates or report projections as acceptance.
-- Console update is built/pulled but protected by an active owner turn; oldc81 images still run. Both native attempts safely deferred, and fresh10:36:12Z health/image proof remains unchanged. Wait for idle or obtain fresh specific restart/active-work interruption approval; no more speculative retries.
+- Console update is built/pulled but protected by an active owner turn; oldc81 images still run. Both native attempts safely deferred, and fresh10:58:33Z health/image proof remains unchanged. Specific restart approval was requested but unavailable, not granted. Wait for idle or obtain fresh specific approval; no more speculative retries.
 - QA37177363819 predates the already-live scoring correction; 67/67 focused regressions passed. Full e748 QA37180577741 ended cancelled, not a whole-backend PASS. Do not rerun unrelated QA for this deployment-control change.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
@@ -152,4 +153,4 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 
 ## Next action
 
-1. Ship this truthful evidence closeout, then obtain the owner's specific decision on the blocked console update (wait for idle or approved restart with active work resumable). Only after actual new health/image proof finish console gates. May25907015352 remains queued without deletion consent; never bypass privacy safety.
+1. Wait for verified console idle or the owner's fresh specific restart decision; only then apply the existing console pipeline and verify new health/images before finishing FAST-04. No more speculative retries or inferred approval. May25907015352 needs separate specific deletion authorization or native resolution before privacy safety can permit a private flip.

@@ -14,15 +14,13 @@ Last updated: 2026-10-04
 ## Active checkpoint - Compulsory accelerated release enforcement (2026-10-04)
 
 - Owner requires every contributor/agent to retain the live510.240s architecture and explicitly authorizes scoped commit/main push/deploy; no duration guarantee or weakened gates.
-- Live typed Jev approved existing guard/lifecycle/inherited-entrypoint scope and the tightly coupled console privacy/workflow correction (all p/confidence/margin1).
-- Native Claude/Gemini imports and contributor/Copilot guidance inherit one baseline; console engines remain isolated agent-branch/PR-only.
+- Live Jev approved guard/lifecycle/inheritance/console corrections (all p/confidence/margin1); Claude/Gemini imports and contributor/Copilot guidance inherit one baseline. Console engines remain isolated agent-branch/PR-only.
 - Guarded controls reject completion/visibility/workflow bypasses, missing checkers and unknown native data; scoped mutations protect proven reuse/cache/SQL/Writing/runtime contracts. Console expiry retries safely, never force-private over holders/runs.
 - Exclusive local locks/atomic state and the existing native workstation/console holder channel prevent missing-shaped state or one-way lease coverage; variable writes are not claimed as a global mutex. Additional live Jev approved both corrections; runnable boundary checks remain Actions-only.
 - Native full e748QA37180577741 finished cancelled, not green; focused67/67 and actual production37180764537 proof are unchanged. Preserve the additional Writing/retired-worktree checkpoints.
 - Privacy remains blocked by native empty May25907015352 without specific deletion approval; no history exclusion or safety bypass.
-- Commit441 shipped; build37193948006 stopped69/70 only on PowerShell ANSI/wrapped rejection-message assertion. Guard actually rejects; Jev approved stdlib presentation-only normalization. AX37193948034 three native matrices passed; console package checks green, runtime pending.
-- Correction327 shipped green: Build37194323785 (70/70), four proven digest reuses; Deploy37194396337 public/physical blue proof in284.177s (4m44.18, reuse-only observation). Both441/327 QA frontend/placement/gates green, backend skipped. Console469 tests/images green but oldc81 protected by1 active turn; idle-only retry37195228166, no force.
-- Both console runs deferred; fresh10:36:12Z health still1 active/oldc81. Runtime gate remains BLOCKED pending idle or specific restart approval; no speculative retry or false whole-project completion.
+- First441 build37193948006 failed69/70 only on native PowerShell presentation; approved stdlib-only correction327 passed70/70 at37194323785. Deploy37194396337 public/physical blue proof284.177s (4m44.18, four unchanged proven digest reuses). AX37193948034 native matrices and441/327 frontend QA green; backend skipped.
+- Console469 tests/images green but both runs deferred1 active turn. Fresh10:58:33Z stilloldc81/1 active; app remains exact327/blue/HTTP200. Specific restart approval unavailable, no grant. Evidenceb361 shipped legitimate no-op and106 rows/26 gate IDs verified; console/private gates remain BLOCKED.
 
 ## Previous checkpoint - Verified API correction and measured deployment closeout (2026-10-04)
 
