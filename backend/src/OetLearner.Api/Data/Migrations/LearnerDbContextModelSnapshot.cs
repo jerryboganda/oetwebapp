@@ -23627,6 +23627,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("CombinedAssessmentJson")
+                        .HasColumnType("text");
+
                     b.Property<double?>("CombinedScaledSnapshot")
                         .HasColumnType("double precision");
 

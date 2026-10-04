@@ -745,8 +745,16 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
 
         var results = await exams.GetResultsAsync(UserId, exam.ExamId, default);
 
-        Assert.Equal("scored", results.OverallStatus);
-        Assert.Equal(380, results.CombinedScaledScore);
+        // Both cards are reachable (not "pending" for a v1.1 report that never comes). The exam then waits only for its
+        // ONE combined judgement, which is queued for the worker: the two card scores are never averaged into a number.
+        Assert.All(results.Cards, card => Assert.Equal("scored", card.Status));
+        Assert.Equal("pending", results.OverallStatus);
+        Assert.Equal(SpeakingExamCombinedStates.Pending, results.CombinedState);
+        Assert.Null(results.CombinedScaledScore);
+        var operation = await _db.AiOperations.AsNoTracking()
+            .SingleAsync(o => o.ResourceType == SpeakingCanonicalAssessmentService.ExamResourceType);
+        Assert.Equal(exam.ExamId, operation.ResourceId);
+        Assert.Equal(AiOperationState.Queued, operation.State);
     }
 
     [Fact]

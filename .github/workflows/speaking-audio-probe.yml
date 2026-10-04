@@ -2,9 +2,9 @@ name: speaking-audio-probe
 
 # Release gate for the Speaking audio judge (owner spec 4 Oct 2026; docs/speaking/scoring.md).
 # Manual only. All compute (speech synthesis, the probe script) runs here, never on the workstation or the VPS.
-# The clips are synthetic, so no learner audio is involved: a speech synthesiser reads a known phrase, and a
-# different-language voice reading the same English phrase gives a deliberately accented clip (three voices are tried:
-# the gate needs at least one of them to be judged from its audio and scored below the clean clip).
+# The clips are synthetic, so no learner audio is involved: a speech synthesiser reads a known phrase, ffmpeg makes
+# a noise-only clip and a copy of the speech buried in noise, and different-language voices reading the English phrase
+# give accented clips that are printed for information only (a synthetic voice is fully intelligible, so they cannot gate).
 
 on:
   workflow_dispatch:
@@ -37,17 +37,23 @@ jobs:
           PHRASE: ${{ inputs.phrase }}
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq espeak-ng
+          sudo apt-get install -y -qq espeak-ng ffmpeg
           espeak-ng -v en-us -s 150 -w clean.wav "$PHRASE"
           for voice in de es fr; do espeak-ng -v "$voice" -s 150 -w "accented-$voice.wav" "$PHRASE"; done
-          ls -l clean.wav accented-*.wav
+          # No speech at all: five seconds of pink noise.
+          ffmpeg -hide_banner -loglevel error -y -f lavfi -i "anoisesrc=d=5:c=pink:a=0.3" -ar 16000 -ac 1 noise.wav
+          # The same speech buried in noise and cut to a telephone-like band.
+          ffmpeg -hide_banner -loglevel error -y -i clean.wav -f lavfi -i "anoisesrc=d=12:c=white:a=0.6" \
+            -filter_complex "[0:a]volume=0.5[s];[s][1:a]amix=inputs=2:duration=first:weights='1 1.8',highpass=f=300,lowpass=f=2400[out]" \
+            -map "[out]" -ar 16000 -ac 1 degraded.wav
+          ls -l clean.wav noise.wav degraded.wav accented-*.wav
 
       - name: Probe the production audio judge
         env:
           OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
           OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
           PHRASE: ${{ inputs.phrase }}
-        run: node scripts/speaking/audio-probe.mjs --clean clean.wav --accented accented-de.wav,accented-es.wav,accented-fr.wav --phrase "$PHRASE"
+        run: node scripts/speaking/audio-probe.mjs --clean clean.wav --noise noise.wav --degraded degraded.wav --accented accented-de.wav,accented-es.wav,accented-fr.wav --phrase "$PHRASE"
 
       - name: Upload the result
         if: always()

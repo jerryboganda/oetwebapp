@@ -79,11 +79,13 @@ public sealed class LearnerAttemptHistorySpeakingTests : IAsyncLifetime
         await using var db = new LearnerDbContext(_options);
         // The persisted combined snapshot wins.
         AddExam(db, "spx_snapshot", SpeakingExamState.Completed, started, combinedSnapshot: 412);
-        // No snapshot yet, both cards graded: (361 + 400) / 2 = 380.5, rounded the way the results page rounds it.
+        // No snapshot yet, both cards graded: the one combined judgement has not finished, so there is no number.
+        // Two card scores are never averaged into one (owner spec 4 Oct 2026): (361 + 400) / 2 would be 380 here.
         AddExam(db, "spx_average", SpeakingExamState.Completed, started.AddMinutes(30));
         AddAssessment(db, "sps_spx_average_a", 361);
         AddAssessment(db, "sps_spx_average_b", 400);
-        // Graded by the v1.1 assessor instead of the classic one: counts the same way.
+        // Graded by the retired v1.1 assessor: the exam results page stores its averaged number the first time it is
+        // opened; until then there is none here either.
         AddExam(db, "spx_v11", SpeakingExamState.Completed, started.AddMinutes(45));
         AddV11CardScore(db, "sps_spx_v11_a", 350);
         AddV11CardScore(db, "sps_spx_v11_b", 400);
@@ -102,8 +104,8 @@ public sealed class LearnerAttemptHistorySpeakingTests : IAsyncLifetime
         var rows = (await HistoryAsync(db)).ToDictionary(item => item.AttemptId);
 
         Assert.Equal("410/500", rows["spx_snapshot"].ResultLabel);
-        Assert.Equal("380/500", rows["spx_average"].ResultLabel);
-        Assert.Equal("380/500", rows["spx_v11"].ResultLabel);
+        Assert.Equal("Marking in progress", rows["spx_average"].ResultLabel);
+        Assert.Equal("Marking in progress", rows["spx_v11"].ResultLabel);
         Assert.Equal(412, (await db.SpeakingExamSessions.AsNoTracking()
             .SingleAsync(exam => exam.Id == "spx_snapshot")).CombinedScaledSnapshot);
         Assert.Equal(new int?[] { 350, 400 }, await db.SpeakingSimulationV11Assessments.AsNoTracking()

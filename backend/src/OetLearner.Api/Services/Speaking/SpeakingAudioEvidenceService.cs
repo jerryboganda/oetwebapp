@@ -353,7 +353,7 @@ public sealed class SpeakingAudioEvidenceService(
         sb.AppendLine();
         sb.AppendLine("Your job here is narrow. Judge only what you can HEAR; do not guess from the likely content of a consultation.");
         sb.AppendLine("1. Write what you hear in the first 8 to 12 words of the audio as \"heardOpening\" (exactly the words spoken). This shows you listened to this recording.");
-        sb.AppendLine("2. Judge INTELLIGIBILITY on the official 0-6 band descriptors in the system prompt: how much effort a listener needs to understand the speech, from pronunciation of individual sounds, word stress, sentence stress, intonation and rhythm. Judge the SOUND of the speech — not whether the content is right, and not grammar or vocabulary.");
+        sb.AppendLine("2. Judge INTELLIGIBILITY on the official 0-6 band descriptors in the system prompt, the way a listener hears it: how much effort the speech costs a native-English listener, from the pronunciation of individual sounds, word stress, sentence stress, intonation, rhythm and the effect of the speaker's first-language accent. First list what you notice as observations (each one a specific word or feature: a sound replaced by another, stress on the wrong syllable, flat or odd intonation, rhythm that is hard to follow, an accent feature that needs extra concentration). Then choose the band from those observations: 6 only when you noticed nothing that costs the listener any effort and the prosody is used effectively; 5 when you noticed a few errors or a noticeable accent but understanding was never strained; 4 when you had to concentrate at times; 3 or lower when it was hard to follow or caused serious strain. Do not give credit just because you managed to work out the words: being understood is not the same as being easy to understand. Judge the SOUND of the speech — not whether the content is right, and not grammar or vocabulary.");
         sb.AppendLine("3. Report fluency EVIDENCE you can hear (speech rate, long pauses of about two seconds or more, hesitations, fillers, restarts). Do not score fluency.");
         sb.AppendLine();
         sb.AppendLine("Return ONLY this JSON object (no markdown, no prose):");
@@ -364,9 +364,9 @@ public sealed class SpeakingAudioEvidenceService(
   "audioQuality": "good|fair|poor",
   "patientVoiceBleed": false,
   "intelligibility": {
-    "score": 0,
+    "observations": [ { "clip": 1, "approxSecond": 0, "issue": "", "example": "" } ],
     "rationale": "",
-    "observations": [ { "clip": 1, "approxSecond": 0, "issue": "", "example": "" } ]
+    "score": 0
   },
   "fluency": {
     "speechRateWpm": 0,
@@ -380,7 +380,7 @@ public sealed class SpeakingAudioEvidenceService(
 }
 """);
         sb.AppendLine("Rules:");
-        sb.AppendLine("  * `score` is a whole number from 0 to 6.");
+        sb.AppendLine("  * `score` is a whole number from 0 to 6, written last: it must follow from the observations and the rationale above it.");
         sb.AppendLine("  * `rationale` is 1-3 plain sentences a candidate can read, saying what in the sound earned that band. Never write rule IDs or internal codes.");
         sb.AppendLine("  * At most 6 intelligibility observations; each names the clip (1-based), the approximate second within the audio, the sound or word affected, and, where useful, how it was said.");
         sb.AppendLine("  * If the audio is silent, only noise, or not speech, set `audioUsable` to false.");
@@ -628,6 +628,7 @@ public sealed class SpeakingAudioEvidenceService(
         "audio_missing_blob" or "audio_too_short" or "audio_unusable" => "the recording could not be used",
         "audio_unverified" => "the audio could not be matched to the transcript",
         "audio_transcoder_unavailable" => "the audio could not be prepared for analysis",
+        "partial_audio" => "audio evidence was available for only one of the two role-plays",
         "timeout" or "provider_error" or "ai_refused" or "parse_error" => "the audio analysis was not available",
         _ => "audio evidence was not available",
     };

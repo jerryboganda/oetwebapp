@@ -81,6 +81,14 @@ describe('DualAssessmentColumn — one reported score, one OET grade', () => {
     expect(screen.getByTestId('dual-grade-ai')).toHaveTextContent('Grade C+');
   });
 
+  it('can leave its score box out when the page already leads with the score', () => {
+    render(<DualAssessmentColumn kind="ai" title="Your whole test" assessment={aiAssessment()} showScore={false} />);
+
+    expect(screen.queryByText('Estimated scaled score')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('dual-grade-ai')).not.toBeInTheDocument();
+    expect(screen.getByText('Clear and kind.')).toBeInTheDocument();
+  });
+
   it('shows the tutor score the same way, without the AI calibration label', () => {
     render(<DualAssessmentColumn kind="tutor" title="Tutor Assessment" assessment={tutorAssessment(390)} />);
 

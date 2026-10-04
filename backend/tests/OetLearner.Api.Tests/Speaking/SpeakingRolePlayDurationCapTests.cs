@@ -1164,6 +1164,15 @@ public sealed class SpeakingRolePlayDurationCapTests
         public Task AssessNowAsync(string sessionId, CancellationToken ct)
             => throw new NotSupportedException();
 
+        public Task<SpeakingFinalizationTicket> EnqueueExamCombinedAsync(string examId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task RetryExamCombinedAsync(string examId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<string> GetExamCombinedStateAsync(string examId, CancellationToken ct)
+            => throw new NotSupportedException();
+
         public Task<bool> UsesV11Async(string sessionId, CancellationToken ct)
             => throw new NotSupportedException();
 
