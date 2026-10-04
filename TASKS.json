@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-04T10:03:41Z",
+  "updated": "2026-10-04T10:36:12Z",
   "statuses": [
     "pending",
     "in_progress",
@@ -41,11 +41,11 @@
     {
       "id": "FAST-04",
       "title": "Commit only owned paths, ship main and record actual Actions/live deployment and coordinated handoff",
-      "status": "in_progress",
+      "status": "blocked",
       "owner": "mandatory-fast-release",
       "blockedBy": ["FAST-02", "FAST-03"],
       "verify": "pnpm run ship + native build/AX/console/production runs + ax:record",
-      "evidence": ["441f50271 pushed through registered native lease; Build37193948006 executed69/70 passing, blocked by only wrapped/color-decorated PowerShell rejection-message assertion. Production guard correctly rejects. Live Jev approved presentation-only fixture correction; actual app live still pending.", "AX37193948034 all three native matrices passed; console37193947969 all package typecheck/Vitest jobs passed, build/apply pending."],
+      "evidence": ["327082ec21 exact main release verified: Build37194323785 ran70/70 protocol cases and four proven digest reuses; Deploy37194396337 actual blue promotion, public HTTP200/release/slot and physical image proof. Inclusive284.177s (4m44.18), measured reuse case not universal.", "AX37193948034 three native matrices passed; QA37193947973/37194323799 frontend/placement/gate passed, backend skipped. Wrapper ax:record/verify succeeded.", "Console37193947969 tsc469 cases/24 files/execpolicy and all images green; both it and exact327 idle-only retry37195228166 safely deferred1 active owner turn. Fresh10:36:12Z health proves oldc81 images still run. External blocker: idle or fresh specific owner restart approval, never fake runtime PASS or force interruption."],
       "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md", "DEPLOYMENT.md"]
     },
     {

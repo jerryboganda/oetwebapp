@@ -6,6 +6,14 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 10:23 | Owner Agent Console (build + deploy) | Owner Agent Console (build + deploy) | 37195228166 | Static rollout guards=success Unit tests (agent-console/dockerproxy)=success Unit tests (agent-console/egress)=success Unit tests (agent-console)=success Build & push agent-console-dockerproxy=success Build & push agent-console-egress=success Build & push agent-console=success Roll out on the VPS (pull-only)=success | SUCCESS | 327082ec2 |
+| 2026-10-04 10:18 | CI triage | CI triage | 37194927786 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 327082ec2 |
+| 2026-10-04 10:07 | QA Smoke | QA Smoke | 37194323799 | Detect what changed=success Frontend unit (vitest + lint + tsc + build)=success Placement entry contracts=success Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}=skipped QA gate (all suites green)=success | SUCCESS | 327082ec2 |
+| 2026-10-04 10:11 | CI triage | CI triage | 37194564146 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 327082ec2 |
+| 2026-10-04 10:10 | CI triage | CI triage | 37194529841 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 327082ec2 |
+| 2026-10-04 10:08 | CI triage | CI triage | 37194396362 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 327082ec2 |
+| 2026-10-04 10:08 | Deploy production | Deploy production | 37194396337 | Resolve the build to deploy=success Roll out to the VPS=success Apply migration SQL (if the API changed)=skipped | SUCCESS | 327082ec2 |
+| 2026-10-04 10:07 | Build images | Build images | 37194323785 | Deployment contract guards=success Detect what changed=success Syntax gate (seconds)=success Writing grader regression (on change)=skipped Retag unchanged agent-gateway=success Retag unchanged db-backup=success Retag unchanged web=success Retag unchanged api=success build-web=skipped build-api=skipped build-agent-gateway=skipped build-backup=skipped Writing model-answer gate (on change)=skipped Pu | SUCCESS | 327082ec2 |
 | 2026-10-04 05:48 | CI triage | CI triage | 37180950749 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e7485ce2f |
 | 2026-10-04 05:44 | CI triage | CI triage | 37180764506 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e7485ce2f |
 | 2026-10-04 05:44 | Deploy production | Deploy production | 37180764537 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | e7485ce2f |

@@ -3,9 +3,9 @@
 Session: deployment-latency
 Goal: Make the verified accelerated production release architecture compulsory for all project agents and contributors, then commit, push main and verify this session live.
 Mode: verify
-Updated: 2026-10-04T10:03:41Z
+Updated: 2026-10-04T10:36:12Z
 Branch: main
-HEAD: 441f50271f8cc09f32ddcf1a625d0d96e925c80c
+HEAD: 327082ec21b8be2f951f3b08a929f46c638a053d
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -36,7 +36,7 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 ## Acceptance criteria
 
 - [x] AC-1 Copilot/Codex/OpenCode, native Claude/Gemini and contributor entrypoints inherit one compulsory baseline; console engines retain PR/Ship isolation.
-- [ ] AC-2 Job-scoped guards/mutation regressions protect immutable reuse, consumed caches, same-publish SQL, real Writing tests and lean byte-checked runtimes.
+- [x] AC-2 Job-scoped guards/mutation regressions protect immutable reuse, consumed caches, same-publish SQL, real Writing tests and lean byte-checked runtimes.
 - [ ] AC-3 Actual releases reject watcher/evidence/visibility/workflow bypasses; unknown native reads and missing checkers fail closed; no live lock theft or forced console-private timeout.
 - [ ] AC-4 Exact Actions regressions, production serving proof and the separately updated console runtime are verified after scoped main shipment.
 - [ ] AC-5 Evidence/handoffs are persistent, timing claims remain measured and privacy restoration never ignores another holder or queued run.
@@ -82,6 +82,10 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 - D-37 Bounded reviewer had read-only tools and could not obtain its required diff/live Jev, so no review PASS claimed. Parent traced exact state/lock/holder boundaries; additional live Jev approved atomic fail-closed state/exclusive locks and reuse of the existing native cross-surface holder channel (both p/confidence/margin1). No new dependency/service; variable writes are explicitly not a distributed commit mutex.
 - D-38 Scoped 25-path enforcement commit441f50271 pushed at10:00:08.392Z through the new registered native holder. Build37193948006 executed70 protocol cases,69 passed/1 failed because native PowerShell colors/prefixes/wrapping split the expected error phrase. The intended guard did reject before operations; no app promotion occurred. Live Jev presentation_assertion p/confidence/margin1 approved stdlib VT/prefix/whitespace normalization only, retaining the exact message/nonzero assertion and every production guard.
 - D-39 AX37193948034 passed three actual Windows Node22/24/Linux22 matrices, including gate/wrapper self-tests and native watcher selection. Console37193947969 all three typecheck/Vitest package jobs and execpolicy passed; console image build/apply still pending, so no whole-console-live claim.
+- D-40 Corrected327082ec21 shipped through the complete wrapper: build37194323785 executed70/70 protocol cases, all four components immutably reused; production37194396337 promoted blue, public web/ready/live HTTP200 and exact physical web/API serving proof passed. Inclusive marker284.177s (4m44.18s), actual five-minute acceptance for this unchanged-component reuse case only. Preserve510.240s API-change baseline and unmeasured cold cases; live Jev timing_scope p/confidence/margin1 validated this distinction.
+- D-41 Console37193947969 actually passed469 cases/24 files, tsc and execpolicy, built/pulled all images but did NOT apply: an active owner turn protected the oldc81 runtime. Fresh native health confirmed1 active/non-draining. Live Jev idle_gated_retry p/confidence/margin1 approved existing apply=false retry37195228166 at exact327, never force/restart active work or treat update-pending as applied.
+- D-42 Both already-started QA37193947973 (441) and37194323799 (327) passed frontend/placement/gate; backend legitimately skipped. Wrapper ax:record/verify succeeded for327. Peer received user-directed inherited contract and exact descendant/physical proof; parent retains HEAD/index/ledger ownership until console/evidence closeout.
+- D-43 Idle-only retry37195228166 completed its tests/images successfully but again safely deferred recreation; fresh10:36:12Z native health/image read still shows1 active/non-draining and all three oldc81 images. Console runtime completion is externally blocked, not green. No more duplicate retries or forced interruption without fresh specific owner approval.
 
 ## Touched files
 
@@ -129,15 +133,18 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 | new same-publish SQL verification/application | production-deploy.yml / job 111372763414 | 37180764537 | PASS |
 | latest API-change physical/public serving and measured timing | production-deploy.yml / job 111372825658 + ship watcher | 37180764537 | PASS |
 | mandatory fast-path mutation/native boundary regressions, first attempt | build-images.yml / guards (69/70, native presentation fixture) | 37193948006 | FAIL |
-| mandatory fast-path mutation/native boundary correction | build-images.yml / guards | .github/workflows/build-images.yml | NOT RUN |
+| mandatory fast-path mutation/native boundary correction (70/70) | build-images.yml / guards job 111412904843 | 37194323785 | PASS |
 | strict ship helpers on Windows/Linux | ax-check.yml / three self-test/native selection matrices | 37193948034 | PASS |
-| console typecheck/tests and separately updated runtime | agent-console.yml | .github/workflows/agent-console.yml | NOT RUN |
-| enforcement shipment + physical/public serving proof | production-deploy.yml + ship watcher | .github/workflows/production-deploy.yml | NOT RUN |
+| console source typecheck469 tests/24 files/execpolicy + images (update-pending, not live) | agent-console.yml | 37193947969 | PASS |
+| console runtime still oldc81/1 active; idle-only retry deferred | agent-console.yml / rollout111415804815 | 37195228166 | BLOCKED |
+| enforcement shipment + exact physical/public serving proof (284.177s) | production-deploy.yml / rollout111413177138 + ship watcher | 37194396337 | PASS |
+| already-started frontend/placement QA, backend skipped | qa-smoke.yml | 37194323799 | PASS |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
-- The 300-second target remains unmet. Verified inclusive releases measured 744.784 -> 569.457 -> 582.880 -> 529.552 -> 510.240 seconds under different observed conditions. Latest e748 rebuilt the API/reused web; full cold/Writing-live remains unmeasured. Cold forced-Writing build-only took 310 seconds. Direct readiness already polls every three seconds; never remove gates or present projections as acceptance.
+- Verified unchanged-component327 reuse met300s at284.177s. API-change e748 remains510.240s, and full cold/Writing-live is unmeasured; forced-Writing build-only was310s. Different conditions are not isolated causal attribution or a universal deadline. Never remove gates or report projections as acceptance.
+- Console update is built/pulled but protected by an active owner turn; oldc81 images still run. Both native attempts safely deferred, and fresh10:36:12Z health/image proof remains unchanged. Wait for idle or obtain fresh specific restart/active-work interruption approval; no more speculative retries.
 - QA37177363819 predates the already-live scoring correction; 67/67 focused regressions passed. Full e748 QA37180577741 ended cancelled, not a whole-backend PASS. Do not rerun unrelated QA for this deployment-control change.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
@@ -145,4 +152,4 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 
 ## Next action
 
-1. Commit the one-test native output-format correction and its honest continuity record, then pnpm run ship again. Follow corrected70-case build/production proof and the existing441 console build/apply (no redundant console dispatch); record native evidence. Retain May-record privacy blocking and all mandatory production controls.
+1. Ship this truthful evidence closeout, then obtain the owner's specific decision on the blocked console update (wait for idle or approved restart with active work resumable). Only after actual new health/image proof finish console gates. May25907015352 remains queued without deletion consent; never bypass privacy safety.

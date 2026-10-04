@@ -242,8 +242,19 @@ exposed by full QA was corrected without changing its assertions: manual
 filtered run `37180640839` executed and passed all 67 selected Speaking cases
 with zero skipped, plus the whole-solution compile and scoped frontend checks.
 That is focused correction evidence, not a claim that the separate six-shard
-QA run passed. The latest inclusive result is approximately **8 minutes
-30 seconds**, still above the five-minute target on the approved free runners.
+QA run passed. This API-change baseline is approximately **8 minutes 30 seconds**,
+above the five-minute target on the approved free runners.
+
+The mandatory-contract enforcement release `327082ec2` (build `37194323785`,
+deploy `37194396337`) subsequently measured **284.177 seconds (4m44.18s)** from
+before the push to verified public/physical serving. Its corrected native
+contract suite executed **70/70 passing cases**, and all four unchanged
+components reused proven immutable digests through registry-only aliases.
+The already-deployed API did not require new SQL. This actual reuse release met
+five minutes; it is not proof that changed-component or cold builds do so.
+The separate console workflow's built/pulled update is not a running update
+until its active-turn gate permits recreation and native health/image proof
+confirms it.
 
 Migrations normally come from the build API publish artifact. Startup migration
 is an opt-in (`AUTO_MIGRATE` → `Bootstrap__AutoMigrate`, default `false`).
