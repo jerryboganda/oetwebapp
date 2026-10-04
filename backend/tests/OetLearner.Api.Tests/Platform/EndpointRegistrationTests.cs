@@ -24,6 +24,7 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
         new("/v1/admin/imports/real-content-folder/stage", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/result-templates", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/rulebooks/{id}/reference-pdf", "POST", "AdminContentWrite", "PerUserWrite"),
+        new("/v1/admin/speaking/audio-assess/probe", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/speaking/role-play-cards/import", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/admin/speaking/shared-resources", "POST", "AdminContentWrite", "PerUserWrite"),
         new("/v1/speaking/drills/attempts/{aid}/recordings", "POST", "LearnerOnly", "PerUserWrite"),
