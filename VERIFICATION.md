@@ -6,6 +6,12 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 03:11 | CI triage | CI triage | 37173356860 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | f13b93bd4 |
+| 2026-10-04 03:07 | CI triage | CI triage | 37173143859 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | f13b93bd4 |
+| 2026-10-04 03:07 | Deploy production | Deploy production | 37173143817 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | f13b93bd4 |
+| 2026-10-04 03:02 | SBOM and SCA | SBOM and SCA | 37172887093 | sbom-sca=success | SUCCESS | f13b93bd4 |
+| 2026-10-04 03:02 | Build images | Build images | 37172887015 | Detect what changed=success Deployment contract guards=success Syntax gate (seconds)=success Writing grader regression (on change)=skipped build-api=success build-agent-gateway=success build-web=success build-backup=success Retag unchanged ${{ matrix.image }}=skipped Publish verified release provenance=success Writing model-answer gate (on change)=skipped | SUCCESS | f13b93bd4 |
+| 2026-10-04 03:02 | .github/workflows/ax-check.yml | .github/workflows/ax-check.yml | 37172886438 | (none) | FAILURE | f13b93bd4 |
 | 2026-10-04 02:21 | CI triage | CI triage | 37170802825 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 66458ca82 |
 | 2026-10-04 02:16 | CI triage | CI triage | 37170535352 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 66458ca82 |
 | 2026-10-04 02:16 | Deploy production | Deploy production | 37170535406 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 66458ca82 |

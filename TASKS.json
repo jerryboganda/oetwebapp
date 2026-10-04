@@ -250,7 +250,10 @@
         "First actual promotion 37170535406 verified at 744.784 seconds inclusive; target missed honestly",
         "Cold build-only benchmark 37170735127 succeeded in about 322 seconds with 26 real Writing tests; no deployment or cold-live result claimed",
         "Measured Next compilation improved 75 seconds to 2.9 seconds; remove 67-second cache extraction/20-second hosted cleanup overhead without discarding useful persistence",
-        "Live Jev approved native cache export, exact opt-in Writing compilation, stable API layer partition and watcher benchmark-purpose filtering; follow-up Actions/live acceptance remains"
+        "Live Jev approved native cache export, exact opt-in Writing compilation, stable API layer partition and watcher benchmark-purpose filtering",
+        "Follow-up f13b93bd47b74123b4cbeba09dc81ce2e0a19094: build 37172887015 passed 37 protocol tests, native cache persistence and complete runtime-byte checks; Writing was skipped",
+        "Deploy 37173143817 served exact physical images in blue: 569.457 seconds before-push-to-watcher-live, 543.109 seconds to driver public-live; target missed",
+        "AX 37172886438 failed workflow validation before jobs; live Jev approved existing matrix context correction. Native PowerShell and forced-Writing checks remain"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md"]
     }

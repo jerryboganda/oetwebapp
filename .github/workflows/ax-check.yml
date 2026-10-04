@@ -78,7 +78,7 @@ jobs:
         run: node scripts/ship/ship.mjs --self-test
 
       - name: Watcher build selection on the native PowerShell engine
-        shell: ${{ runner.os == 'Windows' && 'powershell' || 'pwsh' }}
+        shell: ${{ matrix.runner == 'windows-latest' && 'powershell' || 'pwsh' }}
         run: |
           $ErrorActionPreference = 'Stop'
           $tokens = $null

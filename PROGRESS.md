@@ -11,16 +11,16 @@ Last updated: 2026-10-04
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
-## Active checkpoint - Deployment acceleration, live but target missed (2026-10-04)
+## Active checkpoint - Deployment acceleration, 569.457 seconds inclusive (2026-10-04)
 
-- Wrote immutable component reuse, same-publish SQL/Writing references, persisted build caches and lean contexts.
-- Wrote health/config-aware service reuse, bound prepare/promote, durable paired router reload/recovery and serving identity.
+- Wrote immutable component reuse, same-publish SQL/Writing references, persisted caches, lean contexts and health/config-aware service reuse.
+- Bound prepare/promote, durable paired router recovery and exact serving identity remain enforced.
 - Added inclusive ship timing, actual-promotion/no-op proof and offline provenance/driver/watcher/registry regressions.
 - Existing owner authentication is verified process-scoped; shared CLI defaults/credentials remain unchanged.
 - SHA 66458ca821: Build images 37170176749 passed 31 protocol checks and 26 real Writing tests; production 37170535406 served exact images in green.
 - Inclusive push-to-verified-live was 744.784 seconds, not 300; cold build-only benchmark 37170735127 passed in about 322 seconds without promotion.
-- Measured follow-up keeps useful Next caching, removes image-based export/hosted teardown, limits only deployment Writing compilation and partitions stable API publish bytes.
-- Follow-up edits and the released eleven-path Speaking repair await separate coordinated shipments; private restoration waits for all Actions/leases.
+- Follow-up f13b93bd4: build 37172887015 passed 37 protocol tests, native cache persistence and complete runtime bytes; deploy 37173143817 served blue at 569.457 seconds inclusive (driver 543.109).
+- Native PowerShell correction, forced scoped Writing benchmark and separate eleven-path Speaking/reused-API measurement remain; private restoration also faces an inconsistent empty May queue.
 
 ## Previous checkpoint — AX: externalized agent working memory (2026-10-01)
 
