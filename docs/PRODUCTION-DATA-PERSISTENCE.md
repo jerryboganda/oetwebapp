@@ -26,14 +26,16 @@ so a deploy cannot attach a new empty volume.
 
 `scripts/deploy/auto-deploy-ghcr.sh` only:
 
-1. Pulls GHCR images
-2. `compose up --force-recreate` of **web-$slot**, **learner-api-$slot**, **db-backup**
-3. Health-gates, then flips the routers
+1. Pulls verified immutable GHCR images and preserves per-release aliases
+2. Reuses healthy native-config/image matches; recreates only changed, stale or
+   unhealthy target app/supporting services, retaining worker/gateway drainage
+3. Health-gates the target, then validates and gracefully reloads durable router
+   configs, restoring both previous configs if cutover/public proof fails
 
 It does **not** recreate `postgres`. It does **not** pass `-v`. It does **not**
 `docker volume rm`, `volume prune`, or `system prune`.
 
-`down -v` in `qa-smoke.yml` is **desktop CI only**, never production.
+Any CI fixture cleanup is isolated runner work, never production.
 
 Host wrapper `/usr/local/bin/docker` (installed by
 `scripts/deploy/protect-production-data.sh` on every deploy) **blocks**:

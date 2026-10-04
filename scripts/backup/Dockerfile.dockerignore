@@ -1,0 +1,5 @@
+# Repository-root context; the backup image consumes only shell scripts.
+**
+!scripts/
+!scripts/backup/
+!scripts/backup/*.sh

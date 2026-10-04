@@ -319,9 +319,14 @@ function rebaseOntoMain() {
 }
 
 function pushWithRetry() {
+  const pushStartedAt = new Date().toISOString();
+  console.log(`SHIP_PUSH_STARTED_AT ${pushStartedAt}`);
   for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const beforePush = git(['ls-remote', 'origin', `refs/heads/${BASE_BRANCH}`], { allowFail: true });
+    const pushBaseSha = beforePush ? beforePush.split(/\s+/)[0] : '';
+    console.log(`SHIP_PUSH_ATTEMPT_STARTED_AT ${new Date().toISOString()}`);
     const result = spawnSync('git', ['push', 'origin', `HEAD:${BASE_BRANCH}`], { cwd: root, stdio: 'inherit' });
-    if (result.status === 0) return { ok: true, sha: git(['rev-parse', 'HEAD']) };
+    if (result.status === 0) return { ok: true, sha: git(['rev-parse', 'HEAD']), pushStartedAt, pushBaseSha };
     console.warn(`ship: push rejected (attempt ${attempt}/3) - another agent pushed; fetching + rebasing`);
     if (attempt === 3) break;
     const rebase = rebaseOntoMain();
@@ -343,11 +348,13 @@ function startHeartbeat(paths) {
   return () => clearInterval(timer);
 }
 
-function runWatcher(sha, { workflow } = {}) {
+function runWatcher(sha, { workflow, pushStartedAt, pushBaseSha } = {}) {
   const script = join(root, 'scripts', 'ship', 'watch-deploy.ps1');
   const candidates = process.platform === 'win32' ? ['powershell'] : ['pwsh', 'powershell'];
   const args = ['-ExecutionPolicy', 'Bypass', '-File', script, '-Sha', sha, '-SkipPublic', '-SkipPrivateFlip'];
   if (workflow) args.push('-Workflow', workflow);
+  if (pushStartedAt) args.push('-PushStartedAt', pushStartedAt);
+  if (pushBaseSha) args.push('-PushBaseSha', pushBaseSha);
   for (const bin of candidates) {
     const result = spawnSync(bin, args, { cwd: root, stdio: 'inherit' });
     if (result.error && result.error.code === 'ENOENT') continue;
@@ -545,7 +552,7 @@ export async function main(argv) {
 
     let watchStatus = 0;
     if (!flags['no-watch']) {
-      watchStatus = runWatcher(pushed.sha, { workflow: flags.workflow });
+      watchStatus = runWatcher(pushed.sha, { workflow: flags.workflow, pushStartedAt: pushed.pushStartedAt, pushBaseSha: pushed.pushBaseSha });
     }
 
     if (watchStatus === 0 && !flags['no-watch']) {

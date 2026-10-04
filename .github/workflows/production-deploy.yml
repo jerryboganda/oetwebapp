@@ -42,107 +42,47 @@ concurrency:
 jobs:
   resolve:
     name: Resolve the build to deploy
-    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository) || github.event_name == 'workflow_dispatch' }}
+    if: ${{ (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository && !startsWith(github.event.workflow_run.display_title, 'Benchmark build ')) || github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
       build_run_id: ${{ steps.resolve.outputs.build_run_id }}
-      deployable: ${{ steps.gate.outputs.deployable }}
-      api_changed: ${{ steps.api.outputs.api_changed }}
+      deployable: ${{ steps.resolve.outputs.deployable }}
+      api_changed: ${{ steps.resolve.outputs.api_changed }}
+      api_source_sha: ${{ steps.resolve.outputs.api_source_sha }}
+      api_source_run: ${{ steps.resolve.outputs.api_source_run }}
+      sql_checksum: ${{ steps.resolve.outputs.sql_checksum }}
+      web_image: ${{ steps.resolve.outputs.web_image }}
+      api_image: ${{ steps.resolve.outputs.api_image }}
+      backup_image: ${{ steps.resolve.outputs.backup_image }}
+      gateway_image: ${{ steps.resolve.outputs.gateway_image }}
+      legacy: ${{ steps.resolve.outputs.legacy }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.workflow_run.head_sha }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - id: resolve
-        name: Resolve the SHA to deploy
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            SHA="${{ inputs.sha }}"
-            BUILD_RUN_ID=""
-          else
-            SHA="${{ github.event.workflow_run.head_sha }}"
-            BUILD_RUN_ID="${{ github.event.workflow_run.id }}"
-          fi
-          printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$' || { echo "::error::bad sha '$SHA'"; exit 1; }
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "build_run_id=$BUILD_RUN_ID" >> "$GITHUB_OUTPUT"
-          echo "deploying $SHA (build run: ${BUILD_RUN_ID:-manual dispatch})"
-
-      # Did this build actually rebuild the API image? The build run's own job
-      # list answers it: `build-api` is skipped when no API input changed (its
-      # image was retagged). Migrations only run when the answer is yes, so a
-      # frontend-only rollout never pays for SQL generation (~4 min).
-      - id: api
-        name: Did the API image get rebuilt?
+        name: Verify immutable release and applied-API provenance
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          RUN_ID="${{ steps.resolve.outputs.build_run_id }}"
-          api_changed=false
-          if [ -z "$RUN_ID" ]; then
-            echo "manual dispatch: not running migrations (the idempotent SQL is already applied)"
-          else
-            api_changed="$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs \
-              --jq '[.jobs[] | select(.name == "build-api" and .conclusion != "skipped")] | length > 0')"
-          fi
-          echo "api_changed=$api_changed" >> "$GITHUB_OUTPUT"
-          echo "api_changed=$api_changed"
-
-      # Two guards, owner directive 2026-10-03 (minimum deploy time):
-      #   1. settle window - a burst of pushes produces ONE rollout, because a
-      #      newer Build images run on main already contains this commit;
-      #   2. image existence - a push that touched no build input started no
-      #      build, so there is nothing to roll out.
-      - id: gate
-        name: Settle window + image existence
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          SHA="${{ steps.resolve.outputs.sha }}"
-          RUN_ID="${{ steps.resolve.outputs.build_run_id }}"
-          deployable=true
-          reason=""
-
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            for attempt in 1 2; do
-              newest="$(gh run list --repo "$GITHUB_REPOSITORY" -w 'Build images' --branch main -L 10 \
-                --json databaseId,status,conclusion \
-                --jq '.[0] | [.databaseId, .status, (.conclusion // "")] | @tsv')"
-              NEWEST_ID="$(printf '%s' "$newest" | cut -f1)"
-              NEWEST_STATUS="$(printf '%s' "$newest" | cut -f2)"
-              NEWEST_CONCLUSION="$(printf '%s' "$newest" | cut -f3)"
-              if [ -n "$NEWEST_ID" ] && [ "$NEWEST_ID" != "$RUN_ID" ] && [ "$NEWEST_CONCLUSION" != "failure" ]; then
-                deployable=false
-                reason="superseded by newer build run $NEWEST_ID ($NEWEST_STATUS)"
-                break
-              fi
-              if [ "$attempt" = "1" ]; then sleep 30; fi
-            done
-          fi
-
-          if [ "$deployable" = "true" ]; then
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin >/dev/null
-            missing=""
-            for image in web api db-backup agent-gateway; do
-              docker manifest inspect "ghcr.io/$GITHUB_REPOSITORY-$image:$SHA" >/dev/null 2>&1 || missing="$missing $image"
-            done
-            docker logout ghcr.io >/dev/null 2>&1 || true
-            if [ -n "$missing" ]; then
-              deployable=false
-              reason="no images tagged $SHA (unchanged:$missing) - nothing to deploy"
-            fi
-          fi
-
-          echo "deployable=$deployable" >> "$GITHUB_OUTPUT"
-          {
-            echo "### Resolve"
-            echo "- sha: $SHA"
-            echo "- build run: ${RUN_ID:-manual dispatch}"
-            echo "- deployable: $deployable"
-            if [ -n "$reason" ]; then echo "- skipped: $reason"; fi
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "deployable=$deployable ${reason:+($reason)}"
+          RELEASE_SHA: ${{ inputs.sha || github.event.workflow_run.head_sha }}
+          BUILD_RUN_ID: ${{ github.event.workflow_run.id }}
+          MANUAL_ROLLBACK: ${{ github.event_name == 'workflow_dispatch' }}
+        run: node scripts/deploy/release-manifest.mjs resolve
+      - uses: actions/upload-artifact@v4
+        if: steps.resolve.outputs.legacy != 'true'
+        with:
+          name: release-candidate
+          path: output/release.json
+          if-no-files-found: error
+          retention-days: 1
 
   apply-migrations:
     name: Apply migration SQL (if the API changed)
@@ -153,41 +93,21 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-
-      # SQL generation lives HERE (owner directive 2026-10-03): keeping it in
-      # the build workflow put ~9 minutes of EF tooling on the critical path
-      # before the rollout could even start. It is still generated on Actions
-      # (compute policy) and only when the API image was actually rebuilt.
-      - uses: actions/cache@v4
         with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
-          restore-keys: nuget-${{ runner.os }}-
-      - uses: actions/setup-dotnet@v4
+          ref: ${{ needs.resolve.outputs.sha }}
+      - uses: actions/download-artifact@v4
         with:
-          dotnet-version: 10.0.x
-      - name: Install EF command-line tools
-        run: |
-          EF_TOOL_DIR="$RUNNER_TEMP/dotnet-tools"
-          mkdir -p "$EF_TOOL_DIR"
-          dotnet tool install --tool-path "$EF_TOOL_DIR" dotnet-ef --version 10.0.5
-          EF_TOOL="$EF_TOOL_DIR/dotnet-ef"
-          test -x "$EF_TOOL"
-          "$EF_TOOL" --version
-      - name: Restore + build the API for the migration generator
-        run: |
-          dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
-          dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release --no-restore --nologo
-      - name: Generate the idempotent SQL on Actions
-        run: |
-          EF_TOOL="$RUNNER_TEMP/dotnet-tools/dotnet-ef"
-          mkdir -p output
-          "$EF_TOOL" migrations script --idempotent --no-build --configuration Release \
-            --project backend/src/OetLearner.Api/OetLearner.Api.csproj \
-            --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj \
-            --output output/oet-production-migrations.sql
-          test -s output/oet-production-migrations.sql
-          sha256sum output/oet-production-migrations.sql
+          name: api-release-${{ needs.resolve.outputs.api_source_sha }}
+          run-id: ${{ needs.resolve.outputs.api_source_run }}
+          github-token: ${{ github.token }}
+          path: output/api-release
+      - name: Verify the successful source build and SQL checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_SOURCE_SHA: ${{ needs.resolve.outputs.api_source_sha }}
+          API_SOURCE_RUN: ${{ needs.resolve.outputs.api_source_run }}
+          SQL_CHECKSUM: ${{ needs.resolve.outputs.sql_checksum }}
+        run: node scripts/deploy/release-manifest.mjs verify-api
 
       - name: Apply migration SQL through the production PostgreSQL container
         env:
@@ -198,10 +118,7 @@ jobs:
           APP_DIR: "/opt/oetwebapp"
         run: |
           set -euo pipefail
-          if [ ! -s output/oet-production-migrations.sql ]; then
-            echo "No migration SQL for this SHA - nothing to apply."
-            exit 0
-          fi
+          test -s output/api-release/migrations.sql
           PORT="${VPS_PORT:-22}"
           REMOTE_WRAPPER="/tmp/oet-apply-migrations-${GITHUB_RUN_ID}.sh"
           mkdir -p ~/.ssh
@@ -224,7 +141,7 @@ jobs:
             < scripts/deploy/apply-migrations-from-ci.sh
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "set -e; VPS_APP_DIR='$APP_DIR' bash '$REMOTE_WRAPPER'" \
-            < output/oet-production-migrations.sql
+            < output/api-release/migrations.sql
 
   deploy:
     name: Roll out to the VPS
@@ -235,9 +152,33 @@ jobs:
     timeout-minutes: 45
     env:
       SHA: ${{ needs.resolve.outputs.sha }}
+      RELEASE_SHA: ${{ needs.resolve.outputs.sha }}
+      BUILD_RUN_ID: ${{ needs.resolve.outputs.build_run_id }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || needs.resolve.outputs.sha }}
+      - uses: actions/download-artifact@v4
+        if: needs.resolve.outputs.legacy != 'true'
+        with:
+          name: release-candidate
+          path: output
+      - name: Load the target release configuration using the maintained driver
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          for file in docker-compose.production.yml scripts/deploy/nginx/web-bluegreen.conf.template scripts/deploy/nginx/api-bluegreen.conf.template; do
+            gh api "repos/$GITHUB_REPOSITORY/contents/$file?ref=$SHA" --jq '.content' | base64 --decode > "$file"
+            test -s "$file"
+          done
+      - id: preflight
+        name: Immediate successful-descendant check
+        if: github.event_name != 'workflow_dispatch'
+        run: node scripts/deploy/release-manifest.mjs superseded
       - name: Deploy to VPS over SSH (pull + blue/green redeploy)
+        id: rollout
+        if: steps.preflight.outputs.superseded != 'true'
         env:
           # Dedicated CI deploy key (authorized on the real prod box's root).
           # Cutover 2026-06-05 moved production to MAIN; app/api DNS now resolve
@@ -249,10 +190,10 @@ jobs:
           VPS_PORT: "22"
           GHCR_USER: ${{ github.actor }}
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          WEB_IMAGE: ghcr.io/${{ github.repository }}-web:${{ needs.resolve.outputs.sha }}
-          API_IMAGE: ghcr.io/${{ github.repository }}-api:${{ needs.resolve.outputs.sha }}
-          DB_BACKUP_IMAGE: ghcr.io/${{ github.repository }}-db-backup:${{ needs.resolve.outputs.sha }}
-          AGENT_GATEWAY_IMAGE: ghcr.io/${{ github.repository }}-agent-gateway:${{ needs.resolve.outputs.sha }}
+          WEB_IMAGE: ${{ needs.resolve.outputs.web_image }}
+          API_IMAGE: ${{ needs.resolve.outputs.api_image }}
+          DB_BACKUP_IMAGE: ${{ needs.resolve.outputs.backup_image }}
+          AGENT_GATEWAY_IMAGE: ${{ needs.resolve.outputs.gateway_image }}
         run: |
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
@@ -276,7 +217,10 @@ jobs:
           )
           cleanup() {
             ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-              "rm -f '$REMOTE_SCRIPT' '$REMOTE_COMPOSE' '$REMOTE_VALIDATE' '$REMOTE_NGINX' '$REMOTE_NGINX_API'; rmdir '$REMOTE_DIR' 2>/dev/null || true" \
+              "rm -f '$REMOTE_SCRIPT' '$REMOTE_COMPOSE' '$REMOTE_VALIDATE' '$REMOTE_NGINX' '$REMOTE_NGINX_API' \
+               '$REMOTE_DIR/docker-auth-prepare/config.json' '$REMOTE_DIR/docker-auth-promote/config.json'; \
+               rmdir '$REMOTE_DIR/docker-auth-prepare' '$REMOTE_DIR/docker-auth-promote' 2>/dev/null || true; \
+               rmdir '$REMOTE_DIR' 2>/dev/null || true" \
               >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
@@ -295,21 +239,62 @@ jobs:
              chmod 700 '$REMOTE_SCRIPT' '$REMOTE_VALIDATE'; \
              chmod 600 '$REMOTE_COMPOSE'; \
              chmod 644 '$REMOTE_NGINX' '$REMOTE_NGINX_API'"
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-            "set -e; echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
+          deploy_phase() {
+            local phase="$1"
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "set -e; umask 077; export DOCKER_CONFIG='$REMOTE_DIR/docker-auth-$phase'; mkdir -p \"\$DOCKER_CONFIG\"; \
+             cleanup_registry() { status=\$?; trap - EXIT; docker logout ghcr.io >/dev/null 2>&1 || true; \
+               if ! rm -f \"\$DOCKER_CONFIG/config.json\" || ! rmdir \"\$DOCKER_CONFIG\"; then \
+                 echo 'Temporary registry authorization cleanup failed' >&2; [ \"\$status\" -ne 0 ] || status=1; \
+               fi; exit \"\$status\"; }; trap cleanup_registry EXIT; \
+             echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
              WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' \
-             AGENT_GATEWAY_IMAGE='$AGENT_GATEWAY_IMAGE' \
+             AGENT_GATEWAY_IMAGE='$AGENT_GATEWAY_IMAGE' RELEASE_SHA='$SHA' DEPLOY_PHASE='$phase' \
              VPS_APP_DIR='$APP_DIR' VPS_COMPOSE_FILE='$REMOTE_COMPOSE' VPS_VALIDATE_ENV_SCRIPT='$REMOTE_VALIDATE' \
              NGINX_TEMPLATE_SRC='$REMOTE_NGINX' NGINX_API_TEMPLATE_SRC='$REMOTE_NGINX_API' \
-               bash '$REMOTE_SCRIPT'; \
-             docker logout ghcr.io >/dev/null 2>&1 || true"
+               bash '$REMOTE_SCRIPT'"
+          }
+          deploy_phase prepare | tee "$RUNNER_TEMP/rollout-prepare.log"
+          if [ "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]; then
+            node scripts/deploy/release-manifest.mjs superseded
+            if grep -q '^superseded=true$' "$GITHUB_OUTPUT"; then
+              echo "promoted=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          deploy_phase promote | tee "$RUNNER_TEMP/rollout-promote.log"
+          grep -q '^DEPLOY_LIVE ' "$RUNNER_TEMP/rollout-promote.log"
+          mkdir -p output
+          grep '^DEPLOY_LIVE ' "$RUNNER_TEMP/rollout-promote.log" > output/promotion-proof.txt
+          echo "promoted=true" >> "$GITHUB_OUTPUT"
+      - name: Record actual promotion
+        uses: actions/upload-artifact@v4
+        if: steps.rollout.outputs.promoted == 'true'
+        with:
+          name: promotion-proof
+          path: output/promotion-proof.txt
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: ${{ steps.rollout.outputs.promoted == 'true' && needs.resolve.outputs.legacy != 'true' }}
+        with:
+          name: production-release
+          path: output/release.json
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rollout-timing
+          path: ${{ runner.temp }}/rollout-*.log
+          if-no-files-found: warn
       # Every third rollout only: pruning walks the whole image store on a
       # shared host and is not needed after every push. The check lives in a
       # shell step because GitHub expressions have NO modulo operator (`%` makes
       # the whole workflow file invalid - it silently stops registering).
       - name: Decide whether to prune
         id: prune
-        if: success()
+        if: ${{ success() && steps.rollout.outputs.promoted == 'true' }}
         run: |
           if [ $((GITHUB_RUN_NUMBER % 3)) -eq 0 ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -318,6 +303,8 @@ jobs:
           fi
       - name: Prune stale OET images on VPS
         if: ${{ success() && steps.prune.outputs.run == 'true' }}
+        timeout-minutes: 1
+        continue-on-error: true
         env:
           SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -340,3 +327,5 @@ jobs:
           echo "- backup: \`ghcr.io/${{ github.repository }}-db-backup:$SHA\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- agent-gateway: \`ghcr.io/${{ github.repository }}-agent-gateway:$SHA\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- result: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- promoted: ${{ steps.rollout.outputs.promoted || 'false' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- cleanup: ${{ steps.prune.outputs.run == 'true' && 'bounded, non-blocking; inspect the cleanup step outcome' || 'not required' }}" >> "$GITHUB_STEP_SUMMARY"

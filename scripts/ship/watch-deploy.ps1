@@ -14,6 +14,8 @@
 param(
     [string]$Repo = 'jerryboganda/oetwebapp',
     [string]$Sha = '',
+    [string]$PushStartedAt = '',
+    [string]$PushBaseSha = '',
     # $Workflow is the display name used for the EXACT-match filter; $WorkflowFile
     # is what `gh run list --workflow` is given, because a long-deleted workflow
     # is still registered under the name "Deploy Production" (id 254806378) and
@@ -21,7 +23,7 @@ param(
     [string]$Workflow = 'Deploy production',
     [string]$WorkflowFile = 'production-deploy.yml',
     [int]$WaitForRunSeconds = 180,
-    [int]$PollSeconds = 25,
+    [int]$PollSeconds = 10,
     [int]$TimeoutSeconds = 1800,
     [switch]$SkipPublic,
     [switch]$SkipPrivateFlip,
@@ -59,14 +61,8 @@ function Test-ContainsSha {
         [Parameter(Mandatory = $true)][string]$Candidate
     )
     if ($Candidate -eq $Ancestor) { return $true }
-    $status = ''
-    try {
-        $status = (& gh api "repos/$Repo/compare/$Ancestor...$Candidate" --jq '.status' 2>$null | Out-String).Trim()
-    } catch {
-        return $false
-    }
-    if ($LASTEXITCODE -ne 0) { return $false }
-    return ($status -eq 'ahead' -or $status -eq 'identical')
+    $comparison = (Invoke-GhJson @('api', "repos/$Repo/compare/$Ancestor...$Candidate")) | ConvertFrom-Json
+    return (($comparison.status -eq 'ahead' -or $comparison.status -eq 'identical') -and $comparison.merge_base_commit.sha -eq $Ancestor)
 }
 
 if (-not $Sha) {
@@ -95,6 +91,9 @@ $waitDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
 $noBuildGrace = [DateTime]::UtcNow.AddSeconds($WaitForRunSeconds)
 $runId = $null
 $runUrl = ''
+$stoodDown = New-Object 'System.Collections.Generic.HashSet[string]'
+$ancestry = @{}
+$missingBuildProof = $null
 while (-not $runId) {
     if ([DateTime]::UtcNow -ge $waitDeadline) {
         Write-Output 'SHIP-WATCH_TIMEOUT'
@@ -102,56 +101,69 @@ while (-not $runId) {
         exit 3
     }
 
-    # 1. Our rollout run (exact workflow name: `gh run list -w` also matches a
-    #    legacy registration case-insensitively).
-    try {
-        $listRaw = Invoke-GhJson @(
-            'run', 'list',
-            '--repo', $Repo,
-            '--workflow', $WorkflowFile,
-            '--commit', $Sha,
-            '--json', 'databaseId,status,conclusion,url,workflowName',
-            '--limit', '5'
-        )
-        if ($listRaw -and $listRaw -ne '[]') {
-            $runs = @($listRaw | ConvertFrom-Json) | Where-Object { $_.workflowName -eq $Workflow }
-            if ($runs.Count -gt 0) {
-                $runId = [string]$runs[0].databaseId
-                $runUrl = [string]$runs[0].url
-                break
-            }
-        }
-    } catch {
-        Write-Output "waiting for Actions run: $($_.Exception.Message)"
-    }
-
-    # 2. Superseded? A newer rollout run that CONTAINS this SHA does the job
-    #    (main is linear, and GitHub keeps one pending run per group).
+    # workflow_run.headSha can be the newer default-branch checkout, not the
+    # version being promoted. The run title and actual promotion prove identity.
     try {
         $recentRaw = Invoke-GhJson @(
             'run', 'list',
             '--repo', $Repo,
             '--workflow', $WorkflowFile,
             '--limit', '10',
-            '--json', 'databaseId,headSha,status,conclusion,url,workflowName'
+            '--json', 'databaseId,headSha,displayTitle,status,conclusion,url,workflowName'
         )
         if ($recentRaw -and $recentRaw -ne '[]') {
             $recent = @($recentRaw | ConvertFrom-Json) | Where-Object { $_.workflowName -eq $Workflow }
+            $failedCandidate = $null
             foreach ($candidate in $recent) {
-                $candidateSha = [string]$candidate.headSha
-                if (-not $candidateSha) { continue }
-                & git merge-base --is-ancestor $Sha $candidateSha 2>$null
-                if ($LASTEXITCODE -eq 0) {
-                    $runId = [string]$candidate.databaseId
-                    $runUrl = [string]$candidate.url
-                    Write-Output "SHIP-WATCH_SUPERSEDED_BY $candidateSha run $runId"
-                    break
+                $id = [string]$candidate.databaseId
+                if ($stoodDown.Contains($id)) { continue }
+                $titleSha = [regex]::Match([string]$candidate.displayTitle, '\b([0-9a-f]{40})$')
+                $candidateSha = if ($titleSha.Success) { $titleSha.Groups[1].Value } else { [string]$candidate.headSha }
+                if (-not $ancestry.ContainsKey($candidateSha)) {
+                    $ancestry[$candidateSha] = Test-ContainsSha -Ancestor $Sha -Candidate $candidateSha
                 }
+                if (-not $ancestry[$candidateSha]) { continue }
+                if ($candidate.status -ne 'completed') {
+                    Write-Output "SHIP-WATCH_STATUS run=$id status=$($candidate.status)"
+                    continue
+                }
+                if ($candidate.conclusion -ne 'success') {
+                    if (-not $failedCandidate -and ($candidateSha -eq $Sha -or $stoodDown.Count -gt 0)) {
+                        $failedCandidate = $candidate
+                    }
+                    continue
+                }
+                if ($candidate.conclusion -eq 'success') {
+                    $inventory = (Invoke-GhJson @('api', "repos/$Repo/actions/runs/$id/artifacts?per_page=100")) | ConvertFrom-Json
+                    $promoted = @($inventory.artifacts | Where-Object { $_.name -eq 'promotion-proof' -and -not $_.expired }).Count -gt 0
+                    if (-not $promoted) {
+                        $details = (Invoke-GhJson @('run', 'view', $id, '--repo', $Repo, '--json', 'jobs')) | ConvertFrom-Json
+                        $rolloutJob = @($details.jobs | Where-Object { $_.name -eq 'Roll out to the VPS' -and $_.conclusion -eq 'success' })
+                        if ($rolloutJob.Count -eq 1) {
+                            $modern = @($rolloutJob[0].steps | Where-Object { $_.name -eq 'Immediate successful-descendant check' }).Count -gt 0
+                            $legacyRollout = @($rolloutJob[0].steps | Where-Object { $_.name -eq 'Deploy to VPS over SSH (pull + blue/green redeploy)' -and $_.conclusion -eq 'success' }).Count -gt 0
+                            $promoted = -not $modern -and $legacyRollout
+                        }
+                    }
+                    if (-not $promoted) {
+                        [void]$stoodDown.Add($id)
+                        Write-Output "SHIP-WATCH_STOOD_DOWN run=$id - following the actual promoting descendant"
+                        continue
+                    }
+                }
+                $runId = $id
+                $runUrl = [string]$candidate.url
+                if ($candidateSha -ne $Sha) { Write-Output "SHIP-WATCH_SUPERSEDED_BY $candidateSha run $runId" }
+                break
+            }
+            if (-not $runId -and $failedCandidate) {
+                $runId = [string]$failedCandidate.databaseId
+                $runUrl = [string]$failedCandidate.url
             }
             if ($runId) { break }
         }
     } catch {
-        Write-Output "supersede check failed: $($_.Exception.Message)"
+        Write-Output "Actions promotion check failed: $($_.Exception.Message)"
     }
 
     # 3. Follow the build that must exist before any rollout can.
@@ -159,15 +171,37 @@ while (-not $runId) {
         $buildRaw = Invoke-GhJson @(
             'run', 'list',
             '--repo', $Repo,
-            '--workflow', 'Build images',
+            '--workflow', 'build-images.yml',
             '--commit', $Sha,
             '--limit', '1',
             '--json', 'databaseId,status,conclusion,url'
         )
         if (-not $buildRaw -or $buildRaw -eq '[]') {
+            if ($null -eq $missingBuildProof -and $PushBaseSha) {
+                $oldRepo = $env:GITHUB_REPOSITORY
+                $oldSha = $env:RELEASE_SHA
+                $oldBase = $env:PUSH_BASE_SHA
+                try {
+                    $env:GITHUB_REPOSITORY = $Repo
+                    $env:RELEASE_SHA = $Sha
+                    $env:PUSH_BASE_SHA = $PushBaseSha
+                    $helper = Join-Path (Join-Path (Split-Path -Parent $PSScriptRoot) 'deploy') 'release-manifest.mjs'
+                    $proof = & node $helper prove-no-build 2>&1 | Out-String
+                    $missingBuildProof = @{ ExitCode = $LASTEXITCODE; Detail = $proof.Trim() }
+                } finally {
+                    $env:GITHUB_REPOSITORY = $oldRepo
+                    $env:RELEASE_SHA = $oldSha
+                    $env:PUSH_BASE_SHA = $oldBase
+                }
+                if ($missingBuildProof.ExitCode -eq 0 -and $missingBuildProof.Detail -match "RELEASE_NO_DEPLOYMENT_INPUTS base=$PushBaseSha sha=$Sha") {
+                    Write-Output "SHIP-WATCH_NOTHING_TO_DEPLOY $($missingBuildProof.Detail) - bound push inputs prove production is unchanged."
+                    exit 0
+                }
+            }
             if ([DateTime]::UtcNow -ge $noBuildGrace) {
-                Write-Output "SHIP-WATCH_NOTHING_TO_DEPLOY no 'Build images' run for $Sha - the push touched no build input, production is unchanged."
-                exit 0
+                $detail = if ($missingBuildProof) { $missingBuildProof.Detail } else { 'No exact before-push base; deployment-free inputs cannot be proven.' }
+                Write-Output "SHIP-WATCH_MISSING_BUILD no 'Build images' run for $Sha. $detail"
+                exit 2
             }
         } else {
             $build = @($buildRaw | ConvertFrom-Json)[0]
@@ -190,7 +224,7 @@ while (-not $runId) {
         Write-Output "build-run check failed: $($_.Exception.Message)"
     }
 
-    Start-Sleep -Seconds 15
+    Start-Sleep -Seconds $PollSeconds
 }
 
 Write-Output "SHIP-WATCH_RUN $runId $runUrl"
@@ -229,6 +263,8 @@ if ($conclusion -ne 'success') {
 Write-Output 'SHIP-WATCH_DEPLOY_OK'
 
 $healthFailed = $false
+$publicShas = @()
+$publicSlots = @()
 $checks = @(
     @{ Name = 'web'; Url = 'https://app.oetwithdrhesham.co.uk/api/health' },
     @{ Name = 'api-ready'; Url = 'https://api.oetwithdrhesham.co.uk/health/ready' },
@@ -236,8 +272,19 @@ $checks = @(
 )
 foreach ($check in $checks) {
     try {
-        $body = & curl.exe -fsS -m 15 $check.Url
+        $body = & curl.exe -fsS -D - -m 15 $check.Url
+        if ($LASTEXITCODE -ne 0) { throw "curl failed with exit $LASTEXITCODE" }
         Write-Output "LIVE $($check.Name): $body"
+        $response = @($body) -join "`n"
+        $httpStatuses = [regex]::Matches($response, '(?im)^HTTP/[0-9.]+\s+([0-9]{3})\b')
+        if ($httpStatuses.Count -eq 0 -or $httpStatuses[$httpStatuses.Count - 1].Groups[1].Value -ne '200') {
+            throw 'Public health must return direct HTTP 200.'
+        }
+        $releaseHeader = [regex]::Match($response, '(?im)^X-Oet-Release:\s*([0-9a-f]{40})\s*$')
+        $slotHeader = [regex]::Match($response, '(?im)^X-Oet-Slot:\s*(blue|green)\s*$')
+        if (-not $releaseHeader.Success -or -not $slotHeader.Success) { throw 'Serving release/slot headers are missing.' }
+        $publicShas += $releaseHeader.Groups[1].Value
+        $publicSlots += $slotHeader.Groups[1].Value
     } catch {
         Write-Output "LIVE $($check.Name) FAILED: $($_.Exception.Message)"
         $healthFailed = $true
@@ -246,69 +293,46 @@ foreach ($check in $checks) {
 
 if (-not $SkipVpsSsh) {
     try {
-        $remote = @"
-docker inspect oet-web-blue oet-web-green oet-api-blue oet-api-green oet-agent-gateway --format 'NAME={{.Name}} HEALTH={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} IMAGE={{.Config.Image}}' 2>/dev/null
-docker exec oet-api sh -c 'echo ROUTER_ACTIVE_SLOT=`$ACTIVE_SLOT' 2>/dev/null
-"@
+        $remote = @'
+set -e
+cd /opt/oetwebapp
+cat .deploy/live-release.env
+slot="$(sed -n 's/^ACTIVE_SLOT=//p' .deploy/live-release.env)"
+sha="$(sed -n 's/^RELEASE_SHA=//p' .deploy/live-release.env)"
+case "$slot" in blue|green) ;; *) exit 1 ;; esac
+for kind in web api; do
+  container="oet-$kind-$slot"
+  image="$(sed -n "s/^$(printf '%s' "$kind" | tr 'a-z' 'A-Z')_IMAGE=//p" .deploy/live-release.env)"
+  actual="$(docker inspect -f '{{.Image}}' "$container")"
+  expected="$(docker image inspect -f '{{.Id}}' "$image")"
+  alias="$(docker image inspect -f '{{.Id}}' "ghcr.io/jerryboganda/oetwebapp-$kind:$sha")"
+  test "$actual" = "$expected"
+  test "$actual" = "$alias"
+  docker exec "oet-$kind" nginx -T 2>/dev/null | grep -F "$kind-$slot"
+  printf 'SERVING_IMAGE_OK=%s\n' "$kind"
+done
+'@
         $inspect = & ssh -o BatchMode=yes -o ConnectTimeout=12 -o StrictHostKeyChecking=accept-new root@185.252.233.186 $remote
+        if ($LASTEXITCODE -ne 0) { throw "Serving image proof failed with SSH exit $LASTEXITCODE" }
         Write-Output $inspect
         # Join first. PowerShell -match/-notmatch on a string[] filters the
         # array; leftover green lines would look like a miss even when blue
         # already carries this SHA.
         $inspectText = @($inspect | ForEach-Object { [string]$_ }) -join "`n"
 
-        # Root-cause fix (Writing Rule Enforcement Addendum Rev5, 10 Sep
-        # 2026): checking "does EITHER blue or green carry this SHA" only
-        # proves the image was PULLED, not that the router (oet-api/oet-web,
-        # which reads $ACTIVE_SLOT to pick learner-api-<slot>/web-<slot> as
-        # its proxy_pass target) is actually SENDING PUBLIC TRAFFIC to that
-        # slot. Confirmed live 10 Sep 2026: auto-deploy-ghcr.sh reported
-        # "AUTO_DEPLOY_DONE: live on green" and this exact check reported
-        # LIVE_SHA_OK, while oet-api's baked ACTIVE_SLOT env var was actually
-        # "blue" (the router recreate step's `ACTIVE_SLOT="$slot" docker
-        # compose ... -f "$COMPOSE_FILE" up ...` resolved the compose
-        # file's `${ACTIVE_SLOT:-blue}` to its fallback default) - the OLD
-        # commit kept serving all public traffic while this script reported
-        # success. Now require the slot the router is ACTUALLY pointed at,
-        # per ROUTER_ACTIVE_SLOT above, to carry this SHA - not just any slot.
-        if ($inspectText -notmatch 'ROUTER_ACTIVE_SLOT=(blue|green)') {
-            Write-Output "LIVE_SHA_MISMATCH could not read the router's active slot"
-            $healthFailed = $true
-        } else {
-            $activeSlot = $Matches[1]
-            # The tag of each image the router is actually pointing at: inspect
-            # prints `NAME=/oet-web-blue HEALTH=... IMAGE=ghcr.io/<repo>-web:<sha>`.
-            $slotImageShas = @('web', 'api') | ForEach-Object {
-                $match = [regex]::Match($inspectText, "NAME=/oet-$_-$activeSlot\b[^\n]*:([0-9a-f]{40})")
-                if ($match.Success) { $match.Groups[1].Value } else { $null }
-            }
-            $liveShas = @($slotImageShas | Where-Object { $_ })
-
-            if ($liveShas.Count -eq 2 -and $liveShas -notcontains $null -and @($liveShas | Where-Object { $_ -ne $Sha }).Count -eq 0) {
-                Write-Output "LIVE_SHA_OK $Sha (serving slot: $activeSlot)"
-            } else {
-                # Agents push in bursts, so OUR rollout can be followed by a
-                # descendant's rollout within minutes (GitHub keeps one pending
-                # run per group). Landing on a slot that carries a NEWER main
-                # commit is production moving FORWARD - the supersede pattern the
-                # run-selection loop above already tolerates - not a failed
-                # deploy of $Sha. Only a slot that carries neither $Sha nor a
-                # descendant is the real "traffic is still on the OLD build"
-                # failure this check exists for.
-                $successor = @(
-                    $liveShas | Where-Object { $_ -ne $Sha -and (Test-ContainsSha -Ancestor $Sha -Candidate $_) }
-                )[0]
-                if ($liveShas.Count -eq 2 -and $successor) {
-                    Write-Output "SHIP-WATCH_SUPERSEDED_BY_LIVE $successor (slot '$activeSlot' serves a newer main commit that contains $Sha - production moved forward, nothing to fix)"
-                    Write-Output "LIVE_SHA_OK $Sha via $successor"
-                } else {
-                    Write-Output "LIVE_SHA_MISMATCH router is serving slot '$activeSlot', which is not tagged $Sha - traffic is still on the OLD build"
-                    $healthFailed = $true
-                }
-            }
+        $liveSha = [regex]::Match($inspectText, '(?m)^RELEASE_SHA=([0-9a-f]{40})$').Groups[1].Value
+        $activeSlot = [regex]::Match($inspectText, '(?m)^ACTIVE_SLOT=(blue|green)$').Groups[1].Value
+        if (-not $liveSha -or -not $activeSlot -or $inspectText -notmatch 'SERVING_IMAGE_OK=web' -or $inspectText -notmatch 'SERVING_IMAGE_OK=api' `
+            -or $publicShas.Count -ne 3 -or @($publicShas | Where-Object { $_ -ne $liveSha }).Count -gt 0 `
+            -or @($publicSlots | Where-Object { $_ -ne $activeSlot }).Count -gt 0 `
+            -or -not (Test-ContainsSha -Ancestor $Sha -Candidate $liveSha)) {
+            throw 'LIVE_SHA_MISMATCH public routing and immutable serving images do not prove this release.'
         }
+        if ($liveSha -ne $Sha) { Write-Output "SHIP-WATCH_SUPERSEDED_BY_LIVE $liveSha" }
+        Write-Output "LIVE_SHA_OK $Sha via $liveSha (serving slot: $activeSlot)"
     } catch {
-        Write-Output "VPS_SSH_SKIPPED: $($_.Exception.Message)"
+        Write-Output "VPS_SERVING_PROOF_FAILED: $($_.Exception.Message)"
+        $healthFailed = $true
     }
 }
 
@@ -316,6 +340,15 @@ if ($healthFailed) {
     Write-Output 'SHIP-WATCH_LIVE_FAIL'
     Write-Output 'NEXT: keep investigating live health until the new SHA is healthy. Do not wait for the owner to ask.'
     exit 4
+}
+
+if ($PushStartedAt) {
+    $started = [DateTimeOffset]::Parse($PushStartedAt)
+    $verified = [DateTimeOffset]::UtcNow
+    $elapsedSeconds = [Math]::Round(($verified - $started).TotalSeconds, 3)
+    if ($elapsedSeconds -lt 0) { throw 'Invalid push-to-live timing: the start is in the future.' }
+    $targetResult = if ($SkipVpsSsh) { 'UNVERIFIED' } elseif ($elapsedSeconds -le 300) { 'MET' } else { 'MISSED' }
+    Write-Output "SHIP-WATCH_PUSH_TO_VERIFIED_LIVE seconds=$elapsedSeconds target_seconds=300 result=$targetResult boundary=before_push_to_verified_live sha=$Sha run=$runId"
 }
 
 if (-not $SkipPrivateFlip) {

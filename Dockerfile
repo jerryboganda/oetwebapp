@@ -34,6 +34,9 @@ ENV NODE_OPTIONS="--max-old-space-size=6144"
 # Ensure .env exists for Next.js build (real values come from Docker build args above)
 RUN touch .env
 
+ARG GITHUB_SHA=dev
+ENV GITHUB_SHA=${GITHUB_SHA}
+
 RUN --mount=type=cache,target=/app/.next/cache pnpm run build
 
 FROM node:22-alpine AS runner

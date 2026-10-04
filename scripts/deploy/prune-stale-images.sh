@@ -11,13 +11,14 @@
 set -euo pipefail
 
 RETENTION_HOURS="${1:-24}"
-used="$(docker ps -a --format '{{.Image}}' | sort -u)"
+used="$(docker ps -aq | xargs -r docker inspect -f '{{.Image}}' | sort -u)"
 removed=0
 
-while read -r tag; do
+while read -r tag image_id; do
   [ -z "$tag" ] && continue
-  case ",$used," in *",$tag,"*) continue ;; esac
-  created="$(docker inspect -f '{{.Created}}' "$tag" 2>/dev/null || true)"
+  # Serving containers use immutable digest refs, not the per-release aliases.
+  if printf '%s\n' "$used" | grep -Fxq "$image_id"; then continue; fi
+  created="$(docker image inspect -f '{{.Created}}' "$image_id" 2>/dev/null || true)"
   [ -z "$created" ] && continue
   age_hours=$(( ($(date +%s) - $(date -d "$created" +%s)) / 3600 ))
   if [ "$age_hours" -ge "$RETENTION_HOURS" ]; then
@@ -25,10 +26,9 @@ while read -r tag; do
       removed=$((removed + 1))
     fi
   fi
-done < <(docker images --format '{{.Repository}}:{{.Tag}}' \
+done < <(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
   | grep '^ghcr\.io/jerryboganda/oetwebapp-' \
   | grep -v '^ghcr\.io/jerryboganda/oetwebapp-agent-console' \
-  | grep -v ':latest$' || true)
+  | grep -v ':latest ' || true)
 
-docker image prune -f >/dev/null 2>&1 || true
 echo "[prune-stale-images] removed $removed stale oetwebapp tag(s) older than ${RETENTION_HOURS}h"

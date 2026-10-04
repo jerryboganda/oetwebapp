@@ -39,14 +39,21 @@ like `ship:watch` they are local tooling, not compute. See `scripts/agent/README
 | Placement entry contracts | `qa-smoke.yml` / `placement-entry` |
 | ~~Playwright/e2e~~ | **Removed by owner directive 2026-10-03 (hard rule).** No e2e job runs on any trigger; `tests/e2e/**` is a manual tool. Bugs are reported by the owner and fixed on demand. |
 | Pending EF model changes, gitleaks (path-filtered) | `speaking-ci.yml` / `migrations-check`, `secrets-scan` |
-| Images → GHCR. Runs only for pushes touching a build input; rebuilds only the changed component (the rest are retagged from `:latest`); parallel per SHA, no cross-SHA lock | `build-images.yml` (push to `main` only) |
-| Migration SQL generation (only when `build-api` ran) + apply, then blue/green rollout with health gate (serialized `production-deploy`); stands down when superseded or when the SHA has no images; dispatch with `sha` = rollback | `production-deploy.yml` |
+| Immutable images → GHCR. Filtered main build/deployment inputs; compare a successful ancestor manifest, compile only changed components and reuse verified digests. API publish generates SQL/references without a second compile | `build-images.yml` |
+| Deployment protocol regressions, shell syntax, PowerShell parser and single-pipeline/compute contracts | `build-images.yml` / `guards` |
+| Guarded cold-cache build measurement (`benchmark=true`, `rebuild_all=true`): no image push or deploy. Force real required Writing tests with `writing_gate=true` | `build-images.yml` / manual dispatch |
+| Verify original-source SQL artifact, apply when API is not proven deployed, then bound prepare/promote with durable router reload/public serving proof. Only successful descendant main builds supersede; dispatch a proven deployed `sha` for rollback | `production-deploy.yml` |
 | Android / iOS builds | `mobile-ci.yml` |
 | Tauri desktop (fmt, clippy, cargo test) | `tauri-ci.yml` |
 
 Ship-it default is `pnpm run ship` (which runs `ship:gate` internally). Never treat "pushed" as done.
 A push touching no build input starts no build and no rollout at all; the watcher reports
 `SHIP-WATCH_NOTHING_TO_DEPLOY` and exits 0 — production is legitimately unchanged.
+
+Report inclusive before-first-push-attempt to verified-live elapsed separately from
+workflow creation proxies and the VPS `DEPLOY_LIVE` timestamp. A successful
+stand-down is not a deployment. Cold/queue/Writing time and unmeasured categories
+remain visible; never declare the 300-second target met from an unverified health response.
 
 ## Scope & safety
 

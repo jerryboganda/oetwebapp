@@ -133,6 +133,119 @@
         "SESSION_STATE.md",
         "VERIFICATION.md"
       ]
+    },
+    {
+      "id": "DEPLOY-01",
+      "title": "Confirm inclusive deployment clock, free-runner scope and approved acceleration plan",
+      "status": "done",
+      "owner": "deployment-latency",
+      "blockedBy": [],
+      "verify": "owner approval and live Jev planning record",
+      "evidence": [
+        "Owner approved all-category target with existing free runners even if 300 seconds remains unmet",
+        "Baseline build/deploy pairs 37159346852/37159617346 and 37156713454/37156952312"
+      ],
+      "files": []
+    },
+    {
+      "id": "DEPLOY-02",
+      "title": "Write immutable component classification and same-publish migration/Writing reference reuse",
+      "status": "done",
+      "owner": "deployment-latency",
+      "blockedBy": ["DEPLOY-01"],
+      "verify": "build-images.yml",
+      "evidence": [
+        "Draft implementation written; executable acceptance belongs to DEPLOY-05/06"
+      ],
+      "files": [
+        ".github/workflows/build-images.yml",
+        ".github/workflows/production-deploy.yml",
+        "scripts/deploy/release-manifest.mjs"
+      ]
+    },
+    {
+      "id": "DEPLOY-03",
+      "title": "Write bounded cache/context changes and durable health-aware prepare/promote rollout",
+      "status": "done",
+      "owner": "deployment-latency",
+      "blockedBy": ["DEPLOY-02"],
+      "verify": "build-images.yml and production-deploy.yml",
+      "evidence": [
+        "Draft implementation written; cache/cutover Jev choices validated; no runtime acceptance yet"
+      ],
+      "files": [
+        "Dockerfile",
+        "Dockerfile.dockerignore",
+        "backend/Dockerfile.runtime.dockerignore",
+        "scripts/backup/Dockerfile.dockerignore",
+        "next.config.ts",
+        "docker-compose.production.yml",
+        "scripts/deploy/auto-deploy-ghcr.sh",
+        "scripts/ship/ship.mjs",
+        "scripts/ship/watch-deploy.ps1"
+      ]
+    },
+    {
+      "id": "DEPLOY-04",
+      "title": "Complete independent evidence review, live Jev triage, failure regressions and operational docs",
+      "status": "done",
+      "owner": "deployment-latency",
+      "blockedBy": ["DEPLOY-02", "DEPLOY-03"],
+      "verify": "build-images.yml / guards",
+      "evidence": [
+        "Independent source review and strictly validated live Jev dispositions completed",
+        "Offline driver, watcher, provenance and registry-cleanup regressions written for Actions; not executed locally",
+        "local:ship:gate and local:ax:check passed; executable acceptance remains DEPLOY-05/06"
+      ],
+      "files": [
+        "scripts/deploy/release-manifest.test.mjs",
+        "scripts/deploy/verify-pipeline-contract.mjs",
+        "scripts/deploy/verify-compute-offload.sh",
+        "scripts/deploy/prune-stale-images.sh",
+        "docs/ops/deploy-gate.md",
+        "AGENTS.md",
+        ".github/instructions/deployment.instructions.md",
+        ".github/instructions/validation.instructions.md"
+      ]
+    },
+    {
+      "id": "DEPLOY-AUTH",
+      "title": "Obtain explicit authorization for the signed-in repository-owner GitHub identity and verify admin access",
+      "status": "blocked",
+      "owner": "deployment-latency",
+      "blockedBy": [],
+      "verify": "owner authorization and gh repository permission/visibility checks",
+      "evidence": [
+        "Read-only checks: active account push=true/admin=false; repository remains private",
+        "Speaking wrapper public flip returned HTTP 404 before push; its lock/lease released",
+        "Owner unavailable to authorize account switching; no alternate identity used"
+      ],
+      "files": []
+    },
+    {
+      "id": "DEPLOY-05",
+      "title": "Run static ship gate, commit only owned paths and verify production through the shipping lease",
+      "status": "blocked",
+      "owner": "deployment-latency",
+      "blockedBy": ["DEPLOY-04", "DEPLOY-AUTH"],
+      "verify": "build-images.yml and production-deploy.yml",
+      "evidence": [
+        "Static gate passed; scoped local commit prepared above Speaking ancestor 092e9434dc",
+        "No push/deploy allowed until DEPLOY-AUTH is resolved"
+      ],
+      "files": ["SESSION_STATE.md", "TASKS.json", "VERIFICATION.md"]
+    },
+    {
+      "id": "DEPLOY-06",
+      "title": "Measure genuine warm/cold and Writing paths on Actions and record exact live evidence or target misses",
+      "status": "blocked",
+      "owner": "deployment-latency",
+      "blockedBy": ["DEPLOY-05"],
+      "verify": "build-images.yml benchmark/Writing dispatch and production-deploy.yml",
+      "evidence": [
+        "No new Actions, production or timing evidence; blocked by shipping authorization"
+      ],
+      "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md"]
     }
   ]
 }

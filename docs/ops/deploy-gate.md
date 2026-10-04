@@ -1,6 +1,6 @@
 # Production Deploy Gate
 
-Status: **active** — adopted 2026-05-10.
+Status: **active** — pipeline-only contract, updated 2026-10-04.
 
 ## Approval Owner
 
@@ -10,64 +10,74 @@ Status: **active** — adopted 2026-05-10.
 
 ## Pre-Deploy Checklist
 
-Every production deploy must, at minimum, attach:
+The standing owner-approved shipping path requires:
 
-1. Green CI run from the deploying SHA (lint, type-check, unit, backend
-   tests, production build) — see `.github/workflows`.
-2. Latest SBOM + SCA workflow artifacts for the deploying SHA, with any accepted
-   vulnerability risk explicitly owned and time-bounded.
-3. Successful **Build images** (`.github/workflows/build-images.yml`) run for the
-   deploying SHA — `build-web`, `build-api` (or a documented retag from
-   `:latest`), `build-backup`, `build-agent-gateway` all green, with the `:<sha>`
-   images in GHCR — plus a green **Deploy production**
-   (`.github/workflows/production-deploy.yml`) run (`apply-migrations` only when
-   the API image was rebuilt, then `deploy`).
-4. Pre-flight script success: `scripts/deploy/pre-flight.sh` against the
-   target host. Only the manual `deploy-prod.sh` path runs it automatically.
-5. `.env.production` validation — no missing keys, no `__placeholder__`
-   values. The deploy/pre-flight scripts run
-   `scripts/deploy/validate-production-env.sh` without printing secrets.
-6. Production mock/stub scan success from `scripts/deploy/mock-stub-scan.sh`.
-7. Approver acknowledgement (Dr Faisal Maqsood) recorded in the deploy
-   commit message or release notes.
-8. Pinned SSH host fingerprint. **Not enforced today:** `production-deploy.yml`
+1. Successful **Build images** (`.github/workflows/build-images.yml`) with syntax,
+   deployment contracts and applicable real Writing tests green. The release
+   manifest binds all four immutable component digests and their successful
+   source builds; unchanged components are registry-only aliases, never `:latest`.
+2. API SQL from the exact publish compilation (`--no-build`), bound to its source
+   SHA/run/tool/checksum. Even a reused API needs SQL when no successful actual
+   production release proves that API digest was deployed. Missing or mismatched
+   required SQL blocks promotion; production never recompiles.
+3. Production environment validation without printing secrets, protected-volume
+   invariants, target readiness, durable validated router configuration, public
+   web/API health and exact serving-release/image proof.
+4. Successful **Deploy production** (`.github/workflows/production-deploy.yml`)
+   with actual promotion evidence. A green superseded stand-down is not a deploy.
+   Record real run IDs through `pnpm run ax:record`.
+5. Pinned SSH host fingerprint. **Not enforced today:** `production-deploy.yml`
    uses `ssh-keyscan` with `StrictHostKeyChecking=accept-new`, and no workflow
    reads a `VPS_SSH_FINGERPRINT` secret. Pinning it is an open owner item.
 
+QA Smoke, SBOM/SCA and operational smoke evidence remain separate quality/incident
+tools, not invented prerequisites for the live pipeline. Browser lanes remain
+manual-dispatch only. Do not describe an unrun check as passed.
+
 ## Deploy Command (current)
 
-Production deploys come from `.github/workflows/build-images.yml` (every push to
-`main`: images built on Actions and pushed to GHCR as `:<sha>`, migration SQL
-generated as an artifact) followed automatically by
+Production deploys come from `.github/workflows/build-images.yml` (filtered
+build/deployment-input pushes to `main`: components built or immutably reused on
+Actions, API SQL generated from the same publish) followed automatically by
 `.github/workflows/production-deploy.yml` (apply migrations, then run
 `scripts/deploy/auto-deploy-ghcr.sh` on the VPS). A manual dispatch of
 `production-deploy.yml` with `-f sha=<sha>` is the rollback path. See
 `DEPLOYMENT.md` §3 and `DEPLOY-MANUAL.md`. (The earlier protected `Build Release
 Images` / `Deploy Production` workflows were removed in e616c3dcd.)
 
-The manual incident path is exact-SHA and digest-pinned. The VPS command shape
-is:
-
-```bash
-ssh root@185.252.233.186
-cd /opt/oetwebapp
-DEPLOY_REF=<40-character-sha> \
-WEB_IMAGE=<web-image@sha256:...> \
-API_IMAGE=<api-image@sha256:...> \
-DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
-ROUTER_IMAGE=<router-image@sha256:...> \
-bash ./scripts/deploy/deploy-prod.sh
-```
-
 The active GitHub deploy checkout is `/opt/oetwebapp`. `/root/oetwebsite` is
-stale and must not be used for builds. `deploy-prod.sh` runs pre-flight, starts
-digest-pinned images in the inactive blue/green slot, verifies each pulled image
-is labelled with the deploying SHA, switches the stable `web` and `learner-api`
-router containers only after internal slot health passes, then runs post-deploy
-verification, observability smoke, and the Reading/media smoke gate. The
-automatic path health-gates the new slot and the public URLs but does not run
-those smoke scripts, so the Post-Deploy Smoke Gate below stays a manual step.
-Neither path runs volume-destructive commands.
+stale and must not be used. Do not invoke rollout scripts or Compose manually on
+the VPS. The maintained driver prepares verified images and the exact target
+slot; CI rechecks for a successful descendant build before promoting the same
+bound identity. Unchanged healthy services are reused by native configuration
+hash and physical image ID. Changed worker/gateway services retain drainage.
+
+The routers use durable directory-mounted rendered configs. Both candidates
+must pass nginx validation; graceful pair reload leaves the previous slot warm.
+Partial cutover or public health/identity failure restores and reloads both
+previous configurations. First deployment or a changed router image/configuration
+may recreate routers; recovery retains previous physical images and the last
+successful router Compose source (not interpolated credentials), including its
+original project directory. No path destroys volumes.
+
+## Deployment timing
+
+The target is 300 seconds from the main push through healthy public serving,
+including queues, cold builds, migrations and required Writing checks on the
+existing free hosted runners. It is not a guaranteed runner/database deadline.
+The shipping wrapper measures conservatively from before the first push attempt
+through verified public serving identity, including retries and watcher overhead.
+`DEPLOY_LIVE` marks the VPS public health/image observation before optional bounded
+cleanup. Report measured misses and unmeasured categories explicitly.
+An absent build run is never proof of a no-op: the watcher must bind the
+before-push base and match the complete changed range against the actual ordered
+workflow path filters. Missing/truncated/expected-input evidence fails explicitly.
+Public gates require direct HTTP 200 and exact release/slot identity. Remote
+registry authorization is invocation-scoped and cleaned on both success and failure.
+
+Cold-cache dispatch uses `build-images.yml` with `benchmark=true` and
+`rebuild_all=true`; it cannot push images or deploy. `writing_gate=true` executes
+the real required Writing gate. These are measurement tools, not a second rollout path.
 
 ## Post-Deploy Smoke Gate
 
@@ -100,28 +110,17 @@ windows above at the approver's discretion.
 
 ## Rollback Procedure
 
-```bash
-ssh root@185.252.233.186
-cd /opt/oetwebapp
-# Identify the rollback SHA, image digests, and slot from
-# .deploy/rollback-target.env first, then .deploy/release-history.tsv if needed.
-# The current deploy driver is preserved under .deploy/deploy-driver before
-# resetting to older SHAs, so rollback can still use the digest-native rollout
-# scripts after the digest deployment migration.
-DEPLOY_REF=<previous-good-sha> \
-WEB_IMAGE=<previous-web-image@sha256:...> \
-API_IMAGE=<previous-api-image@sha256:...> \
-DB_BACKUP_IMAGE=<previous-db-backup-image@sha256:...> \
-ROUTER_IMAGE=<previous-router-image@sha256:...> \
-bash ./scripts/deploy/deploy-prod.sh
-# Verify
-scripts/deploy/post-deploy-verify.sh
+```powershell
+gh workflow run production-deploy.yml -f sha=<previous-deployed-40-character-sha>
 ```
 
-`.deploy/rollback-target.env` and `release-history.tsv` are written only by the
-`deploy-prod.sh` path. After automatic `production-deploy.yml` releases, the previous
-`:<sha>` image refs are in `.deploy/auto-deploy-history.tsv`; redeploy them with
-the `auto-deploy-ghcr.sh` command in `DEPLOY-MANUAL.md`.
+Use a proven previously deployed release, not merely a successful build.
+The pipeline uses the maintained driver with the target release's Compose and
+templates; it validates immutable images and serving identity and does not reverse
+database migrations. `.deploy/auto-deploy-history.tsv` and
+`.deploy/live-release.env` retain the runtime release/slot/image mapping.
+Follow the public-before-Actions visibility lease in `AGENTS.md`; watch the
+rollback run and verify actual promotion plus live health.
 
 Before rollback or hotfix deploys, run `scripts/deploy/pre-flight.sh` to record
 a database snapshot when the host is stable enough. If Reading media policy is

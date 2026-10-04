@@ -23,7 +23,7 @@ Validation is not done here or on the VPS — it runs only on GitHub Actions (se
 - Keep production, staging, and local compose files distinct. Do not point local work at production
   data, secrets, or the VPS.
 - Secrets come from environment / runtime settings, never hardcoded in images, compose, or workflows.
-- CI/CD changes must keep build → test → deploy ordering and not weaken required checks.
+- CI/CD changes must keep the required build/Writing/guard gates before migration application and promotion. QA Smoke remains separate from the live path; do not remove a required gate to improve timing.
 
 ## Desktop / mobile
 
@@ -50,9 +50,13 @@ that had already been superseded on live Play Console and had to be reverted.
 
 - One command: `pnpm run ship` — ship lock → rebase on `origin/main` → `ship:gate` → visibility lease + public flip → push with rebase-retry → watch `Deploy production` → `ax:record` → lease release (private only when no other lease holder and no run queued/in-progress). Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--sha <sha>`, `--status`, `--release-lease`.
 - `pnpm run ship:gate` alone stays the seconds-long pre-push check inside that flow (conflict markers, leftover rebase splices, brace imbalance). Not a full `pnpm build` / `dotnet test`.
-- **Parallel agents (owner directive 2026-10-03):** never flip visibility by hand while another session is shipping — the wrapper owns the flips under a cross-session lease. A push may be SUPERSEDED before its deploy runs (the newest push contains it); the watcher follows the newer run and prints `SHIP-WATCH_SUPERSEDED_BY`. Ignore QA Smoke on a push: the 13-project e2e matrix is on-demand (nightly + dispatch) and no longer cancelled by the next push.
+- **Parallel agents (owner directive 2026-10-03):** never flip visibility by hand while another session is shipping — the wrapper owns the flips under a cross-session lease. A push may be SUPERSEDED by a successful descendant main build; the watcher follows actual promotion, not a successful stand-down. QA Smoke does not gate production; browser lanes are manual-dispatch only.
 - Once live health is green, `pnpm run ax:record` then `pnpm run ax:verify` (the wrapper already does this on a green watch) so `VERIFICATION.md` carries this SHA's real run ids.
 - `build-images.yml` `syntax-gate` job must stay first (`needs` of every image build). Do not remove it to "save a minute".
+- Reuse only successful ancestor release manifests and immutable component digests; never mutable `latest`. Missing provenance rebuilds conservatively. Reused API images retain their original SQL source run/checksum.
+- Generate API SQL using the existing publish compilation with `--no-build`; production downloads/verifies that artifact and never installs the SDK or recompiles. Required Writing tests still restore, compile and execute even when same-build API references are reused.
+- Prepare and promote bind the same SHA, slot, images, effective Compose configuration and templates. CI rechecks successful-descendant eligibility at the boundary. Durable directory-mounted router configs are validated and gracefully reloaded; failure restores/reloads both previous configs.
+- Measure before-first-push-attempt to verified public serving identity, including queues/retries. `DEPLOY_LIVE` marks the public health/image observation separately from cleanup. Five minutes is a measured target, never permission to shorten drainage or skip readiness.
 - Rollbacks: `gh workflow run production-deploy.yml -f sha=<previous-sha>` — the images are already in GHCR, so no rebuild is needed.
 - **Pipeline-only deploys (hard enforced):** the rollout path is `Build images` → `Production deploy`; never SSH-deploy, never run the rollout script or `docker compose` on the VPS by hand, never add a second rollout workflow. `pnpm run pipeline:check` (`scripts/deploy/verify-pipeline-contract.mjs`) runs in the `guards` job of every build **and** inside `pnpm run ship:gate`, so a bypassing change fails the pipeline before images exist.
 - Flip the repo private only under the lease rule above. Then confirm public health + VPS image tags contain the SHA. VPS remains pull-only.
@@ -68,8 +72,7 @@ The VPS (`185.252.233.186`, production deploy target — never run validation th
   `dotnet build`, `dotnet test`, or `dotnet publish` on production unless the
   user explicitly approves an emergency source-build exception in the current
   conversation. If Actions is broken, fix Actions first.
-- **ROUTER_IMAGE digest bug:** `.env.production` sets `ROUTER_IMAGE=nginx:...@sha256:...`. Docker cannot
-  use a digest as a build tag. Always override `ROUTER_IMAGE=oetwebsite-nginx-router:local` for build/up.
+- **Digest identity:** stable runtime refs use verified `repository@sha256:...`; local per-release aliases support serving proof and rollback. Never replace a pinned runtime digest with a mutable tag or build a router on the VPS.
 - **Protected volumes:** never destroy `oetwebsite_oet_postgres_data` (database) or
   `oetwebsite_oet_learner_storage` (uploads). No `down -v` on the VPS.
 - **Blue/green slots:** `oet-api-<slot>` + `oet-web-<slot>`; only one slot is live. Confirm the active

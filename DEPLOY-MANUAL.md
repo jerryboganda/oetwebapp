@@ -15,40 +15,43 @@ new slot is healthy.
    commit — `.github/workflows/production-deploy.yml` (`Deploy production`)
    starts automatically when the build succeeds. For a rollback, dispatch
    `Deploy production` with `-f sha=<previous-sha>` (images already in GHCR).
-3. Confirm the workflow built and pushed:
+3. Confirm the verified release manifest built or immutably reused all four aliases:
    - `ghcr.io/jerryboganda/oetwebapp-web:<sha>`
    - `ghcr.io/jerryboganda/oetwebapp-api:<sha>`
    - `ghcr.io/jerryboganda/oetwebapp-db-backup:<sha>`
+   - `ghcr.io/jerryboganda/oetwebapp-agent-gateway:<sha>`
 4. Confirm the workflow SSH deploy step ran `scripts/deploy/auto-deploy-ghcr.sh`
    on the VPS.
 5. Verify production:
 
 ```bash
 curl -fsS https://api.oetwithdrhesham.co.uk/health/ready
+curl -fsS https://api.oetwithdrhesham.co.uk/health/live
 curl -fsS https://app.oetwithdrhesham.co.uk/api/health
 ```
 
 ## VPS Role
 
-The VPS may run only lightweight production operations:
+Only the production workflow invokes rollout operations. Never SSH-deploy, sync
+source or run rollout scripts/Compose by hand. API migration SQL comes from the
+same publish compilation on Actions and is verified before application.
 
-```bash
-cd /opt/oetwebapp
-git fetch origin main
-git reset --hard <exact-sha>
-docker login ghcr.io
-WEB_IMAGE=ghcr.io/jerryboganda/oetwebapp-web:<exact-sha> \
-API_IMAGE=ghcr.io/jerryboganda/oetwebapp-api:<exact-sha> \
-DB_BACKUP_IMAGE=ghcr.io/jerryboganda/oetwebapp-db-backup:<exact-sha> \
-bash scripts/deploy/auto-deploy-ghcr.sh
-```
+The driver pulls immutable digests, preserves per-SHA aliases, repairs only
+changed/stale/unhealthy services, and health-gates the inactive slot. CI rechecks
+successful-descendant eligibility between bound preparation and promotion.
+Durable router configs are validated and gracefully reloaded as a pair; a failed
+cutover restores both previous configs. The prior slot remains warm.
 
-Those commands pull and run existing images. They must not build images.
-`DB_BACKUP_IMAGE` is required; `AGENT_GATEWAY_IMAGE` is optional (when unset
-the gateway container is left untouched). The previous blue/green slot stays
-running, and `.deploy/auto-deploy-history.tsv` lists earlier image refs for a
-rollback. The digest-pinned incident path (`scripts/deploy/deploy-prod.sh`) is
-in `DEPLOYMENT.md` §3.
+For rollback, use `gh workflow run production-deploy.yml -f sha=<previous-deployed-sha>`
+through the public-before-Actions visibility lease. The maintained driver uses
+the proven target release's configuration and does not reverse database migrations.
+`.deploy/auto-deploy-history.tsv` and `.deploy/live-release.env` record runtime
+image/slot identity. Follow the run through actual promotion and live proof.
+
+The inclusive 300-second target includes queues, cold builds, SQL and required
+Writing checks. `pnpm run ship` reports conservative before-first-push-attempt
+to verified-live elapsed; do not substitute a workflow completion timestamp or
+an unrelated QA duration. See `docs/ops/deploy-gate.md`.
 
 ## Forbidden On The Production VPS
 

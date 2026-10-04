@@ -18,7 +18,7 @@ Standing owner directive for **every** development/debugging task. Overrides any
 **One command (multi-agent safe, owner directive 2026-10-03): `pnpm run ship`** — ship lock (shared by every worktree) → rebase on `origin/main` → `ship:gate` → visibility lease + public flip (before the push) → `git push origin HEAD:main` with rebase-retry → supersede-aware watch of `Deploy production` → `ax:record`. Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--sha <sha>`, `--status`, `--release-lease`.
 
 1. Do the task properly (correctness/root-cause still matter).
-2. Run `pnpm run ship`. `ship:gate` (seconds) is the required pre-push check inside it. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. Ignore QA Smoke on a push — the 13-project e2e matrix is on-demand (nightly + dispatch). Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.
+2. Run `pnpm run ship`. `ship:gate` (seconds) is the required pre-push check inside it. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. QA Smoke does not gate production; browser lanes are manual-dispatch only. Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.
 3. Stage explicit paths only. Never `git add -A`. Never commit secrets, `.env*`, or `.impeccable/`. Commit before shipping; the wrapper never stages for you. See "GitHub Actions on a public-when-working repo" below — the public-before-push order is HARD ENFORCED, no bargains, no mistakes.
 4. **Parallel agents:** the wrapper owns every visibility flip under a cross-session lease. Never flip public/private by hand while another session is shipping. A push may be **superseded** before its deploy runs (GitHub keeps one pending run; the newest push contains it) — the watcher follows the newer run and prints `SHIP-WATCH_SUPERSEDED_BY`. The same rule applies after the rollout: if the router slot ends up carrying a **descendant** of this SHA, the watcher prints `SHIP-WATCH_SUPERSEDED_BY_LIVE <sha>` and succeeds (production moved forward). Only a slot carrying neither this SHA nor a descendant is the real `LIVE_SHA_MISMATCH` failure.
 5. If the deploy fails: the watcher dumps `--log-failed`; fix the compile/parse error, `pnpm run ship` again. **Do this without waiting for the owner to ask.** Cap automatic fix-loops at 3; if still red, say exactly what is still failing.
@@ -26,9 +26,11 @@ Standing owner directive for **every** development/debugging task. Overrides any
 7. Evidence: the wrapper runs `ax:record` on green; run `pnpm run ax:verify` if you need the GitHub re-check. The lease releases itself, and the repo returns to **private** only when no other lease holder and no run is queued/in-progress (`node scripts/ship/ship.mjs --may-flip-private` decides).
 
 **Minimum-time rules (owner directive 2026-10-03):** `build-images.yml` runs **only** for pushes that touch a
-build input, rebuilds **only** the component whose inputs changed (the other is retagged from `:latest`, so
-`:<sha>` tags always exist), and `production-deploy.yml` stands down when a newer build run exists (one rollout
-per burst instead of N) or when this SHA has no images. A push that legitimately ships nothing ends the watcher
+build or deployment input. Components compare against a verified successful ancestor manifest and reuse its
+immutable digests through registry-only per-SHA aliases; missing provenance rebuilds conservatively.
+API SQL is generated with `--no-build` from the same publish and consumed as a verified artifact.
+`production-deploy.yml` stands down only for a successful descendant main build, immediately and again between
+bound preparation and promotion, or when this SHA has no images. A push that legitimately ships nothing ends the watcher
 with `SHIP-WATCH_NOTHING_TO_DEPLOY` and exit 0 — that is success, not a missing run.
 `qa-smoke.yml`'s 6-way backend matrix is **path-filtered** for the same reason: it runs only when a backend input
 (`backend/**`, `data/**`, `rulebooks/**`, `global.json`, NuGet props/config, or the workflow) changed, so a
@@ -69,7 +71,7 @@ Only skip the auto-push if the user explicitly says "don't push" for that task. 
      contract on every build;
   3. `pnpm run ship:gate` runs the same contract checker on every agent push, so a bypassing change cannot even
      leave the workstation. Deleting a checker is not a bypass: the `guards` job fails and no rollout happens.
-- **Deploy only what the pipeline built:** the VPS pulls `:<sha>` images and never compiles, tests or installs.
+- **Deploy only what the pipeline built:** the VPS pulls verified immutable component digests, preserves `:<sha>` aliases for proof/rollback, and never compiles, tests or installs.
 
 ## Operating Rules
 
@@ -153,8 +155,8 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 | Purpose | Workflow |
 | --- | --- |
 | Frontend unit (vitest + lint + tsc + build), backend `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached; **path-filtered** to backend inputs — skipped otherwise, `qa-gate` accepts the skip, `-f backend=always` forces it), placement-entry. **No e2e** (owner directive 2026-10-03) | `.github/workflows/qa-smoke.yml` |
-| Build all four images → GHCR. Parallel per SHA, no cross-SHA lock; a component whose inputs did not change is retagged from `:latest` instead of rebuilt | `.github/workflows/build-images.yml` (push to `main` only) |
-| Generate the migration SQL (only when `build-api` actually ran) + apply it, then blue/green VPS rollout with health gate. Serialized by the `production-deploy` concurrency group; `workflow_dispatch -f sha=<sha>` is the rollback path | `.github/workflows/production-deploy.yml` |
+| Build/reuse four immutable components → GHCR. API publish also generates its SQL and reference artifacts. Parallel per SHA; guarded dispatch supports cold benchmarks without image pushes/deploys and real Writing-gate evidence | `.github/workflows/build-images.yml` (filtered `main` push + dispatch) |
+| Validate the successful release manifest and original API SQL artifact, apply SQL when not proven deployed, then bound preparation and durable health-gated blue/green promotion. Serialized by `production-deploy`; `workflow_dispatch -f sha=<previous-deployed-sha>` is rollback | `.github/workflows/production-deploy.yml` |
 | Mobile/Android build | `.github/workflows/mobile-ci.yml` |
 | Owner Agent Console sidecar + proxy images (unit tests, build → GHCR → pull-only VPS rollout of `docker-compose.agent-console.yml`) | `.github/workflows/agent-console.yml` (`workflow_dispatch`, `apply=true` to recreate) |
 

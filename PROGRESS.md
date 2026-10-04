@@ -1,6 +1,6 @@
 # PROGRESS — Durable Checkpoint Ledger
 
-Last updated: 2026-10-01
+Last updated: 2026-10-04
 
 ## How this file works
 
@@ -11,7 +11,17 @@ Last updated: 2026-10-01
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
-## Live checkpoint — AX: externalized agent working memory (2026-10-01)
+## Draft checkpoint - Deployment acceleration, shipping blocked (2026-10-04)
+
+- Wrote immutable component reuse, same-publish SQL/Writing references, persisted build caches and lean contexts.
+- Wrote health/config-aware service reuse, bound prepare/promote, durable paired router reload/recovery and serving identity.
+- Added inclusive ship timing, actual-promotion/no-op proof and offline provenance/driver/watcher/registry regressions.
+- Independent source review and live typed Jev triage complete; local static gates passed. No new Actions/runtime/timing evidence.
+- Speaking ancestor 092e9434dc is local only. Active GitHub identity lacks admin; required public flip failed before push.
+- Account-switch authorization is unavailable. Keep private; resume through pnpm run ship after explicit owner authorization.
+- The 300-second target is unproven; cold/Writing/queue and actual live measurements remain open.
+
+## Previous checkpoint — AX: externalized agent working memory (2026-10-01)
 
 - `.github/agent-state.local.md` was named as the current-task handoff in 21 files but did not
   exist and is gitignored, so every "read the handoff" gate pointed at nothing.

@@ -375,19 +375,11 @@ services:
     image: ${ROUTER_IMAGE:-nginx:1.27-alpine}
     container_name: oet-api
     restart: unless-stopped
-    # Every deploy force-recreates this router (auto-deploy-ghcr.sh/rollout-release.sh
-    # run `up -d --force-recreate`), and it proxies long-lived SignalR long-polling/WS
-    # connections (see api-bluegreen.conf.template's WS-upgrade + 1800s timeouts). nginx
-    # sends a graceful SIGQUIT on stop, but Docker's ~10s default grace window is too
-    # short to let in-flight long-polling requests complete before SIGKILL severs them
-    # with no application-level close signal. 30s gives nginx's graceful shutdown a
-    # real chance to drain before the hard kill.
+    # Normal cutovers gracefully reload persisted config. Image/settings changes
+    # still need enough stop grace for long-lived connections.
     stop_grace_period: 30s
-    environment:
-      ACTIVE_SLOT: ${ACTIVE_SLOT:-blue}
-      NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"
     volumes:
-      - ${VPS_APP_DIR:-.}/scripts/deploy/nginx/api-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${VPS_APP_DIR:-.}/.deploy/nginx/api:/etc/nginx/conf.d:ro
     expose:
       - "8080"
     networks:
@@ -523,14 +515,10 @@ services:
     image: ${ROUTER_IMAGE:-nginx:1.27-alpine}
     container_name: oet-web
     restart: unless-stopped
-    # See learner-api's stop_grace_period comment — same force-recreate-on-every-deploy
-    # + proxied long-lived-connection concern applies to this router.
+    # Keep graceful stop for the image/settings-change fallback.
     stop_grace_period: 30s
-    environment:
-      ACTIVE_SLOT: ${ACTIVE_SLOT:-blue}
-      NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"
     volumes:
-      - ${VPS_APP_DIR:-.}/scripts/deploy/nginx/web-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${VPS_APP_DIR:-.}/.deploy/nginx/web:/etc/nginx/conf.d:ro
       - ${RELEASES_HOST_PATH:-/var/opt/oet-learner/releases}:/var/opt/oet-learner/releases:ro
     expose:
       - "3000"

@@ -32,6 +32,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_DEPLOY_SHA: process.env.GITHUB_SHA ?? 'dev',
   },
   experimental: {
+    turbopackFileSystemCacheForBuild: true,
     // FE-038: rewrite barrel imports (lucide-react is imported by ~250 files,
     // plus tabler/recharts/motion) to deep imports so unused members tree-shake
     // out of each route bundle.

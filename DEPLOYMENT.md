@@ -136,71 +136,59 @@ artifact per channel and delete the previous VPS copy automatically.
 The normal path is two workflows (split 2026-10-03 so agents can build in
 parallel while production rollouts serialize):
 
-- `.github/workflows/build-images.yml` (**Build images**) — runs on every push to
-  `main`, no cross-SHA lock:
-  1. `changes` — classifies the push (api / writing) so the Writing gates and
-     migration SQL only run when their files changed.
+- `.github/workflows/build-images.yml` (**Build images**) — filtered build/deployment
+  inputs on `main`, no cross-SHA lock:
+  1. `changes` — compares the full successful-ancestor range and classifies
+     web/API/backup/gateway/Writing inputs. Missing provenance rebuilds conservatively.
   2. `syntax-gate` — ship-gate self-test plus the CI ship gate (seconds); the
      Writing model-answer dotnet regression runs only when Writing changed.
-  3. `build-web`, `build-api`, `build-backup`, `build-agent-gateway` — build the
-     images on Actions and push them to GHCR tagged `:<sha>` (and `:latest`).
-  4. A component whose inputs did not change is **retagged from `:latest`**
-     instead of rebuilt, so `:<sha>` tags always exist while the expensive build
-     is skipped.
+  3. Component jobs build only changed inputs and publish immutable image digests
+     plus per-SHA aliases. API publish generates idempotent SQL with `--no-build`
+     and optional same-build references for the real required Writing tests.
+  4. Unchanged components reuse a verified successful ancestor's immutable digest
+     through registry-only aliases, never `:latest`. The final release manifest
+     binds all components and original API SQL provenance after required gates.
 - `.github/workflows/production-deploy.yml` (**Deploy production**) — starts when
   a Build images run on `main` succeeds (or `workflow_dispatch -f sha=<sha>` for
   a rollback); serialized by the `production-deploy` concurrency group:
-  5. `apply-migrations` — only when `build-api` actually ran: generates the
-     idempotent EF migration SQL on Actions and applies it through the
+  5. `apply-migrations` — verifies the original API source run/SHA/tool/checksum
+     and applies its SQL when no actual successful production release proves the
+     API digest was already deployed, even when the API was reused. Application uses the
      production PostgreSQL container (`scripts/deploy/apply-migrations-from-ci.sh`).
      Migrations are forward-only.
   6. `deploy` — streams `scripts/deploy/auto-deploy-ghcr.sh`,
    `docker-compose.production.yml`, `validate-production-env.sh` and the nginx
-   router templates to the VPS and runs the script with the `:<sha>` image
-   refs. The script validates `.env.production`, pulls the images, recreates
-   only the inactive blue/green slot (`--no-build --no-deps`), health-gates it,
-   switches the stable `web`/`learner-api` routers, checks the public health
-   URLs (switching the routers back if they fail), and records
-   `.deploy/active-slot.env` and `.deploy/auto-deploy-history.tsv`. The
-   previous slot stays running for fast rollback. A last step prunes stale OET
-   images.
+   router templates to the VPS with immutable refs. The script validates the
+   environment, pulls once, reuses healthy native-config/image matches and repairs
+   the inactive slot/shared services without touching postgres. Parallel readiness
+   binds preparation to the exact SHA/slot/images/configuration. CI rechecks for
+   successful descendant builds before promotion. Durable validated router configs
+   are gracefully reloaded, with paired recovery on partial/public failure.
+   Public release/slot headers and physical image proof precede `DEPLOY_LIVE`;
+   the previous slot stays warm and optional cleanup is bounded.
 
 This path does not wait for `qa-smoke.yml` or `sbom-sca.yml`; run those
 separately when a change needs them. Operator checklist, forbidden commands and
 topology: [`DEPLOY-MANUAL.md`](DEPLOY-MANUAL.md). Compute boundary:
 [`docs/ops/production-compute-offload.md`](docs/ops/production-compute-offload.md).
 
-### Manual incident rollout (digest-pinned)
+### Pipeline rollback (digest-pinned)
 
-`scripts/deploy/deploy-prod.sh` is the manual incident path. It still uses
-prebuilt images, pinned by digest, and needs the exact SHA plus all four
-immutable image refs. `ROUTER_IMAGE` is an `nginx`-compatible `@sha256:`
-digest; the build/deploy workflows do not build a router image (the compose default is
-`nginx:1.27-alpine`).
+Dispatch `gh workflow run production-deploy.yml -f sha=<previous-deployed-sha>`
+through the public-before-Actions visibility lease. Only a proven previously
+deployed release qualifies. The maintained driver loads that release's Compose
+and templates, verifies immutable components, and does not reverse migrations.
+Never invoke rollout scripts or Compose manually on the VPS.
+`.deploy/live-release.env` and `.deploy/auto-deploy-history.tsv` record actual
+runtime release/slot/images. A successful stand-down is not a promotion.
 
-```bash
-DEPLOY_REF=<40-character-sha> \
-WEB_IMAGE=<web-image@sha256:...> \
-API_IMAGE=<api-image@sha256:...> \
-DB_BACKUP_IMAGE=<db-backup-image@sha256:...> \
-ROUTER_IMAGE=<router-image@sha256:...> \
-bash ./scripts/deploy/deploy-prod.sh
-```
+The 300-second target includes runner queues, cold builds, SQL and required
+Writing gates. The ship watcher reports conservative before-first-push-attempt
+to verified-live elapsed; `DEPLOY_LIVE` marks the earlier public-health/image
+observation. See `docs/ops/deploy-gate.md` for measurement and guarded benchmark
+dispatch. Never claim the target from unrelated QA duration or unrun checks.
 
-The helper refuses branch names and short SHAs, starts the inactive blue/green
-slot from digest-pinned images, verifies each pulled image carries the expected
-`org.opencontainers.image.revision=<sha>` label, health-checks it internally,
-switches the stable `web`/`learner-api` router containers to the new slot, and
-runs post-deploy verification, observability smoke, and Reading/media smoke
-before a release is recorded as previous-good.
-
-Only this manual path (via `rollout-release.sh`) writes `.deploy/previous-good.env`,
-`.deploy/rollback-target.env` and `.deploy/release-history.tsv`: it copies the
-prior known-good release to `rollback-target.env` before overwriting
-`previous-good.env` with the newly successful release. After automatic deploys,
-read `.deploy/auto-deploy-history.tsv` for the previous image refs instead.
-
-Migrations normally come from the `migrate-production` job. Startup migration
+Migrations normally come from the build API publish artifact. Startup migration
 is an opt-in (`AUTO_MIGRATE` → `Bootstrap__AutoMigrate`, default `false`).
 
 Production normally uses immutable image digest inputs. Local rehearsal may use
@@ -311,10 +299,8 @@ Back up both named volumes before upgrades or VPS maintenance.
 Merge or push to `main` and let `build-images.yml` + `production-deploy.yml` build and deploy that exact SHA
 (§3). The VPS must not build frontend, API, backend, Next.js, or .NET
 artifacts. The step-by-step checklist is [`DEPLOY-MANUAL.md`](DEPLOY-MANUAL.md);
-the digest-pinned `deploy-prod.sh` incident path is described in §3. On that
-path, set `KEEP_PREVIOUS_SLOT_RUNNING=false` only after confirming VPS capacity
-and a separate rollback image path, and keep at least one previous-good SHA,
-slot and image digest set available for rollback.
+the pipeline rollback path is described in §3. Keep the previous slot warm and
+at least one proven deployed SHA/slot/immutable image set available for rollback.
 
 Do **not** run `docker compose down -v`, `docker volume prune`, `docker system prune --volumes`, or manually delete `oetwebsite_*` named volumes as part of a normal redeploy. Volume cleanup is a separate destructive maintenance task and requires an explicit backup, restore plan, and approval naming the exact volume.
 
@@ -326,8 +312,8 @@ digest-input gate and can overload the shared host.
 
 Destructive or irreversible EF migrations require a maintenance window, fresh
 verified backup ID, non-live restore drill evidence, and owner approval.
-`scripts/deploy/pre-flight.sh` (run by `deploy-prod.sh`) enforces this; the
-`build-images.yml` `migrate-sql` / `production-deploy.yml` `apply-migrations` jobs do not, so review such migrations
+The legacy pre-flight helper describes those requirements; the
+`build-images.yml` API SQL artifact / `production-deploy.yml` `apply-migrations` jobs do not independently approve destructiveness, so review such migrations
 before they reach `main`.
 
 ## Troubleshooting

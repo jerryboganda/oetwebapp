@@ -1,11 +1,11 @@
 # SESSION STATE
 
-Session: learner-dashboard-fixes
-Goal: Every learner-dashboard header element is functional for all learners: true merged XP/streak numbers, real profile identity, a bell that tells the truth (no false offline, no pinned 99+), the gamification flag actually honored, shipped to production with Actions evidence.
-Mode: done
-Updated: 2026-10-04T00:00:00Z
+Session: deployment-latency
+Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
+Mode: blocked
+Updated: 2026-10-04T01:29:15Z
 Branch: main
-HEAD: 1705bb5d0
+HEAD: 092e9434dc
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -26,69 +26,62 @@ Rules
 
 ## Objective
 
-Continue and finish the interrupted "learner dashboard non-functional" round (opencode session ses_efcf9d8d0ffe, 3 Oct): the session's backend merge + retention edits survived in the tree, the frontend gaps it never reached are now implemented. Acceptance bar: qa-smoke green on the shipped SHA, production deployed, live health confirms the SHA, ledger rows recorded.
+Shorten the full main-push-to-healthy-public-serving path toward 300 seconds,
+including queues, cold builds, migrations and required Writing checks.
+Use existing free hosted runners only; report measured misses without bypassing
+release provenance, protected storage, readiness or rollback.
 
 ## Acceptance criteria
 
-- [x] AC-1 Profile chip shows the signed-in learner's real name/email (AppShell derives `effectiveUserSummary` from AuthContext when the caller omits `userSummary`).
-- [x] AC-2 Streak/level chips show merged truth: XP = grammar `LearnerXPs` + reading `LearnerXps`; streak = max(LearnerStreaks, StreakRecords, Users engagement); achievements criteria evaluate merged values; alltime leaderboard adds reading XP (weekly/monthly stay grammar-scoped). Backend xunit coverage.
-- [x] AC-3 Bell tells the truth: badge = unread + labeled admin alerts with 99+ cap; popover header counts the same way; degraded "offline" UI only after a real failed hub attempt (initial state `connecting`); inbox retention purges 180d rows and marks 14d stale unread read so the badge unpins.
-- [x] AC-4 `gamification` flag is honored: header badges hide on explicit `false` only (fail-open on fetch failure); seeding forces the flag on so production behavior is unchanged.
-- [x] AC-5 Theme toggle renders the real button immediately (no disabled placeholder flash); header icon chips carry tooltips.
-- [x] AC-6 Frontend vitest coverage for the identity fallback, bell counts/cap/degraded gating, and badge flag gating; all suites green in CI on the shipped SHA.
+- [ ] AC-1 Only changed runtime inputs compile; every reused component has verified immutable provenance.
+- [ ] AC-2 API SQL comes from the same publish compilation; required Writing tests really execute.
+- [ ] AC-3 Unchanged healthy services stay running; router cutover is durable and rolls back as a pair.
+- [ ] AC-4 Actions regression/build/deploy evidence and exact serving-image proof are recorded.
+- [ ] AC-5 Inclusive elapsed measurements disclose cold/Writing/queue misses and unmeasured categories.
 
 ## Decisions (do not revisit)
 
-- D-1 Badge/popover consistency = precise labeling (unread + admin alerts shown as separate parts in aria-label and header), not forcing admin ops alerts into the personal unread count — they are derived view models, not inbox rows.
-- D-2 Flag semantics for the header chips are explicit-false-only (fail-open): a flag-endpoint blip must never strip the header chips; the seeder forces `gamification` on exactly like `strategy_guides`.
-- D-3 Local compute stays banned (AGENTS.md): all builds/tests/typechecks run on GitHub Actions; fix-forward via push.
+- D-1 Owner approved implementation on existing free GitHub-hosted runners; no paid or self-hosted capacity.
+- D-2 Reuse successful ancestor manifests, never mutable latest; a built-but-unapplied API still needs SQL.
+- D-3 Only successful descendant main builds supersede; CI rechecks between bound preparation and promotion.
+- D-4 Preserve required Writing tests, health gates, Max-first behavior, drainage and all protected volumes.
+- D-5 Ship/watch elapsed starts before the first push attempt; live_at excludes later cleanup, not safety gates.
+- D-6 Speaking session released HEAD/staging after its local commit 092e9434dc3b54b8a41ba8ca67e89ccdc154ed01; no push occurred. The deployment commit will be its descendant. Preserve unrelated dirty files.
+- D-7 Jev planning/cutover/cache decisions are validated semantic evidence, not executable verification.
+- D-8 Independent findings are triaged through validated live Jev: bound no-op proof, HTTP 200, scoped registry cleanup, earlier pair recovery and successful-promotion preference.
+- D-9 Do not switch stored GitHub identities without explicit authorization or push/dispatch while private. The owner is unavailable to answer the account-switch request.
 
 ## Touched files
 
 | Path | Change |
 | --- | --- |
-| backend/src/OetLearner.Api/Services/GamificationService.cs | merged XP/streak/achievement/leaderboard read-through (from interrupted session, verified) |
-| backend/src/OetLearner.Api/Services/DataRetentionWorker.cs, Configuration/DataRetentionOptions.cs | inbox purge 180d + stale-unread mark-read 14d (from interrupted session, verified) |
-| backend/src/OetLearner.Api/Services/SeedData.cs, SeedData.DemoUserData.cs | force `gamification` flag on at seed |
-| backend/tests/OetLearner.Api.Tests/GamificationServiceTests.cs | new: merged XP/streak/achievement/leaderboard tests |
-| components/layout/app-shell.tsx | `effectiveUserSummary` fallback (from interrupted session, verified) |
-| components/layout/notification-center.tsx | popover header + aria-label count consistency, bell title |
-| contexts/notification-center-context.tsx | initial connectionStatus `connecting` |
-| components/ui/theme-toggle.tsx | CSS-swapped glyphs, no mounted placeholder |
-| components/layout/learner-streak-badges.tsx | gamification flag gate + tooltips |
-| components/layout/profile-menu.tsx | account tooltip |
-| components/layout/__tests__/app-shell.test.tsx, notification-center.test.tsx, learner-streak-badges.test.tsx (new) | coverage for AC-1/3/4/5 |
+| .github/workflows/build-images.yml | classification, immutable reuse, same-publish SQL/references, caches, guards |
+| .github/workflows/production-deploy.yml | artifact-only SQL, bound prepare/promote, actual promotion evidence |
+| scripts/deploy/release-manifest.mjs + .test.mjs | new provenance helper and focused offline regressions |
+| scripts/deploy/auto-deploy-ghcr.sh + docker-compose.production.yml | service reuse, durable router reload, paired rollback and serving proof |
+| scripts/deploy/verify-*.sh + verify-pipeline-contract.mjs + prune-stale-images.sh | revised mechanical contracts and image-ID protection |
+| scripts/ship/ship.mjs + watch-deploy.ps1 | inclusive timing and actual serving-release verification |
+| Dockerfile + per-image Docker ignore files + next.config.ts | consumed contexts and trusted build-cache persistence |
+| docs/ops/deploy-gate.md + AGENTS.md + deployment/validation instructions | current pipeline-only operational contract |
+| SESSION_STATE.md + TASKS.json + PROGRESS.md | owned task state and durable handoff |
 
 ## Verification gates
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
 | ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| images (api+web rebuilt) | build-images.yml | 37159346852 | PASS |
-| deploy | production-deploy.yml | 37159617346 | PASS |
-| frontend tsc + vitest + build | qa-smoke.yml | 37159346891 | PASS |
-| backend compile + tests | qa-smoke.yml backend matrix | 37159346891 | PASS |
-| live confirmation | production-deploy.yml + health probe | 37159617346 | PASS |
-
-Live SHA: 58ba842eafb7d6de2d6b522285775e1e08a6f1ce (green slot). Round-trip log (fix-forward, no local compute):
-
-Round-trip log (fix-forward, no local compute):
-- run 37151640283 (483606e15): CS1061 — the interrupted session added the inbox
-  windows to DataRetentionOptions but never to the merged DataRetentionSettings
-  record; plumbed through in a479f98d4.
-- run 37152060321 (Jev integration): JsonElement.GetDateOnly() does not exist;
-  parse the ISO string (e484b7104).
-- run 37152898318 (e484b7104): perf test read-count 2→4 (merge adds the two
-  reading-pathway reads); leaderboard rows expose registry DisplayName; popover
-  header counts totalAlertCount (what the pill counts) and the banner test opens
-  the popover — 42f69600c.
-- Encoding guard step red on main is pre-existing noise (same 4 findings in
-  green run 37150223833; step is continue-on-error) — not this round's file.
+| regressions | build-images.yml / guards | NOT RUN | NOT RUN |
+| images + SQL | build-images.yml | NOT RUN | NOT RUN |
+| Writing | build-images.yml / writing-model-answer-gate | NOT RUN | NOT RUN |
+| deploy + live proof | production-deploy.yml + ship watcher | NOT RUN | NOT RUN |
+| cold benchmark | build-images.yml / benchmark dispatch | NOT RUN | NOT RUN |
 
 ## Blockers
 
-- None. (Parallel Codex agent shares this tree — stage explicit paths only; deploys queue, never cancel.)
+- The active gh account has push permission but admin=false; repository visibility is private. The Speaking shipment's required public flip returned HTTP 404 before any push. Read-only permission checks confirmed this blocker.
+- Switching to the already-signed-in repository-owner account requires explicit authorization; ask_user could not obtain an answer. No identity switch, push, dispatch, rollout or visibility change has occurred for this implementation.
+- Independent source review and local static gates are complete. All executable regressions (including registry cleanup failures), images, SQL, real Writing tests, serving proof and latency measurements still require Actions. Five minutes is not an achieved result.
 
 ## Next action
 
-1. Commit the round (feature commit + chore(ax) ledger commit), confirm repo public, `pnpm run ship`, watch qa-smoke green on the SHA, confirm live, `ax:record`, flip repo private after runs.
+1. Obtain explicit authorization to use the repository-owner GitHub identity, verify its admin access, then run pnpm run ship for the deployment commit (including the local Speaking ancestor). Own Actions through actual live proof and warm/cold/Writing measurements; restore privacy under the lease rule.

@@ -1,4 +1,5 @@
 name: Build images
+run-name: ${{ inputs.benchmark && format('Benchmark build {0}', github.sha) || format('Build images {0}', github.sha) }}
 
 # Build half of the former "Build & Deploy (web + API)": classifies the push,
 # runs the seconds-long syntax gate (plus the Writing gates only when Writing
@@ -26,6 +27,7 @@ on:
     # Add a path here the moment it becomes a build input.
     paths:
       - 'app/**'
+      - 'pages/**'
       - 'components/**'
       - 'contexts/**'
       - 'hooks/**'
@@ -41,14 +43,17 @@ on:
       - '*.ts'
       - '*.tsx'
       - '*.mjs'
+      - '*.cjs'
       - '*.json'
       - 'pnpm-lock.yaml'
       - '.npmrc'
       - '.dockerignore'
       - 'Dockerfile'
+      - 'Dockerfile.dockerignore'
       - 'backend/**'
       - 'global.json'
       - 'Directory.*.props'
+      - 'Directory.*.targets'
       - 'NuGet.config'
       - 'rulebooks/**'
       - 'data/**'
@@ -60,14 +65,34 @@ on:
       - '.env.production.example'
       - '.github/workflows/build-images.yml'
       - '.github/workflows/production-deploy.yml'
+      - 'tests/writing-regression/**'
+      - '!TASKS.json'
+      - '!backend/tests/**'
+      - '!backend/**/*.md'
+      - '!playwright*.ts'
+      - '!vitest*.ts'
   # A PR run proves the workflow itself before the merge (routing, retag-reuse,
   # the contract guards). It can never deploy: production-deploy.yml only acts
   # on a Build images run whose head branch is `main`.
   pull_request:
     branches: [main]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      rebuild_all:
+        description: 'Rebuild all components instead of immutable reuse'
+        type: boolean
+        default: false
+      benchmark:
+        description: 'Cold-cache build measurement only: never push images or deploy'
+        type: boolean
+        default: false
+      writing_gate:
+        description: 'Exercise the unchanged mandatory Writing checks for release evidence'
+        type: boolean
+        default: false
 
 permissions:
+  actions: read
   contents: read
   packages: write
 
@@ -95,65 +120,21 @@ jobs:
     outputs:
       web: ${{ steps.detect.outputs.web }}
       api: ${{ steps.detect.outputs.api }}
+      backup: ${{ steps.detect.outputs.backup }}
+      gateway: ${{ steps.detect.outputs.gateway }}
       writing: ${{ steps.detect.outputs.writing }}
+      baseline: ${{ steps.detect.outputs.baseline }}
+      reuse_matrix: ${{ steps.detect.outputs.reuse_matrix }}
+      reuse_count: ${{ steps.detect.outputs.reuse_count }}
     steps:
-      # No checkout: the compare API answers in a second where a full-history
-      # clone takes ~30s, and every build job waits for this one.
+      - uses: actions/checkout@v4
       - id: detect
-        name: Classify the push
-        shell: bash
+        name: Compare the complete successful-ancestor input range
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          all=0
-          BASE="${{ github.event.before }}"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE="${{ github.event.pull_request.base.sha }}"
-          elif [ "${{ github.event_name }}" != "push" ]; then
-            all=1
-          fi
-          if [ -z "$BASE" ] || printf '%s' "$BASE" | grep -qE '^0+$'; then all=1; fi
-          FILES=""
-          if [ "$all" = "0" ]; then
-            JSON="$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BASE}...${{ github.sha }}")"
-            FILES="$(printf '%s' "$JSON" | jq -r '.files[].filename')"
-            # The compare API truncates at 300 files; assume everything changed
-            # rather than under-reporting a build input.
-            if [ "$(printf '%s' "$JSON" | jq -r '.files | length')" -ge 300 ]; then all=1; fi
-          fi
-          if [ "$all" = "1" ]; then
-            echo "No usable diff range (first push / manual dispatch / truncated compare) - treating everything as changed."
-            web=true; api=true; writing=true; FILES="(all)"
-          else
-            has() { printf '%s\n' "$FILES" | grep -Eq "$1"; }
-            # true/false strings on purpose: every job condition compares to
-            # 'true' (1/0 would silently skip every gated job).
-            web=false; api=false; writing=false
-            # rulebooks/** is embedded by the API AND imported statically by the
-            # web bundle, so it is an input to BOTH images. Root-level
-            # .ts/.tsx/.mjs/.json files (proxy.ts, i18n.ts, next.config.ts,
-            # instrumentation*.ts, sentry.*.config.ts, ...) are web inputs too.
-            if has '^(app/|components/|contexts/|hooks/|lib/|public/|messages/|types/|rulebooks/|pnpm-lock\.yaml$|\.npmrc$|[^/]+\.(ts|tsx|mjs|json)$)'; then web=true; fi
-            # api: everything the API image bakes (source, embedded rulebooks,
-            # seed data) plus anything that can change the EF model.
-            if has '^(backend/|rulebooks/|data/|global\.json$|Directory\.[A-Za-z]+\.props$|NuGet\.config$|\.npmrc$)'; then api=true; fi
-            # .dockerignore and the compose file shape BOTH images.
-            if has '^(\.dockerignore$|docker-compose\.production(\.build|\.hostports)?\.yml$)'; then web=true; api=true; fi
-            # writing: the old inline detector's patterns (directory granularity).
-            if has '^(backend/src/OetLearner\.Api/Services/Rulebook/|backend/src/OetLearner\.Api/Services/Ai/AiFeatureRouteResolver\.cs|rulebooks/writing/|tests/writing-regression/)'; then writing=true; fi
-          fi
-          echo "web=$web" >> "$GITHUB_OUTPUT"
-          echo "api=$api" >> "$GITHUB_OUTPUT"
-          echo "writing=$writing" >> "$GITHUB_OUTPUT"
-          echo "web=$web api=$api writing=$writing"
-          {
-            echo "### Change detection"
-            echo "- web=$web api=$api writing=$writing"
-            echo '```'
-            printf '%s\n' "$FILES" | head -n 200
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          REBUILD_ALL: ${{ inputs.rebuild_all || inputs.benchmark || false }}
+          FORCE_WRITING: ${{ inputs.writing_gate || false }}
+        run: node scripts/deploy/release-manifest.mjs detect
 
   syntax-gate:
     name: Syntax gate (seconds)
@@ -191,15 +172,16 @@ jobs:
   # any image build could start.
   writing-model-answer-gate:
     name: Writing model-answer gate (on change)
-    needs: [changes]
-    if: needs.changes.outputs.writing == 'true'
+    needs: [changes, build-api]
+    if: ${{ always() && needs.changes.outputs.writing == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - uses: actions/cache@v4
+        if: ${{ !inputs.benchmark }}
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
@@ -207,8 +189,48 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        if: needs.build-api.result == 'success'
+        with:
+          name: api-release-${{ github.sha }}
+          path: output/api-release
       - name: Writing model-answer recovery regression gate
-        run: dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj -c Release --nologo -p:RunAnalyzers=false --filter 'FullyQualifiedName~WritingRev8ModelAnswerGateTests' --logger 'console;verbosity=normal'
+        run: |
+          set -euo pipefail
+          test_project=backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+          dotnet restore "$test_project" --nologo
+          reference_args=()
+          if [ -f output/api-release/api-references.tar.gz ]; then
+            metadata=output/api-release/api.json
+            test "$(jq -r '.sha' "$metadata")" = "$GITHUB_SHA"
+            test "$(jq -r '.runId' "$metadata")" = "$GITHUB_RUN_ID"
+            if [ "$(jq -r '.sdk' "$metadata")" = "$(dotnet --version)" ]; then
+              expected="$(jq -r '.referencesChecksum' "$metadata")"
+              actual="$(sha256sum output/api-release/api-references.tar.gz | cut -d' ' -f1)"
+              test "$expected" = "$actual"
+              tar -xzf output/api-release/api-references.tar.gz
+              # This second project reference is not part of the API publish.
+              dotnet build backend/scripts/StripeProductSeeder/StripeProductSeeder.csproj \
+                -c Release --no-restore --nologo -p:RunAnalyzers=false
+              reference_args=(-p:BuildProjectReferences=false)
+              echo "WRITING_API_REFERENCE_REUSE sha=$GITHUB_SHA sdk=$(dotnet --version)"
+            else
+              echo "::notice::SDK mismatch: explicitly compiling the API for Writing tests."
+            fi
+          else
+            echo "::notice::No same-build API references: explicitly compiling the API for Writing tests."
+          fi
+          dotnet test "$test_project" -c Release --no-restore --nologo -p:RunAnalyzers=false \
+            "${reference_args[@]}" --filter 'FullyQualifiedName~WritingRev8ModelAnswerGateTests' \
+            --logger 'console;verbosity=normal' --logger 'trx;LogFileName=writing-gate.trx' \
+            --results-directory output/writing-tests
+          python -c 'import xml.etree.ElementTree as E; r=E.parse("output/writing-tests/writing-gate.trx"); c=r.find(".//{*}Counters"); assert c is not None and int(c.attrib["executed"]) > 0 and int(c.attrib["failed"]) == 0; print("WRITING_TESTS_EXECUTED", c.attrib["executed"])'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: writing-gate-${{ github.sha }}
+          path: output/writing-tests
+          if-no-files-found: warn
 
   # Writing grader prompt/model gate (recorded-artifact). When the push touches the
   # Writing prompt, house-style rules, rulebooks or the AI route, this verifies the
@@ -224,7 +246,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -234,45 +256,34 @@ jobs:
           python selftest_checker.py
           python verify_manifest.py
 
-  # Retag-reuse (owner directive 2026-10-03: minimum deploy time): when a
-  # component's inputs did not change, the previous image IS the correct image
-  # for this SHA. Pull the last built `:latest` and push it under `:<sha>` so
-  # the rollout still finds a per-SHA tag, while the expensive build is skipped.
+  # Registry-only copies preserve a proven ancestor's immutable digest.
   retag:
     name: Retag unchanged ${{ matrix.image }}
-    needs: [changes, syntax-gate]
-    if: ${{ needs.changes.outputs.web != 'true' || needs.changes.outputs.api != 'true' }}
+    needs: [syntax-gate, guards, changes]
+    if: ${{ needs.changes.outputs.reuse_count != '0' && github.event_name != 'pull_request' && !inputs.benchmark }}
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - image: web
-            changed: "${{ needs.changes.outputs.web }}"
-          - image: api
-            changed: "${{ needs.changes.outputs.api }}"
+      matrix: ${{ fromJSON(needs.changes.outputs.reuse_matrix) }}
     steps:
+      - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
-        if: matrix.changed != 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Retag ${{ matrix.image }} (inputs unchanged)
-        if: matrix.changed != 'true'
+        env:
+          SOURCE: ${{ matrix.source }}
+          EXPECTED_DIGEST: ${{ matrix.digest }}
+          DESTINATION: ghcr.io/${{ github.repository }}-${{ matrix.image }}:${{ github.sha }}
         run: |
           set -euo pipefail
-          SHA="${{ github.sha }}"
-          SRC="ghcr.io/${{ github.repository }}-${{ matrix.image }}:latest"
-          DST="ghcr.io/${{ github.repository }}-${{ matrix.image }}:$SHA"
-          docker pull "$SRC"
-          docker tag "$SRC" "$DST"
-          docker push "$DST"
-          echo "reused $SRC as $DST"
-      - name: Nothing to reuse
-        if: matrix.changed == 'true'
-        run: echo "${{ matrix.image }} inputs changed - the build job handles it."
+          docker buildx imagetools create --prefer-index=false --tag "$DESTINATION" "$SOURCE"
+          actual="$(docker buildx imagetools inspect "$DESTINATION" --format '{{.Manifest.Digest}}')"
+          test "$actual" = "$EXPECTED_DIGEST"
+          echo "RELEASE_REUSE $DESTINATION digest=$actual source=$SOURCE"
 
   # Static deployment contract. Its own job (not a step of build-web) because
   # retag-reuse can SKIP build-web, and the contract must be checked on every
@@ -283,6 +294,9 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Assert production rollout is image-only
         run: |
           bash scripts/deploy/verify-image-only-rollout.sh
@@ -292,7 +306,17 @@ jobs:
       # rollout path, a browser lane with an automatic trigger, an e2e job back
       # in qa-smoke, an un-filtered build trigger, a lost rollout gate.
       - name: Assert the pipeline contract
-        run: node scripts/deploy/verify-pipeline-contract.mjs
+        run: |
+          node scripts/deploy/verify-pipeline-contract.mjs
+          node --test scripts/deploy/release-manifest.test.mjs
+          bash -n scripts/deploy/auto-deploy-ghcr.sh
+      - name: Parse the Windows deployment watcher
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$pwd/scripts/ship/watch-deploy.ps1", [ref]$tokens, [ref]$errors)
+          if ($errors.Count) { $errors | Format-List; exit 1 }
 
   # NOTE: the build jobs deliberately do NOT `needs:` the Writing gates. A job
   # that needs a SKIPPED job is itself skipped -  chaining them made every
@@ -301,30 +325,54 @@ jobs:
   # their own, which blocks the rollout via deploy-production's
   # `conclusion == success` check.
   build-web:
-    needs: [syntax-gate, changes]
+    needs: [syntax-gate, guards, changes]
     if: needs.changes.outputs.web == 'true'
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      - uses: actions/cache@v4
+        id: mount-cache
+        if: ${{ github.event_name != 'pull_request' && !inputs.benchmark }}
+        with:
+          path: .build-cache
+          key: web-mounts-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'package.json', '.npmrc', 'Dockerfile', 'next.config.ts') }}-${{ github.sha }}
+          restore-keys: |
+            web-mounts-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('pnpm-lock.yaml', 'package.json', '.npmrc', 'Dockerfile', 'next.config.ts') }}-
+      - uses: reproducible-containers/buildkit-cache-dance@4b2444fec0c0fb9dbf175a96c094720a692ef810
+        if: ${{ github.event_name != 'pull_request' && !inputs.benchmark }}
+        with:
+          cache-source: .build-cache/pnpm
+          cache-target: /root/.local/share/pnpm/store
+          scratch-dir: .buildkit-pnpm
+          skip-extraction: ${{ steps.mount-cache.outputs.cache-hit == 'true' }}
+      - uses: reproducible-containers/buildkit-cache-dance@4b2444fec0c0fb9dbf175a96c094720a692ef810
+        if: ${{ github.event_name != 'pull_request' && !inputs.benchmark }}
+        with:
+          cache-source: .build-cache/next
+          cache-target: /app/.next/cache
+          scratch-dir: .buildkit-next
+          skip-extraction: ${{ steps.mount-cache.outputs.cache-hit == 'true' }}
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build & push web
+        id: image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           target: runner
-          push: true
+          push: ${{ github.event_name != 'pull_request' && !inputs.benchmark }}
           provenance: false
-          tags: |
-            ghcr.io/${{ github.repository }}-web:${{ github.sha }}
-            ghcr.io/${{ github.repository }}-web:latest
+          tags: ghcr.io/${{ github.repository }}-web:${{ github.sha }}
           build-args: |
+            GITHUB_SHA=${{ github.sha }}
             NEXT_PUBLIC_API_BASE_URL=https://api.oetwithdrhesham.co.uk
             APP_URL=https://app.oetwithdrhesham.co.uk
             # 17 Sep 2026 handover: the public Mac DMG has not passed protected
@@ -333,17 +381,21 @@ jobs:
             # re-enable once the signed 0.7.10 build passes (see
             # docs/APPLE-RELEASE-EVIDENCE-PACK.md).
             NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED=1
-          cache-from: type=gha,scope=web
-          cache-to: type=gha,mode=max,scope=web
+          cache-from: ${{ !inputs.benchmark && 'type=gha,scope=web' || '' }}
+          cache-to: ${{ github.event_name != 'pull_request' && !inputs.benchmark && 'type=gha,mode=max,scope=web' || '' }}
 
   build-api:
-    needs: [syntax-gate, changes]
+    needs: [syntax-gate, guards, changes]
     if: needs.changes.outputs.api == 'true'
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+      checksum: ${{ steps.sql.outputs.checksum }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
+        if: ${{ !inputs.benchmark }}
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
@@ -353,6 +405,9 @@ jobs:
           dotnet-version: 10.0.x
       - name: Publish API on the Actions host
         run: |
+          set -euo pipefail
+          dotnet tool install --tool-path "$RUNNER_TEMP/dotnet-tools" dotnet-ef --version 10.0.5 &
+          ef_pid=$!
           dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
           rm -rf backend/publish
           # /m:1 + BuildInParallel=false + UseSharedCompilation=false were tuned
@@ -363,9 +418,45 @@ jobs:
             --output backend/publish \
             --no-restore \
             /p:UseAppHost=false \
+            /p:ProduceReferenceAssembly=true \
             /p:UseSharedCompilation=true \
             /p:RunAnalyzers=false
           test -n "$(find backend/publish -mindepth 1 -maxdepth 1 -print -quit)"
+          wait "$ef_pid"
+      - name: Generate SQL from the exact published Release compilation
+        id: sql
+        env:
+          WRITING_CHANGED: ${{ needs.changes.outputs.writing }}
+        run: |
+          set -euo pipefail
+          mkdir -p output/api-release
+          "$RUNNER_TEMP/dotnet-tools/dotnet-ef" migrations script --idempotent --no-build --configuration Release \
+            --project backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --startup-project backend/src/OetLearner.Api/OetLearner.Api.csproj \
+            --output output/api-release/migrations.sql
+          test -s output/api-release/migrations.sql
+          checksum="$(sha256sum output/api-release/migrations.sql | cut -d' ' -f1)"
+          references_checksum=""
+          if [ "$WRITING_CHANGED" = "true" ]; then
+            tar -czf output/api-release/api-references.tar.gz \
+              backend/src/OetLearner.Api/bin/Release/net10.0/OetLearner.Api.dll \
+              backend/src/OetLearner.Api/bin/Release/net10.0/OetLearner.Api.deps.json \
+              backend/src/OetLearner.Api/bin/Release/net10.0/OetLearner.Api.runtimeconfig.json \
+              backend/src/OetLearner.Api/obj/Release/net10.0/ref
+            references_checksum="$(sha256sum output/api-release/api-references.tar.gz | cut -d' ' -f1)"
+          fi
+          jq -n --arg sha "$GITHUB_SHA" --argjson run "$GITHUB_RUN_ID" --arg checksum "$checksum" \
+            --arg sdk "$(dotnet --version)" --arg referencesChecksum "$references_checksum" \
+            '{sha:$sha,runId:$run,checksum:$checksum,efVersion:"10.0.5",sdk:$sdk,referencesChecksum:$referencesChecksum}' \
+            > output/api-release/api.json
+          echo "checksum=$checksum" >> "$GITHUB_OUTPUT"
+          echo "API_SQL_GENERATED sha=$GITHUB_SHA run=$GITHUB_RUN_ID checksum=$checksum"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-release-${{ github.sha }}
+          path: output/api-release
+          if-no-files-found: error
+          retention-days: 90
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -373,22 +464,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build & push API
+        id: image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./backend/Dockerfile.runtime
-          push: true
+          push: ${{ github.event_name != 'pull_request' && !inputs.benchmark }}
           provenance: false
-          tags: |
-            ghcr.io/${{ github.repository }}-api:${{ github.sha }}
-            ghcr.io/${{ github.repository }}-api:latest
-          cache-from: type=gha,scope=api
-          cache-to: type=gha,mode=max,scope=api
+          tags: ghcr.io/${{ github.repository }}-api:${{ github.sha }}
+          cache-from: ${{ !inputs.benchmark && 'type=gha,scope=api' || '' }}
+          cache-to: ${{ github.event_name != 'pull_request' && !inputs.benchmark && 'type=gha,mode=max,scope=api' || '' }}
 
   build-backup:
-    needs: [syntax-gate]
+    needs: [syntax-gate, guards, changes]
+    if: needs.changes.outputs.backup == 'true'
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -398,22 +491,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build & push backup sidecar
+        id: image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./scripts/backup/Dockerfile
-          push: true
+          push: ${{ github.event_name != 'pull_request' && !inputs.benchmark }}
           provenance: false
-          tags: |
-            ghcr.io/${{ github.repository }}-db-backup:${{ github.sha }}
-            ghcr.io/${{ github.repository }}-db-backup:latest
-          cache-from: type=gha,scope=db-backup
-          cache-to: type=gha,mode=max,scope=db-backup
+          tags: ghcr.io/${{ github.repository }}-db-backup:${{ github.sha }}
+          cache-from: ${{ !inputs.benchmark && 'type=gha,scope=db-backup' || '' }}
+          cache-to: ${{ github.event_name != 'pull_request' && !inputs.benchmark && 'type=gha,mode=max,scope=db-backup' || '' }}
 
   build-agent-gateway:
-    needs: [syntax-gate]
+    needs: [syntax-gate, guards, changes]
+    if: needs.changes.outputs.gateway == 'true'
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -423,21 +518,47 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build & push agent gateway (Google Antigravity SDK runtime)
+        id: image
         uses: docker/build-push-action@v6
         with:
           context: ./agent-gateway
           file: ./agent-gateway/Dockerfile
-          push: true
+          push: ${{ github.event_name != 'pull_request' && !inputs.benchmark }}
           provenance: false
-          tags: |
-            ghcr.io/${{ github.repository }}-agent-gateway:${{ github.sha }}
-            ghcr.io/${{ github.repository }}-agent-gateway:latest
-          cache-from: type=gha,scope=agent-gateway
-          cache-to: type=gha,mode=max,scope=agent-gateway
+          tags: ghcr.io/${{ github.repository }}-agent-gateway:${{ github.sha }}
+          cache-from: ${{ !inputs.benchmark && 'type=gha,scope=agent-gateway' || '' }}
+          cache-to: ${{ github.event_name != 'pull_request' && !inputs.benchmark && 'type=gha,mode=max,scope=agent-gateway' || '' }}
 
-  # Migration SQL is generated by the ROLLOUT workflow (`apply-migrations`),
-  # not here. It used to be a job in this workflow, which meant the rollout
-  # could not start until SQL generation finished (~9 min) - generation now
-  # happens once, on Actions, inside the deploy, and only when the API image was
-  # actually rebuilt. Same guarantee (prod can never migrate ahead of a failed
-  # build: the deploy only starts when this whole run is green), half the wait.
+  release-manifest:
+    name: Publish verified release provenance
+    needs: [changes, syntax-gate, guards, retag, build-web, build-api, build-backup, build-agent-gateway, writing-model-answer-gate, writing-regression-gate]
+    if: ${{ always() && github.event_name != 'pull_request' && !inputs.benchmark && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.changes.result == 'success' }}
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Bind immutable images and SQL to this successful release
+        env:
+          BASELINE: ${{ needs.changes.outputs.baseline }}
+          WEB_CHANGED: ${{ needs.changes.outputs.web }}
+          API_CHANGED: ${{ needs.changes.outputs.api }}
+          DB_BACKUP_CHANGED: ${{ needs.changes.outputs.backup }}
+          AGENT_GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
+          WEB_DIGEST: ${{ needs.build-web.outputs.digest }}
+          API_DIGEST: ${{ needs.build-api.outputs.digest }}
+          DB_BACKUP_DIGEST: ${{ needs.build-backup.outputs.digest }}
+          AGENT_GATEWAY_DIGEST: ${{ needs.build-agent-gateway.outputs.digest }}
+          SQL_CHECKSUM: ${{ needs.build-api.outputs.checksum }}
+        run: node scripts/deploy/release-manifest.mjs create
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest
+          path: output/release.json
+          if-no-files-found: error
+          retention-days: 90

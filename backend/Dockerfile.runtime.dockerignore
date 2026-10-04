@@ -1,0 +1,5 @@
+# Only the Actions-generated publish tree is consumed by the runtime image.
+**
+!backend/
+!backend/publish/
+!backend/publish/**

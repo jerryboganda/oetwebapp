@@ -15,7 +15,7 @@
  *   4. build-images.yml stays path-filtered to build inputs (a push touching
  *      none of them must start no build and no rollout);
  *   5. production-deploy.yml keeps its identity, its serialized concurrency
- *      group and its settle-window + image-existence gates, never runs on a
+ *      group and its immutable provenance/supersede gates, never runs on a
  *      PR, and never builds on the VPS;
  *   6. the rollout script stays pull-only (--no-build, no docker build);
  *   7. the sanctioned ship wrapper exists.
@@ -72,7 +72,9 @@ export function checkContract({ readWorkflow, listWorkflows, readFile }) {
   }
 
   // 2. Exactly one rollout workflow, at the intended path.
-  const rolloutRefs = files.filter((file) => readWorkflow(file).includes('auto-deploy-ghcr.sh'));
+  const rolloutRefs = files.filter((file) => activeLines(readWorkflow(file))
+    .replace(/^[ \t]*bash -n scripts\/deploy\/auto-deploy-ghcr\.sh[ \t]*$/gm, '')
+    .includes('auto-deploy-ghcr.sh'));
   if (rolloutRefs.length !== 1 || rolloutRefs[0] !== 'production-deploy.yml') {
     failures.push(
       `the production rollout must live in exactly production-deploy.yml (found: ${rolloutRefs.join(', ') || 'none'})`,
@@ -111,8 +113,12 @@ export function checkContract({ readWorkflow, listWorkflows, readFile }) {
     ['group: production-deploy', 'serialized rollout concurrency group'],
     ['cancel-in-progress: false', 'rollouts must never cancel each other mid-flip'],
     ['needs: [resolve, apply-migrations]', 'the migration gate before the rollout'],
-    ["-w 'Build images'", 'the settle-window check (one rollout per burst)'],
-    ['docker manifest inspect', 'the image-existence gate (nothing to deploy is a valid outcome)'],
+    ['release-manifest.mjs resolve', 'successful exact-SHA image and migration provenance'],
+    ['release-manifest.mjs verify-api', 'source-run SQL checksum verification'],
+    ['release-manifest.mjs superseded', 'immediate and safe pre-cutover descendant checks'],
+    ['deploy_phase prepare', 'the health-gated preparation boundary'],
+    ['deploy_phase promote', 'promotion only after CI rechecks eligibility'],
+    ['name: promotion-proof', 'actual promotion evidence, not merely a successful stand-down'],
   ];
   for (const [needle, why] of required) {
     if (!deploy.includes(needle)) failures.push(`production-deploy.yml is missing ${needle} (${why})`);
@@ -122,6 +128,16 @@ export function checkContract({ readWorkflow, listWorkflows, readFile }) {
   }
   if (/(^|\s)--build(\s|$)/m.test(deploy)) {
     failures.push('production-deploy.yml must never pass --build (the VPS does not build)');
+  }
+  if (/sleep 30|setup-dotnet|dotnet (?:build|publish|restore|tool)/.test(activeLines(deploy))) {
+    failures.push('production-deploy.yml must not recompile the API or keep a fixed settle delay');
+  }
+  for (const needle of ['migrations script --idempotent --no-build', 'release-manifest.mjs create',
+    '--prefer-index=false', 'needs: [syntax-gate, guards, changes]', 'name: release-manifest']) {
+    if (!activeLines(build).includes(needle)) failures.push(`build-images.yml must keep ${needle}`);
+  }
+  if (/:(?:latest)\s*$|\s(?:SRC|SOURCE)=.*:latest/m.test(activeLines(build))) {
+    failures.push('build-images.yml must not publish/consume mutable latest as release provenance');
   }
 
   // 6. The rollout script stays pull-only.
@@ -133,6 +149,10 @@ export function checkContract({ readWorkflow, listWorkflows, readFile }) {
   if (!active.includes('--no-build')) failures.push('auto-deploy-ghcr.sh must keep --no-build on every start');
   if (/(docker\s+build|docker\s+compose[^\n]*\sbuild(\s|$))/m.test(active)) {
     failures.push('auto-deploy-ghcr.sh must never build on the VPS');
+  }
+  for (const needle of ['--pull never', 'nginx -t', 'nginx -s reload', 'rollback_routers',
+    'DEPLOY_LIVE', 'prepared-', 'live-release.env']) {
+    if (!active.includes(needle)) failures.push(`auto-deploy-ghcr.sh must keep ${needle}`);
   }
 
   // 7. The sanctioned ship wrapper exists.
