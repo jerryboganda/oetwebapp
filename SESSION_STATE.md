@@ -70,7 +70,7 @@ release provenance, protected storage, readiness or rollback.
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
 | ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| regressions | build-images.yml / guards | NOT RUN | NOT RUN |
+| regressions | build-images.yml / guards | 37168983221 | FAIL |
 | images + SQL | build-images.yml | NOT RUN | NOT RUN |
 | Writing | build-images.yml / writing-model-answer-gate | NOT RUN | NOT RUN |
 | deploy + live proof | production-deploy.yml + ship watcher | NOT RUN | NOT RUN |
@@ -79,8 +79,9 @@ release provenance, protected storage, readiness or rollback.
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
-- Independent source review and local static gates are complete. All executable regressions, images, SQL, real Writing tests, serving proof and latency measurements still require Actions. Five minutes is not an achieved result.
+- First Actions run 37168983221 executed 30 regressions: 29 passed, router-start failure injection did not match its padded command suffix. Live Jev validated the fixture-boundary correction without weakening the production failure path or rollback assertions. Re-run acceptance is pending; no production promotion occurred.
+- The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 
 ## Next action
 
-1. Commit this authentication-resolution checkpoint, then run pnpm run ship with process-scoped verified owner authentication. Own Actions through actual live proof and warm/cold/Writing measurements; restore privacy under the lease rule.
+1. Commit the corrected offline router-start fixture, then rerun pnpm run ship with process-scoped verified owner authentication. Own Actions through actual live proof and warm/cold/Writing measurements; restore privacy under the lease rule.

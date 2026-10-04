@@ -148,7 +148,7 @@ if [ "$1" = compose ]; then
   if [[ " $* " == *" --images "* ]]; then echo nginx:fixture; exit 0; fi
   if [[ " $* " == *" config "* ]]; then echo stable-effective-config; exit 0; fi
   if [[ " $* " == *" --force-recreate "* ]]; then touch "$VPS_APP_DIR/repaired"; fi
-  if [[ " $* " == *" web learner-api" ]]; then
+  if [[ " $* " == *" web learner-api " ]]; then
     if [ "$MODE" = router-start-failure ] && [ ! -f "$VPS_APP_DIR/router-failed" ]; then
       touch "$VPS_APP_DIR/router-failed"; exit 1
     fi
@@ -250,7 +250,10 @@ for (const mode of ['reuse', 'stale', 'config', 'unhealthy', 'first', 'partial',
           const config = readFileSync(join(fixture.dir, '.deploy', 'nginx', kind, 'default.conf'), 'utf8');
           assert.doesNotMatch(config, /(?:web|learner-api)-green/);
         }
-        if (mode === 'router-start-failure') assert.match(calls, /router-rollback\.yml/);
+        if (mode === 'router-start-failure') {
+          assert.equal(existsSync(join(fixture.dir, 'router-failed')), true);
+          assert.match(calls, /router-rollback\.yml/);
+        }
       } else {
         assert.equal(promoted.status, 0, promoted.stdout + promoted.stderr);
         assert.match(promoted.stdout, /DEPLOY_LIVE sha=/);
