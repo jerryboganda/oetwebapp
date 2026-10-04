@@ -238,7 +238,8 @@ describe('useSpeakingRealtimeVoice refresh-safe transcript', () => {
     await advance(1_000);
     expect(readStored()?.segments.map((segment) => segment.text)).toEqual(['How can I help you today', 'My chest hurts']);
     // Nothing but the conversation and the numbers to carry on with: no provider session id, no token.
-    expect(Object.keys(readStored() ?? {}).sort()).toEqual(['originEpochMs', 'savedAt', 'segments', 'sessionId', 'turnIndex']);
+    expect(Object.keys(readStored() ?? {}).sort()).toEqual(['audioRecordings', 'originEpochMs', 'savedAt', 'segments', 'sessionId', 'turnIndex']);
+    expect(readStored()).toMatchObject({ audioRecordings: [] });
     expect(window.sessionStorage.getItem(KEY)).not.toMatch(/oai-session|access_token/);
   });
 

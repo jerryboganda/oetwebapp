@@ -615,8 +615,10 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         {
             var results = await exams.GetResultsAsync(UserId, examId, default);
             Assert.Equal("scored", results.OverallStatus);
-            Assert.Equal(cardScore, results.CombinedScaledScore);
+            Assert.Equal(OetScoring.OetReportedScaledScore(cardScore), results.CombinedScaledScore);
         }
+        Assert.Equal(cardScore, (await _db.SpeakingExamSessions.AsNoTracking()
+            .SingleAsync(exam => exam.Id == examId)).CombinedScaledSnapshot);
 
         var holds = await _db.AiCreditReservations.AsNoTracking().ToListAsync();
         Assert.Equal(2, holds.Count);

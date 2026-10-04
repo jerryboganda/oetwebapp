@@ -127,7 +127,7 @@ public sealed class JevSpeakingGraderTests : IAsyncLifetime
         var row = await RowAsync(sessionId);
         AssertGradeUnchanged(row);
         Assert.Equal("high", row.ConfidenceBand);
-        Assert.Equal(ExpectedScaled(), projection.EstimatedScaledScore);
+        Assert.Equal(OetScoring.OetReportedScaledScore(ExpectedScaled()), projection.EstimatedScaledScore);
 
         var audit = Assert.Single(await _db.AuditEvents.AsNoTracking().ToListAsync());
         Assert.Equal(JevSpeakingAdvisor.ReviewFlaggedAction, audit.Action);
@@ -170,7 +170,7 @@ public sealed class JevSpeakingGraderTests : IAsyncLifetime
         AssertGradeUnchanged(row);
         Assert.Equal("low", row.ConfidenceBand);
         Assert.Equal("low", projection.ConfidenceBand);
-        Assert.Equal(ExpectedScaled(), projection.EstimatedScaledScore);
+        Assert.Equal(OetScoring.OetReportedScaledScore(ExpectedScaled()), projection.EstimatedScaledScore);
         Assert.Equal(3, projection.CriterionScores["relationshipBuilding"].Score);
 
         var audit = Assert.Single(await _db.AuditEvents.AsNoTracking().ToListAsync());

@@ -1021,13 +1021,19 @@ describe('useSpeakingRealtimeVoice provider failover', () => {
     await act(async () => {
       rerender({ id: 'card-b' });
     });
-    // The card that was left is saved on its way out (after the provider's close handshake window).
-    await flush(5_000);
-    expect(mockTranscript).toHaveBeenCalledWith('card-a', expect.objectContaining({ provider: 'openai', providerSessionId: 'oai-session-1' }));
     expect(result.current.captions).toEqual([]);
 
     expect(await startVoice(result)).toBe(true);
     await candidateSays('Card B words', 1);
+    // Card A finishes saving after Card B has already begun, without reading or clearing Card B's refs.
+    await flush(5_000);
+    expect(mockTranscript).toHaveBeenCalledWith('card-a', {
+      provider: 'openai',
+      providerSessionId: 'oai-session-1',
+      segments: [expect.objectContaining({ text: 'Card A words' })],
+    });
+    expect(result.current.provider).toBe('openai');
+    expect(result.current.captions).toEqual([expect.objectContaining({ text: 'Card B words' })]);
     expect(await stopVoice(result)).toBe(true);
 
     const last = mockTranscript.mock.calls.at(-1);

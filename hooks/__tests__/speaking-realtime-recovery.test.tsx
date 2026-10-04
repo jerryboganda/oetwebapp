@@ -107,8 +107,10 @@ async function mic(kind: 'speech' | 'quiet', ms: number) {
 }
 
 // `requested` is the provider the page asks the server to pin (?voiceProvider=); only a pinned:true preflight makes it count.
-async function mount(requested?: 'openai' | 'gemini') {
-  const rendered = renderHook(() => useSpeakingRealtimeVoice('s1', requested));
+async function mount(requested?: 'openai' | 'gemini', sessionId = 's1') {
+  const rendered = renderHook(({ id }) => useSpeakingRealtimeVoice(id, requested), {
+    initialProps: { id: sessionId },
+  });
   await advance(0);
   return rendered;
 }
@@ -191,6 +193,7 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     vi.stubGlobal('RTCPeerConnection', FakePeer);
     vi.stubGlobal('WebSocket', FakeSocket);
     vi.stubGlobal('AudioContext', FakeAudioContext);
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
       frameCallback = callback;
       return 1;
@@ -272,6 +275,35 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     expect(result.current.recoveries).toBe(1);
   });
 
+  it('keeps a departing card audio upload out of the next card while its stop is still draining', async () => {
+    let finishOldUpload!: (value: { recordingId: string; mimeType: string; durationSeconds: number }) => void;
+    mockAudioCapture.mockImplementationOnce(() => new Promise((resolve) => { finishOldUpload = resolve; }));
+    mockAudioCapture.mockResolvedValue({ recordingId: 'card-b-clip', mimeType: 'audio/webm', durationSeconds: 1 });
+    const { result, rerender } = await mount(undefined, 'card-a');
+    expect(await startVoice(result)).toBe(true);
+    await mic('speech', 500);
+    await geminiSays(0, { inputTranscription: { text: 'Card A words' } });
+
+    await act(async () => { rerender({ id: 'card-b' }); });
+    await advance(0);
+    expect(mockAudioCapture).toHaveBeenCalledWith('card-a', expect.anything());
+    expect(await startVoice(result)).toBe(true);
+    await mic('speech', 500);
+    await geminiSays(1, { inputTranscription: { text: 'Card B words' } });
+    await act(async () => {
+      finishOldUpload({ recordingId: 'card-a-clip', mimeType: 'audio/webm', durationSeconds: 1 });
+    });
+    await advance(GEMINI_STOP_DRAIN_MS);
+
+    expect(mockTranscript).toHaveBeenCalledWith('card-a', expect.objectContaining({
+      segments: [expect.objectContaining({ text: 'Card A words', sourceRecordingId: 'card-a-clip' })],
+    }));
+    expect(await stopVoice(result)).toBe(true);
+    expect(mockTranscript).toHaveBeenCalledWith('card-b', expect.objectContaining({
+      segments: [expect.objectContaining({ text: 'Card B words', sourceRecordingId: 'card-b-clip' })],
+    }));
+  });
+
   it('suppresses mic capture during Gemini patient playback and its tail, then resumes after quiet', async () => {
     vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
     const { result } = await mount();
@@ -281,12 +313,10 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     expect(FakeMediaRecorder.instances).toHaveLength(1);
 
     await geminiSays(0, {
-      serverContent: {
-        modelTurn: {
-          parts: [{ inlineData: { data: 'AAAAAA==', mimeType: 'audio/pcm;rate=24000' } }],
-        },
-        turnComplete: true,
+      modelTurn: {
+        parts: [{ inlineData: { data: 'AAAAAA==', mimeType: 'audio/pcm;rate=24000' } }],
       },
+      turnComplete: true,
     });
     expect(FakeMediaRecorder.instances[0].state).toBe('inactive');
     expect(FakeAudioContext.instances.at(-1)?.sources).toHaveLength(1);

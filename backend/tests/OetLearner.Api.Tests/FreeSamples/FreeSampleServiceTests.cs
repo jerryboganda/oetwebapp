@@ -569,11 +569,14 @@ public sealed class FreeSampleServiceTests
         (await db.Evaluations.SingleAsync(e => e.Id == evaluationId)).State = AsyncState.Completed;
         await db.SaveChangesAsync();
         var offer = (await svc.ListAsync("u1", "speaking", default)).Single();
-        Assert.Equal(FreeSampleService.StateRetryAvailable, offer.State);
+        Assert.Equal(FreeSampleService.StateCompleted, offer.State);
         Assert.Equal(1, offer.SuccessfulCount);
         Assert.Equal($"/speaking/results/{evaluationId}", offer.LastResultRoute);
         Assert.Equal(first, offer.LastSubmissionId);
-        Assert.Equal(FreeSampleService.StartRoute("speaking", card), offer.Route); // retry = the same card
+        Assert.Null(offer.Route);
+        Assert.Equal(1, offer.Limit);
+        Assert.Equal(0, offer.Remaining);
+        Assert.False(await svc.IsOfferedAsync("u1", "speaking", card, default));
     }
 
     [Fact]

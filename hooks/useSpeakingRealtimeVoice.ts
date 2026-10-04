@@ -902,19 +902,22 @@ export function useSpeakingRealtimeVoice(
     if (checkpointTimerRef.current === undefined) checkpointTimerRef.current = window.setTimeout(flushCheckpoint, CHECKPOINT_WRITE_DELAY_MS);
   }, [flushCheckpoint]);
 
-  const saveCandidateAudio = useCallback(async (capture: FailedCandidateAudioCapture): Promise<boolean> => {
+  const saveCandidateAudio = useCallback(async (
+    capture: FailedCandidateAudioCapture,
+    recordings = candidateAudioRecordingsRef.current,
+  ): Promise<boolean> => {
     try {
       const stored = await captureLiveVoiceAudioTurn(capture.sessionId, {
         providerSessionId: capture.providerSessionId,
         audio: capture.audio,
         durationMs: capture.durationMs,
       });
-      if (activeSessionIdRef.current !== capture.sessionId) return true;
-      candidateAudioRecordingsRef.current.push({
+      recordings.push({
         startMs: capture.startMs,
         endMs: capture.endMs,
         recordingId: stored.recordingId,
       });
+      if (activeSessionIdRef.current !== capture.sessionId) return true;
       segmentsRef.current = linkCandidateAudioToTranscript(
         segmentsRef.current,
         candidateAudioRecordingsRef.current,
@@ -931,7 +934,7 @@ export function useSpeakingRealtimeVoice(
   }, [scheduleCheckpoint, sessionId]);
 
   const startCandidateAudioCapture = useCallback((stream: MediaStream, startedAt: number) => {
-    if (activeCandidateAudioRef.current) return;
+    if (stoppingRef.current || activeCandidateAudioRef.current) return;
     const providerSessionId = providerSessionIdRef.current;
     if (!providerSessionId) return;
     if (typeof MediaRecorder === 'undefined') {
@@ -966,11 +969,14 @@ export function useSpeakingRealtimeVoice(
     activeCandidateAudioRef.current = null;
     const endMs = sinceOrigin(performance.now());
     const durationMs = Math.max(1, endMs - capture.startMs);
+    const recordings = candidateAudioRecordingsRef.current;
     const task = new Promise<boolean>((resolve) => {
       const finish = (audio: Blob) => {
         if (audio.size === 0) {
-          candidateAudioUnavailableRef.current = true;
-          setError('No candidate audio was captured for this response. Please try again before leaving this role-play.');
+          if (activeSessionIdRef.current === capture.sessionId) {
+            candidateAudioUnavailableRef.current = true;
+            setError('No candidate audio was captured for this response. Please try again before leaving this role-play.');
+          }
           resolve(false);
           return;
         }
@@ -981,15 +987,17 @@ export function useSpeakingRealtimeVoice(
           endMs,
           providerSessionId: capture.providerSessionId,
           sessionId: capture.sessionId,
-        }).then(resolve);
+        }, recordings).then(resolve);
       };
 
       capture.recorder.onstop = () => {
         finish(new Blob(capture.chunks, { type: capture.recorder.mimeType || 'audio/webm' }));
       };
       capture.recorder.onerror = () => {
-        candidateAudioUnavailableRef.current = true;
-        setError('Your voice recording stopped unexpectedly. Please try again before leaving this role-play.');
+        if (activeSessionIdRef.current === capture.sessionId) {
+          candidateAudioUnavailableRef.current = true;
+          setError('Your voice recording stopped unexpectedly. Please try again before leaving this role-play.');
+        }
         resolve(false);
       };
       try {
@@ -1014,22 +1022,33 @@ export function useSpeakingRealtimeVoice(
   }, [stopCandidateAudioCapture]);
 
   const flushCandidateAudio = useCallback(async (): Promise<boolean> => {
-    await stopCandidateAudioCapture();
-    while (pendingCandidateAudioRef.current.length > 0) {
-      const pending = pendingCandidateAudioRef.current.splice(0);
-      if ((await Promise.all(pending)).some((saved) => !saved)) break;
-    }
-
-    if (failedCandidateAudioRef.current.length > 0) {
-      const failed = [...failedCandidateAudioRef.current];
-      failedCandidateAudioRef.current = [];
-      for (const capture of failed) {
-        if (!(await saveCandidateAudio(capture))) return false;
+    const stopped = stopCandidateAudioCapture();
+    const pendingUploads = pendingCandidateAudioRef.current;
+    const failedUploads = failedCandidateAudioRef.current;
+    const recordings = candidateAudioRecordingsRef.current;
+    const unavailable = candidateAudioUnavailableRef.current;
+    await stopped;
+    let uploadsSucceeded = true;
+    while (pendingUploads.length > 0) {
+      const pending = pendingUploads.splice(0);
+      if ((await Promise.all(pending)).some((saved) => !saved)) {
+        uploadsSucceeded = false;
+        break;
       }
     }
 
-    return !candidateAudioUnavailableRef.current && failedCandidateAudioRef.current.length === 0;
-  }, [saveCandidateAudio, stopCandidateAudioCapture]);
+    if (failedUploads.length > 0) {
+      const failed = failedUploads.splice(0);
+      for (const capture of failed) {
+        if (!(await saveCandidateAudio(capture, recordings))) return false;
+      }
+      uploadsSucceeded = true;
+    }
+
+    return !unavailable && uploadsSucceeded
+      && failedUploads.length === 0
+      && (activeSessionIdRef.current !== sessionId || !candidateAudioUnavailableRef.current);
+  }, [saveCandidateAudio, sessionId, stopCandidateAudioCapture]);
 
   stopCandidateAudioRef.current = stopCandidateAudioCapture;
 
@@ -1838,6 +1857,11 @@ export function useSpeakingRealtimeVoice(
     const current = () => runRef.current === run;
     const provider = providerRef.current;
     const providerSessionId = providerSessionIdRef.current;
+    // A card switch resets the refs while this card's provider close is still in flight.
+    const departingSegments = segmentsRef.current.map((segment) => ({ ...segment }));
+    const departingRecordings = candidateAudioRecordingsRef.current;
+    const departingTurns = flushPromiseRef.current;
+    const departingSocket = socketRef.current;
     if (!provider || !providerSessionId) {
       // Nothing ever went live, so there is nothing to save: leaving must never wait on a failed or cancelled start.
       stoppingRef.current = true;
@@ -1846,10 +1870,15 @@ export function useSpeakingRealtimeVoice(
       return true;
     }
     stoppingRef.current = true;
+    const departingCapture = stopCandidateAudioCapture();
+    const departingUploads = [...pendingCandidateAudioRef.current];
+    const departingAudioUnavailable = candidateAudioUnavailableRef.current;
+    const departingFailedUploads = failedCandidateAudioRef.current;
     setConnection('ending');
     setMicEnabled(false);
     setPhase('idle');
     const releaseSession = () => {
+      if (!current()) return;
       if (providerSessionIdRef.current !== providerSessionId) return;
       providerRef.current = null;
       providerSessionIdRef.current = null;
@@ -1871,25 +1900,29 @@ export function useSpeakingRealtimeVoice(
             openAiClosedRef.current();
           }
         });
-        openAiClosedRef.current = null;
+        if (current()) openAiClosedRef.current = null;
       }
       // Gemini has no close handshake and transcribes a sentence ~1.5 s after it was spoken: its link (and its handlers)
       // stays up for a moment, so a candidate still talking at the buzzer keeps the end of the last sentence.
-      if (provider === 'gemini' && socketRef.current?.readyState === WebSocket.OPEN) await delay(GEMINI_STOP_DRAIN_MS);
+      if (provider === 'gemini' && departingSocket?.readyState === WebSocket.OPEN) await delay(GEMINI_STOP_DRAIN_MS);
       // The per-turn rows are advisory: a turn that cannot be saved must not keep the transcript from being saved.
-      await flushPromiseRef.current.catch(() => undefined);
-      await flushPendingTurn().catch(() => undefined);
-      if (!(await flushCandidateAudio())) {
+      await departingTurns.catch(() => undefined);
+      if (current()) await flushPendingTurn().catch(() => undefined);
+      const audioSaved = current()
+        ? await flushCandidateAudio()
+        : !departingAudioUnavailable && departingFailedUploads.length === 0
+          && (await Promise.all([departingCapture, ...departingUploads])).every(Boolean);
+      if (!audioSaved) {
         throw new Error('Your voice recording could not be saved. Please try again before leaving this role-play.');
       }
       // The conversation is over: release the microphone and provider before the (retryable) save.
       if (current()) closeTransport();
       // The server rejects an empty transcript, and there is nothing to grade in one.
       const finalSegments = linkCandidateAudioToTranscript(
-        segmentsRef.current,
-        candidateAudioRecordingsRef.current,
+        current() ? segmentsRef.current : departingSegments,
+        current() ? candidateAudioRecordingsRef.current : departingRecordings,
       );
-      segmentsRef.current = finalSegments;
+      if (current()) segmentsRef.current = finalSegments;
       if (finalSegments.length > 0) {
         await persistLiveVoiceTranscript(sessionId, {
           provider,
@@ -1925,7 +1958,7 @@ export function useSpeakingRealtimeVoice(
       }
       return false;
     }
-  }, [closeTransport, flushCandidateAudio, flushPendingTurn, sessionId]);
+  }, [closeTransport, flushCandidateAudio, flushPendingTurn, sessionId, stopCandidateAudioCapture]);
 
   // Single-flight: overlapping callers (the exam page's 3 s polls, the unmount cleanup) share one save.
   const stop = useCallback((): Promise<boolean> => {

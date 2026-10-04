@@ -69,12 +69,15 @@ public sealed class JevSpeakingV11PlacementTests
     }
 
     [Fact]
-    public void EachGrader_StillMakesExactlyOneGradeChainCall_NoJevHopIsAddedToIt()
+    public void EachGradingPath_MakesExactlyOneGradeChainCall_NoJevHopIsAddedToIt()
     {
-        foreach (var file in new[] { "SpeakingAiAssessmentService.cs", "SpeakingSimulationV11AssessmentService.cs" })
-        {
-            Assert.Equal(1, CountOf(Source(file), "SpeakingGradeChain.CompleteAsync("));
-        }
+        Assert.Equal(1, CountOf(Source("SpeakingAiAssessmentService.cs"), "SpeakingGradeChain.CompleteAsync("));
+        var v11 = Source("SpeakingSimulationV11AssessmentService.cs");
+        var combinedStart = v11.IndexOf("RunCombinedAssessmentAsync(", StringComparison.Ordinal);
+        Assert.True(combinedStart > 0, "combined assessment method missing");
+        Assert.Equal(1, CountOf(v11[..combinedStart], "SpeakingGradeChain.CompleteAsync("));
+        Assert.Equal(1, CountOf(v11[combinedStart..], "SpeakingGradeChain.CompleteAsync("));
+        Assert.DoesNotContain("JevSpeakingAdvisor", v11[combinedStart..], StringComparison.Ordinal);
     }
 
     private static int CountOf(string haystack, string needle)

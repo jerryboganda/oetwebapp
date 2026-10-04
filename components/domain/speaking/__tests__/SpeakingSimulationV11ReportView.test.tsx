@@ -217,7 +217,7 @@ describe('SpeakingSimulationV11ReportView source audio evidence', () => {
       play: vi.fn().mockResolvedValue(undefined),
       pause: vi.fn(),
     } as unknown as HTMLAudioElement;
-    const audioConstructor = vi.fn(() => audio);
+    const audioConstructor = vi.fn(function () { return audio; });
     vi.stubGlobal('Audio', audioConstructor);
     vi.mocked(fetchAuthorizedObjectUrl).mockResolvedValue('blob:candidate-clip');
 

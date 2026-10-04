@@ -101,9 +101,16 @@ public sealed class LearnerAttemptHistorySpeakingTests : IAsyncLifetime
 
         var rows = (await HistoryAsync(db)).ToDictionary(item => item.AttemptId);
 
-        Assert.Equal("412/500", rows["spx_snapshot"].ResultLabel);
+        Assert.Equal("410/500", rows["spx_snapshot"].ResultLabel);
         Assert.Equal("380/500", rows["spx_average"].ResultLabel);
-        Assert.Equal("375/500", rows["spx_v11"].ResultLabel);
+        Assert.Equal("380/500", rows["spx_v11"].ResultLabel);
+        Assert.Equal(412, (await db.SpeakingExamSessions.AsNoTracking()
+            .SingleAsync(exam => exam.Id == "spx_snapshot")).CombinedScaledSnapshot);
+        Assert.Equal(new int?[] { 350, 400 }, await db.SpeakingSimulationV11Assessments.AsNoTracking()
+            .Where(assessment => assessment.SpeakingSessionId.StartsWith("sps_spx_v11_"))
+            .OrderBy(assessment => assessment.SpeakingSessionId)
+            .Select(assessment => assessment.EstimatedPracticeScore)
+            .ToArrayAsync());
         Assert.Equal("Marking in progress", rows["spx_half"].ResultLabel);
         Assert.Equal("Marking in progress", rows["spx_waiting"].ResultLabel);
         Assert.Null(rows["spx_running"].ResultLabel);

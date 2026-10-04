@@ -129,6 +129,9 @@ owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is th
   wording identifies the transcript as the graded submission, hides the full-session recorder player, and exposes only
   verified source-linked microphone clips in the v1.1 report. This newer clip path is implemented but is not
   production-verified ([Results wording by input kind](#results-wording-by-input-kind)).
+  A departing card snapshots its transcript and audio-link collection before awaiting provider close. Its pending
+  microphone uploads remain attached to that card even if the next card starts first; completing an old save must
+  neither persist the next card's words nor clear its provider state. Recording stops when card shutdown begins.
 - A connection that drops mid-conversation, or a patient that stays silent, is restored automatically up to twice per card
   ([Mid-session recovery](#mid-session-recovery)); after that (or for a run the server pinned, QA accounts only) the error is
   shown as before. A provider that cannot *start* is replaced by the other one automatically
