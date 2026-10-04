@@ -11,7 +11,7 @@ Last updated: 2026-10-04
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
-## Active checkpoint - Deployment acceleration, 569.457 seconds inclusive (2026-10-04)
+## Active checkpoint - Deployment acceleration, measured free-runner target misses (2026-10-04)
 
 - Wrote immutable component reuse, same-publish SQL/Writing references, persisted caches, lean contexts and health/config-aware service reuse.
 - Bound prepare/promote, durable paired router recovery and exact serving identity remain enforced.
@@ -20,7 +20,9 @@ Last updated: 2026-10-04
 - SHA 66458ca821: Build images 37170176749 passed 31 protocol checks and 26 real Writing tests; production 37170535406 served exact images in green.
 - Inclusive push-to-verified-live was 744.784 seconds, not 300; cold build-only benchmark 37170735127 passed in about 322 seconds without promotion.
 - Follow-up f13b93bd4: build 37172887015 passed 37 protocol tests, native cache persistence and complete runtime bytes; deploy 37173143817 served blue at 569.457 seconds inclusive (driver 543.109).
-- Native PowerShell correction, forced scoped Writing benchmark and separate eleven-path Speaking/reused-API measurement remain; private restoration also faces an inconsistent empty May queue.
+- AX 37174084749 passed actual-source cases on native Windows 5.1/Linux 7.6.6; forced-Writing benchmark 37173946904 passed 3/666 evaluated sources and 26 tests in 310 seconds build-only.
+- Genuine changed-web/reused-API e96: build 37174218390 passed, deploy 37174402463 verified green at 582.880 seconds inclusive (driver 528.521); Next compile 5.7s, image pull 91.524s, native readiness 94.649s.
+- Web copy-time ownership/stable-layer native execution remains; private restoration still faces active Actions and an inconsistent empty May queue.
 
 ## Previous checkpoint — AX: externalized agent working memory (2026-10-01)
 

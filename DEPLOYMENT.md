@@ -147,6 +147,10 @@ parallel while production rollouts serialize):
      and optional same-build references for the real required Writing tests.
      Its runtime separates stable published dependencies/content from the changing
      application assembly so a code change does not retransmit the full publish tree.
+     The web runtime likewise separates root-owned standalone dependencies from
+     `server.js` and `.next`; copy-time ownership preserves writable `.next`/`public`
+     without a recursive ownership layer duplicating their files. Image-build
+     assertions verify original standalone bytes and writable/read-only ownership.
      The existing test project opts into `DeploymentWritingGateOnly` for this gate
      only: unchanged gate/fixture/assembly sources, unchanged real test filter and TRX
      assertions. Actions checks the evaluated source sets; default full QA is unchanged.
@@ -196,6 +200,19 @@ Next's trusted cache remains enabled: measured compilation fell from 75 seconds
 to 2.9 seconds. Cache persistence uses a native local-directory export instead of
 loading a cache-only Docker image; only ephemeral hosted web builders skip explicit
 teardown. Transfer costs and end-to-end elapsed remain part of acceptance.
+
+Measured verified releases on 4 October 2026 were **744.784 seconds** (build
+`37170176749`, deploy `37170535406`), **569.457 seconds** after the cache/API-layer
+follow-up (build `37172887015`, deploy `37173143817`), and **582.880 seconds** for
+a genuine changed-web/reused-API release (build `37174218390`, deploy `37174402463`).
+The latter used a 5.7-second cached Next compilation and skipped API compilation
+and already-applied SQL, but still spent 91.524 seconds pulling images and
+94.649 seconds on actual target readiness. The web ownership-layer follow-up
+requires its own native image-build and live timing evidence.
+Cold forced-Writing benchmark `37173946904` verified the opt-in 3-source/default
+666-source boundary and ran all 26 required tests successfully in a **310-second
+build-only workflow**. It did not publish or promote a release. These results do
+not establish a five-minute guarantee or cold-live acceptance on free runners.
 
 Migrations normally come from the build API publish artifact. Startup migration
 is an opt-in (`AUTO_MIGRATE` → `Bootstrap__AutoMigrate`, default `false`).

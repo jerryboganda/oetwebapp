@@ -3,9 +3,9 @@
 Session: deployment-latency
 Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
 Mode: execute
-Updated: 2026-10-04T03:16:28Z
+Updated: 2026-10-04T03:50:46Z
 Branch: main
-HEAD: f13b93bd47b74123b4cbeba09dc81ce2e0a19094
+HEAD: e96e762acfbe363d12a7b3b049e64600c8b6878b
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -55,7 +55,10 @@ release provenance, protected storage, readiness or rollback.
 - D-12 Benchmark-only builds must not replace the real watcher prerequisite. Preserve actual promotion preference, no-op proof and genuine release failure handling.
 - D-13 Independent follow-up review found a PowerShell 5.1 array candidate. Live typed Jev approved explicit native enumeration and actual-source checks on existing Windows 5.1/Linux 7 Actions lanes; no installation or runtime prerequisite change.
 - D-14 Follow-up f13b93bd4 is genuinely live: 37 protocol checks, native cache export/persistence and complete runtime-byte checks passed. Inclusive watcher timing was 569.457 seconds; driver public-live timing was 543.109 seconds. Neither meets 300 seconds.
-- D-15 AX 37172886438 failed before jobs because step shell expressions reject runner context. Live typed Jev approved using the existing matrix.runner instead; actual native-engine Actions checks still need execution.
+- D-15 AX rejected both runner and matrix step-shell expressions. Move selection to supported job defaults, not another step expression. AX 37174084749 passed actual-source cases on native Windows 5.1.26100.33438 and Linux 7.6.6.
+- D-16 Forced-Writing cold build-only benchmark 37173946904 evaluated 3 gate sources versus 666 default sources, reused apphost-consistent API references and executed 26/26 tests. Workflow elapsed was 310 seconds; no promotion or cold-live result.
+- D-17 Genuine changed-web release e96e762ac: build 37174218390 reused the exact f13 API/backup/gateway digests, cached Next compilation took 5.7 seconds, and production 37174402463 verified green physical serving images. Inclusive timing was 582.880 seconds; driver public-live was 528.521 seconds. SQL was actually skipped on deployed-API proof.
+- D-18 Live Jev selected native web copy-time ownership and stable dependency layers (p .99, confidence .99) after a measured 91.524-second image pull. Preserve original bytes, root-owned dependencies, nextjs-owned .next/public, entrypoint and health gates; native image assertions and live timing remain required.
 
 ## Touched files
 
@@ -67,7 +70,7 @@ release provenance, protected storage, readiness or rollback.
 | scripts/deploy/auto-deploy-ghcr.sh + docker-compose.production.yml | service reuse, durable router reload, paired rollback and serving proof |
 | scripts/deploy/verify-*.sh + verify-pipeline-contract.mjs + prune-stale-images.sh | revised mechanical contracts and image-ID protection |
 | scripts/ship/ship.mjs + watch-deploy.ps1 + .github/workflows/ax-check.yml | inclusive timing, benchmark-purpose isolation, actual-source PowerShell compatibility and serving-release verification |
-| Dockerfile + per-image Docker ignore files + next.config.ts | consumed contexts and trusted build-cache persistence |
+| Dockerfile + per-image Docker ignore files + next.config.ts | consumed contexts, trusted cache persistence, stable web dependency layers and original byte/owner assertions |
 | backend/Dockerfile.runtime + backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj | stable publish layers with byte verification; deployment-only Writing source set |
 | docs/ops/deploy-gate.md + AGENTS.md + deployment/validation instructions | current pipeline-only operational contract |
 | SESSION_STATE.md + TASKS.json + PROGRESS.md | owned task state and durable handoff |
@@ -84,18 +87,20 @@ release provenance, protected storage, readiness or rollback.
 | cold build-only benchmark | build-images.yml / benchmark dispatch | 37170735127 | PASS |
 | 37 follow-up protocol regressions | build-images.yml / guards | 37172887015 | PASS |
 | native cache export/persistence and runtime bytes | build-images.yml / build-web + build-api | 37172887015 | PASS |
-| exact deployment Writing source set and real tests | build-images.yml / forced Writing benchmark | NOT RUN | NOT RUN |
-| native PowerShell 5.1/7 selection | ax-check.yml / self-test matrix | NOT RUN | NOT RUN |
+| exact deployment Writing source set and 26 real tests | build-images.yml / forced Writing benchmark | 37173946904 | PASS |
+| native PowerShell 5.1/7 actual-source cases | ax-check.yml / self-test matrix | 37174084749 | PASS |
 | follow-up serving/timing | production-deploy.yml + ship watcher | 37173143817 | PASS |
+| genuine changed-web/reused-API serving/timing | build-images.yml + production-deploy.yml + ship watcher | 37174402463 | PASS |
+| web stable layers, original bytes and ownership | build-images.yml / build-web | NOT RUN | NOT RUN |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
 - The first inclusive result missed 300 seconds. API publish was 181 seconds, Writing 72 seconds, parallel image pulls 88.621 seconds and actual API readiness 76.594 seconds. Direct HTTP readiness already polls every three seconds; changing Docker health intervals would not address it.
-- Follow-up f13b93bd4 built/deployed successfully, but its pipeline-only classification skipped Writing. The opt-in source set and actual required test count need a guarded forced-Writing benchmark. AX's one-line context correction is not yet pushed or validated.
+- The 300-second target remains unmet: f13 measured 569.457 seconds; changed-web/reused-API e96 measured 582.880. Its pull was 91.524 seconds and native target readiness was 94.649 seconds. Do not replace measured safety gates with optimistic timing. Web copy-time ownership/source partition is written but not natively executed yet.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
 
 ## Next action
 
-1. Ship the scoped AX context correction and this genuine follow-up evidence (no runtime input change), then verify the actual native PowerShell matrix and forced-Writing cold build-only benchmark. Commit/ship the released eleven-path Speaking repair separately for a genuine changed-web/immutable-API measurement; report real run IDs to its owner and restore privacy only under the lease rule.
+1. Commit only the owned web-layer/protocol/doc/state paths, ship through the existing lease and verify original-byte/ownership assertions plus exact public serving. Record that release's inclusive timing, finalize evidence/continuity and restore privacy only when the native lease/queue guard permits it.

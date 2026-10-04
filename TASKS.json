@@ -242,9 +242,9 @@
     {
       "id": "DEPLOY-06",
       "title": "Measure genuine warm/cold and Writing paths on Actions and record exact live evidence or target misses",
-      "status": "in_progress",
+      "status": "pending",
       "owner": "deployment-latency",
-      "blockedBy": ["DEPLOY-05"],
+      "blockedBy": ["DEPLOY-05", "DEPLOY-07"],
       "verify": "build-images.yml benchmark/Writing dispatch and production-deploy.yml",
       "evidence": [
         "First actual promotion 37170535406 verified at 744.784 seconds inclusive; target missed honestly",
@@ -253,9 +253,27 @@
         "Live Jev approved native cache export, exact opt-in Writing compilation, stable API layer partition and watcher benchmark-purpose filtering",
         "Follow-up f13b93bd47b74123b4cbeba09dc81ce2e0a19094: build 37172887015 passed 37 protocol tests, native cache persistence and complete runtime-byte checks; Writing was skipped",
         "Deploy 37173143817 served exact physical images in blue: 569.457 seconds before-push-to-watcher-live, 543.109 seconds to driver public-live; target missed",
-        "AX 37172886438 failed workflow validation before jobs; live Jev approved existing matrix context correction. Native PowerShell and forced-Writing checks remain"
+        "AX invalid step runner/matrix expressions were corrected using supported job defaults; 37174084749 passed actual-source cases on native Windows PS 5.1.26100.33438 and Linux PS 7.6.6",
+        "Cold forced-Writing build-only benchmark 37173946904 passed exact evaluated 3/666 source sets and 26/26 real tests in 310 workflow seconds; no cold-live claim",
+        "Genuine changed-web/reused-API e96e762ac: build 37174218390 restored the Next cache (5.7s compilation), reused exact f13 component digests and passed; production 37174402463 skipped proven already-applied SQL and verified green physical serving images",
+        "E96 inclusive watcher elapsed 582.880 seconds; driver public-live elapsed 528.521 seconds. Measured image pull 91.524s and actual target readiness 94.649s; target remains unmet",
+        "Final native web ownership/stable-layer release and final continuity/privacy disposition remain"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md"]
+    },
+    {
+      "id": "DEPLOY-07",
+      "title": "Remove measured web runtime ownership copy-up with unchanged standalone bytes and permissions",
+      "status": "in_progress",
+      "owner": "deployment-latency",
+      "blockedBy": ["DEPLOY-05"],
+      "verify": "build-images.yml / guards + build-web and production-deploy.yml",
+      "evidence": [
+        "Live validated Jev selected native copy-time ownership and stable dependency partition after a genuine 91.524-second changed-web image pull (p .99/confidence .99)",
+        "Dockerfile retains root-owned dependencies/server.js and nextjs-owned .next/public; native checksum/ownership assertions and one protocol regression written",
+        "Actions image build, exact physical serving proof and new inclusive timing not run yet"
+      ],
+      "files": ["Dockerfile", "scripts/deploy/release-manifest.test.mjs", "DEPLOYMENT.md"]
     }
   ]
 }

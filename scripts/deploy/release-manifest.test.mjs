@@ -152,6 +152,28 @@ test('API runtime separates stable dependencies without omitting published bytes
   assert.match(dockerfile, /ENTRYPOINT \["dotnet", "OetLearner\.Api\.dll"\]/);
 });
 
+test('web runtime preserves standalone bytes and owners without recursive ownership copy-up', () => {
+  const dockerfile = readFileSync(join(root, 'Dockerfile'), 'utf8');
+  const runtime = dockerfile.split('FROM node:22-alpine AS runner')[1];
+  assert.ok(runtime);
+  assert.match(dockerfile, /^# syntax=docker\/dockerfile:1\.19\r?$/m);
+  assert.match(runtime, /COPY --from=builder --exclude=server\.js --exclude=\.next \/app\/\.next\/standalone \.\//);
+  assert.match(runtime, /COPY --from=builder \/app\/\.next\/standalone\/server\.js \.\/server\.js/);
+  assert.match(runtime, /COPY --from=builder --chown=nextjs:nodejs \/app\/\.next\/standalone\/\.next \.\/\.next/);
+  assert.match(runtime, /COPY --from=builder --chown=nextjs:nodejs \/app\/\.next\/static \.\/\.next\/static/);
+  assert.match(runtime, /COPY --from=builder --chown=nextjs:nodejs \/app\/public \.\/public/);
+  assert.match(runtime, /RUN --mount=type=bind,from=builder,source=\/app\/\.next\/standalone,target=\/standalone/);
+  assert.match(runtime, /sha256sum --check --quiet \/tmp\/standalone\.sha256/);
+  assert.match(runtime, /chown nextjs:nodejs \/app\/\.next \/app\/\.next\/cache \/app\/public/);
+  for (const path of ['.next', 'public', 'node_modules', 'server.js']) {
+    const owner = path.startsWith('.') || path === 'public' ? '10001:10001' : '0:0';
+    assert.ok(runtime.includes(`test "$(stat -c '%u:%g' ${path})" = "${owner}"`));
+  }
+  assert.doesNotMatch(runtime, /chown -R/);
+  assert.match(runtime, /USER nextjs/);
+  assert.match(runtime, /CMD \["node", "server\.js"\]/);
+});
+
 test('web cache exports fresh files directly and only skips cleanup on ephemeral hosted runners', () => {
   const workflow = readFileSync(join(root, '.github', 'workflows', 'build-images.yml'), 'utf8');
   const web = workflow.match(/^  build-web:\n([\s\S]*?)(?=^  build-api:)/m)?.[1];

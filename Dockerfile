@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.19
 FROM node:22-alpine AS deps
 WORKDIR /app
 
@@ -50,9 +50,12 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     NEXT_TELEMETRY_DISABLED=1
 
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# Keep dependencies reusable and root-owned without copying application bytes twice.
+COPY --from=builder --exclude=server.js --exclude=.next /app/.next/standalone ./
+COPY --from=builder /app/.next/standalone/server.js ./server.js
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 # next-intl message bundles live outside the .next traced output (they are
 # loaded via dynamic import at request time, so Next.js does not include them
 # in the standalone trace). Copy them explicitly so server-rendered pages can
@@ -60,8 +63,18 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/messages ./messages
 COPY --from=builder /app/i18n.ts ./i18n.ts
 
-RUN mkdir -p /app/.next/cache \
-    && chown -R nextjs:nodejs /app/.next /app/public
+RUN --mount=type=bind,from=builder,source=/app/.next/standalone,target=/standalone \
+    mkdir -p /app/.next/cache \
+    && chown nextjs:nodejs /app/.next /app/.next/cache /app/public \
+    && cd /standalone \
+    && find . -type f -exec sha256sum {} + > /tmp/standalone.sha256 \
+    && cd /app \
+    && sha256sum --check --quiet /tmp/standalone.sha256 \
+    && rm /tmp/standalone.sha256 \
+    && test "$(stat -c '%u:%g' .next)" = "10001:10001" \
+    && test "$(stat -c '%u:%g' public)" = "10001:10001" \
+    && test "$(stat -c '%u:%g' node_modules)" = "0:0" \
+    && test "$(stat -c '%u:%g' server.js)" = "0:0"
 
 EXPOSE 3000
 
