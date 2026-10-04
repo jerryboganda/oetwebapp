@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -80,7 +81,7 @@ public sealed class CompanionGetStudyPlanTool(
             .ToListAsync(ct);
 
         var upcoming = items
-            .Where(i => i.DueDate >= today && i.Status == StudyPlanItemStatus.Pending)
+            .Where(i => i.DueDate >= today && i.Status == StudyPlanItemStatus.NotStarted)
             .Take(7)
             .Select(i => new
             {
@@ -103,7 +104,7 @@ public sealed class CompanionGetStudyPlanTool(
             state = plan.State.ToString().ToLowerInvariant(),
             weeks = plan.TotalWeeks,
             minutes_per_day = plan.MinutesPerDayBudget,
-            pending_count = items.Count(i => i.Status == StudyPlanItemStatus.Pending),
+            pending_count = items.Count(i => i.Status == StudyPlanItemStatus.NotStarted),
             completed_count = items.Count(i => i.Status == StudyPlanItemStatus.Completed),
             upcoming_items = upcoming,
             goal = new
@@ -112,7 +113,7 @@ public sealed class CompanionGetStudyPlanTool(
                 study_hours_per_week = goal?.StudyHoursPerWeek,
                 weak_subtests = goal?.WeakSubtestsJson,
             },
-            url = await destinations.GetUrlAsync("study.plan", context, ct),
+            url = (await destinations.ResolveAsync("study.plan", context, ct)).Url,
         }));
     }
 }

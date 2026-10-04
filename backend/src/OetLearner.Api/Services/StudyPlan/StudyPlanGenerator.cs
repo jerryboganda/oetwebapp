@@ -537,7 +537,7 @@ public class StudyPlanGenerator(
                 .Where(i => i.StudyPlanId == activePlan.Id)
                 .ToListAsync(cancellationToken);
 
-            pending = items.Count(i => i.Status == StudyPlanItemStatus.Pending);
+            pending = items.Count(i => i.Status == StudyPlanItemStatus.NotStarted);
             completed = items.Count(i => i.Status == StudyPlanItemStatus.Completed);
             learnerAdded = items.Count(i => i.SourceContentId == null);
         }
