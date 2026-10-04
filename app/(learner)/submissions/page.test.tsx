@@ -149,6 +149,68 @@ describe('Submission history page', () => {
     expect(mockFetchMyAttemptHistory).toHaveBeenCalledWith(100, undefined);
   });
 
+  it('Speaking view (?subtest=speaking): asks only for Speaking attempts, shows score + grade, and never offers tutor review', async () => {
+    mockFetchMyAttemptHistory.mockResolvedValue([{ ...scoredMock, resultLabel: '350/500', grade: 'B' }]);
+
+    renderWithRouter(<SubmissionHistoryPage />, { searchParams: new URLSearchParams('subtest=speaking') });
+
+    expect(await screen.findByText('Reopen your Speaking role-plays and mock results')).toBeInTheDocument();
+    expect(mockFetchMyAttemptHistory).toHaveBeenCalledWith(100, 'speaking');
+    // Speaking results are AI-only: the tutor-review evidence list is not even requested.
+    expect(mockFetchSubmissions).not.toHaveBeenCalled();
+    const row = (await screen.findByText('Full Speaking Mock')).closest('li') as HTMLElement;
+    expect(within(row).getByText('350/500')).toBeInTheDocument();
+    expect(within(row).getByText('Grade B')).toBeInTheDocument();
+    expect(screen.queryByText(/request tutor review/i)).not.toBeInTheDocument();
+  });
+
+  it('Speaking view: a grade that did not finish says so (retry is free) and an empty list points back to Speaking', async () => {
+    mockFetchMyAttemptHistory.mockResolvedValue([
+      { ...scoredMock, resultLabel: "Grading didn't finish — retry is free", grade: null },
+    ]);
+    const { unmount } = renderWithRouter(<SubmissionHistoryPage />, { searchParams: new URLSearchParams('subtest=speaking') });
+
+    const row = (await screen.findByText('Full Speaking Mock')).closest('li') as HTMLElement;
+    expect(within(row).getByText("Grading didn't finish — retry is free")).toHaveClass('font-bold', 'text-warning-strong');
+    expect(row).not.toHaveTextContent('Grade');
+    unmount();
+
+    mockFetchMyAttemptHistory.mockResolvedValue([]);
+    renderWithRouter(<SubmissionHistoryPage />, { searchParams: new URLSearchParams('subtest=speaking') });
+    expect(await screen.findByText('No Speaking attempts yet')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start Speaking' })).toBeInTheDocument();
+  });
+
+  it('offers "Request Tutor Review" on Writing evidence only', async () => {
+    mockFetchSubmissions.mockResolvedValue([
+      {
+        id: 'sub-w',
+        subTest: 'Writing',
+        attemptDate: '2026-03-26',
+        taskName: 'Writing evidence row',
+        scoreEstimate: 'Pending',
+        reviewStatus: 'not_requested',
+        canRequestReview: true,
+        actions: { reopenFeedbackRoute: '/submissions/sub-w', compareRoute: null, requestReviewRoute: '/writing/expert-review/sub-w' },
+      },
+      {
+        id: 'sub-l',
+        subTest: 'Listening',
+        attemptDate: '2026-03-26',
+        taskName: 'Listening evidence row',
+        scoreEstimate: '66%',
+        reviewStatus: 'not_requested',
+        canRequestReview: true,
+        actions: { reopenFeedbackRoute: '/submissions/sub-l', compareRoute: null, requestReviewRoute: '/expert-review/sub-l' },
+      },
+    ]);
+
+    renderWithRouter(<SubmissionHistoryPage />);
+
+    expect(await screen.findByText('Listening evidence row')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /request tutor review/i })).toHaveLength(1);
+  });
+
   it('shows a scored Speaking mock as one row: score right after the status, opening the mock results', async () => {
     mockFetchMyAttemptHistory.mockResolvedValue([scoredMock]);
 

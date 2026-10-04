@@ -141,7 +141,7 @@ export class ApiError extends Error {
     this.code = code;
     this.retryable = retryable;
     this.fieldErrors = fieldErrors;
-    this.userMessage = mapErrorCodeToUserMessage(code, message);
+    this.userMessage = mapErrorCodeToUserMessage(code, message, status);
   }
 }
 
@@ -149,7 +149,21 @@ export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
-function mapErrorCodeToUserMessage(code: string, fallback: string): string {
+/**
+ * The text the client writes itself when an error response has no readable body (typically an HTML 502 page
+ * from the proxy). It is a log string for developers, never copy for a learner.
+ */
+const SYNTHESISED_STATUS_MESSAGE = /^Request failed: \d{3}$/;
+
+function safeMessageForStatus(status: number): string {
+  return status >= 500
+    ? 'Something went wrong on our side. Please try again in a moment.'
+    : "We couldn't complete that request. Please try again.";
+}
+
+function mapErrorCodeToUserMessage(code: string, rawMessage: string, status = 0): string {
+  // A synthesised "Request failed: 502" never reaches a candidate; a server-written message still does.
+  const fallback = SYNTHESISED_STATUS_MESSAGE.test(rawMessage) ? safeMessageForStatus(status) : rawMessage;
   switch (code) {
     case 'not_authenticated': return 'Your session expired. Please sign in again.';
     case 'unauthorized': return 'Please sign in again to continue.';

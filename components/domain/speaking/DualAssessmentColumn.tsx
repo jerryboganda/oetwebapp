@@ -24,6 +24,7 @@ import {
   readinessBandLabel,
   type AiAssessment,
   type SpeakingCriterionCode,
+  type SpeakingFeedbackReport,
   type TutorAssessment,
 } from '@/lib/api/speaking-assessments';
 import { oetReportedGradeFromScaled, oetReportedScoreFromScaled } from '@/lib/scoring';
@@ -125,31 +126,17 @@ function CriterionRow({
   quotes?: string[];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const canExpand = !!(rationale || (quotes && quotes.length > 0));
+  const hasQuotes = !!(quotes && quotes.length > 0);
   const pct = Math.max(0, Math.min(100, (score / max) * 100));
 
   return (
     <div className="rounded-xl border border-border bg-background-light/60 p-3">
       <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={() => canExpand && setExpanded((v) => !v)}
-          className={cn(
-            'flex flex-1 items-center gap-2 text-left text-sm font-semibold text-navy',
-            canExpand ? 'cursor-pointer hover:text-primary' : 'cursor-default',
-          )}
-          aria-expanded={canExpand ? expanded : undefined}
-          aria-label={`${CRITERION_LABEL[code]} ${score} of ${max}${canExpand ? '; click to ' + (expanded ? 'collapse' : 'expand') + ' rationale' : ''}`}
-          disabled={!canExpand}
+        <span className="flex-1 text-left text-sm font-semibold text-navy">{CRITERION_LABEL[code]}</span>
+        <span
+          className="rounded-full bg-surface px-2.5 py-0.5 text-xs font-bold text-navy ring-1 ring-border"
+          aria-label={`${CRITERION_LABEL[code]} ${score} of ${max}`}
         >
-          {canExpand && (
-            <span aria-hidden className="text-muted">
-              {expanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-            </span>
-          )}
-          <span>{CRITERION_LABEL[code]}</span>
-        </button>
-        <span className="rounded-full bg-surface px-2.5 py-0.5 text-xs font-bold text-navy ring-1 ring-border">
           {score} / {max}
         </span>
       </div>
@@ -160,20 +147,80 @@ function CriterionRow({
           aria-hidden
         />
       </div>
-      {expanded && canExpand && (
-        <div className="mt-3 space-y-2 rounded-lg bg-surface p-3 text-xs leading-relaxed text-muted">
-          {rationale && <p className="text-navy">{rationale}</p>}
-          {quotes && quotes.length > 0 && (
-            <ul className="list-disc space-y-1 pl-4">
-              {quotes.map((q, i) => (
+      {/* A short explanation under every criterion — a bare "4 / 6" tells the candidate nothing. */}
+      {rationale ? (
+        <p className="mt-2 text-xs leading-relaxed text-navy" data-testid={`criterion-explanation-${code}`}>
+          {rationale}
+        </p>
+      ) : null}
+      {hasQuotes ? (
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+            aria-expanded={expanded}
+          >
+            {expanded ? <ChevronDown className="h-3.5 w-3.5" aria-hidden /> : <ChevronRight className="h-3.5 w-3.5" aria-hidden />}
+            {expanded ? 'Hide what you said' : 'Show what you said'}
+          </button>
+          {expanded ? (
+            <ul className="mt-2 list-disc space-y-1 rounded-lg bg-surface p-3 pl-7 text-xs leading-relaxed text-muted">
+              {quotes!.map((q, i) => (
                 <li key={i} className="italic">
                   &ldquo;{q}&rdquo;
                 </li>
               ))}
             </ul>
-          )}
+          ) : null}
         </div>
-      )}
+      ) : null}
+    </div>
+  );
+}
+
+function criterionName(code: string): string {
+  return (CRITERION_LABEL as Record<string, string>)[code] ?? 'Overall';
+}
+
+/** Owner spec 4 Oct 2026 §10: 2–4 strengths and 2–5 priority weaknesses, each weakness ending in an action. */
+function ReportSections({ report }: { report: SpeakingFeedbackReport }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2" data-testid="speaking-report-sections">
+      {report.strengths.length > 0 ? (
+        <section className="rounded-xl border border-success/20 bg-success/10 p-3" aria-label="Strengths">
+          <h5 className="mb-1.5 eyebrow text-success-strong">What went well</h5>
+          <ul className="space-y-2 text-sm text-navy">
+            {report.strengths.map((item, i) => (
+              <li key={i}>
+                <span className="font-semibold">{criterionName(item.criterion)}: </span>
+                {item.text}
+                {item.quote ? <span className="mt-0.5 block text-xs italic text-muted">&ldquo;{item.quote}&rdquo;</span> : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {report.priorityWeaknesses.length > 0 ? (
+        <section className="rounded-xl border border-warning/20 bg-warning/10 p-3" aria-label="Priority weaknesses">
+          <h5 className="mb-1.5 eyebrow text-warning-strong">What to work on first</h5>
+          <ol className="space-y-3 text-sm text-navy">
+            {report.priorityWeaknesses.map((item, i) => (
+              <li key={i}>
+                <span className="font-semibold">{criterionName(item.criterion)}: </span>
+                {item.text}
+                {item.quote ? <span className="mt-0.5 block text-xs italic text-muted">&ldquo;{item.quote}&rdquo;</span> : null}
+                {item.action ? (
+                  <span className="mt-1 block">
+                    <span className="font-semibold">Next time: </span>
+                    {item.action}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -301,6 +348,10 @@ export function DualAssessmentColumn({
                 <p>{assessment.overallSummary}</p>
               </div>
             )}
+            {isAiAssessment(assessment) && assessment.report
+              && (assessment.report.strengths.length > 0 || assessment.report.priorityWeaknesses.length > 0) ? (
+              <ReportSections report={assessment.report} />
+            ) : null}
             {isTutorAssessment(assessment) && assessment.overallFeedbackMarkdown && (
               <div className="rounded-xl border border-border bg-surface p-3 text-sm leading-relaxed text-navy">
                 <p className="mb-1 eyebrow text-muted">Tutor feedback</p>

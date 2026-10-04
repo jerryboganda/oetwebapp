@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, BarChart3, CheckCircle2, ChevronRight, Download, FileText, Headphones, Loader2, Mic, Target, TrendingUp, UserCheck, Zap } from 'lucide-react';
+import { AlertCircle, BarChart3, CheckCircle2, ChevronRight, Download, FileText, Headphones, Loader2, Mic, Target, TrendingUp, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -270,12 +270,6 @@ export default function SpeakingResultSummary() {
         {/* Wave 7: standardised "Estimated score, not official OET"
             disclaimer banner. Required on every speaking results page. */}
         <SpeakingScoreDisclaimer />
-
-        {result.humanReviewRecommended ? (
-          <InlineAlert variant="warning">
-            Human review is recommended before you rely on this estimate for high-stakes readiness decisions.
-          </InlineAlert>
-        ) : null}
       </div>
 
       <MotionSection>
@@ -336,11 +330,6 @@ export default function SpeakingResultSummary() {
             <Button fullWidth asChild>
               <Link href={`/speaking/transcript/${id}`}>
                 <FileText className="h-5 w-5" aria-hidden="true" /> Review Transcript
-              </Link>
-            </Button>
-            <Button variant="outline" fullWidth asChild>
-              <Link href={`/speaking/expert-review/${id}`}>
-                <UserCheck className="h-5 w-5" aria-hidden="true" /> Request Tutor Review
               </Link>
             </Button>
             <Button
@@ -404,9 +393,6 @@ export default function SpeakingResultSummary() {
                             score={criterion.score}
                             max={criterion.max}
                             feedback={criterion.explanation ?? criterion.descriptor ?? null}
-                            meta={criterion.linkedRuleIds && criterion.linkedRuleIds.length > 0
-                              ? `Linked rules: ${criterion.linkedRuleIds.join(', ')}`
-                              : null}
                           />
                         </li>
                       ))}
@@ -419,14 +405,13 @@ export default function SpeakingResultSummary() {
         </MotionSection>
       ) : null}
 
-      {/* 2026-05-27 audit fix — RULE_40 tone score card. Advisory only;
-          human OET Assessor remains authoritative per RULE_57 / RULE_58. */}
+      {/* Tone score card. Advisory only. Rule ids never reach the candidate. */}
       {tone ? (
         <MotionSection delayIndex={2}>
           <Card padding="lg" data-testid="speaking-tone-card">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-base font-bold text-navy">Tone of voice (RULE_40)</h2>
+                <h2 className="text-base font-bold text-navy">Tone of voice</h2>
                 <p className="mt-1 text-xs text-muted">{tone.provenance}</p>
               </div>
               <div className="flex items-center gap-2">

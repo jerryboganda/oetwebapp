@@ -11,12 +11,13 @@ export async function fetchAuthorizedObjectUrl(pathOrUrl: string): Promise<strin
   });
 
   if (!response.ok) {
-    let message = `Request failed: ${response.status}`;
+    // Never the raw "Request failed: 502": this text can reach a learner (audio playback, proof viewers).
+    let message = 'We could not load that file. Please try again.';
     try {
       const error = await response.json();
       message = error.message ?? error.title ?? message;
     } catch (err) {
-      console.error('[API] fetchAuthorizedObjectUrl: failed to parse error response:', err);
+      console.error(`[API] fetchAuthorizedObjectUrl: HTTP ${response.status} with an unreadable error body:`, err);
     }
     throw new Error(message);
   }
@@ -36,12 +37,12 @@ export async function fetchAuthorizedBlob(pathOrUrl: string): Promise<Blob> {
   });
 
   if (!response.ok) {
-    let message = `Request failed: ${response.status}`;
+    let message = 'We could not load that file. Please try again.';
     try {
       const error = await response.json();
       message = error.message ?? error.title ?? message;
     } catch (err) {
-      console.error('[API] fetchAuthorizedBlob: failed to parse error response:', err);
+      console.error(`[API] fetchAuthorizedBlob: HTTP ${response.status} with an unreadable error body:`, err);
     }
     throw new Error(message);
   }

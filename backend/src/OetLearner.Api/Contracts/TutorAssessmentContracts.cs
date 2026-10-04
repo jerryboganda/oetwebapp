@@ -102,7 +102,9 @@ public sealed record AiAssessmentProjection(
     string ConfidenceBand,
     DateTimeOffset GeneratedAt,
     string? Grade = null,
-    string? ScoreLabel = null);
+    string? ScoreLabel = null,
+    IDictionary<string, CriterionScore>? CriterionScores = null,
+    SpeakingFeedbackReport? Report = null);
 
 /// <summary>GET /v1/speaking/sessions/{id}/assessments response. Carries
 /// both assessment tracks plus the divergence metric. Either side may be

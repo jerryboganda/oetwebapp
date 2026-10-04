@@ -43,7 +43,6 @@ vi.mock('@/lib/api/speaking-sessions', () => ({
 vi.mock('@/lib/api/speaking-simulation-v11', () => ({
   getSpeakingSimulationV11Assessment: mockV11Assessment,
   getSpeakingSimulationV11CombinedAssessment: mockV11Combined,
-  getSpeakingSimulationV11TutorOverride: vi.fn().mockResolvedValue(null),
   runSpeakingSimulationV11CombinedAssessment: vi.fn().mockResolvedValue(null),
 }));
 // Same labels as the real map.

@@ -39,6 +39,7 @@ import { ApiError } from '@/lib/api';
 import {
   learnerGetDualAssessment,
   type DualAssessmentResponse,
+  type SpeakingDrillItem,
 } from '@/lib/api/speaking-assessments';
 import {
   getSpeakingSession,
@@ -309,12 +310,11 @@ export default function SpeakingSessionResultsPage() {
     segments: transcript?.segments ?? [],
   }), [transcript]);
 
-  const drills = useMemo(() => {
-    if (!showRecommendedDrills) return [] as string[];
-    const all = new Set<string>();
-    visibleData?.ai?.recommendedDrills?.forEach((d) => all.add(d));
-    return Array.from(all);
-  }, [showRecommendedDrills, visibleData]);
+  // Personalised drills built by the AI from THIS attempt (weak point, what to rehearse, an example to say).
+  const drills = useMemo<SpeakingDrillItem[]>(
+    () => (showRecommendedDrills ? visibleData?.ai?.report?.drills ?? [] : []),
+    [showRecommendedDrills, visibleData],
+  );
 
   const tabs = useMemo(
     () => {
@@ -473,7 +473,6 @@ export default function SpeakingSessionResultsPage() {
             aiPlaceholderCta={showAiEstimate ? <AiProcessingCta /> : hiddenAiPlaceholder}
             showFullCriteria={showFullCriteria}
             showReadinessBand={showReadinessBand}
-            showTutorAssessment={false}
           />
         </TabPanel>
 
@@ -499,28 +498,40 @@ export default function SpeakingSessionResultsPage() {
         {showRecommendedDrills ? (
           <TabPanel id="drills" activeTab={activeTab}>
             {drills.length === 0 ? (
-              <Card padding="lg" className="text-center text-sm text-muted">
-                No drills recommended yet. Come back once your tutor review is in.
+              <Card padding="lg" className="text-center text-sm text-muted" data-testid="speaking-drills-empty">
+                {visibleData?.ai
+                  ? 'No practice drills were suggested for this attempt.'
+                  : 'Your personalised drills appear here as soon as your AI assessment is ready.'}
               </Card>
             ) : (
-              <Card padding="md" className="flex flex-col gap-3">
+              <Card padding="md" className="flex flex-col gap-3" data-testid="speaking-drills">
                 <h3 className="text-base font-bold text-navy">Recommended drills</h3>
                 <p className="text-xs text-muted">
-                  Targeted practice based on your AI and tutor feedback. Drill titles map to slugs in the practice library.
+                  Practice built from what you said in this attempt.
                 </p>
-                <ul className="flex flex-col gap-2">
-                  {drills.map((slug) => (
-                    <li key={slug}>
-                      <Link
-                        href={`/speaking/drills?slug=${encodeURIComponent(slug)}`}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background-light p-3 hover:border-primary/40 hover:bg-primary/5"
-                      >
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="h-4 w-4 text-primary" aria-hidden />
-                          <span className="font-semibold text-navy">{slug.replace(/-/g, ' ')}</span>
+                <ul className="flex flex-col gap-3">
+                  {drills.map((drill, index) => (
+                    <li key={`${drill.title}-${index}`} className="rounded-xl border border-border bg-background-light p-3">
+                      <div className="flex items-center gap-2">
+                        <BookOpen className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                        <p className="text-sm font-bold text-navy">{drill.title}</p>
+                      </div>
+                      <dl className="mt-2 space-y-1.5 text-sm text-navy">
+                        <div>
+                          <dt className="font-semibold">What happened</dt>
+                          <dd>{drill.weakPoint}</dd>
                         </div>
-                        <span className="text-xs font-bold text-primary">Open drill →</span>
-                      </Link>
+                        <div>
+                          <dt className="font-semibold">Practise</dt>
+                          <dd>{drill.practise}</dd>
+                        </div>
+                        {drill.example ? (
+                          <div>
+                            <dt className="font-semibold">Try saying</dt>
+                            <dd className="italic">&ldquo;{drill.example}&rdquo;</dd>
+                          </div>
+                        ) : null}
+                      </dl>
                     </li>
                   ))}
                 </ul>

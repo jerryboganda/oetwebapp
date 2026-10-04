@@ -58,9 +58,17 @@ vi.mock('@/components/domain/speaking/ExamConversationPanel', async () => {
   };
 });
 
+import { ApiError } from '@/lib/api';
 import SpeakingExamPage from './page';
 
 const NOW = '2026-09-30T12:00:00.000Z';
+
+// What the shared client throws when a proxy answers with an HTML 502: the raw text stays in `message` for logs,
+// the learner-facing `userMessage` is plain words (lib/api/client.ts).
+const proxyBadGateway = () => Object.assign(new ApiError('Request failed: 502'), {
+  status: 502,
+  userMessage: 'Something went wrong on our side. Please try again in a moment.',
+});
 
 const card = (overrides: Partial<ExamCandidateCard> = {}): ExamCandidateCard => ({
   cardId: 'card-1',
@@ -295,6 +303,83 @@ describe('Speaking exam page', () => {
 
       expect(stopBySession['sess-b']).toHaveBeenCalledTimes(1);
       expect(router.replace).toHaveBeenCalledWith('/speaking/exam/exam-1/results');
+    });
+
+    it('never promises a next card after the last one: Card B says its results open', async () => {
+      stopBySession['sess-b'] = vi.fn().mockResolvedValue(false);
+      mockGetExam
+        .mockResolvedValueOnce(cardB())
+        .mockResolvedValue(exam({ state: 'completed', currentCardNumber: 0, currentSessionId: null, currentCard: null }));
+      await renderPage();
+
+      await flush(3_000);
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent('The live voice transcript could not be saved. Retrying before your results open.');
+      expect(alert).not.toHaveTextContent(/next card/i);
+    });
+  });
+
+  describe('a server error while polling (owner spec 4 Oct 2026: never a raw "Request failed: 502")', () => {
+    const prepB = () => exam({ state: 'prep_b', currentCardNumber: 2, currentSessionId: 'sess-b' });
+
+    it('is retried silently while the exam is on screen, and the learner never sees the raw text', async () => {
+      mockGetExam
+        .mockResolvedValueOnce(prepB())
+        .mockRejectedValueOnce(proxyBadGateway())
+        .mockRejectedValueOnce(proxyBadGateway())
+        .mockResolvedValue(prepB());
+      await renderPage();
+
+      await flush(3_000); // first failed poll
+      await flush(3_000); // second failed poll
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toMatch(/Request failed/);
+
+      await flush(3_000); // recovered
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByText('Part 2 — Card B')).toBeInTheDocument();
+    });
+
+    it('tells the learner in plain words after a run of failures, and clears it when polling recovers', async () => {
+      mockGetExam
+        .mockResolvedValueOnce(prepB())
+        .mockRejectedValueOnce(proxyBadGateway())
+        .mockRejectedValueOnce(proxyBadGateway())
+        .mockRejectedValueOnce(proxyBadGateway())
+        .mockResolvedValue(prepB());
+      await renderPage();
+
+      await flush(9_000); // three failed polls in a row
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent('Something went wrong on our side. Please try again in a moment.');
+      expect(alert).not.toHaveTextContent(/Request failed|502/);
+      // The card is still there: the attempt is untouched.
+      expect(screen.getByText('Part 2 — Card B')).toBeInTheDocument();
+
+      await flush(3_000);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('uses plain words for an error that is not an API error either', async () => {
+      mockGetExam
+        .mockResolvedValueOnce(prepB())
+        .mockRejectedValue(new TypeError('Failed to fetch'));
+      await renderPage();
+
+      await flush(9_000);
+
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent('We could not load this step. Please try again.');
+      expect(alert).not.toHaveTextContent(/Failed to fetch/);
+    });
+
+    it('still shows a first-load failure straight away: there is nothing else on screen', async () => {
+      mockGetExam.mockRejectedValue(proxyBadGateway());
+      await renderPage();
+
+      expect(screen.getByText('Something went wrong on our side. Please try again in a moment.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     });
   });
 });

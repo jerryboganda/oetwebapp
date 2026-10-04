@@ -44,6 +44,25 @@ describe('ApiError', () => {
     expect(error.userMessage).toBe('Server exploded');
   });
 
+  it('never turns the client-written "Request failed: 502" into learner copy (owner spec 4 Oct 2026)', () => {
+    // An HTML 502 page from the proxy has no readable body, so the client writes this text itself.
+    const proxy = new ApiError(502, 'unknown_error', 'Request failed: 502', true);
+
+    expect(proxy.message).toBe('Request failed: 502'); // kept for logs and debugging
+    expect(proxy.userMessage).toBe('Something went wrong on our side. Please try again in a moment.');
+    expect(proxy.userMessage).not.toMatch(/Request failed|502/);
+  });
+
+  it('gives a plain message for a synthesised client error too, and keeps one the server wrote', () => {
+    expect(new ApiError(400, 'unknown_error', 'Request failed: 400', false).userMessage)
+      .toBe("We couldn't complete that request. Please try again.");
+    expect(new ApiError(503, 'unknown_error', 'Request failed: 503', true).userMessage)
+      .toBe('Something went wrong on our side. Please try again in a moment.');
+    // Server-authored text, even when it mentions a failure, is not touched.
+    expect(new ApiError(500, 'unknown_error', 'Request failed: the card could not be reserved', true).userMessage)
+      .toBe('Request failed: the card could not be reserved');
+  });
+
   it('defaults fieldErrors to empty array', () => {
     const error = new ApiError(500, 'internal_server_error', 'fail', false);
     expect(error.fieldErrors).toEqual([]);

@@ -6,7 +6,9 @@ using OetLearner.Api.Services.Speaking;
 namespace OetLearner.Api.Services;
 
 /// <param name="ResultLabel">Speaking only: "{n}/500" once scored, "Marking in progress" while the
-/// card or exam is finished but not graded yet, otherwise null. Never a raw state token.</param>
+/// card or exam is finished but not graded yet, "Grading didn't finish — retry is free" when the grade
+/// failed, otherwise null. Never a raw state token.</param>
+/// <param name="Grade">Speaking only: the OET letter for the scored number (A/B/C+/C/D/E), null until scored.</param>
 public sealed record LearnerAttemptHistoryItem(
     string AttemptId,
     string Subtest,
@@ -18,7 +20,8 @@ public sealed record LearnerAttemptHistoryItem(
     string? BalanceSource,
     int CreditsUsed,
     string Route,
-    string? ResultLabel = null);
+    string? ResultLabel = null,
+    string? Grade = null);
 
 public sealed record LearnerAttemptHistoryResponse(IReadOnlyList<LearnerAttemptHistoryItem> Items);
 
@@ -38,6 +41,7 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
 {
     private const string SpeakingMockTitle = "Full Speaking Mock";
     private const string MarkingInProgress = "Marking in progress";
+    private const string GradingFailed = "Grading didn't finish — retry is free";
 
     public async Task<LearnerAttemptHistoryResponse> GetHistoryAsync(string userId, int limit, string? subtest, CancellationToken ct)
     {
@@ -150,6 +154,16 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
         var cardScores = scoredSessionIds.Count == 0
             ? new Dictionary<string, int>()
             : await LoadCardScoresAsync(scoredSessionIds, ct);
+        // A grade that ran out of retries is shown as its own state (the learner can retry free of charge).
+        var failedGrades = scoredSessionIds.Count == 0
+            ? new HashSet<string>(StringComparer.Ordinal)
+            : (await db.AiOperations.AsNoTracking()
+                .Where(o => o.FeatureCode == SpeakingCanonicalAssessmentService.FeatureCode
+                    && o.ResourceType == "speaking_session"
+                    && o.State == AiOperationState.FailedTerminal
+                    && scoredSessionIds.Contains(o.ResourceId!))
+                .Select(o => o.ResourceId!)
+                .ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
 
         // Credit enrichment from the same ledger the admin sees.
         var debitRefs = await db.AiPackageCreditTransactions.AsNoTracking()
@@ -219,7 +233,8 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
                     cardDebit?.Source,
                     cardDebit?.Credits ?? 0,
                     resultsReady ? $"{cardRoute}/results" : cardRoute,
-                    PracticeResultLabel(card, resultsReady, cardScores)));
+                    PracticeResultLabel(card, resultsReady, cardScores, failedGrades),
+                    GradeLetter(cardScores.TryGetValue(card.Id, out var cardScore) ? cardScore : null)));
                 continue;
             }
 
@@ -252,7 +267,8 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
                 examDebit?.Source,
                 examDebit?.Credits ?? 0,
                 finished ? $"{examRoute}/results" : examRoute,
-                ExamResultLabel(examRow, cardScores)));
+                ExamResultLabel(examRow, cardScores, failedGrades),
+                GradeLetter(ExamScaledScore(examRow, cardScores))));
         }
 
         foreach (var row in readingAttempts)
@@ -346,7 +362,7 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
 
     /// <summary>The same number the exam results page shows: the persisted combined snapshot, else the
     /// rounded average of the two graded cards (<c>(int)Math.Round((a + b) / 2.0)</c>).</summary>
-    private static string? ExamResultLabel(ExamRow exam, IReadOnlyDictionary<string, int> cardScores)
+    private static int? ExamScaledScore(ExamRow exam, IReadOnlyDictionary<string, int> cardScores)
     {
         // A live-tutor exam is human-marked: there is never an AI number to show or to wait for.
         if (exam.Mode != SpeakingExamMode.Ai)
@@ -356,21 +372,40 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
 
         if (exam.CombinedScaledSnapshot is { } combined)
         {
-            return $"{OetScoring.OetReportedScaledScore(combined)}/500";
+            return OetScoring.OetReportedScaledScore(combined);
         }
 
-        if (exam.SessionAId is { } cardA
+        return exam.SessionAId is { } cardA
             && exam.SessionBId is { } cardB
             && cardScores.TryGetValue(cardA, out var scoreA)
-            && cardScores.TryGetValue(cardB, out var scoreB))
-        {
-            return $"{OetScoring.OetReportedScaledScore((scoreA + scoreB) / 2.0)}/500";
-        }
-
-        return exam.State == SpeakingExamState.Completed ? MarkingInProgress : null;
+            && cardScores.TryGetValue(cardB, out var scoreB)
+                ? OetScoring.OetReportedScaledScore((scoreA + scoreB) / 2.0)
+                : null;
     }
 
-    private static string? PracticeResultLabel(SessionRow card, bool resultsReady, IReadOnlyDictionary<string, int> cardScores)
+    private static string? GradeLetter(int? scaled)
+        => scaled is { } value ? OetScoring.OetGradeLetterFromScaled(value) : null;
+
+    private static string? ExamResultLabel(
+        ExamRow exam, IReadOnlyDictionary<string, int> cardScores, IReadOnlySet<string> failedGrades)
+    {
+        if (ExamScaledScore(exam, cardScores) is { } scaled)
+        {
+            return $"{scaled}/500";
+        }
+
+        if (exam.Mode != SpeakingExamMode.Ai || exam.State != SpeakingExamState.Completed)
+        {
+            return null;
+        }
+
+        var failed = (exam.SessionAId is { } a && failedGrades.Contains(a))
+            || (exam.SessionBId is { } b && failedGrades.Contains(b));
+        return failed ? GradingFailed : MarkingInProgress;
+    }
+
+    private static string? PracticeResultLabel(
+        SessionRow card, bool resultsReady, IReadOnlyDictionary<string, int> cardScores, IReadOnlySet<string> failedGrades)
     {
         if (cardScores.TryGetValue(card.Id, out var score))
         {
@@ -378,7 +413,12 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
         }
 
         // A tutor-marked session never gets an AI result, so it is not "in progress" either.
-        return resultsReady && card.Mode != SpeakingSessionMode.LiveTutor ? MarkingInProgress : null;
+        if (!resultsReady || card.Mode == SpeakingSessionMode.LiveTutor)
+        {
+            return null;
+        }
+
+        return failedGrades.Contains(card.Id) ? GradingFailed : MarkingInProgress;
     }
 
     private static string MapGenericState(AttemptState state)

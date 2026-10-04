@@ -55,6 +55,9 @@ import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
 const POLL_INTERVAL_MS = 3_000;
 // A live transcript that still will not save after this many tries stops holding the exam back.
 const MAX_FAILED_TRANSCRIPT_FLUSHES = 3;
+// Polls that may fail in a row, while the exam is on screen, before the learner is told (3 s apart).
+const MAX_SILENT_POLL_FAILURES = 2;
+const LOAD_FAILED_MESSAGE = 'We could not load this step. Please try again.';
 
 function formatMmSs(secondsLeft: number): string {
   const safe = Math.max(0, secondsLeft);
@@ -97,6 +100,7 @@ export default function SpeakingExamPage() {
   const mockSectionCompletedRef = useRef(false);
   const refreshingRef = useRef(false);
   const failedFlushesRef = useRef(0);
+  const pollFailuresRef = useRef(0);
   const liveRoomSessionRef = useRef<string | null>(null);
   const liveRoomRef = useRef<CreateLiveRoomResponse | null>(null);
   const voiceStopRef = useRef<(() => Promise<boolean>) | null>(null);
@@ -150,8 +154,10 @@ export default function SpeakingExamPage() {
           // A transcript that will not save must not strand the learner on a card the exam clock has
           // already closed: after a few tries the exam moves on. A recording is never dropped.
           if (!live || failedFlushesRef.current < MAX_FAILED_TRANSCRIPT_FLUSHES) {
+            // Card B is the last card: nothing follows it, so never promise "the next card".
+            const whatFollows = previous?.currentCardNumber === 2 ? 'your results open' : 'moving to the next card';
             setLoadError(live
-              ? 'The live voice transcript could not be saved. Retrying before moving to the next card.'
+              ? `The live voice transcript could not be saved. Retrying before ${whatFollows}.`
               : RECORDING_UPLOAD_FAILED);
             setLoading(false);
             return;
@@ -162,6 +168,7 @@ export default function SpeakingExamPage() {
       setExam(detail);
       setFetchedAt(Date.now());
       setLoadError(null);
+      pollFailuresRef.current = 0;
       if (detail.state === 'completed' && detail.mockAttemptId && detail.mockSectionId && !mockSectionCompletedRef.current) {
         mockSectionCompletedRef.current = true;
         try {
@@ -181,9 +188,12 @@ export default function SpeakingExamPage() {
         router.replace(`/speaking/exam/${examId}/results`);
       }
     } catch (err) {
-      setLoadError(
-        err instanceof ApiError ? err.userMessage : err instanceof Error ? err.message : 'Could not load the exam.',
-      );
+      pollFailuresRef.current += 1;
+      // The exam is already on screen and the next poll is 3 s away: a blip (a proxy 502 for a few seconds)
+      // is retried silently, and only a run of failures is shown. Never a raw "Request failed: 502"; the
+      // attempt and its credits are untouched either way.
+      if (examRef.current && pollFailuresRef.current <= MAX_SILENT_POLL_FAILURES) return;
+      setLoadError(err instanceof ApiError ? err.userMessage : LOAD_FAILED_MESSAGE);
     } finally {
       refreshingRef.current = false;
       setLoading(false);

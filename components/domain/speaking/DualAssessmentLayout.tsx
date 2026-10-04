@@ -1,161 +1,49 @@
 'use client';
 
 /**
- * Dual-scoring layout: AI + Tutor columns side-by-side, with a top divergence
- * banner (when both are present) and a bottom advisory disclaimer card.
+ * Learner AI Speaking result layout: the AI assessment column and the practice-estimate disclaimer.
  *
- * Responsive: columns stack on mobile, align top on desktop.
+ * Owner spec 4 Oct 2026: once the AI assessment exists it stands on its own. There is no Tutor Assessment
+ * panel, no divergence banner and no tutor-review prompt here — human review is a separate Book a Tutor
+ * flow, not a second panel beside the AI score. (The file keeps its historical name; the tutor console
+ * renders `DualAssessmentColumn` directly.)
  */
 
-import { ArrowDownRight, ArrowUpRight, Equal, ShieldAlert } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import { type ReactNode } from 'react';
 
-import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import {
-  CRITERION_LABEL,
-  agreementBandTone,
-  type DualAssessmentResponse,
-  type SpeakingCriterionCode,
-} from '@/lib/api/speaking-assessments';
-import { cn } from '@/lib/utils';
+import type { DualAssessmentResponse } from '@/lib/api/speaking-assessments';
 
 import { DualAssessmentColumn } from './DualAssessmentColumn';
 
 export interface DualAssessmentLayoutProps {
   data: DualAssessmentResponse;
-  /** Optional CTAs for null states (e.g. "Request tutor review"). */
-  tutorPlaceholderCta?: ReactNode;
+  /** Shown in the AI column while the assessment is still being produced. */
   aiPlaceholderCta?: ReactNode;
   showFullCriteria?: boolean;
   showReadinessBand?: boolean;
-  showTutorAssessment?: boolean;
-}
-
-function pickLargestDelta(
-  perCriterion: Record<string, number>,
-): { code: SpeakingCriterionCode; delta: number } | null {
-  let best: { code: SpeakingCriterionCode; delta: number } | null = null;
-  for (const [code, delta] of Object.entries(perCriterion)) {
-    if (!best || Math.abs(delta) > Math.abs(best.delta)) {
-      best = { code: code as SpeakingCriterionCode, delta };
-    }
-  }
-  return best && best.delta !== 0 ? best : null;
-}
-
-function DivergenceBanner({
-  divergence,
-}: {
-  divergence: NonNullable<DualAssessmentResponse['divergence']>;
-}) {
-  const tone = agreementBandTone(divergence.agreementBand);
-  const topDelta = pickLargestDelta(divergence.perCriterion);
-  const toneClasses = {
-    success: 'border-success/20 bg-success/10 text-success-strong',
-    warning: 'border-warning/20 bg-warning/10 text-warning-strong',
-    danger: 'border-danger/20 bg-danger/10 text-danger-strong',
-  }[tone];
-
-  let directionIcon: ReactNode = <Equal className="h-4 w-4" aria-hidden />;
-  if (topDelta) {
-    directionIcon =
-      topDelta.delta > 0 ? (
-        <ArrowUpRight className="h-4 w-4" aria-hidden />
-      ) : (
-        <ArrowDownRight className="h-4 w-4" aria-hidden />
-      );
-  }
-
-  const bandLabel = {
-    close: 'close agreement',
-    moderate: 'moderate agreement',
-    wide: 'wide divergence',
-  }[divergence.agreementBand];
-
-  const headline = topDelta
-    ? `Tutor scored ${topDelta.delta > 0 ? 'higher' : 'lower'} on ${CRITERION_LABEL[topDelta.code]} (${topDelta.delta > 0 ? '+' : ''}${topDelta.delta})`
-    : 'AI and tutor agreed across all criteria';
-
-  const scaledDeltaPart =
-    divergence.scaledDelta !== 0
-      ? ` · Scaled-score delta: ${divergence.scaledDelta > 0 ? '+' : ''}${Math.round(divergence.scaledDelta)}`
-      : '';
-
-  return (
-    <Card
-      padding="md"
-      className={cn('flex flex-wrap items-center gap-3 border', toneClasses)}
-      aria-label="AI vs tutor divergence summary"
-      data-testid="divergence-banner"
-    >
-      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-surface/60 dark:bg-navy/20">
-        {directionIcon}
-      </span>
-      <div className="flex flex-1 flex-col gap-0.5">
-        <p className="text-sm font-bold">{headline}</p>
-        <p className="text-xs">Agreement band: {bandLabel}{scaledDeltaPart}</p>
-      </div>
-      <Badge variant={tone === 'success' ? 'success' : tone === 'warning' ? 'warning' : 'danger'}>
-        {divergence.agreementBand}
-      </Badge>
-    </Card>
-  );
 }
 
 export function DualAssessmentLayout({
   data,
-  tutorPlaceholderCta,
   aiPlaceholderCta,
   showFullCriteria = true,
   showReadinessBand = true,
-  showTutorAssessment = true,
 }: DualAssessmentLayoutProps) {
-  const { ai, tutor, divergence } = data;
-  const bothPresent = showTutorAssessment && !!ai && !!tutor;
+  const { ai } = data;
 
   return (
     <div className="flex flex-col gap-4" data-testid="dual-assessment-layout">
-      {bothPresent && divergence && <DivergenceBanner divergence={divergence} />}
-
-      <div className={cn('grid gap-4', showTutorAssessment ? 'md:grid-cols-2' : 'md:grid-cols-1')}>
-        <DualAssessmentColumn
-          kind="ai"
-          title="AI Assessment"
-          assessment={ai}
-          showFullCriteria={showFullCriteria}
-          showReadinessBand={showReadinessBand}
-          attribution={
-            ai
-              ? {
-                  provider: ai.provider,
-                  modelId: ai.modelId,
-                  submittedAt: ai.generatedAt,
-                }
-              : undefined
-          }
-          placeholderCta={aiPlaceholderCta}
-        />
-        {showTutorAssessment ? (
-          <DualAssessmentColumn
-            kind="tutor"
-            title="Tutor Assessment"
-            assessment={tutor}
-            showFullCriteria={showFullCriteria}
-            showReadinessBand={showReadinessBand}
-            attribution={
-              tutor
-                ? {
-                    name: tutor.tutorName,
-                    photoUrl: tutor.tutorPhotoUrl,
-                    submittedAt: tutor.submittedAt,
-                  }
-                : undefined
-            }
-            placeholderCta={tutorPlaceholderCta}
-          />
-        ) : null}
-      </div>
+      <DualAssessmentColumn
+        kind="ai"
+        title="AI Assessment"
+        assessment={ai}
+        showFullCriteria={showFullCriteria}
+        showReadinessBand={showReadinessBand}
+        attribution={ai ? { provider: ai.provider, modelId: ai.modelId, submittedAt: ai.generatedAt } : undefined}
+        placeholderCta={aiPlaceholderCta}
+      />
 
       {/* Universal advisory disclaimer */}
       <Card
@@ -165,16 +53,7 @@ export function DualAssessmentLayout({
         aria-label="Speaking assessment advisory"
       >
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
-        <div>
-          <p className="font-bold">{showTutorAssessment
-            ? 'Both estimates are advisory, not an official OET score.'
-            : 'This AI practice estimate is not an official OET score.'}</p>
-          {showTutorAssessment ? (
-            <p className="mt-0.5 text-xs leading-relaxed text-muted">
-              Use this dual view to triangulate your readiness. Official OET results can only be obtained from an OET test session.
-            </p>
-          ) : null}
-        </div>
+        <p className="font-bold">This AI practice estimate is not an official OET score.</p>
       </Card>
     </div>
   );
