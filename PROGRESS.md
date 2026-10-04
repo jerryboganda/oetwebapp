@@ -21,6 +21,7 @@ Last updated: 2026-10-04
 - Console expiry now requests guarded retries, never force-private over active holders/Actions; final source/static gates are clean, actual runtime/Actions shipment is pending.
 - Native full e748QA37180577741 finished cancelled, not green; focused67/67 and actual production37180764537 proof are unchanged. Preserve the additional Writing/retired-worktree checkpoints.
 - Privacy remains blocked by native empty May25907015352 without specific deletion approval; no history exclusion or safety bypass.
+- Commit441 shipped; build37193948006 stopped69/70 only on PowerShell ANSI/wrapped rejection-message assertion. Guard actually rejects; Jev approved stdlib presentation-only normalization. AX37193948034 three native matrices passed; console package checks green, runtime pending.
 
 ## Previous checkpoint - Verified API correction and measured deployment closeout (2026-10-04)
 

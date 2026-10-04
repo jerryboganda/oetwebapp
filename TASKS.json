@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-04T09:28:15Z",
+  "updated": "2026-10-04T10:03:41Z",
   "statuses": [
     "pending",
     "in_progress",
@@ -45,7 +45,7 @@
       "owner": "mandatory-fast-release",
       "blockedBy": ["FAST-02", "FAST-03"],
       "verify": "pnpm run ship + native build/AX/console/production runs + ax:record",
-      "evidence": [],
+      "evidence": ["441f50271 pushed through registered native lease; Build37193948006 executed69/70 passing, blocked by only wrapped/color-decorated PowerShell rejection-message assertion. Production guard correctly rejects. Live Jev approved presentation-only fixture correction; actual app live still pending.", "AX37193948034 all three native matrices passed; console37193947969 all package typecheck/Vitest jobs passed, build/apply pending."],
       "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md", "DEPLOYMENT.md"]
     },
     {

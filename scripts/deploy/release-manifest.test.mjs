@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import test from 'node:test';
 import { COMPONENTS, apiNeedsMigrations, buildInputsChanged, changedPaths, classifyInputs, comparisonContainsSha,
   eligibleBuild, validateManifest, verifySqlArtifact } from './release-manifest.mjs';
@@ -299,7 +300,9 @@ test('native PowerShell watcher rejects completion bypasses before any GitHub or
       { encoding: 'utf8', timeout: 10_000 });
     assert.ifError(result.error);
     assert.notEqual(result.status, 0);
-    assert.match(result.stdout + result.stderr, message);
+    const output = stripVTControlCharacters(result.stdout + result.stderr)
+      .replace(/^\s*\|\s*/gm, '').replace(/\s+/g, ' ');
+    assert.match(output, message);
   }
 });
 

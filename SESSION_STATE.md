@@ -3,9 +3,9 @@
 Session: deployment-latency
 Goal: Make the verified accelerated production release architecture compulsory for all project agents and contributors, then commit, push main and verify this session live.
 Mode: verify
-Updated: 2026-10-04T09:28:15Z
+Updated: 2026-10-04T10:03:41Z
 Branch: main
-HEAD: 7bc18ffd8b987c05b4bd9e3bf5b87db15a000fed
+HEAD: 441f50271f8cc09f32ddcf1a625d0d96e925c80c
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -80,6 +80,8 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 - D-35 Native full e748 QA37180577741 ended CANCELLED: frontend/placement and shards2-6 passed, shard1 cancelled and dependent gate failed. Focused67/67 and production proof remain valid; never claim the full suite passed. Docs QA37181645871 passed.
 - D-36 A tightly coupled console watchdog bypass would force private after a deadline despite active holders/runs. Live Jev approved guarded retries and a pinned production workflow (both p/confidence/margin1), preserving PR/control identity. Unknown holder/count/visibility fields now block; no historical record is excluded/deleted.
 - D-37 Bounded reviewer had read-only tools and could not obtain its required diff/live Jev, so no review PASS claimed. Parent traced exact state/lock/holder boundaries; additional live Jev approved atomic fail-closed state/exclusive locks and reuse of the existing native cross-surface holder channel (both p/confidence/margin1). No new dependency/service; variable writes are explicitly not a distributed commit mutex.
+- D-38 Scoped 25-path enforcement commit441f50271 pushed at10:00:08.392Z through the new registered native holder. Build37193948006 executed70 protocol cases,69 passed/1 failed because native PowerShell colors/prefixes/wrapping split the expected error phrase. The intended guard did reject before operations; no app promotion occurred. Live Jev presentation_assertion p/confidence/margin1 approved stdlib VT/prefix/whitespace normalization only, retaining the exact message/nonzero assertion and every production guard.
+- D-39 AX37193948034 passed three actual Windows Node22/24/Linux22 matrices, including gate/wrapper self-tests and native watcher selection. Console37193947969 all three typecheck/Vitest package jobs and execpolicy passed; console image build/apply still pending, so no whole-console-live claim.
 
 ## Touched files
 
@@ -126,8 +128,9 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 | latest 38 protocol cases and original API runtime bytes | build-images.yml / guards + build-api | 37180577765 | PASS |
 | new same-publish SQL verification/application | production-deploy.yml / job 111372763414 | 37180764537 | PASS |
 | latest API-change physical/public serving and measured timing | production-deploy.yml / job 111372825658 + ship watcher | 37180764537 | PASS |
-| mandatory fast-path mutation/native boundary regressions | build-images.yml / guards | .github/workflows/build-images.yml | NOT RUN |
-| strict ship helpers on Windows/Linux | ax-check.yml / self-test matrix | .github/workflows/ax-check.yml | NOT RUN |
+| mandatory fast-path mutation/native boundary regressions, first attempt | build-images.yml / guards (69/70, native presentation fixture) | 37193948006 | FAIL |
+| mandatory fast-path mutation/native boundary correction | build-images.yml / guards | .github/workflows/build-images.yml | NOT RUN |
+| strict ship helpers on Windows/Linux | ax-check.yml / three self-test/native selection matrices | 37193948034 | PASS |
 | console typecheck/tests and separately updated runtime | agent-console.yml | .github/workflows/agent-console.yml | NOT RUN |
 | enforcement shipment + physical/public serving proof | production-deploy.yml + ship watcher | .github/workflows/production-deploy.yml | NOT RUN |
 
@@ -142,4 +145,4 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 
 ## Next action
 
-1. Final owned implementation/docs reread and local ship:gate/ax:check are green. Commit the explicit 25 owned paths, then pnpm run ship and follow native build/AX/console/production evidence. Verify the separate console applies without interrupting active turns; retain the May-record privacy blocker unless native safety resolves it or specific deletion approval arrives.
+1. Commit the one-test native output-format correction and its honest continuity record, then pnpm run ship again. Follow corrected70-case build/production proof and the existing441 console build/apply (no redundant console dispatch); record native evidence. Retain May-record privacy blocking and all mandatory production controls.
