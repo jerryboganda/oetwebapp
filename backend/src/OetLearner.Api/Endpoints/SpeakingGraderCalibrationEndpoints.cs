@@ -84,6 +84,48 @@ public static class SpeakingGraderCalibrationEndpoints
             .WithSummary("Mark a performance unusable (with a reason); it is kept for audit and never reported.")
             .WithAdminWrite("AdminContentWrite");
 
+        group.MapGet("/runs", async (SpeakingGraderCalibrationService service, CancellationToken ct)
+                => Results.Ok(await service.ListRunsAsync(ct)))
+            .WithName("SpeakingGraderCalibrationRuns")
+            .WithSummary("Recent calibration runs with their progress. Numbers only.")
+            .WithAdminRead("AdminContentRead");
+
+        group.MapPost("/runs", async (
+                SpeakingGraderCalibrationRunCreateRequest request,
+                HttpContext http,
+                SpeakingGraderCalibrationService service,
+                CancellationToken ct)
+                => Results.Ok(await service.CreateRunAsync(AdminId(http), AdminName(http), request, ct)))
+            .WithName("SpeakingGraderCalibrationRunCreate")
+            .WithSummary("Start grading every expert-marked performance with the current grader (at least twice each).")
+            .WithAdminWrite("AdminContentWrite");
+
+        group.MapGet("/runs/{id}", async (string id, SpeakingGraderCalibrationService service, CancellationToken ct)
+                => Results.Ok(await service.GetRunAsync(id, ct)))
+            .WithName("SpeakingGraderCalibrationRun")
+            .WithSummary("A run's progress and the report so far: per-criterion error, score, grade, pass/fail, repeatability.")
+            .WithAdminRead("AdminContentRead");
+
+        group.MapPost("/runs/{id}/next", async (
+                string id,
+                HttpContext http,
+                SpeakingGraderCalibrationService service,
+                CancellationToken ct)
+                => Results.Ok(await service.NextAsync(id, AdminId(http), ct)))
+            .WithName("SpeakingGraderCalibrationRunNext")
+            .WithSummary("Queue the next calibration grade unless a learner's grade is waiting (queued|busy|yield|done|complete).")
+            .WithAdminWrite("AdminContentWrite");
+
+        group.MapPost("/runs/{id}/finalize", async (
+                string id,
+                HttpContext http,
+                SpeakingGraderCalibrationService service,
+                CancellationToken ct)
+                => Results.Ok(await service.FinalizeAsync(id, AdminId(http), AdminName(http), ct)))
+            .WithName("SpeakingGraderCalibrationRunFinalize")
+            .WithSummary("Freeze the report and close the run.")
+            .WithAdminWrite("AdminContentWrite");
+
         return app;
     }
 

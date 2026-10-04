@@ -1,0 +1,69 @@
+name: speaking-grader-calibration
+
+# Speaking grader calibration (owner spec 4 Oct 2026; docs/speaking/grader-calibration.md).
+# Manual only. This workflow only drives the harness: every grade runs as a durable operation on the API's own worker,
+# so nothing is graded here and a run survives this job ending. It prints numbers and ids only (no transcript, no learner
+# name, no audio) and is resumable: dispatch again with the run id to carry on.
+# The API never starts a calibration grade while a learner's grade is queued or running, so a long run is safe to leave on.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run:
+        description: 'Resume this run id (blank = start a new run, or resume the one already running)'
+        required: false
+        default: ''
+      repeats:
+        description: 'How many times each marked performance is graded (at least 2)'
+        required: false
+        default: '2'
+      audio:
+        description: 'Run the audio judge on every grade'
+        required: false
+        default: true
+        type: boolean
+      max_minutes:
+        description: 'Stop waiting after this many minutes (the grades keep running; dispatch again with the run id)'
+        required: false
+        default: '330'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: speaking-grader-calibration
+  cancel-in-progress: false
+
+jobs:
+  calibrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Drive the calibration run
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          RUN_ID: ${{ inputs.run }}
+          REPEATS: ${{ inputs.repeats }}
+          AUDIO: ${{ inputs.audio }}
+          MAX_MINUTES: ${{ inputs.max_minutes }}
+        run: |
+          ARGS="--repeats ${REPEATS:-2} --max-minutes ${MAX_MINUTES:-330}"
+          if [ -n "$RUN_ID" ]; then ARGS="$ARGS --run $RUN_ID"; fi
+          if [ "$AUDIO" = "false" ]; then ARGS="$ARGS --no-audio"; fi
+          node scripts/speaking/grader-calibration.mjs $ARGS
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speaking-grader-calibration-${{ github.run_id }}
+          path: grader-calibration-report.json
+          if-no-files-found: ignore
+          retention-days: 90

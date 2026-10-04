@@ -20,7 +20,10 @@ namespace OetLearner.Api.Services.Speaking;
 ///     <see cref="CalibrationAudioRetention"/> and an audit event says so.</item>
 /// </list>
 /// </summary>
-public sealed class SpeakingGraderCalibrationService(LearnerDbContext db, TimeProvider clock)
+public sealed partial class SpeakingGraderCalibrationService(
+    LearnerDbContext db,
+    TimeProvider clock,
+    SpeakingAiAssessmentService? assessor = null)
 {
     /// <summary>How long a promoted performance's audio is kept (the privacy call recorded in the plan).</summary>
     public static readonly TimeSpan CalibrationAudioRetention = TimeSpan.FromDays(365);

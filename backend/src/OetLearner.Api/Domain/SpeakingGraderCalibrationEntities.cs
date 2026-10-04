@@ -80,3 +80,112 @@ public class SpeakingGraderCalibrationSample
 
     public DateTimeOffset UpdatedAt { get; set; }
 }
+
+// ── The harness: grading the labelled performances with the grader under test ──
+//
+// A run grades every labelled performance `Repeats` times with the CURRENT grader (the same grader core a learner's grade
+// uses) and keeps only numbers: nothing here is a learner-facing result, no credit is touched and no assessment row is
+// written. The report compares these grades with the expert's marks.
+
+public enum SpeakingGraderCalibrationRunStatus
+{
+    Running = 0,
+    Complete = 1,
+    Cancelled = 2,
+}
+
+public enum SpeakingGraderCalibrationGradeStatus
+{
+    Pending = 0,
+
+    /// <summary>A durable operation is queued or running for it.</summary>
+    Queued = 1,
+
+    Done = 2,
+
+    /// <summary>The last attempt failed (retried by the next `next` call up to the attempt limit).</summary>
+    Failed = 3,
+}
+
+public class SpeakingGraderCalibrationRun
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    /// <summary>The grader version(s) that actually graded, set when the run is finalised (empty while running).</summary>
+    [MaxLength(160)]
+    public string GraderVersion { get; set; } = string.Empty;
+
+    /// <summary>How many times each performance is graded (at least two: repeatability is part of the verdict).</summary>
+    public int Repeats { get; set; }
+
+    /// <summary>Run the audio stage on every grade, whatever the admin flag says (the flag guards learner grades).</summary>
+    public bool UseAudio { get; set; }
+
+    public SpeakingGraderCalibrationRunStatus Status { get; set; } = SpeakingGraderCalibrationRunStatus.Running;
+
+    [MaxLength(64)]
+    public string CreatedById { get; set; } = default!;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset? FinalizedAt { get; set; }
+
+    /// <summary>The report as frozen at finalisation (numbers only).</summary>
+    public string? ReportJson { get; set; }
+}
+
+[Index(nameof(RunId), nameof(SampleId), nameof(Repeat), IsUnique = true)]
+public class SpeakingGraderCalibrationGrade
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string RunId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SampleId { get; set; } = default!;
+
+    /// <summary>1-based repeat number of this performance within the run.</summary>
+    public int Repeat { get; set; }
+
+    public SpeakingGraderCalibrationGradeStatus Status { get; set; } = SpeakingGraderCalibrationGradeStatus.Pending;
+
+    public int Attempts { get; set; }
+
+    /// <summary>The durable operation executing the current attempt.</summary>
+    [MaxLength(64)]
+    public string? OperationId { get; set; }
+
+    public DateTimeOffset? QueuedAt { get; set; }
+
+    public DateTimeOffset? CompletedAt { get; set; }
+
+    /// <summary>The grader's nine criterion scores as <c>{ intelligibility:5, ... }</c>.</summary>
+    public string? ScoresJson { get; set; }
+
+    public int? RawTotal { get; set; }
+
+    /// <summary>What the platform would report today for these nine scores (the current raw-to-reported map).</summary>
+    public int? ReportedScaled { get; set; }
+
+    /// <summary><c>audio</c> (judged from the recording) or <c>transcript_only</c>.</summary>
+    [MaxLength(16)]
+    public string? IntelligibilitySource { get; set; }
+
+    [MaxLength(32)]
+    public string? Provider { get; set; }
+
+    [MaxLength(96)]
+    public string? ModelId { get; set; }
+
+    [MaxLength(160)]
+    public string? GraderVersion { get; set; }
+
+    /// <summary>A reason code for a failed attempt; never learner text.</summary>
+    [MaxLength(64)]
+    public string? Error { get; set; }
+}
