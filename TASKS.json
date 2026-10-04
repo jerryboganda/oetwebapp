@@ -210,40 +210,41 @@
     },
     {
       "id": "DEPLOY-AUTH",
-      "title": "Obtain explicit authorization for the signed-in repository-owner GitHub identity and verify admin access",
-      "status": "blocked",
+      "title": "Verify process-scoped existing repository-owner authentication without changing the shared CLI identity",
+      "status": "done",
       "owner": "deployment-latency",
       "blockedBy": [],
       "verify": "owner authorization and gh repository permission/visibility checks",
       "evidence": [
         "Read-only checks: active account push=true/admin=false; repository remains private",
         "Speaking wrapper public flip returned HTTP 404 before push; its lock/lease released",
-        "Owner unavailable to authorize account switching; no alternate identity used"
+        "Renewed user task authorization; live Jev chose isolated existing authentication (probability/confidence 1)",
+        "Native process-scoped owner identity verified with admin=true; shared default identity unchanged"
       ],
       "files": []
     },
     {
       "id": "DEPLOY-05",
       "title": "Run static ship gate, commit only owned paths and verify production through the shipping lease",
-      "status": "blocked",
+      "status": "in_progress",
       "owner": "deployment-latency",
       "blockedBy": ["DEPLOY-04", "DEPLOY-AUTH"],
       "verify": "build-images.yml and production-deploy.yml",
       "evidence": [
-        "Static gate passed; scoped local commit prepared above Speaking ancestor 092e9434dc",
-        "No push/deploy allowed until DEPLOY-AUTH is resolved"
+        "Static gate passed; deployment draft persisted in d6f7e0104 above Speaking ancestor 092e9434dc",
+        "DEPLOY-AUTH resolved with process-scoped native admin verification; Actions/live acceptance pending"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json", "VERIFICATION.md"]
     },
     {
       "id": "DEPLOY-06",
       "title": "Measure genuine warm/cold and Writing paths on Actions and record exact live evidence or target misses",
-      "status": "blocked",
+      "status": "pending",
       "owner": "deployment-latency",
       "blockedBy": ["DEPLOY-05"],
       "verify": "build-images.yml benchmark/Writing dispatch and production-deploy.yml",
       "evidence": [
-        "No new Actions, production or timing evidence; blocked by shipping authorization"
+        "No new Actions, production or timing evidence yet; measure after DEPLOY-05"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md"]
     }

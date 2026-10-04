@@ -2,10 +2,10 @@
 
 Session: deployment-latency
 Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
-Mode: blocked
-Updated: 2026-10-04T01:29:15Z
+Mode: verify
+Updated: 2026-10-04T01:43:22Z
 Branch: main
-HEAD: 092e9434dc
+HEAD: d6f7e0104
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -49,7 +49,7 @@ release provenance, protected storage, readiness or rollback.
 - D-6 Speaking session released HEAD/staging after its local commit 092e9434dc3b54b8a41ba8ca67e89ccdc154ed01; no push occurred. The deployment commit will be its descendant. Preserve unrelated dirty files.
 - D-7 Jev planning/cutover/cache decisions are validated semantic evidence, not executable verification.
 - D-8 Independent findings are triaged through validated live Jev: bound no-op proof, HTTP 200, scoped registry cleanup, earlier pair recovery and successful-promotion preference.
-- D-9 Do not switch stored GitHub identities without explicit authorization or push/dispatch while private. The owner is unavailable to answer the account-switch request.
+- D-9 Renewed owner task authorization is limited to this repository. Live Jev validated process-scoped existing owner authentication; native identity/admin=true were verified. Shared CLI defaults and stored credentials stay unchanged; the ship lease still owns visibility.
 
 ## Touched files
 
@@ -78,10 +78,9 @@ release provenance, protected storage, readiness or rollback.
 
 ## Blockers
 
-- The active gh account has push permission but admin=false; repository visibility is private. The Speaking shipment's required public flip returned HTTP 404 before any push. Read-only permission checks confirmed this blocker.
-- Switching to the already-signed-in repository-owner account requires explicit authorization; ask_user could not obtain an answer. No identity switch, push, dispatch, rollout or visibility change has occurred for this implementation.
-- Independent source review and local static gates are complete. All executable regressions (including registry cleanup failures), images, SQL, real Writing tests, serving proof and latency measurements still require Actions. Five minutes is not an achieved result.
+- The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
+- Independent source review and local static gates are complete. All executable regressions, images, SQL, real Writing tests, serving proof and latency measurements still require Actions. Five minutes is not an achieved result.
 
 ## Next action
 
-1. Obtain explicit authorization to use the repository-owner GitHub identity, verify its admin access, then run pnpm run ship for the deployment commit (including the local Speaking ancestor). Own Actions through actual live proof and warm/cold/Writing measurements; restore privacy under the lease rule.
+1. Commit this authentication-resolution checkpoint, then run pnpm run ship with process-scoped verified owner authentication. Own Actions through actual live proof and warm/cold/Writing measurements; restore privacy under the lease rule.
