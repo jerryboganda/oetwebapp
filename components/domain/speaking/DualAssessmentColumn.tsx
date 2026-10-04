@@ -27,6 +27,7 @@ import {
   type TutorAssessment,
 } from '@/lib/api/speaking-assessments';
 import { oetReportedGradeFromScaled, oetReportedScoreFromScaled } from '@/lib/scoring';
+import { isProvisionalScore, PROVISIONAL_SCORE_TITLE } from '@/lib/speaking/score-label';
 
 export type DualAssessmentColumnKind = 'ai' | 'tutor';
 
@@ -215,11 +216,10 @@ export function DualAssessmentColumn({
   showReadinessBand = true,
 }: DualAssessmentColumnProps) {
   const styles = KIND_STYLES[kind];
-  const reportedScore = assessment
-    ? isAiAssessment(assessment)
-      ? oetReportedScoreFromScaled(assessment.estimatedScaledScore)
-      : Math.round(assessment.estimatedScaledScore)
-    : null;
+  // Both sides report the same way: 0–500 in 10-point steps with the OET letter grade (no B+).
+  const reportedScore = assessment ? oetReportedScoreFromScaled(assessment.estimatedScaledScore) : null;
+  const serverGrade = assessment && 'grade' in assessment ? assessment.grade : null;
+  const scoreLabel = kind === 'ai' && assessment && 'scoreLabel' in assessment ? assessment.scoreLabel : null;
 
   return (
     <Card
@@ -274,9 +274,14 @@ export function DualAssessmentColumn({
                 </span>
                 <span className="text-sm text-muted">/ 500</span>
               </div>
-              {isAiAssessment(assessment) && reportedScore != null ? (
-                <p className="text-sm font-semibold text-navy">
-                  Grade {oetReportedGradeFromScaled(reportedScore)}
+              {reportedScore != null ? (
+                <p className="text-sm font-semibold text-navy" data-testid={`dual-grade-${kind}`}>
+                  Grade {serverGrade ?? oetReportedGradeFromScaled(reportedScore)}
+                </p>
+              ) : null}
+              {kind === 'ai' && isProvisionalScore(scoreLabel) ? (
+                <p className="text-xs font-semibold text-warning-strong" data-testid="speaking-score-provisional">
+                  {PROVISIONAL_SCORE_TITLE}
                 </p>
               ) : null}
               {showReadinessBand ? (

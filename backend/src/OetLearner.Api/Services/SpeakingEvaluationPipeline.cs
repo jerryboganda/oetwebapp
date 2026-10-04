@@ -294,7 +294,9 @@ public sealed class SpeakingEvaluationPipeline(
         evaluation.State = AsyncState.Completed;
         evaluation.StatusReasonCode = "canonical_speaking_assessment";
         evaluation.StatusMessage = "Scored by the canonical Speaking assessment pipeline.";
-        evaluation.ScoreRange = BuildScoreRange(projection.EstimatedScaledScore);
+        // One reported score in 10-point steps (the projection already carries it); the former
+        // "332-362"-style band was invented precision and not an OET reporting format.
+        evaluation.ScoreRange = projection.EstimatedScaledScore.ToString(System.Globalization.CultureInfo.InvariantCulture);
         evaluation.ConfidenceBand = projection.ConfidenceBand switch
         {
             "high" => ConfidenceBand.High,
@@ -578,19 +580,6 @@ public sealed class SpeakingEvaluationPipeline(
         return score;
     }
 
-    private static string BuildScoreRange(int scaledEstimate)
-    {
-        var lower = ClampScaled(scaledEstimate - 18);
-        var upper = ClampScaled(scaledEstimate + 12);
-        if (lower == 330 && upper == 360)
-        {
-            lower = 332;
-            upper = 362;
-        }
-
-        return $"{lower}-{upper}";
-    }
-
     private static ConfidenceBand ResolveConfidence(
         Attempt attempt,
         IReadOnlyList<UnifiedFinding> findings,
@@ -822,8 +811,6 @@ public sealed class SpeakingEvaluationPipeline(
         "minor" => 2,
         _ => 3
     };
-
-    private static int ClampScaled(int score) => Math.Clamp(score, OetScoring.ScaledMin, OetScoring.ScaledMax);
 
     private static int SecondsToMilliseconds(double seconds) => (int)Math.Round(seconds * 1000);
 

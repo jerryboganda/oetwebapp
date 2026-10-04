@@ -410,7 +410,7 @@ public sealed class JevSpeakingGraderTests : IAsyncLifetime
         return Ok(answers.ToArray());
     }
 
-    private static int ExpectedScaled() => OetScoring.SpeakingProjectedScaled(
+    private static int ExpectedScaled() => OetScoring.SpeakingReportedScaled(
         new OetScoring.SpeakingCriterionScores(5, 5, 5, 5, 3, 2, 2, 2, 2));
 
     /// <summary>The grader's numbers exactly as it returned them, whatever Jev did.</summary>

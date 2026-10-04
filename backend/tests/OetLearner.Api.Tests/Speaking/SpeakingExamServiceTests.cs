@@ -705,8 +705,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
         var canonical = new SpeakingCanonicalAssessmentService(
             _db, classic: null!, v11: null!, TimeProvider.System,
-            NullLogger<SpeakingCanonicalAssessmentService>.Instance,
-            v11ReleaseGate: new SpeakingSimulationV11ReleaseGate(_db));
+            NullLogger<SpeakingCanonicalAssessmentService>.Instance);
         var exams = new SpeakingExamService(
             _db,
             new SpeakingAiAssessmentService(_db, null!, NullLogger<SpeakingAiAssessmentService>.Instance),

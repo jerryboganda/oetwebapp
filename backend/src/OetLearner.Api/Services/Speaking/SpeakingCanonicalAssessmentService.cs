@@ -23,8 +23,8 @@ public interface ISpeakingCanonicalAssessmentService
 
     Task AssessNowAsync(string sessionId, CancellationToken ct);
 
-    /// <summary>True when the session is scored by the v1.1 simulation
-    /// assessor rather than the classic one.</summary>
+    /// <summary>True only when the session already carries a complete v1.1
+    /// report (history); every new session is scored by the classic assessor.</summary>
     Task<bool> UsesV11Async(string sessionId, CancellationToken ct);
 
     /// <summary>Learner-facing grading state for
@@ -53,8 +53,7 @@ public sealed class SpeakingCanonicalAssessmentService(
     SpeakingSimulationV11AssessmentService v11,
     TimeProvider clock,
     ILogger<SpeakingCanonicalAssessmentService> logger,
-    IAiCreditReservationService? creditReservations = null,
-    SpeakingSimulationV11ReleaseGate? v11ReleaseGate = null) : ISpeakingCanonicalAssessmentService
+    IAiCreditReservationService? creditReservations = null) : ISpeakingCanonicalAssessmentService
 {
     public const string FeatureCode = AiFeatureCodes.SpeakingGrade;
     public const string PromptVersion = "speaking.score.v2";
@@ -288,29 +287,17 @@ public sealed class SpeakingCanonicalAssessmentService(
         return true;
     }
 
+    /// <summary>
+    /// True only for a session that ALREADY has a complete v1.1 card report, so that history stays
+    /// readable. Owner spec 4 Oct 2026: the nine official OET criteria are the only scoring model —
+    /// the ten weighted v1.1 criteria (one of them invented) never score new work, whatever the
+    /// release-gate approvals say. Every new session is therefore graded by the classic assessor.
+    /// </summary>
     public async Task<bool> UsesV11Async(string sessionId, CancellationToken ct)
-    {
-        // A recorder-fallback recording has no v1.1 turn evidence (that only
-        // comes from the realtime voice loop), so it is always scored by the
-        // classic assessor from its server-side transcript.
-        var recorderFallbackId = SpeakingSessionRecordingService.RecordingIdFor(sessionId);
-        var v11Evidence = await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
-                   .AnyAsync(x => x.SpeakingSessionId == sessionId, ct)
-               && !await db.SpeakingRecordings.AsNoTracking()
-                   .AnyAsync(r => r.Id == recorderFallbackId, ct);
-        if (!v11Evidence || v11ReleaseGate is null) return v11Evidence;
-
-        // The v1.1 scorer only runs once the owner has approved its release for
-        // the profession; until then it refuses every session (409), so a live
-        // voice role-play would never get a result. Score those from the saved
-        // live transcript with the classic rulebook assessor instead.
-        var professionId = await db.SpeakingSessions.AsNoTracking()
-            .Where(s => s.Id == sessionId)
-            .Join(db.RolePlayCards, s => s.RolePlayCardId, c => c.Id, (s, c) => c.ProfessionId)
-            .FirstOrDefaultAsync(ct);
-        return professionId is not null
-            && (await v11ReleaseGate.EvaluateAsync(professionId, ct)).IsReleased;
-    }
+        => await db.SpeakingSimulationV11Assessments.AsNoTracking()
+            .AnyAsync(a => a.SpeakingSessionId == sessionId
+                && a.AssessmentKind == "card"
+                && a.Status == SpeakingSimulationV11AssessmentStatus.Complete, ct);
 
     public async Task<SpeakingAssessmentState> GetStateAsync(string sessionId, CancellationToken ct)
     {

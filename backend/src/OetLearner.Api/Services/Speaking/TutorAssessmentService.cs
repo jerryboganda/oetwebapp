@@ -192,7 +192,8 @@ public sealed class TutorAssessmentService(
             row.InformationGathering,
             row.InformationGiving);
 
-        row.EstimatedScaledScore = OetScoring.SpeakingProjectedScaled(scores);
+        // Reported score (0–500, multiple of 10): the same single number the AI side uses.
+        row.EstimatedScaledScore = OetScoring.SpeakingReportedScaled(scores);
         row.ReadinessBand = OetScoring.SpeakingReadinessBandCode(
             OetScoring.SpeakingReadinessBandFromScaled(row.EstimatedScaledScore));
 
@@ -683,8 +684,15 @@ public sealed class TutorAssessmentService(
         };
     }
 
-    private static AiAssessmentProjection ProjectAi(SpeakingAiAssessment row) =>
-        new(
+    // A legacy row stored the unrounded heuristic number; both projections report the rounded
+    // value and recompute the readiness band from it, so score, grade and band always agree.
+    private static string BandOf(int reportedScaled) =>
+        OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(reportedScaled));
+
+    private static AiAssessmentProjection ProjectAi(SpeakingAiAssessment row)
+    {
+        var reported = OetScoring.OetReportedScaledScore(row.EstimatedScaledScore);
+        return new(
             AssessmentId: row.Id,
             Provider: row.Provider,
             ModelId: row.ModelId,
@@ -697,14 +705,19 @@ public sealed class TutorAssessmentService(
             Structure: row.Structure,
             InformationGathering: row.InformationGathering,
             InformationGiving: row.InformationGiving,
-            EstimatedScaledScore: row.EstimatedScaledScore,
-            ReadinessBand: row.ReadinessBand,
+            EstimatedScaledScore: reported,
+            ReadinessBand: BandOf(reported),
             OverallSummary: row.OverallSummary,
             ConfidenceBand: row.ConfidenceBand,
-            GeneratedAt: row.GeneratedAt);
+            GeneratedAt: row.GeneratedAt,
+            Grade: OetScoring.OetGradeLetterFromScaled(reported),
+            ScoreLabel: OetScoring.SpeakingScoreLabel(null, row.ModelId));
+    }
 
-    private static TutorAssessmentProjection ProjectTutor(SpeakingTutorAssessment row, string? tutorName) =>
-        new(
+    private static TutorAssessmentProjection ProjectTutor(SpeakingTutorAssessment row, string? tutorName)
+    {
+        var reported = OetScoring.OetReportedScaledScore(row.EstimatedScaledScore);
+        return new(
             AssessmentId: row.Id,
             TutorId: row.TutorId,
             TutorName: tutorName,
@@ -717,14 +730,15 @@ public sealed class TutorAssessmentService(
             Structure: row.Structure,
             InformationGathering: row.InformationGathering,
             InformationGiving: row.InformationGiving,
-            EstimatedScaledScore: row.EstimatedScaledScore,
-            ReadinessBand: row.ReadinessBand,
+            EstimatedScaledScore: reported,
+            ReadinessBand: BandOf(reported),
             OverallFeedbackMarkdown: row.OverallFeedbackMarkdown,
             Strengths: DeserialiseStringArray(row.StrengthsJson),
             Improvements: DeserialiseStringArray(row.ImprovementsJson),
             RecommendedDrills: DeserialiseStringArray(row.RecommendedDrillsJson),
             IsFinal: row.IsFinal,
             SubmittedAt: row.SubmittedAt);
+    }
 
     private static string SerialiseStringArray(string[]? input) =>
         input is null || input.Length == 0 ? "[]" : JsonSerializer.Serialize(input, JsonOpts);

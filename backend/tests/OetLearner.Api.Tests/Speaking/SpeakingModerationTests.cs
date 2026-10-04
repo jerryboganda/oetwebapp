@@ -198,7 +198,7 @@ public sealed class SpeakingModerationTests : IAsyncLifetime
         var dual = await _tutorSvc.GetDualAssessmentForLearnerAsync("learner-9", sessionId, CancellationToken.None);
 
         Assert.NotNull(dual.Tutor);
-        var moderatedScaled = OetScoring.SpeakingProjectedScaled(
+        var moderatedScaled = OetScoring.SpeakingReportedScaled(
             new OetScoring.SpeakingCriterionScores(2, 2, 2, 2, 1, 1, 1, 1, 1));
         Assert.Equal(moderatedScaled, dual.Tutor!.EstimatedScaledScore);
     }
@@ -212,7 +212,7 @@ public sealed class SpeakingModerationTests : IAsyncLifetime
         var dual = await _tutorSvc.GetDualAssessmentForLearnerAsync("learner-10", sessionId, CancellationToken.None);
 
         Assert.NotNull(dual.Tutor);
-        var primaryScaled = OetScoring.SpeakingProjectedScaled(
+        var primaryScaled = OetScoring.SpeakingReportedScaled(
             new OetScoring.SpeakingCriterionScores(4, 4, 4, 4, 2, 2, 2, 2, 2));
         Assert.Equal(primaryScaled, dual.Tutor!.EstimatedScaledScore);
     }
@@ -248,7 +248,7 @@ public sealed class SpeakingModerationTests : IAsyncLifetime
         var scores = new OetScoring.SpeakingCriterionScores(
             linguistic[0], linguistic[1], linguistic[2], linguistic[3],
             clinical[0], clinical[1], clinical[2], clinical[3], clinical[4]);
-        var scaled = OetScoring.SpeakingProjectedScaled(scores);
+        var scaled = OetScoring.SpeakingReportedScaled(scores);
         var now = DateTimeOffset.UtcNow;
         _db.SpeakingTutorAssessments.Add(new SpeakingTutorAssessment
         {

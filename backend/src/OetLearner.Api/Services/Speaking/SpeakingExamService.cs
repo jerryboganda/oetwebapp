@@ -656,8 +656,10 @@ public sealed class SpeakingExamService(
             if (scaledA is not null && scaledB is not null)
             {
                 combined = (int)Math.Round((scaledA.Value + scaledB.Value) / 2.0);
+                // The readiness band follows the reported (10-point) score the learner sees,
+                // never the unrounded average: a combined 345 is shown as 350 and must not read "Borderline".
                 band = OetScoring.SpeakingReadinessBandCode(
-                    OetScoring.SpeakingReadinessBandFromScaled(combined.Value));
+                    OetScoring.SpeakingReadinessBandFromScaled(OetScoring.OetReportedScaledScore(combined.Value)));
                 if (exam.CombinedScaledSnapshot is null)
                 {
                     exam.CombinedScaledSnapshot = combined;
@@ -674,18 +676,31 @@ public sealed class SpeakingExamService(
             }
         }
 
+        // One reported score (10-point steps) for the whole exam, and the grade, readiness band and
+        // label all derive from it: a stored snapshot from before the reported score existed is
+        // re-derived here, never shown with a band that was computed on an unrounded number.
+        int? reportedScore = combined is { } liveCombined
+            ? OetScoring.OetReportedScaledScore(liveCombined)
+            : exam.CombinedScaledSnapshot is { } snapshot
+                ? OetScoring.OetReportedScaledScore(snapshot)
+                : null;
+        var examLabel = cards.Count > 0
+            && cards.All(c => c.Assessment?.ScoreLabel == OetScoring.SpeakingScoreLabelPracticeEstimate)
+                ? OetScoring.SpeakingScoreLabelPracticeEstimate
+                : OetScoring.SpeakingScoreLabelProvisional;
+
         return new SpeakingExamResults(
             ExamId: exam.Id,
             Mode: SpeakingExamModes.ToCode(exam.Mode),
             State: SpeakingExamStates.ToCode(exam.State),
             OverallStatus: overall,
-            CombinedScaledScore: combined is { } reportedCombined
-                ? OetScoring.OetReportedScaledScore(reportedCombined)
-                : exam.CombinedScaledSnapshot is { } snapshot
-                    ? OetScoring.OetReportedScaledScore(snapshot)
-                    : null,
-            ReadinessBand: band ?? exam.ReadinessBandSnapshot,
-            Cards: cards);
+            CombinedScaledScore: reportedScore,
+            ReadinessBand: reportedScore is { } reportedForBand
+                ? OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(reportedForBand))
+                : exam.ReadinessBandSnapshot,
+            Cards: cards,
+            Grade: reportedScore is { } reportedForGrade ? OetScoring.OetGradeLetterFromScaled(reportedForGrade) : null,
+            ScoreLabel: examLabel);
     }
 
     private async Task<(SpeakingExamCardResult Result, int? RawScaledScore)> ResultForCardAsync(
@@ -771,19 +786,21 @@ public sealed class SpeakingExamService(
     /// dedicated v1.1 endpoints.</summary>
     private static SpeakingAiAssessmentProjection ProjectV11CardScore(SpeakingSimulationV11Assessment report)
     {
-        var score = report.EstimatedPracticeScore ?? 0;
+        var reported = OetScoring.OetReportedScaledScore(report.EstimatedPracticeScore ?? 0);
         return new SpeakingAiAssessmentProjection(
             AssessmentId: report.Id,
             Provider: report.Provider ?? "speaking_simulation_v11",
             ModelId: report.ModelName ?? string.Empty,
             PromptTemplateId: report.PromptTemplateId ?? string.Empty,
             CriterionScores: new Dictionary<string, CriterionScore>(),
-            EstimatedScaledScore: OetScoring.OetReportedScaledScore(score),
-            ReadinessBand: OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(score)),
+            EstimatedScaledScore: reported,
+            ReadinessBand: OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(reported)),
             OverallSummary: string.Empty,
             ConfidenceBand: report.ConfidenceLabel ?? "medium",
             GeneratedAt: report.GeneratedAt,
-            IsAdvisory: true);
+            IsAdvisory: true,
+            Grade: OetScoring.OetGradeLetterFromScaled(reported),
+            ScoreLabel: OetScoring.SpeakingScoreLabel(null, report.ModelName));
     }
 
     // ─────────────────────────────────────────────────────────────────

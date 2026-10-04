@@ -50,6 +50,12 @@ import {
   speakingInputKind,
 } from '@/lib/speaking/input-kind';
 import { CountUp } from '@/components/ui/count-up';
+import { oetReportedGradeFromScaled } from '@/lib/scoring';
+import {
+  isProvisionalScore,
+  PROVISIONAL_SCORE_BODY,
+  PROVISIONAL_SCORE_TITLE,
+} from '@/lib/speaking/score-label';
 
 const POLL_INTERVAL_MS = 4_000;
 /** ~10 minutes of polling, then "Check again" (the result persists server-side). */
@@ -331,6 +337,10 @@ export default function SpeakingExamResultsPage() {
   const awaitingTutor = results.overallStatus === 'awaiting_tutor';
   const band = results.readinessBand || null;
   const bandColour = band ? bandTone(band) : 'success';
+  // The badge is the OET letter for the reported score (never B+), not the readiness band.
+  const gradeLetter = typeof results.combinedScaledScore === 'number'
+    ? results.grade ?? oetReportedGradeFromScaled(results.combinedScaledScore)
+    : null;
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -362,7 +372,7 @@ export default function SpeakingExamResultsPage() {
             }
             gaugeLabel="/ 500"
             gaugeColor={`var(--color-${bandColour})`}
-            grade={band ? { label: bandLabel(band), tone: bandColour } : null}
+            grade={gradeLetter ? { label: `Grade ${gradeLetter}`, tone: bandColour } : null}
             stats={results.cards.map((card) => ({
               label: `Card ${card.cardNumber === 1 ? 'A' : 'B'}`,
               value: card.assessment ? `${card.assessment.estimatedScaledScore}/500` : '—',
@@ -380,6 +390,12 @@ export default function SpeakingExamResultsPage() {
             <p className="mt-0.5 text-xs leading-relaxed text-muted">
               Use it to see how ready you are. Official OET results can only be obtained from an OET test session.
             </p>
+            {isProvisionalScore(results.scoreLabel) ? (
+              <p className="mt-2 text-xs leading-relaxed text-navy" data-testid="speaking-score-provisional">
+                <span className="font-semibold text-warning-strong">{PROVISIONAL_SCORE_TITLE}.</span>{' '}
+                {PROVISIONAL_SCORE_BODY}
+              </p>
+            ) : null}
           </div>
         </div>
       )}

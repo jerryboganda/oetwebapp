@@ -170,6 +170,10 @@ export interface AiAssessment {
   confidenceBand: string;
   generatedAt: string;
   isAdvisory: boolean;
+  /** OET letter for `estimatedScaledScore` (A | B | C+ | C | D | E); there is no B+. */
+  grade?: string | null;
+  /** `provisional` until the grader is calibrated, then `ai_practice_estimate`. Missing = provisional. */
+  scoreLabel?: string | null;
   /** Optional: recommended remedial drills (slugs/ids); the learner page renders them on a tab. */
   recommendedDrills?: string[];
 }

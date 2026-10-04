@@ -73,9 +73,11 @@ public record CriterionScore(
 
 /// <summary>Response from <c>POST /v1/speaking/sessions/{id}/ai-assess</c>
 /// and <c>GET /v1/speaking/sessions/{id}/ai-assessment</c>. Always
-/// advisory — the headline <c>EstimatedScaledScore</c> is recomputed
-/// through <see cref="OetLearner.Api.Services.OetScoring.SpeakingProjectedScaled(OetLearner.Api.Services.OetScoring.SpeakingCriterionScores)"/>
-/// so the 0–500 number is the single source of truth.</summary>
+/// advisory — the headline <c>EstimatedScaledScore</c> is the reported score
+/// (<see cref="OetLearner.Api.Services.OetScoring.SpeakingReportedScaled(OetLearner.Api.Services.OetScoring.SpeakingCriterionScores)"/>:
+/// 0–500 in steps of 10), the single number the grade, readiness band and pass line derive from.
+/// <c>Grade</c> is the OET letter for that number; <c>ScoreLabel</c> is <c>provisional</c> until the
+/// grader has been calibrated against expert-labelled performances, then <c>ai_practice_estimate</c>.</summary>
 public record SpeakingAiAssessmentProjection(
     string AssessmentId,
     string Provider,
@@ -87,7 +89,9 @@ public record SpeakingAiAssessmentProjection(
     string OverallSummary,
     string ConfidenceBand,
     DateTimeOffset GeneratedAt,
-    bool IsAdvisory);
+    bool IsAdvisory,
+    string? Grade = null,
+    string? ScoreLabel = null);
 
 /// <summary>POST /v1/speaking/sessions/{id}/consent body. The learner
 /// confirms a specific consent version which the session and any

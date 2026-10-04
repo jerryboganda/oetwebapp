@@ -69,11 +69,13 @@ public sealed class SpeakingFinalizationRaceTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task LiveVoiceSession_UsesClassicAssessor_UntilV11IsReleasedForTheProfession()
+    public async Task LiveVoiceSession_UsesClassicAssessor_V11NeverScoresNewWork_ButExistingReportsStayReadable()
     {
         // Production 25 Sep 2026: every live voice session was routed to the
         // v1.1 scorer, which refuses (409 speaking_v11_release_blocked) until
         // the owner approves its release, so no live role-play got a result.
+        // 4 Oct 2026 (owner spec): the nine official criteria are the only
+        // scoring model, so a captured v1.1 persona alone never selects v1.1.
         var sessionId = await SeedSessionAsync();
         _db.RolePlayCards.Add(new RolePlayCard
         {
@@ -89,16 +91,29 @@ public sealed class SpeakingFinalizationRaceTests : IAsyncDisposable
         });
         await _db.SaveChangesAsync();
 
-        var gated = new SpeakingCanonicalAssessmentService(
-            _db, classic: null!, v11: null!, TimeProvider.System,
-            NullLogger<SpeakingCanonicalAssessmentService>.Instance,
-            v11ReleaseGate: new SpeakingSimulationV11ReleaseGate(_db));
-        Assert.False(await gated.UsesV11Async(sessionId, default));
-
-        var ungated = new SpeakingCanonicalAssessmentService(
+        var svc = new SpeakingCanonicalAssessmentService(
             _db, classic: null!, v11: null!, TimeProvider.System,
             NullLogger<SpeakingCanonicalAssessmentService>.Instance);
-        Assert.True(await ungated.UsesV11Async(sessionId, default));
+        Assert.False(await svc.UsesV11Async(sessionId, default));
+
+        // A card report that is not complete (technical review, pending) does not select v1.1 either.
+        _db.SpeakingSimulationV11Assessments.Add(new SpeakingSimulationV11Assessment
+        {
+            Id = "v11-review", SpeakingSessionId = sessionId, AssessmentKind = "card",
+            Status = SpeakingSimulationV11AssessmentStatus.TechnicalReview, GeneratedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+        Assert.False(await svc.UsesV11Async(sessionId, default));
+
+        // A complete v1.1 card report that already exists stays readable through the v1.1 path.
+        _db.SpeakingSimulationV11Assessments.Add(new SpeakingSimulationV11Assessment
+        {
+            Id = "v11-complete", SpeakingSessionId = sessionId, AssessmentKind = "card",
+            Status = SpeakingSimulationV11AssessmentStatus.Complete, EstimatedPracticeScore = 360,
+            GeneratedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+        Assert.True(await svc.UsesV11Async(sessionId, default));
     }
 
     private async Task<string> SeedSessionAsync()
