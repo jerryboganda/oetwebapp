@@ -66,6 +66,7 @@ describe('AdminSpeakingPage', () => {
     expect(screen.getByRole('link', { name: /Result visibility Open workspace/i })).toHaveAttribute('href', '/admin/speaking/result-visibility');
     expect(screen.getByRole('link', { name: /Speaking analytics Open workspace/i })).toHaveAttribute('href', '/admin/analytics/speaking');
     expect(screen.getByRole('link', { name: /Recording audit Open workspace/i })).toHaveAttribute('href', '/admin/speaking/recordings/audit');
+    expect(screen.getByRole('link', { name: /Grader calibration Open workspace/i })).toHaveAttribute('href', '/admin/speaking/grader-calibration');
   });
 
   it('hides New actions and elevated operations from read-only content admins', async () => {
@@ -78,6 +79,7 @@ describe('AdminSpeakingPage', () => {
     expect(screen.queryByRole('link', { name: /New mock set/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Operations & quality' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Result visibility Open workspace/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Grader calibration Open workspace/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Simulation v1\.1 governance Open workspace/i })).not.toBeInTheDocument();
 
     // But the content tabs are still visible for reading.

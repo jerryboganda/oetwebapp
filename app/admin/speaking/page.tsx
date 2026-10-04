@@ -24,6 +24,7 @@ import {
   Minus,
   Pencil,
   Plus,
+  Scale,
   Tags,
 } from 'lucide-react';
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
@@ -62,6 +63,14 @@ const operationsLinks: AdminHubLink[] = [
     description: 'Choose exactly which Speaking result fields learners can see, from submission receipt to drills and reattempts.',
     icon: <Eye className="h-5 w-5" />,
     badge: 'Policy',
+    badgeVariant: 'info',
+  },
+  {
+    href: '/admin/speaking/grader-calibration',
+    title: 'Grader calibration',
+    description: 'Mark real role-plays blind to the AI score so the AI grader can be checked against an OET expert before it loses its Provisional label.',
+    icon: <Scale className="h-5 w-5" />,
+    badge: 'Calibration',
     badgeVariant: 'info',
   },
   {

@@ -566,6 +566,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/writing', title: 'Writing' },
   { prefix: '/admin/speaking/recordings/audit', title: 'Speaking Recording Audit' },
   { prefix: '/admin/speaking/result-visibility', title: 'Speaking Result Visibility' },
+  { prefix: '/admin/speaking/grader-calibration', title: 'Speaking Grader Calibration' },
   { prefix: '/admin/speaking', title: 'Speaking' },
   { prefix: '/admin/analytics/reading', title: 'Reading Analytics' },
   { prefix: '/admin/analytics/listening', title: 'Listening Analytics' },
