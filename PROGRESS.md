@@ -18,9 +18,9 @@ Last updated: 2026-10-04
 - Guarded controls reject completion/visibility/workflow bypasses, missing checkers and unknown native data; scoped mutations protect proven reuse/cache/SQL/Writing/runtime contracts. Console expiry retries safely, never force-private over holders/runs.
 - Exclusive local locks/atomic state and the existing native workstation/console holder channel prevent missing-shaped state or one-way lease coverage; variable writes are not claimed as a global mutex. Additional live Jev approved both corrections; runnable boundary checks remain Actions-only.
 - Native full e748QA37180577741 finished cancelled, not green; focused67/67 and actual production37180764537 proof are unchanged. Preserve the additional Writing/retired-worktree checkpoints.
-- Privacy remains blocked by native empty May25907015352 without specific deletion approval; no history exclusion or safety bypass.
+- Privacy: native May25907015352 and its check-suite remain queued/zero jobs/checks, no pending-deployment approval; age exceeds GitHub30-day rerun limit. Exact deletion request unavailable, no grant; no history exclusion or bypass.
 - First441 build37193948006 failed69/70 only on native PowerShell presentation; approved stdlib-only correction327 passed70/70 at37194323785. Deploy37194396337 public/physical blue proof284.177s (4m44.18, four unchanged proven digest reuses). AX37193948034 native matrices and441/327 frontend QA green; backend skipped.
-- Console469 tests/images green but both runs deferred1 active turn. Fresh10:58:33Z stilloldc81/1 active; app remains exact327/blue/HTTP200. Specific restart approval unavailable, no grant. Evidenceb361 shipped legitimate no-op and106 rows/26 gate IDs verified; console/private gates remain BLOCKED.
+- Console469 tests/images green, but six idle checks and final11:22:41Z remainoldc81/2 active. Restart approval unavailable, no grant. Refined live protected_pending boundary validated1 after uncertain preference paused. Main9e2 QA37197421291 frontend/placement/gate passed, backend skipped; real evidence recorded, console/private gates still BLOCKED.
 
 ## Previous checkpoint - Verified API correction and measured deployment closeout (2026-10-04)
 

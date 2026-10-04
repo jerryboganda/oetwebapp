@@ -6,6 +6,8 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 11:13 | CI triage | CI triage | 37198028630 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 9e2f34e6f |
+| 2026-10-04 11:03 | QA Smoke | QA Smoke | 37197421291 | Placement entry contracts=success Frontend unit (vitest + lint + tsc + build)=success Detect what changed=success Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}=skipped QA gate (all suites green)=success | SUCCESS | 9e2f34e6f |
 | 2026-10-04 10:23 | Owner Agent Console (build + deploy) | Owner Agent Console (build + deploy) | 37195228166 | Static rollout guards=success Unit tests (agent-console/dockerproxy)=success Unit tests (agent-console/egress)=success Unit tests (agent-console)=success Build & push agent-console-dockerproxy=success Build & push agent-console-egress=success Build & push agent-console=success Roll out on the VPS (pull-only)=success | SUCCESS | 327082ec2 |
 | 2026-10-04 10:18 | CI triage | CI triage | 37194927786 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 327082ec2 |
 | 2026-10-04 10:07 | QA Smoke | QA Smoke | 37194323799 | Detect what changed=success Frontend unit (vitest + lint + tsc + build)=success Placement entry contracts=success Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}=skipped QA gate (all suites green)=success | SUCCESS | 327082ec2 |

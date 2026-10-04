@@ -3,9 +3,9 @@
 Session: deployment-latency
 Goal: Make the verified accelerated production release architecture compulsory for all project agents and contributors, then commit, push main and verify this session live.
 Mode: blocked
-Updated: 2026-10-04T10:58:33Z
+Updated: 2026-10-04T11:22:41Z
 Branch: main
-HEAD: b361bf121942d921516c65f89d49ba2153db120f
+HEAD: 9e2f34e6ff4a499b76c1c814a27e52c47570c9f1
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -87,6 +87,8 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 - D-42 Both already-started QA37193947973 (441) and37194323799 (327) passed frontend/placement/gate; backend legitimately skipped. Wrapper ax:record/verify succeeded for327. Peer received user-directed inherited contract and exact descendant/physical proof; parent retains HEAD/index/ledger ownership until console/evidence closeout.
 - D-43 Idle-only retry37195228166 completed its tests/images successfully but again safely deferred recreation; fresh10:36:12Z native health/image read still shows1 active/non-draining and all three oldc81 images. Console runtime completion is externally blocked, not green. No more duplicate retries or forced interruption without fresh specific owner approval.
 - D-44 Evidence commitb361bf121 shipped with legitimate RELEASE_NO_DEPLOYMENT_INPUTS; ax:verify checked106 ledger rows/26 cited gate IDs. Fresh10:58:33Z app web/ready/live remain HTTP200/exact327/blue, while console remains oldc81/1 active. Specific restart approval was requested but user unavailable; this is no grant. All owned source/evidence is pushed, but console runtime and May-record privacy remain blocked.
+- D-45 Renewed completion request was followed with native11:07 app proof and six protected idle observations11:13-11:18: oldc81/2 active throughout. Final11:22:41Z still2 active/non-draining; native May run/check-suite queued withzero jobs/checks and no pending deployment approval. Its142-day age exceeds GitHub's30-day rerun window. Both exact deletion and active-turn restart questions returned unavailable, not grants. One action-preference judgment failed confidence validation and paused; the narrower live protected_pending authorization judgment validated p/confidence/margin1. No force, deletion, speculative rerun or private flip.
+- D-46 Exact main9e2 QA37197421291 passed frontend job111422053012 (tsc/encoding/lint/Vitest/build), placement and gate; backend explicitly skipped. ax:record wrote its real row and skipped triage37198028630. All safe code/evidence work is complete; runtime/privacy gates stay open for actual idle or specific permissions, not generic autonomy.
 
 ## Touched files
 
@@ -140,16 +142,17 @@ The measured duration is not a fixed deadline or an authorization to skip gates.
 | console runtime still oldc81/1 active; idle-only retry deferred | agent-console.yml / rollout111415804815 | 37195228166 | BLOCKED |
 | enforcement shipment + exact physical/public serving proof (284.177s) | production-deploy.yml / rollout111413177138 + ship watcher | 37194396337 | PASS |
 | already-started frontend/placement QA, backend skipped | qa-smoke.yml | 37194323799 | PASS |
+| final9e2 frontend/placement QA, backend explicitly skipped | qa-smoke.yml / frontend job111422053012 | 37197421291 | PASS |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
 - Verified unchanged-component327 reuse met300s at284.177s. API-change e748 remains510.240s, and full cold/Writing-live is unmeasured; forced-Writing build-only was310s. Different conditions are not isolated causal attribution or a universal deadline. Never remove gates or report projections as acceptance.
-- Console update is built/pulled but protected by an active owner turn; oldc81 images still run. Both native attempts safely deferred, and fresh10:58:33Z health/image proof remains unchanged. Specific restart approval was requested but unavailable, not granted. Wait for idle or obtain fresh specific approval; no more speculative retries.
+- Console update is built/pulled but protected by2 active owner turns; oldc81 images still run. Six bounded native idle checks stayed busy, and final11:22:41Z health remains2/non-draining. Specific restart approval was requested again but unavailable, not granted. Wait for genuine idle or actual specific approval; no more unchanged polling or speculative retries.
 - QA37177363819 predates the already-live scoring correction; 67/67 focused regressions passed. Full e748 QA37180577741 ended cancelled, not a whole-backend PASS. Do not rerun unrelated QA for this deployment-control change.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
-- Latest startup: ship lock/lease free, repository PUBLIC and only the empty May25907015352 queue record remains. Its permanent deletion still lacks specific authorization; no history is deleted or native safety bypassed.
+- Final11:22:41Z native refresh: repository PUBLIC, zero in-progress Actions and only May25907015352 queued. The check-suite is also queued/zero checks; no pending-deployment approval can resolve it, and a rerun exceeds GitHub's30-day limit. Exact deletion permission was requested but unavailable, not granted. Never infer either missing permission from generic autonomous completion.
 
 ## Next action
 
