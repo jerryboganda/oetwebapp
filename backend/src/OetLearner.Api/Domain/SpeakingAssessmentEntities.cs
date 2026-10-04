@@ -46,6 +46,15 @@ public class SpeakingAiAssessment
     [MaxLength(64)]
     public string PromptTemplateId { get; set; } = "speaking.score.v2";
 
+    /// <summary>
+    /// The exact grader that produced this score: <c>{prompt template}|{raw→reported mapping version}|{audio
+    /// stage version}</c>. A score is "provisional" until its grader version (with the model) has passed
+    /// calibration against expert-labelled performances; null on rows graded before this existed, which are
+    /// therefore always provisional.
+    /// </summary>
+    [MaxLength(128)]
+    public string? GraderVersion { get; set; }
+
     // Linguistic criteria — 0..6 each (OET band).
     public int Intelligibility { get; set; }
     public int Fluency { get; set; }

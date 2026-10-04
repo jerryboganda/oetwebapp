@@ -30,6 +30,46 @@ explanation is penalised only through the communication criterion it affects (In
 Appropriateness), never as a separate deduction. Rulebook rules guide how evidence is read; they never
 create a second penalty on top of a criterion score.
 
+## How the grader is told to score (`speaking.score.v3`)
+
+The grounded system prompt (`RulebookPromptBuilder`, Speaking + Score only) carries:
+
+- **The official OET band descriptors**, rendered from `rulebooks/speaking/common/assessment-criteria.json`
+  under the codes the grader replies with (`grammarExpression` = "Resources of Grammar and Expression",
+  `structure` = "Providing structure", …). They decide each number; before v3 the prompt had only one-line
+  glosses and never saw them.
+- **"How to score" principles**: score each criterion holistically against its descriptor; the rulebook is
+  interpretation guidance and **never a separate deduction** (a rule's "costs marks" wording describes its own
+  criterion); one event counts against at most **one** criterion; **medical or clinical knowledge accuracy is
+  not assessed** — a confusing or mistaken explanation lowers only the communication criterion it affects
+  (Information giving, or Appropriateness); connection talk is not performance; candidate-facing text never
+  contains rule IDs or internal codes.
+- The rulebook headed "Key rules (interpretation guidance — not deductions)" (the old heading read "violations
+  are auto-mark-deductions"), including the Breaking Bad News / follow-up rules for cards of those types
+  (`SpeakingAiAssessmentService.RulebookCardToken`; the grader used to pass the generic `role_play` token, so
+  card-scoped rules never reached their cards).
+- A reply contract that defers to the JSON in the user message: nine criterion scores with rationales and
+  verbatim quotes. The model is **not** asked for a score, grade or readiness band — the server derives all
+  three. Writing keeps its own prompt unchanged.
+
+Safety net: `SpeakingLearnerText.ScrubRuleIds` removes any `RULE_nn` the model still writes from the rationales
+and summary a candidate reads; the stored text is left as written.
+
+### Graded evidence
+
+The graded transcript starts at the real role-play. The opening connection check ("Hi, can you hear me?" /
+"Yeah, I hear you. Go ahead.") is removed from the grader input, the quote check, the interruption signals and
+the learner-facing marked transcript by `SpeakingTranscriptEvidence.StripConnectivityChatter`. Only *leading*
+connection-check sentences go, so a real greeting and anything said later is always kept; the stored segments
+and their hash are never altered.
+
+### Grader version
+
+Every score records `GraderVersion` = `{prompt template}|{mapping version}|{audio stage}` (for example
+`speaking.score.v3|speaking-map.v0-heuristic|audio-none`). A score is `provisional` until that exact version —
+together with the grading model — has passed calibration; changing the prompt, the mapping or the audio stage
+starts a new, uncalibrated version.
+
 ## The reported score — one number, everywhere
 
 `OetScoring.SpeakingReportedScaled` (mirrored by `speakingReportedScaled` in `lib/scoring.ts`):
