@@ -63,12 +63,56 @@ the learner-facing marked transcript by `SpeakingTranscriptEvidence.StripConnect
 connection-check sentences go, so a real greeting and anything said later is always kept; the stored segments
 and their hash are never altered.
 
+### Acoustic evidence — Intelligibility is judged from the sound
+
+Intelligibility is a property of the *sound* of speech; a transcript cannot carry it. When the admin feature flag
+`speaking_audio_assessment` is on, every Speaking grade first runs the **audio stage**
+(`SpeakingAudioEvidenceService`, feature code `speaking.audio_assess`), then hands its findings to the grader:
+
+1. **Clips.** The candidate's own stored clips: a live-voice session's per-turn clips (the segments' `sourceRecordingId`,
+   in the order spoken; archived and warm-up clips never), or a recorder session's recording. The patient's voice is
+   not part of them. Nothing is written to disk: each clip is streamed from `IFileStorage` through `ffmpeg`
+   (stdin → stdout) to 16 kHz mono, a 600 ms silence is put between clips, the join is cut at 6 minutes and encoded as
+   one 48 kbps mp3 (`SpeakingAudioTranscoder`; the API image installs `ffmpeg`).
+2. **The judge.** One call per card to the OpenAI audio-chat model (`gpt-audio-1.5` by default, editable on the
+   `openai-audio` provider row), pinned to that row and **never** the Speaking grade chain, so the Claude Max grade
+   route is untouched. It is sent the audio and a narrow brief — and **never the transcript**, so it cannot read the
+   answer off the text. It returns what it heard in the first words, an Intelligibility score 0–6 on the official band
+   descriptors with a rationale and observations (clip, second, what), fluency *evidence* (rate, long pauses,
+   hesitations, fillers, restarts) and its own confidence. Temperature 0; the credential is the already-funded OpenAI
+   key (`LIVEVOICE__OPENAIAPIKEY`), used when the row carries none of its own.
+3. **Verification.** The words it says it heard are compared with the first candidate turn of the transcript
+   (first twelve words; one contained in the other, or at least 40 % shared). A mismatch (silence, wrong audio, a made-up
+   judgement) discards the audio result: `audio_unverified`. A poor recording, a second voice (patient bleed) or a
+   judgement that covers only part of the speech keeps the score but sets the stage's confidence to low.
+4. **Feeding the grade.** The grader receives an "ACOUSTIC EVIDENCE" block; **the audio score replaces its own
+   Intelligibility**, its Fluency stays its own (the fluency evidence only informs it). The stage's findings are stored
+   beside the criterion rationales (`_acoustic`, no migration) and the grade's `GraderVersion` carries
+   `audio-openai.v1:{model}`.
+
+**No usable audio is not a failure** (owner decision 4 Oct 2026). Every problem — no clip kept, a missing blob, too
+short, unusable, unverified, the transcoder or the provider failing, a refusal, a timeout — becomes
+`unavailable:<reason>` and grading goes on from the transcript: Intelligibility is the grader's text-only estimate, the
+grade's confidence is **low**, and the result says plainly *"Estimated from the transcript only (limited evidence)"*
+with the reason in words (`SpeakingIntelligibilityEvidence`, shown under the Intelligibility row). A grade that has no
+stored audio judgement — stage off, or an older grade — is labelled the same way. Grading never fails because of audio.
+
+**Release gate.** The stage is dark until a probe passes. `POST /v1/admin/speaking/audio-assess/probe` (admin, multipart:
+`audio` + `phrase`) runs a clip through the same pipeline and reports what the model heard, the similarity to the phrase,
+the score and observations; the manual workflow `speaking-audio-probe.yml` sends a clean synthetic clip and three deliberately accented ones
+(German, Spanish and French voices reading the English phrase) and requires: the model heard the clean clip
+(similarity ≥ 0.6) and judged it, at least one accented clip is judged from its audio, and a judged one scores 4 or
+lower with at least one observation and below the clean clip. Only then is the flag turned on. The probe is plumbing and sanity evidence; accuracy
+against human experts is what [calibration](#calibration) measures (audio-sourced Intelligibility error is one of its
+pass criteria).
+
 ### Grader version
 
 Every score records `GraderVersion` = `{prompt template}|{mapping version}|{audio stage}` (for example
-`speaking.score.v3|speaking-map.v0-heuristic|audio-none`). A score is `provisional` until that exact version —
-together with the grading model — has passed calibration; changing the prompt, the mapping or the audio stage
-starts a new, uncalibrated version.
+`speaking.score.v3|speaking-map.v0-heuristic|audio-none`, or `…|audio-openai.v1:gpt-audio-1.5` for a grade whose
+Intelligibility was judged from audio). A score is `provisional` until that exact version — together with the grading
+model — has passed calibration; changing the prompt, the mapping, the audio model or the audio stage starts a new,
+uncalibrated version.
 
 ## The reported score — one number, everywhere
 

@@ -75,6 +75,19 @@ Source-of-truth registration in `backend/src/OetLearner.Api/Services/Seeding/Spe
   (credit balance, usage limits, ...) never decide the class of an OpenAI or Gemini HTTP 400, 413, 415 or 422,
   because those replies can echo request content.
 
+## Speaking audio judge (owner decision 4 Oct 2026)
+
+Intelligibility is judged from the candidate's audio by an OpenAI audio-chat model: provider row `openai-audio`
+(seeded by `CoreAiProviderSeeder`; `OpenAiCompatible`, category `Asr` so it never joins text failover, model
+`gpt-audio-1.5`, editable in the admin UI), feature `speaking.audio_assess` (scoring-critical, pinned, own circuit,
+**never** on the grade chain above). Its key is the funded OpenAI key already used by live voice
+(`LIVEVOICE__OPENAIAPIKEY`): `AiProviderRegistry.GetPlatformKeyAsync` falls back to it for this one provider code when
+the row has no key of its own; a key pasted on the row overrides it. The payload builder sends the audio as
+`input_audio` (mp3) parts on the first user message and uses `max_completion_tokens` for audio models; the
+coordinator's request hash includes the audio bytes. Deactivating the row (or adding `speaking.audio_assess` to the
+disabled-features list, or switching off the `speaking_audio_assessment` flag) stops the stage; grades continue from the
+transcript, labelled as such. Details and the release probe: [scoring.md](./scoring.md#acoustic-evidence--intelligibility-is-judged-from-the-sound).
+
 ## Provider env keys
 
 See `docs/env/speaking.md`.

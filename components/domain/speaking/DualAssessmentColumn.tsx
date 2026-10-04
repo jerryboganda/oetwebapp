@@ -30,6 +30,8 @@ import {
 import { oetReportedGradeFromScaled, oetReportedScoreFromScaled } from '@/lib/scoring';
 import { isProvisionalScore, PROVISIONAL_SCORE_TITLE } from '@/lib/speaking/score-label';
 
+import { IntelligibilityEvidenceNote } from './IntelligibilityEvidenceNote';
+
 export type DualAssessmentColumnKind = 'ai' | 'tutor';
 
 export interface DualAssessmentColumnAttribution {
@@ -58,7 +60,7 @@ const KIND_STYLES: Record<DualAssessmentColumnKind, { header: string; ring: stri
     chip: 'bg-lavender text-primary-dark',
     icon: <Sparkles className="h-4 w-4" aria-hidden />,
     tooltip:
-      'AI-generated estimate based on your transcript. Advisory only, not an official OET score.',
+      'AI-generated estimate from your transcript and, when a recording was kept, how your speech sounded. Advisory only, not an official OET score.',
   },
   tutor: {
     header: 'bg-success/10 border-success/20',
@@ -117,6 +119,7 @@ function CriterionRow({
   barClass,
   rationale,
   quotes,
+  children,
 }: {
   code: SpeakingCriterionCode;
   score: number;
@@ -124,6 +127,7 @@ function CriterionRow({
   barClass: string;
   rationale?: string;
   quotes?: string[];
+  children?: ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasQuotes = !!(quotes && quotes.length > 0);
@@ -153,6 +157,7 @@ function CriterionRow({
           {rationale}
         </p>
       ) : null}
+      {children}
       {hasQuotes ? (
         <div className="mt-2">
           <button
@@ -378,7 +383,11 @@ export function DualAssessmentColumn({
                           barClass={styles.bar}
                           rationale={rationale}
                           quotes={quotes}
-                        />
+                        >
+                          {code === 'intelligibility' && isAiAssessment(assessment) ? (
+                            <IntelligibilityEvidenceNote evidence={assessment.intelligibilityEvidence} />
+                          ) : null}
+                        </CriterionRow>
                       );
                     })}
                   </div>

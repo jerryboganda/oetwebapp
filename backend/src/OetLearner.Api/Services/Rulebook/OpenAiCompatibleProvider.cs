@@ -65,7 +65,7 @@ public sealed class OpenAiCompatibleProvider(
             ["model"] = model,
             ["messages"] = AiProviderPayloadBuilder.BuildOpenAiMessages(request),
             ["temperature"] = request.Temperature,
-            ["max_tokens"] = maxTokens,
+            [AiProviderPayloadBuilder.MaxTokensParameter(model)] = maxTokens,
             ["stream"] = false,
         };
         var responseFormat = AiProviderPayloadBuilder.BuildOpenAiResponseFormat(request.ResponseFormatJson);

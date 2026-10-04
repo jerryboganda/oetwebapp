@@ -67,6 +67,8 @@ public sealed class AiFeaturePolicyRegistryTests : IAsyncDisposable
     [InlineData(AiFeatureCodes.OcrListeningPartA, "ocr", AiOperationClass.InteractiveLearning, false)]
     [InlineData(AiFeatureCodes.ListeningPartAScore, "listening", AiOperationClass.ScoringCritical, false)]
     [InlineData(SpeakingAiFeatureCodes.SpeakingScoreV2, "speaking", AiOperationClass.ScoringCritical, true)]
+    // The acoustic judge feeds a candidate's score, so it is scoring-critical even though its code has no "grade"/"score".
+    [InlineData(AiFeatureCodes.SpeakingAudioAssess, "speaking", AiOperationClass.ScoringCritical, true)]
     [InlineData(SpeakingAiFeatureCodes.CardDraftV1, "speaking", AiOperationClass.AdminBatch, true)]
     public async Task LookupAsync_StaticDefault_CoversFeature(
         string featureCode, string expectedModule, AiOperationClass expectedClass, bool expectedGrounding)

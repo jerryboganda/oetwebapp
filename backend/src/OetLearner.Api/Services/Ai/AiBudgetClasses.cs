@@ -135,6 +135,7 @@ public static class AiBudgetClasses
         if (string.Equals(code, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.WritingSampleScore, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(code, AiFeatureCodes.SpeakingAudioAssess, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.MockFullGrade, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.PronunciationScore, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.PronunciationLinguisticScore, StringComparison.OrdinalIgnoreCase)

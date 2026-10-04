@@ -5,12 +5,16 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0
 # - tesseract-ocr / tesseract-ocr-eng: native binaries + English trained data
 #   for the Tesseract wrapper used by WritingOcrService.
 # - libleptonica-dev: provides libleptonica used by libtesseract.
+# - ffmpeg: decodes the candidate's stored Speaking clips (webm/opus, mp4/aac) and encodes the one mp3 the
+#   OpenAI audio judge accepts (SpeakingAudioEvidenceService). Used through stdin/stdout only: no audio is
+#   ever written to the container's disk.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         curl \
         tesseract-ocr \
         tesseract-ocr-eng \
         libleptonica-dev \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

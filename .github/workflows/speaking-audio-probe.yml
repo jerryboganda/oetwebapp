@@ -1,0 +1,59 @@
+name: speaking-audio-probe
+
+# Release gate for the Speaking audio judge (owner spec 4 Oct 2026; docs/speaking/scoring.md).
+# Manual only. All compute (speech synthesis, the probe script) runs here, never on the workstation or the VPS.
+# The clips are synthetic, so no learner audio is involved: a speech synthesiser reads a known phrase, and a
+# different-language voice reading the same English phrase gives a deliberately accented clip (three voices are tried:
+# the gate needs at least one of them to be judged from its audio and scored below the clean clip).
+
+on:
+  workflow_dispatch:
+    inputs:
+      phrase:
+        description: 'The phrase both clips speak (a dozen words or more, not from any prompt)'
+        required: false
+        default: 'Good afternoon, my name is Doctor Okafor and I will be looking after you today.'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: speaking-audio-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Make the probe clips
+        env:
+          PHRASE: ${{ inputs.phrase }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq espeak-ng
+          espeak-ng -v en-us -s 150 -w clean.wav "$PHRASE"
+          for voice in de es fr; do espeak-ng -v "$voice" -s 150 -w "accented-$voice.wav" "$PHRASE"; done
+          ls -l clean.wav accented-*.wav
+
+      - name: Probe the production audio judge
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          PHRASE: ${{ inputs.phrase }}
+        run: node scripts/speaking/audio-probe.mjs --clean clean.wav --accented accented-de.wav,accented-es.wav,accented-fr.wav --phrase "$PHRASE"
+
+      - name: Upload the result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: speaking-audio-probe-${{ github.run_id }}
+          path: audio-probe-result.json
+          if-no-files-found: ignore
+          retention-days: 30

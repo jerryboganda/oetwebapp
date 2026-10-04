@@ -32,11 +32,11 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
     public async ValueTask DisposeAsync() => await _connection.DisposeAsync();
 
     [Fact]
-    public void BuildSeeds_EmitsFourCanonicalRows()
+    public void BuildSeeds_EmitsFiveCanonicalRows()
     {
         var seeds = CoreAiProviderSeeder.BuildSeeds();
 
-        Assert.Equal(4, seeds.Count);
+        Assert.Equal(5, seeds.Count);
         Assert.Contains(seeds, s => s.Code == "anthropic"
             && s.Dialect == AiProviderDialect.Anthropic
             && s.Category == AiProviderCategory.TextChat
@@ -47,6 +47,15 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
         Assert.Contains(seeds, s => s.Code == "whisper-asr"
             && s.Dialect == AiProviderDialect.WhisperAsr
             && s.Category == AiProviderCategory.Asr);
+        // The Speaking acoustic judge: an OpenAI-compatible audio chat model, Asr category (never in a
+        // text failover list), keyless (its key falls back to the live-voice OpenAI account), low priority.
+        Assert.Contains(seeds, s => s.Code == "openai-audio"
+            && s.Dialect == AiProviderDialect.OpenAiCompatible
+            && s.Category == AiProviderCategory.Asr
+            && s.BaseUrl == "https://api.openai.com/v1"
+            && s.DefaultModel == "gpt-audio-1.5"
+            && s.FailoverPriority == 95
+            && s.IsActive);
         Assert.Contains(seeds, s => s.Code == "typesafe-jev"
             && s.Dialect == AiProviderDialect.TypeSafeJev
             && s.Category == AiProviderCategory.Judgment
@@ -74,7 +83,7 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
 
         await using var db = new LearnerDbContext(_options);
         var rows = await db.AiProviders.AsNoTracking().ToListAsync();
-        Assert.Equal(4, rows.Count);
+        Assert.Equal(5, rows.Count);
         Assert.All(rows, r => Assert.Equal(string.Empty, r.EncryptedApiKey));
         // Every canonical row is live except the Jev judgment row, which stays off until
         // an admin pastes the key and the connection test passes.
@@ -120,8 +129,8 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
         Assert.Equal("existing-cipher", whisper.EncryptedApiKey);        // untouched
         Assert.Equal("https://groq.example.com/openai/v1", whisper.BaseUrl);
         Assert.Equal("whisper-large-v3", whisper.DefaultModel);
-        // The other three canonical rows are still backfilled.
-        Assert.Equal(4, await db.AiProviders.CountAsync());
+        // The other four canonical rows are still backfilled.
+        Assert.Equal(5, await db.AiProviders.CountAsync());
     }
 
     [Fact]
@@ -157,7 +166,7 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
         Assert.Equal("Jev (admin renamed)", jev.Name);
         Assert.Equal("https://jev.example.com", jev.BaseUrl);
         Assert.Equal("jev-1.99.0", jev.DefaultModel);
-        Assert.Equal(4, await db.AiProviders.CountAsync());
+        Assert.Equal(5, await db.AiProviders.CountAsync());
     }
 
     [Fact]
@@ -169,7 +178,7 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
         await seeder.StartAsync(default);
 
         await using var db = new LearnerDbContext(_options);
-        Assert.Equal(4, await db.AiProviders.CountAsync());
+        Assert.Equal(5, await db.AiProviders.CountAsync());
     }
 
     private IServiceProvider BuildServiceProvider()

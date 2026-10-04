@@ -88,6 +88,19 @@ public sealed record SpeakingFeedbackReport(
     IReadOnlyList<SpeakingFeedbackItem> PriorityWeaknesses,
     IReadOnlyList<SpeakingReportDrill> Drills);
 
+/// <summary>One thing the audio judge heard that affected Intelligibility: which clip, about which second, what.</summary>
+public sealed record SpeakingAudioObservation(int Clip, int ApproxSecond, string Issue, string? Example);
+
+/// <summary>What the candidate's Intelligibility score was judged from (owner spec 4 Oct 2026). <c>Source</c> is
+/// <c>audio</c> (judged from the recording) or <c>transcript_only</c> (estimated from the transcript: limited
+/// evidence, stated plainly). <c>ReasonText</c> says in plain words why there was no audio evidence.</summary>
+public sealed record SpeakingIntelligibilityEvidence(
+    string Source,
+    string? Reason,
+    string? ReasonText,
+    string Confidence,
+    IReadOnlyList<SpeakingAudioObservation> Observations);
+
 /// <summary>Response from <c>POST /v1/speaking/sessions/{id}/ai-assess</c>
 /// and <c>GET /v1/speaking/sessions/{id}/ai-assessment</c>. Always
 /// advisory — the headline <c>EstimatedScaledScore</c> is the reported score
@@ -109,7 +122,8 @@ public record SpeakingAiAssessmentProjection(
     bool IsAdvisory,
     string? Grade = null,
     string? ScoreLabel = null,
-    SpeakingFeedbackReport? Report = null);
+    SpeakingFeedbackReport? Report = null,
+    SpeakingIntelligibilityEvidence? IntelligibilityEvidence = null);
 
 /// <summary>POST /v1/speaking/sessions/{id}/consent body. The learner
 /// confirms a specific consent version which the session and any

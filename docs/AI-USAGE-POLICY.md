@@ -107,6 +107,7 @@ Every feature the gateway serves is classified. Defaults:
 | `writing.grade` | ✅ | ❌ | ✅ | Mock / practice grading |
 | `writing.sample_score` | ✅ | ❌ | ✅ | Sample scoring |
 | `speaking.grade` | ✅ | ❌ | ✅ | Speaking evaluation |
+| `speaking.audio_assess` | ✅ | ❌ | ✅ | Speaking acoustic judge: an OpenAI audio model (provider `openai-audio`, key from the row or `LIVEVOICE__OPENAIAPIKEY`) hears the candidate's clips and judges Intelligibility and fluency evidence; never sent the transcript; never via the grade chain |
 | `mock.full_grade` | ✅ | ❌ | ✅ | Full mock exam grading |
 | `writing.coach.suggest` | ❌ | ✅ | ✅ | Inline suggestions |
 | `writing.coach.explain` | ❌ | ✅ | ✅ | Why-is-this-wrong explanations |

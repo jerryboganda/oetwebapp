@@ -163,6 +163,7 @@ builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<OetLearner.Api.Configuration.DeviceAttestationOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.DeviceAttestationOptions.SectionName));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.Configure<SpeakingGradingOptions>(builder.Configuration.GetSection(SpeakingGradingOptions.SectionName));
+builder.Services.Configure<SpeakingAudioAssessmentOptions>(builder.Configuration.GetSection(SpeakingAudioAssessmentOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveVoiceOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveVoiceOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.FeatureFlagOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.FeatureFlagOptions.SectionName));
@@ -1111,6 +1112,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingResultVisib
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingComplianceService>();
 // Phase 2 (B.3) — AI-side speaking assessment scorer.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingAiAssessmentService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.ISpeakingAudioTranscoder, OetLearner.Api.Services.Speaking.FfmpegSpeakingAudioTranscoder>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingAudioEvidenceService, OetLearner.Api.Services.Speaking.SpeakingAudioEvidenceService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingCanonicalAssessmentService,
     OetLearner.Api.Services.Speaking.SpeakingCanonicalAssessmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingPatientTurnService,
@@ -3083,6 +3086,7 @@ app.MapLiveClassEndpoints();
 app.MapTutorEndpoints();
 app.MapSpeakingCalibrationEndpoints();
 app.MapSpeakingGraderCalibrationEndpoints();
+app.MapSpeakingAudioProbeEndpoints();
 
 // ── OET Speaking module (Phase 1+ role-play cards, sessions, compliance) ──
 app.MapAdminSpeakingContentEndpoints();

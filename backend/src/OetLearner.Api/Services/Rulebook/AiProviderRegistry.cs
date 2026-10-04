@@ -33,9 +33,16 @@ public interface IAiProviderRegistry
     Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct);
 }
 
-public sealed class AiProviderRegistry(LearnerDbContext db, IDataProtectionProvider dpProvider)
+public sealed class AiProviderRegistry(
+    LearnerDbContext db,
+    IDataProtectionProvider dpProvider,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.LiveVoiceOptions>? liveVoice = null)
     : IAiProviderRegistry
 {
+    /// <summary>Registry code of the OpenAI audio-chat model that judges Speaking audio
+    /// (<c>speaking.audio_assess</c>). Seeded keyless by <c>CoreAiProviderSeeder</c>.</summary>
+    public const string SpeakingAudioProviderCode = "openai-audio";
+
     private const string ProtectorPurpose = "AiProvider.PlatformKey.v1";
     private readonly IDataProtector _protector = dpProvider.CreateProtector(ProtectorPurpose);
 
@@ -61,7 +68,15 @@ public sealed class AiProviderRegistry(LearnerDbContext db, IDataProtectionProvi
     public async Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct)
     {
         var p = await FindByCodeAsync(providerCode, ct);
-        if (p is null || string.IsNullOrEmpty(p.EncryptedApiKey)) return null;
+        if (p is null) return null;
+        if (string.IsNullOrEmpty(p.EncryptedApiKey))
+        {
+            // The Speaking audio judge runs on the OpenAI account that already funds live voice, so the
+            // key is not pasted twice; a key pasted on the row (above) still wins.
+            if (!string.Equals(p.Code, SpeakingAudioProviderCode, StringComparison.OrdinalIgnoreCase)) return null;
+            var shared = liveVoice?.Value.OpenAiApiKey?.Trim();
+            return string.IsNullOrEmpty(shared) ? null : shared;
+        }
         // Keyless subscription sidecar rows store a literal marker, not ciphertext; the sidecar
         // ignores the key header, so hand the marker back instead of failing to decrypt it. Only
         // while the row still points at an allow-listed INTERNAL host (OET_INTERNAL_AI_HOSTS): a
@@ -194,7 +209,7 @@ public sealed class RegistryBackedProvider(
             ["model"] = model,
             ["messages"] = AiProviderPayloadBuilder.BuildOpenAiMessages(request),
             ["temperature"] = request.Temperature,
-            ["max_tokens"] = maxTokens,
+            [AiProviderPayloadBuilder.MaxTokensParameter(model)] = maxTokens,
             ["stream"] = false,
         };
         if (ubagFacade)

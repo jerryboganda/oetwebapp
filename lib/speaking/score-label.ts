@@ -16,3 +16,11 @@ export const PROVISIONAL_SCORE_BODY =
 export function isProvisionalScore(label: string | null | undefined): boolean {
   return label !== 'ai_practice_estimate';
 }
+
+/** Owner spec 4 Oct 2026: with no usable audio the score is still given, and Intelligibility says plainly what it rests on. */
+export const INTELLIGIBILITY_TRANSCRIPT_ONLY_LABEL = 'Estimated from the transcript only (limited evidence)';
+
+export const INTELLIGIBILITY_AUDIO_LABEL = 'Judged from your recording';
+
+export const INTELLIGIBILITY_AUDIO_LIMITED_NOTE =
+  'The recording was hard to judge (quality, background noise or another voice), so treat this part as less certain.';

@@ -39,7 +39,8 @@ public sealed class SpeakingAiAssessmentService(
     SpeakingSimulationV11EvidenceCaptureService? v11EvidenceCapture = null,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null,
     ITypeSafeJudgmentService? judgments = null,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null)
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
+    ISpeakingAudioEvidenceService? audioEvidence = null)
 {
     // v3 (4 Oct 2026): the system prompt now carries the official OET band descriptors and the
     // "rules guide, never deduct" principles; the model is no longer asked for a readiness band
@@ -56,6 +57,11 @@ public sealed class SpeakingAiAssessmentService(
     /// </summary>
     internal static string GraderVersion
         => $"{PromptTemplateId}|{OetScoring.SpeakingMappingVersion}|{AudioStageVersion}";
+
+    /// <summary>The grader version of a grade whose Intelligibility was judged from audio by <paramref name="model"/>:
+    /// a different audio model is a different grader and must be calibrated on its own.</summary>
+    internal static string GraderVersionWithAudio(string? model)
+        => $"{PromptTemplateId}|{OetScoring.SpeakingMappingVersion}|{SpeakingAudioEvidenceService.StageVersion(model)}";
 
     private const string ProviderName = "ai_gateway";
     private const string ModelId = "gateway-default";
@@ -247,14 +253,39 @@ Scoring rules:
             throw;
         }
 
-        var userInput = BuildUserInput(card, script, transcript, cardTypeRow);
-
         // Free Mocks: is this session a use of the learner's free sample?
         // Derived server-side from the bound use — the session itself (shared
         // engine) or its legacy recorder attempt (attempt→session bridge) —
         // never from the request, so only that grading call skips the
         // plan/token gate (kill switches still win in AiQuotaService).
         var freeSample = await FreeSamples.FreeSampleService.IsFreeSpeakingSessionAsync(db, session, ct);
+        // Free sample OR paid with AI credits: both skip the plan feature gate / token counters (kill switches
+        // still win). The audio stage below uses the same grant, so a funded session is never refused there.
+        var gradeGrant = freeSample || await SpeakingCreditSettlement.IsCreditFundedAsync(db, session, ct);
+        // ONLY a genuine mock (curated Mock Set / full mock bundle: MockSetId/MockSessionId set) is Mock context;
+        // a plain ExamSessionId does NOT make a session a mock (every two-card exam card has one).
+        var assessmentContext =
+            (!string.IsNullOrWhiteSpace(session.MockSetId) || !string.IsNullOrWhiteSpace(session.MockSessionId))
+                ? AiAssessmentContext.Mock
+                : AiAssessmentContext.Practice;
+
+        // ── Acoustic evidence (admin-flagged, fail-soft) ──
+        // null = the audio stage did not run for this grade (flag off, or no service): grading is exactly as
+        // before. When it runs it never throws for an audio problem: the result says "unavailable" and why.
+        SpeakingAudioEvidence? audio = null;
+        if (audioEvidence is not null && await audioEvidence.IsEnabledAsync(ct))
+        {
+            audio = await audioEvidence.AssessAsync(new SpeakingAudioAssessRequest(
+                sessionId,
+                session.UserId,
+                card.ProfessionId,
+                RulebookCardToken(card),
+                SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson),
+                gradeGrant,
+                assessmentContext), ct);
+        }
+
+        var userInput = BuildUserInput(card, script, transcript, cardTypeRow, audio);
 
         // ── Jev readiness (advisory, flag-gated, fail-soft, <= 3 s) ──
         // Strictly BEFORE the grade chain and sequential with it (the scoped DbContext is not
@@ -290,9 +321,7 @@ Scoring rules:
                 Temperature = 0.1,
                 MaxTokens = 4096,
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
-                // Free sample OR paid with AI credits: both skip the plan
-                // feature gate / token counters (kill switches still win).
-                FreeSampleGrant = freeSample || await SpeakingCreditSettlement.IsCreditFundedAsync(db, session, ct),
+                FreeSampleGrant = gradeGrant,
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
                 // Tag the assessment context for the audit trail + gateway
@@ -303,11 +332,7 @@ Scoring rules:
                 // marking. Mock Speaking never reaches here (it is human-marked
                 // above) — this tag just arms the gateway's mock_assessment_
                 // forbidden backstop if a future caller ever bypasses the guard.
-                AssessmentContext =
-                    (!string.IsNullOrWhiteSpace(session.MockSetId)
-                        || !string.IsNullOrWhiteSpace(session.MockSessionId))
-                        ? AiAssessmentContext.Mock
-                        : AiAssessmentContext.Practice,
+                AssessmentContext = assessmentContext,
             }, gradingOptions?.Value, logger, ct);
         }
         catch (PromptNotGroundedException)
@@ -352,6 +377,17 @@ Scoring rules:
             }
         }
 
+        // The audio judge's verified Intelligibility replaces the grader's text-only estimate: it was reached
+        // from the sound of the recording (and only that), against the same official band descriptors.
+        if (audio is { IsAudio: true, IntelligibilityScore: { } audioIntelligibility })
+        {
+            parsed.CriterionScores["intelligibility"] = new CriterionScore(
+                Math.Clamp(audioIntelligibility, 0, 6),
+                6,
+                audio.IntelligibilityRationale ?? "Judged from the sound of your recording.",
+                Array.Empty<string>());
+        }
+
         // ── Canonical scaled score: ALWAYS recomputed via OetScoring ──
         var rubricScores = new OetScoring.SpeakingCriterionScores(
             Intelligibility:      ScoreOf(parsed, "intelligibility",      0, 6),
@@ -370,6 +406,9 @@ Scoring rules:
         var readinessBand = OetScoring.SpeakingReadinessBandCode(
             OetScoring.SpeakingReadinessBandFromScaled(scaled));
         var confidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand);
+        // Owner decision 4 Oct 2026: when the audio stage ran but there was no usable audio, the grade is still
+        // given, Intelligibility is labelled as estimated from the transcript, and confidence is low.
+        if (audio is not null && (!audio.IsAudio || audio.Confidence == "low")) confidenceBand = "low";
 
         // ── Jev cross-check (advisory, flag-gated, fail-soft, <= 3 s) ──
         // After the grade is parsed and scaled, never inside the grade chain. It can only lower the
@@ -409,6 +448,8 @@ Scoring rules:
         // Advisory lives beside the rationales (RulebookFindingsJson is a List<string> read by
         // analytics, so it cannot hold it). ReadRationales and the projection only look up the
         // nine criterion codes, so the extra entry is inert.
+        if (audio is not null) rationalesPayload[AcousticKey] = JsonSerializer.SerializeToElement(AcousticPayload(audio), ReportJson);
+
         var jevPayload = JevSpeakingAdvisor.AdvisoryPayload(jevReadiness, jevCrosscheck);
         if (jevPayload is not null) rationalesPayload[JevSpeakingAdvisor.AdvisoryKey] = jevPayload;
 
@@ -431,7 +472,7 @@ Scoring rules:
             Provider = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedProvider) ? ProviderName : aiResult.ResolvedProvider.Trim(), 32),
             ModelId = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedModel) ? ModelId : aiResult.ResolvedModel.Trim(), 96),
             PromptTemplateId = PromptTemplateId,
-            GraderVersion = GraderVersion,
+            GraderVersion = audio is { IsAudio: true } ? GraderVersionWithAudio(audio.Model) : GraderVersion,
             Intelligibility = rubricScores.Intelligibility,
             Fluency = rubricScores.Fluency,
             Appropriateness = rubricScores.Appropriateness,
@@ -576,7 +617,8 @@ Scoring rules:
             // Provisional until this exact grader version (with its model) has passed calibration;
             // a legacy row has no version and is always provisional.
             ScoreLabel: OetScoring.SpeakingScoreLabel(row.GraderVersion, row.ModelId),
-            Report: ReadStoredReport(row.PerCriterionRationalesJson));
+            Report: ReadStoredReport(row.PerCriterionRationalesJson),
+            IntelligibilityEvidence: ReadIntelligibilityEvidence(row.PerCriterionRationalesJson));
     }
 
     internal static IDictionary<string, CriterionScore> RehydrateCriterionScores(SpeakingAiAssessment row)
@@ -653,7 +695,8 @@ Scoring rules:
         RolePlayCard card,
         InterlocutorScript? script,
         SpeakingTranscript transcript,
-        SpeakingCardType? cardType)
+        SpeakingCardType? cardType,
+        SpeakingAudioEvidence? audio = null)
     {
         var sb = new StringBuilder();
         sb.AppendLine(PROMPT_TEMPLATE_V3);
@@ -703,11 +746,25 @@ Scoring rules:
                 closingCue = script.ClosingCue,
             }));
         sb.AppendLine();
-        // A live voice role-play has no audio, so the feedback must not send the candidate to a recording
-        // that does not exist. Added to the input only: the template, rubric and schema are unchanged.
-        if (transcript.Provider.StartsWith(LiveVoiceService.TranscriptProviderPrefix, StringComparison.Ordinal))
+        if (audio is null)
         {
-            sb.AppendLine("NOTE: This role-play was a live voice conversation with no audio recording (transcript only), so the feedback text must never tell the candidate to listen to or check a recording.");
+            // The audio stage did not run. A live voice role-play then has no audio the grader can use, so the
+            // feedback must not send the candidate to a recording. Added to the input only: the template, rubric
+            // and schema are unchanged.
+            if (transcript.Provider.StartsWith(LiveVoiceService.TranscriptProviderPrefix, StringComparison.Ordinal))
+            {
+                sb.AppendLine("NOTE: This role-play was a live voice conversation with no audio recording (transcript only), so the feedback text must never tell the candidate to listen to or check a recording.");
+                sb.AppendLine();
+            }
+        }
+        else if (audio.IsAudio)
+        {
+            AppendAcousticEvidence(sb, audio);
+        }
+        else
+        {
+            // The audio stage ran but there was nothing usable: judge Intelligibility from the transcript, and say so.
+            sb.AppendLine($"NOTE: No audio evidence could be used for this attempt ({SpeakingAudioEvidenceService.ReasonText(audio.Reason)}). Estimate Intelligibility from the transcript alone, say in its rationale that no audio evidence was available, and keep its score within what a transcript can support. The feedback text must never tell the candidate to listen to or check a recording.");
             sb.AppendLine();
         }
         // The graded evidence starts at the real role-play: the opening connection check ("can you hear
@@ -783,6 +840,115 @@ Scoring rules:
     /// <summary>Reserved key beside the nine criterion rationales in <c>PerCriterionRationalesJson</c> (the same
     /// pattern as the Jev advisory); no migration, and nothing that looks up a criterion code sees it.</summary>
     private const string ReportKey = "_report";
+
+    /// <summary>Reserved key (same pattern as <see cref="ReportKey"/>) holding what the audio judge heard, or why
+    /// there was no audio evidence. Nothing that looks up a criterion code sees it.</summary>
+    private const string AcousticKey = "_acoustic";
+
+    /// <summary>The acoustic evidence as the grader sees it. Authoritative for Intelligibility; the fluency
+    /// observations inform, but never replace, the grader's own Fluency judgement.</summary>
+    private static void AppendAcousticEvidence(StringBuilder sb, SpeakingAudioEvidence audio)
+    {
+        sb.AppendLine("---- ACOUSTIC EVIDENCE (from the candidate's audio; authoritative for Intelligibility) ----");
+        sb.AppendLine($"Intelligibility judged from the audio: {audio.IntelligibilityScore}/6 (audio quality: {audio.AudioQuality}; confidence: {audio.Confidence}).");
+        if (!string.IsNullOrWhiteSpace(audio.IntelligibilityRationale)) sb.AppendLine($"Why: {audio.IntelligibilityRationale}");
+        foreach (var observation in audio.Observations)
+        {
+            sb.AppendLine($"- Heard at about {observation.ApproxSecond}s (clip {observation.Clip}): {observation.Issue}"
+                + (string.IsNullOrWhiteSpace(observation.Example) ? string.Empty : $" ({observation.Example})"));
+        }
+
+        if (audio.Fluency is { } fluency)
+        {
+            sb.AppendLine(
+                $"Fluency evidence: speech rate {(fluency.SpeechRateWpm is { } wpm ? $"about {wpm} words per minute" : "not measured")}; "
+                + $"{fluency.LongPauses} long pause(s); {fluency.HesitationCount} hesitation(s); {fluency.FillerCount} filler(s); {fluency.RestartCount} restart(s).");
+            foreach (var note in fluency.Observations) sb.AppendLine($"- {note}");
+        }
+
+        sb.AppendLine("The Intelligibility score above is final: report it as your Intelligibility score. Use the fluency evidence to inform your own Fluency judgement.");
+        sb.AppendLine("---- END ACOUSTIC EVIDENCE ----");
+        sb.AppendLine();
+    }
+
+    private static object AcousticPayload(SpeakingAudioEvidence audio)
+        => audio.IsAudio
+            ? new
+            {
+                source = "audio",
+                model = audio.Model,
+                confidence = audio.Confidence,
+                audioQuality = audio.AudioQuality,
+                patientVoiceBleed = audio.PatientVoiceBleed,
+                clips = audio.ClipCount,
+                durationMs = audio.DurationMs,
+                observations = audio.Observations,
+                fluency = audio.Fluency,
+            }
+            : new
+            {
+                source = "transcript_only",
+                reason = audio.Reason,
+                model = (string?)null,
+                confidence = audio.Confidence,
+                audioQuality = audio.AudioQuality,
+                patientVoiceBleed = false,
+                clips = 0,
+                durationMs = 0,
+                observations = Array.Empty<SpeakingAudioObservation>(),
+                fluency = (SpeakingFluencyEvidence?)null,
+            };
+
+    /// <summary>
+    /// What Intelligibility was judged from, for the candidate. A grade without a stored audio judgement (the stage
+    /// off, an older grade, or no usable audio) is always honestly labelled as estimated from the transcript only.
+    /// </summary>
+    internal static SpeakingIntelligibilityEvidence ReadIntelligibilityEvidence(string? rationalesJson)
+    {
+        var transcriptOnly = new SpeakingIntelligibilityEvidence("transcript_only", null, null, "low", Array.Empty<SpeakingAudioObservation>());
+        if (string.IsNullOrWhiteSpace(rationalesJson)) return transcriptOnly;
+        try
+        {
+            using var doc = JsonDocument.Parse(rationalesJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty(AcousticKey, out var stored)
+                || stored.ValueKind != JsonValueKind.Object)
+            {
+                return transcriptOnly;
+            }
+
+            var source = TryReadString(stored, "source");
+            var reason = TryReadString(stored, "reason");
+            if (source != "audio")
+            {
+                return new SpeakingIntelligibilityEvidence(
+                    "transcript_only", reason, reason is null ? null : SpeakingAudioEvidenceService.ReasonText(reason), "low", Array.Empty<SpeakingAudioObservation>());
+            }
+
+            var observations = new List<SpeakingAudioObservation>();
+            if (stored.TryGetProperty("observations", out var list) && list.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in list.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var issue = TryReadString(item, "issue");
+                    if (string.IsNullOrWhiteSpace(issue)) continue;
+                    observations.Add(new SpeakingAudioObservation(
+                        TryReadInt(item, "clip") ?? 1,
+                        TryReadInt(item, "approxSecond") ?? 0,
+                        SpeakingLearnerText.ScrubRuleIds(issue),
+                        TryReadString(item, "example") is { } example ? SpeakingLearnerText.ScrubRuleIds(example) : null));
+                }
+            }
+
+            return new SpeakingIntelligibilityEvidence(
+                "audio", null, null, TryReadString(stored, "confidence") ?? "medium", observations);
+        }
+        catch (JsonException)
+        {
+            return transcriptOnly;
+        }
+    }
 
     private const int MaxStrengths = 4;
     private const int MaxWeaknesses = 5;

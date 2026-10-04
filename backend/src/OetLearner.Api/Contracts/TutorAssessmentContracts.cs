@@ -104,7 +104,8 @@ public sealed record AiAssessmentProjection(
     string? Grade = null,
     string? ScoreLabel = null,
     IDictionary<string, CriterionScore>? CriterionScores = null,
-    SpeakingFeedbackReport? Report = null);
+    SpeakingFeedbackReport? Report = null,
+    SpeakingIntelligibilityEvidence? IntelligibilityEvidence = null);
 
 /// <summary>GET /v1/speaking/sessions/{id}/assessments response. Carries
 /// both assessment tracks plus the divergence metric. Either side may be

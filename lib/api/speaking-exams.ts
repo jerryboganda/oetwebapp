@@ -17,6 +17,7 @@
  * (patient) card, the hidden card type, or any interlocutor field.
  */
 import { apiClient } from '@/lib/api';
+import type { SpeakingIntelligibilityEvidence } from '@/lib/api/speaking-assessments';
 
 export type SpeakingExamMode = 'ai' | 'live_tutor';
 
@@ -107,6 +108,8 @@ export interface SpeakingExamAssessment {
   isAdvisory: boolean;
   grade?: string | null;
   scoreLabel?: string | null;
+  /** What Intelligibility was judged from: the recording, or the transcript only (limited evidence). */
+  intelligibilityEvidence?: SpeakingIntelligibilityEvidence | null;
 }
 
 export interface SpeakingExamCardResult {

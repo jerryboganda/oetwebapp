@@ -7,15 +7,26 @@ internal static class AiProviderPayloadBuilder
 {
     public static List<Dictionary<string, object?>> BuildOpenAiMessages(AiProviderRequest request)
     {
+        // Audio input (OpenAI audio chat models only): the clips ride on the FIRST user message as
+        // `input_audio` parts. Any other model keeps byte-identical payloads, whatever was attached.
+        var audioParts = BuildOpenAiAudioParts(request);
+
         if (request.Messages is not { Count: > 0 })
         {
             return new List<Dictionary<string, object?>>
             {
                 new() { ["role"] = "system", ["content"] = request.SystemPrompt },
-                new() { ["role"] = "user", ["content"] = request.UserPrompt },
+                new()
+                {
+                    ["role"] = "user",
+                    ["content"] = audioParts.Count == 0
+                        ? request.UserPrompt
+                        : TextThenParts(request.UserPrompt, audioParts),
+                },
             };
         }
 
+        var audioPending = audioParts.Count > 0;
         return request.Messages.Select(message =>
         {
             var role = (message.Role ?? "user").Trim().ToLowerInvariant();
@@ -29,7 +40,9 @@ internal static class AiProviderPayloadBuilder
             // string content keeps the legacy shape so text-only providers
             // and the mock see byte-identical payloads to before.
             object? content = message.Content ?? string.Empty;
-            if (role is "user" or "system" && message.ImageAttachments is { Count: > 0 })
+            var carriesAudio = audioPending && role == "user";
+            if (carriesAudio) audioPending = false;
+            if ((role is "user" or "system" && message.ImageAttachments is { Count: > 0 }) || carriesAudio)
             {
                 var parts = new List<object?>();
                 if (!string.IsNullOrWhiteSpace(message.Content))
@@ -40,7 +53,7 @@ internal static class AiProviderPayloadBuilder
                         ["text"] = message.Content,
                     });
                 }
-                foreach (var image in message.ImageAttachments)
+                foreach (var image in message.ImageAttachments ?? Array.Empty<AiProviderImageAttachment>())
                 {
                     if (image.Data is not { Length: > 0 }) continue;
                     parts.Add(new Dictionary<string, object?>
@@ -52,6 +65,7 @@ internal static class AiProviderPayloadBuilder
                         },
                     });
                 }
+                if (carriesAudio) parts.AddRange(audioParts);
                 content = parts;
             }
 
@@ -82,6 +96,70 @@ internal static class AiProviderPayloadBuilder
 
             return output;
         }).ToList();
+    }
+
+    /// <summary>True for OpenAI chat models that take audio input (gpt-audio, gpt-audio-1.5,
+    /// gpt-4o-audio-preview ...). Transcription models (whisper, *-transcribe) are a separate
+    /// endpoint and never come through here.</summary>
+    internal static bool IsAudioChatModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var normalized = model.Trim().ToLowerInvariant();
+        return normalized.Contains("audio", StringComparison.Ordinal)
+            && !normalized.StartsWith("whisper", StringComparison.Ordinal)
+            && !normalized.Contains("transcribe", StringComparison.Ordinal);
+    }
+
+    /// <summary>The token-limit parameter the model accepts. OpenAI's audio chat models take
+    /// <c>max_completion_tokens</c> (<c>max_tokens</c> is deprecated there); every other model keeps
+    /// the long-standing <c>max_tokens</c>.</summary>
+    internal static string MaxTokensParameter(string? model)
+        => IsAudioChatModel(model) ? "max_completion_tokens" : "max_tokens";
+
+    /// <summary>The <c>input_audio</c> content parts for the request's audio attachments: only for an
+    /// audio chat model, and only mp3/wav (the formats the API accepts); anything else is left out
+    /// rather than sent as a payload the API would reject.</summary>
+    internal static List<object?> BuildOpenAiAudioParts(AiProviderRequest request)
+    {
+        var parts = new List<object?>();
+        if (!IsAudioChatModel(request.Model) || request.AudioAttachments is not { Count: > 0 }) return parts;
+
+        foreach (var audio in request.AudioAttachments)
+        {
+            var format = OpenAiAudioFormat(audio.MimeType);
+            if (format is null || audio.Data is not { Length: > 0 }) continue;
+            parts.Add(new Dictionary<string, object?>
+            {
+                ["type"] = "input_audio",
+                ["input_audio"] = new Dictionary<string, object?>
+                {
+                    ["data"] = Convert.ToBase64String(audio.Data),
+                    ["format"] = format,
+                },
+            });
+        }
+
+        return parts;
+    }
+
+    private static string? OpenAiAudioFormat(string? mimeType)
+        => mimeType?.Trim().ToLowerInvariant() switch
+        {
+            "audio/mpeg" or "audio/mp3" => "mp3",
+            "audio/wav" or "audio/x-wav" or "audio/wave" => "wav",
+            _ => null,
+        };
+
+    private static List<object?> TextThenParts(string text, List<object?> parts)
+    {
+        var content = new List<object?>();
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            content.Add(new Dictionary<string, object?> { ["type"] = "text", ["text"] = text });
+        }
+
+        content.AddRange(parts);
+        return content;
     }
 
     public static List<Dictionary<string, object?>> BuildOpenAiTools(IReadOnlyList<AiToolDefinition>? tools)

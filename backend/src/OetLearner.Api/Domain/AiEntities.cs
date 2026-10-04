@@ -306,6 +306,10 @@ public static class AiFeatureCodes
     /// Scoring-adjacent but not itself a score — see AiCredentialResolver.</summary>
     public const string WritingModelAnswerPregenerate = "writing.model_answer_pregenerate";
     public const string SpeakingGrade = "speaking.grade";
+    /// <summary>The acoustic half of Speaking grading: an OpenAI audio model listens to the candidate's
+    /// recording and judges Intelligibility and fluency evidence. Scoring-critical and platform-only;
+    /// pinned to the <c>openai-audio</c> provider row, never routed through the grade chain.</summary>
+    public const string SpeakingAudioAssess = "speaking.audio_assess";
     public const string MockFullGrade = "mock.full_grade";
 
     // Non-scoring (BYOK-eligible)

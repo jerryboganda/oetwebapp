@@ -153,6 +153,21 @@ public sealed class CoreAiProviderSeeder(
             PricePer1kPromptTokens: 0m,
             PricePer1kCompletionTokens: 0m,
             FailoverPriority: 27),
+        // Speaking acoustic judge (owner spec 4 Oct 2026): an OpenAI audio-chat model hears the candidate's
+        // clips. Keyless on purpose — AiProviderRegistry.GetPlatformKeyAsync falls back to the OpenAI account
+        // that already funds live voice (LIVEVOICE__OPENAIAPIKEY); a key pasted here overrides it. Category
+        // Asr keeps it out of every text-chat failover list; it is reached only by an explicit pin. The
+        // model is editable in the admin UI. Prices are blended text+audio per 1k prompt tokens.
+        new CoreProviderSeed(
+            Code: AiProviderRegistry.SpeakingAudioProviderCode,
+            Name: "OpenAI audio (Speaking acoustic judge)",
+            Category: AiProviderCategory.Asr,
+            Dialect: AiProviderDialect.OpenAiCompatible,
+            BaseUrl: "https://api.openai.com/v1",
+            DefaultModel: "gpt-audio-1.5",
+            PricePer1kPromptTokens: 0.01m,
+            PricePer1kCompletionTokens: 0.01m,
+            FailoverPriority: 95),
         // TypeSafe Jev (typed judgments): keyless AND inactive. Not a chat provider
         // (Judgment category, no IAiModelProvider adapter); the row only holds the
         // admin-pasted key (read via GetPlatformKeyAsync, which ignores inactive rows

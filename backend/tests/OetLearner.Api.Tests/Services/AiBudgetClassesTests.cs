@@ -74,6 +74,7 @@ public sealed class AiBudgetClassesTests
     [Theory]
     [InlineData(AiFeatureCodes.WritingGrade, AiOperationClass.ScoringCritical)]
     [InlineData(AiFeatureCodes.SpeakingGrade, AiOperationClass.ScoringCritical)]
+    [InlineData(AiFeatureCodes.SpeakingAudioAssess, AiOperationClass.ScoringCritical)]
     [InlineData(AiFeatureCodes.ListeningPartAScore, AiOperationClass.ScoringCritical)]
     [InlineData(AiFeatureCodes.PronunciationScore, AiOperationClass.ScoringCritical)]
     [InlineData(AiFeatureCodes.AdminContentGeneration, AiOperationClass.AdminBatch)]

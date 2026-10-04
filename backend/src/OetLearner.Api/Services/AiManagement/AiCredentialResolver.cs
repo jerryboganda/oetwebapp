@@ -42,6 +42,7 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.WritingGrade,
         AiFeatureCodes.WritingSampleScore,
         AiFeatureCodes.SpeakingGrade,
+        AiFeatureCodes.SpeakingAudioAssess,
         AiFeatureCodes.MockFullGrade,
         AiFeatureCodes.PronunciationLinguisticScore,
     };

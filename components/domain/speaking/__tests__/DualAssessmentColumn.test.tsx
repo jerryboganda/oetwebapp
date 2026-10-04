@@ -89,3 +89,77 @@ describe('DualAssessmentColumn — one reported score, one OET grade', () => {
     expect(screen.queryByTestId('speaking-score-provisional')).not.toBeInTheDocument();
   });
 });
+
+describe('DualAssessmentColumn — what Intelligibility was judged from', () => {
+  const withIntelligibility = (intelligibilityEvidence: unknown) =>
+    aiAssessment({
+      criterionScores: { intelligibility: { score: 4, maxScore: 6, rationale: 'Mostly clear.', evidenceQuotes: [] } },
+      intelligibilityEvidence,
+    });
+
+  it('says plainly that the number is estimated from the transcript when no audio could be used', () => {
+    render(
+      <DualAssessmentColumn
+        kind="ai"
+        title="AI Assessment"
+        assessment={withIntelligibility({
+          source: 'transcript_only',
+          reason: 'no_audio',
+          reasonText: 'no audio recording was kept for this attempt',
+          confidence: 'low',
+          observations: [],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('intelligibility-evidence-label')).toHaveTextContent(
+      'Estimated from the transcript only (limited evidence) — no audio recording was kept for this attempt.',
+    );
+    expect(document.body.textContent).not.toContain('no_audio');
+  });
+
+  it('shows what was heard when Intelligibility was judged from the recording', () => {
+    render(
+      <DualAssessmentColumn
+        kind="ai"
+        title="AI Assessment"
+        assessment={withIntelligibility({
+          source: 'audio',
+          confidence: 'high',
+          observations: [{ clip: 2, approxSecond: 31, issue: 'The ending of "inhaler" was dropped.', example: 'inha-uh' }],
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('intelligibility-evidence-label')).toHaveTextContent('Judged from your recording');
+    expect(screen.getByTestId('intelligibility-observations')).toHaveTextContent('About 31 s: The ending of "inhaler" was dropped.');
+    expect(screen.getByTestId('intelligibility-observations')).toHaveTextContent('inha-uh');
+    expect(screen.queryByTestId('intelligibility-evidence-limited')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('Estimated from the transcript only');
+  });
+
+  it('says so when the recording was hard to judge', () => {
+    render(
+      <DualAssessmentColumn
+        kind="ai"
+        title="AI Assessment"
+        assessment={withIntelligibility({ source: 'audio', confidence: 'low', observations: [] })}
+      />,
+    );
+
+    expect(screen.getByTestId('intelligibility-evidence-limited')).toBeInTheDocument();
+    expect(screen.queryByTestId('intelligibility-observations')).not.toBeInTheDocument();
+  });
+
+  it('shows nothing for a payload that carries no evidence (an older API)', () => {
+    render(<DualAssessmentColumn kind="ai" title="AI Assessment" assessment={withIntelligibility(undefined)} />);
+
+    expect(screen.queryByTestId('intelligibility-evidence-label')).not.toBeInTheDocument();
+  });
+
+  it('never puts the note on the tutor side', () => {
+    render(<DualAssessmentColumn kind="tutor" title="Tutor Assessment" assessment={tutorAssessment(390)} />);
+
+    expect(screen.queryByTestId('intelligibility-evidence-label')).not.toBeInTheDocument();
+  });
+});

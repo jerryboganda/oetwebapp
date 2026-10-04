@@ -645,12 +645,14 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
 
     private SpeakingAiAssessmentService BuildAssessor(
         IAiGatewayService gateway,
-        SpeakingGradingOptions? gradingOptions = null)
+        SpeakingGradingOptions? gradingOptions = null,
+        ISpeakingAudioEvidenceService? audioEvidence = null)
         => new(
             _db,
             gateway,
             NullLogger<SpeakingAiAssessmentService>.Instance,
-            gradingOptions: gradingOptions is null ? null : Options.Create(gradingOptions));
+            gradingOptions: gradingOptions is null ? null : Options.Create(gradingOptions),
+            audioEvidence: audioEvidence);
 
     private static object Crit(int score) => new { score, rationale = "ok", evidenceQuotes = Array.Empty<string>() };
 
@@ -939,6 +941,139 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         Assert.Equal("speaking_ai_unavailable", ex.ErrorCode);
         Assert.Equal(2, gateway.Requests.Count);
         Assert.Equal(0, await _db.SpeakingAiAssessments.CountAsync(a => a.SpeakingSessionId == sessionId));
+    }
+
+    // ── Acoustic evidence: the audio judge's Intelligibility replaces the transcript estimate ──
+
+    private sealed class FakeAudioEvidence(SpeakingAudioEvidence result, bool enabled = true) : ISpeakingAudioEvidenceService
+    {
+        public List<SpeakingAudioAssessRequest> Requests { get; } = new();
+
+        public Task<bool> IsEnabledAsync(CancellationToken ct) => Task.FromResult(enabled);
+
+        public Task<SpeakingAudioEvidence> AssessAsync(SpeakingAudioAssessRequest request, CancellationToken ct)
+        {
+            Requests.Add(request);
+            return Task.FromResult(result);
+        }
+
+        public Task<SpeakingAudioProbeResult> ProbeAsync(Stream audio, string mimeType, string spokenPhrase, CancellationToken ct)
+            => throw new NotSupportedException("The probe is not part of grading.");
+    }
+
+    private static SpeakingAudioEvidence JudgedAudio(int score = 3, string confidence = "high") => new()
+    {
+        Status = SpeakingAudioEvidence.StatusAudio,
+        IntelligibilityScore = score,
+        IntelligibilityRationale = "Several vowels were hard to tell apart.",
+        AudioQuality = "good",
+        Confidence = confidence,
+        Observations = [new SpeakingAudioObservation(1, 12, "The word asthma was stressed on the wrong syllable.", "AS-ma")],
+        Fluency = new SpeakingFluencyEvidence(118, 1, 2, 3, 0, ["One long pause before the explanation."]),
+        Model = "gpt-audio-1.5",
+        ClipCount = 4,
+        DurationMs = 61_000,
+    };
+
+    [Fact]
+    public async Task Assessor_WithTheAudioStageSwitchedOff_NeverCallsIt_AndLabelsTheTranscriptEstimate()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var disabled = new FakeAudioEvidence(JudgedAudio(), enabled: false);
+
+        var projection = await BuildAssessor(new SwitchableAiGateway(), audioEvidence: disabled).RunAssessmentAsync(sessionId, default);
+
+        Assert.Empty(disabled.Requests);
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal(SpeakingAiAssessmentService.GraderVersion, row.GraderVersion);
+        Assert.DoesNotContain("_acoustic", row.PerCriterionRationalesJson);
+        Assert.Equal(5, row.Intelligibility);
+        Assert.Equal("transcript_only", projection.IntelligibilityEvidence!.Source);
+        Assert.Null(projection.IntelligibilityEvidence.Reason);
+        Assert.Equal("low", projection.IntelligibilityEvidence.Confidence);
+    }
+
+    [Fact]
+    public async Task Assessor_AudioJudged_ReplacesTheTextOnlyIntelligibility_AndStoresTheEvidence()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var audio = new FakeAudioEvidence(JudgedAudio(score: 3));
+        var gateway = new SwitchableAiGateway();
+        var audioCallsBeforeTheGrade = -1;
+        gateway.OnComplete = () => audioCallsBeforeTheGrade = audio.Requests.Count;
+
+        var projection = await BuildAssessor(gateway, audioEvidence: audio).RunAssessmentAsync(sessionId, default);
+
+        // The audio judge ran first, for this session and learner; the grader then read its evidence.
+        Assert.Equal(1, audioCallsBeforeTheGrade);
+        var request = Assert.Single(audio.Requests);
+        Assert.Equal(sessionId, request.SessionId);
+        Assert.Equal(UserId, request.UserId);
+        var graderInput = Assert.Single(gateway.Requests).UserInput!;
+        Assert.Contains("ACOUSTIC EVIDENCE", graderInput);
+        Assert.Contains("3/6", graderInput);
+        Assert.DoesNotContain("No audio evidence could be used", graderInput);
+
+        // The grader said 5 from the words; the sound said 3, and the sound is final.
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal(3, row.Intelligibility);
+        Assert.Equal(SpeakingAiAssessmentService.GraderVersionWithAudio("gpt-audio-1.5"), row.GraderVersion);
+        Assert.Equal(3, projection.CriterionScores["intelligibility"].Score);
+        Assert.Equal("Several vowels were hard to tell apart.", projection.CriterionScores["intelligibility"].Rationale);
+        var evidence = projection.IntelligibilityEvidence!;
+        Assert.Equal("audio", evidence.Source);
+        Assert.Equal("high", evidence.Confidence);
+        var observation = Assert.Single(evidence.Observations);
+        Assert.Equal(12, observation.ApproxSecond);
+        Assert.Contains("wrong syllable", observation.Issue);
+
+        // Stored beside the rationales and read back unchanged by a later GET.
+        Assert.Contains("\"_acoustic\"", row.PerCriterionRationalesJson);
+        var reread = await BuildAssessor(new SwitchableAiGateway()).GetLatestAsync(sessionId, default);
+        Assert.NotNull(reread);
+        Assert.Equal("audio", reread!.IntelligibilityEvidence!.Source);
+        Assert.Equal(3, reread.CriterionScores["intelligibility"].Score);
+    }
+
+    [Fact]
+    public async Task Assessor_AudioUnavailable_StillGrades_ButSaysSo_WithLowConfidence()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var audio = new FakeAudioEvidence(SpeakingAudioEvidence.Unavailable("no_audio"));
+        var gateway = new SwitchableAiGateway();
+
+        var projection = await BuildAssessor(gateway, audioEvidence: audio).RunAssessmentAsync(sessionId, default);
+
+        var graderInput = Assert.Single(gateway.Requests).UserInput!;
+        Assert.Contains("No audio evidence could be used", graderInput);
+        Assert.Contains("no audio recording was kept", graderInput);
+        Assert.DoesNotContain("ACOUSTIC EVIDENCE", graderInput);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal(5, row.Intelligibility); // the grader's own estimate from the transcript
+        Assert.Equal("low", row.ConfidenceBand); // although the grader itself said high
+        Assert.Equal(SpeakingAiAssessmentService.GraderVersion, row.GraderVersion); // no audio stage in this grade
+        var evidence = projection.IntelligibilityEvidence!;
+        Assert.Equal("transcript_only", evidence.Source);
+        Assert.Equal("no_audio", evidence.Reason);
+        Assert.Equal("no audio recording was kept for this attempt", evidence.ReasonText);
+        Assert.Equal("low", evidence.Confidence);
+        Assert.Equal("low", projection.ConfidenceBand);
+    }
+
+    [Fact]
+    public async Task Assessor_AudioJudgedWithLowConfidence_KeepsTheJudgement_ButTheGradeIsLowConfidence()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var audio = new FakeAudioEvidence(JudgedAudio(score: 4, confidence: "low"));
+
+        var projection = await BuildAssessor(new SwitchableAiGateway(), audioEvidence: audio).RunAssessmentAsync(sessionId, default);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal(4, row.Intelligibility);
+        Assert.Equal("low", projection.ConfidenceBand);
+        Assert.Equal("audio", projection.IntelligibilityEvidence!.Source);
+        Assert.Equal("low", projection.IntelligibilityEvidence.Confidence);
     }
 
     private sealed class SwitchableAiGateway : IAiGatewayService

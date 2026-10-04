@@ -187,6 +187,28 @@ export interface SpeakingFeedbackReport {
   drills: SpeakingReportDrill[];
 }
 
+/** One thing the audio judge heard that affected Intelligibility: which clip, about which second, what. */
+export interface SpeakingAudioObservation {
+  clip: number;
+  approxSecond: number;
+  issue: string;
+  example?: string | null;
+}
+
+/**
+ * What the Intelligibility score was judged from (owner spec 4 Oct 2026). `audio` = judged from the recording;
+ * `transcript_only` = estimated from the transcript, which is limited evidence and is said plainly.
+ */
+export interface SpeakingIntelligibilityEvidence {
+  source: 'audio' | 'transcript_only' | string;
+  /** Machine code for why there was no audio evidence (never shown as is). */
+  reason?: string | null;
+  /** The same reason in plain words, ready to show. */
+  reasonText?: string | null;
+  confidence: string;
+  observations: SpeakingAudioObservation[];
+}
+
 export interface AiAssessment {
   assessmentId: string;
   provider: string;
@@ -205,6 +227,8 @@ export interface AiAssessment {
   scoreLabel?: string | null;
   /** Strengths, priority weaknesses (each ending in an action) and personalised drills for this attempt. */
   report?: SpeakingFeedbackReport | null;
+  /** What Intelligibility was judged from: the recording, or the transcript only (limited evidence). */
+  intelligibilityEvidence?: SpeakingIntelligibilityEvidence | null;
   /** Optional: recommended remedial drills (slugs/ids); the learner page renders them on a tab. */
   recommendedDrills?: string[];
 }

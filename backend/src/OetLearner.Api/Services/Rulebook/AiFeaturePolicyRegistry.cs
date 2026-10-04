@@ -150,6 +150,8 @@ public static class AiFeaturePolicyDefaults
     private static readonly HashSet<string> ScoringOverrides = new(StringComparer.OrdinalIgnoreCase)
     {
         AiFeatureCodes.ConversationEvaluation,
+        // Speaking audio judge: its Intelligibility score becomes part of the candidate's score.
+        AiFeatureCodes.SpeakingAudioAssess,
         // Owner directive 2026-08-28 AI/Cloud API plan, point 7: appeals are
         // "quality-sensitive assessment" and must be treated with the same
         // rigour as official grading (platform-only credential, premium

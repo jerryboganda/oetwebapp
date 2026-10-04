@@ -171,11 +171,19 @@ public sealed class CoordinatedAiGatewayService(
             .Append(Digest(request.Prompt?.SystemPrompt)).Append('|')
             .Append(Digest(request.Prompt?.TaskInstruction)).Append('|')
             .Append(Digest(request.UserInput)).Append('|')
-            .Append(request.AudioAttachments?.Count.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "0")
+            .Append(AudioDigest(request.AudioAttachments))
             .ToString();
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
+
+    /// <summary>"0" with no audio (unchanged); otherwise the clip count plus a SHA-256 of every clip, so two
+    /// different recordings are never the same operation. The audio bytes themselves are never kept.</summary>
+    private static string AudioDigest(IReadOnlyList<AiProviderAudioAttachment>? audio)
+        => audio is not { Count: > 0 }
+            ? "0"
+            : audio.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+              + ":" + string.Join(",", audio.Select(clip => Convert.ToHexString(SHA256.HashData(clip.Data)).ToLowerInvariant()));
 
     private static string Norm(string? value)
         => string.IsNullOrWhiteSpace(value) ? string.Empty : value.Trim().ToLowerInvariant();
