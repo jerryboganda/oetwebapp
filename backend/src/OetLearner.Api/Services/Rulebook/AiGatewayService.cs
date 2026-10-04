@@ -1645,30 +1645,44 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             sb.AppendLine();
             sb.AppendLine("The OET Assessor (NOT the interlocutor) scores the audio recording after the exam against these 9 criteria. You MUST produce one score per criterion — never aggregate Clinical Communication into a single number.");
             sb.AppendLine();
-            sb.AppendLine("**Linguistic Criteria (4, each scored 0–6):**");
-            sb.AppendLine("1. `intelligibility` — Intelligibility (pronunciation, stress, intonation, rhythm; L1 accent effect on clarity)");
-            sb.AppendLine("2. `fluency` — Fluency (speed, hesitation, self-correction, sustained utterances)");
-            sb.AppendLine("3. `appropriateness` — Appropriateness of Language (register, tone, lexis; explaining technical matters in lay terms)");
-            sb.AppendLine("4. `grammarExpression` — Resources of Grammar & Expression (range, accuracy, flexibility of grammar and vocabulary)");
-            sb.AppendLine();
-            sb.AppendLine("**Clinical Communication Criteria (5, each scored 0–3 — level descriptors: 3=Adept, 2=Competent, 1=Partially effective, 0=Ineffective):**");
-            sb.AppendLine("5. `relationshipBuilding` — Relationship Building (greeting/introductions, attentive respectful attitude, non-judgemental approach, empathy)");
-            sb.AppendLine("6. `patientPerspective` — Understanding & Incorporating the Patient's Perspective (eliciting ideas/concerns/expectations, picking up cues, relating explanations back)");
-            sb.AppendLine("7. `structure` — Providing Structure (sequencing the interview purposefully, signposting changes in topic, organising explanations)");
-            sb.AppendLine("8. `informationGathering` — Information Gathering (facilitating narrative, open-then-closed questions, avoiding compound/leading questions, clarifying, summarising)");
-            sb.AppendLine("9. `informationGiving` — Information Giving (establishing prior knowledge, pausing, encouraging reactions, checking understanding, discovering further needs)");
-            sb.AppendLine();
-            if (ctx.Task == AiTaskMode.Score)
+            if (ctx.Task == AiTaskMode.Score && speakingCriteria is { } descriptors)
             {
-                sb.AppendLine("Report each criterion under exactly the code shown above. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected. The reply shape is given in the user message.");
+                // The official band descriptors name every criterion and the code it is reported under, so the
+                // short list below is not repeated (it carried the legacy `grammar` / `providingStructure` codes).
+                sb.AppendLine("Report each criterion under exactly the code shown in its heading below. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected. The reply shape is given in the user message.");
                 sb.AppendLine();
-                if (speakingCriteria is { } descriptors) AppendSpeakingBandDescriptors(sb, descriptors);
+                AppendSpeakingBandDescriptors(sb, descriptors);
                 AppendSpeakingScoringPrinciples(sb);
             }
             else
             {
-                sb.AppendLine("Every feedback item MUST cite (a) the criterion code from this list AND (b) at least one rule ID from the active rulebook. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected.");
+                // NOTE: these numbered lines are read verbatim by tests/writing-regression/prompt_builder.py (the
+                // Writing regression gate hashes them). Do not reword them; Score replies use the descriptor block above.
+                sb.AppendLine("**Linguistic Criteria (4, each scored 0–6):**");
+                sb.AppendLine("1. `intelligibility` — Intelligibility (pronunciation, stress, intonation, rhythm; L1 accent effect on clarity)");
+                sb.AppendLine("2. `fluency` — Fluency (speed, hesitation, self-correction, sustained utterances)");
+                sb.AppendLine("3. `appropriateness` — Appropriateness of Language (register, tone, lexis; explaining technical matters in lay terms)");
+                sb.AppendLine("4. `grammar` — Resources of Grammar & Expression (range, accuracy, flexibility of grammar and vocabulary)");
                 sb.AppendLine();
+                sb.AppendLine("**Clinical Communication Criteria (5, each scored 0–3 — level descriptors: 3=Adept, 2=Competent, 1=Partially effective, 0=Ineffective):**");
+                sb.AppendLine("5. `relationshipBuilding` — Relationship Building (greeting/introductions, attentive respectful attitude, non-judgemental approach, empathy)");
+                sb.AppendLine("6. `patientPerspective` — Understanding & Incorporating the Patient's Perspective (eliciting ideas/concerns/expectations, picking up cues, relating explanations back)");
+                sb.AppendLine("7. `providingStructure` — Providing Structure (sequencing the interview purposefully, signposting changes in topic, organising explanations)");
+                sb.AppendLine("8. `informationGathering` — Information Gathering (facilitating narrative, open-then-closed questions, avoiding compound/leading questions, clarifying, summarising)");
+                sb.AppendLine("9. `informationGiving` — Information Giving (establishing prior knowledge, pausing, encouraging reactions, checking understanding, discovering further needs)");
+                sb.AppendLine();
+                if (ctx.Task == AiTaskMode.Score)
+                {
+                    // Band descriptors unavailable: still reply under the codes the Speaking JSON template uses.
+                    sb.AppendLine("Report each criterion under the code shown above, except that `grammar` is reported as `grammarExpression` and `providingStructure` as `structure`. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected. The reply shape is given in the user message.");
+                    sb.AppendLine();
+                    AppendSpeakingScoringPrinciples(sb);
+                }
+                else
+                {
+                    sb.AppendLine("Every feedback item MUST cite (a) the criterion code from this list AND (b) at least one rule ID from the active rulebook. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected.");
+                    sb.AppendLine();
+                }
             }
             sb.AppendLine("### Architectural rule — Interlocutor vs Assessor");
             sb.AppendLine();
