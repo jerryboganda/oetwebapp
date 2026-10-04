@@ -7,6 +7,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiAssistant;
 using OetLearner.Api.Services.AiAssistant.Safety;
 using OetLearner.Api.Services.AiAssistant.SystemPrompts;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Seeding;
 using OetLearner.Api.Services.Settings;
 
@@ -76,12 +77,14 @@ public static class AiAssistantEndpoints
             return renamed ? Results.NoContent() : Results.NotFound();
         }).RequireRateLimiting("PerUserWrite");
 
-        // Per-conversation model override. Claude API ids and UBAG browser
-        // ids are separate catalogs; unknown ids 400. Null/empty clears
-        // back to the feature-route default.
+        // Per-conversation model override. Claude API ids, UBAG browser ids
+        // and (learners only, while the provider row is active) OpenCode ids
+        // are separate catalogs; unknown ids 400. Null/empty clears back to
+        // the feature-route default.
         group.MapPatch("/threads/{threadId}/model", async (
             string threadId,
             [FromServices] IAiAssistantOrchestrator orchestrator,
+            [FromServices] IAiProviderRegistry providerRegistry,
             HttpContext ctx,
             [FromBody] SetAiThreadModelRequest? req,
             CancellationToken ct = default) =>
@@ -90,26 +93,47 @@ public static class AiAssistantEndpoints
             if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
 
             var model = string.IsNullOrWhiteSpace(req?.Model) ? null : req.Model.Trim();
-            if (model is not null && !AssistantModelCatalog.IsSelectable(model))
+            if (model is not null && !AssistantModelCatalog.IsThreadSelectable(model))
                 return new ApiErrorResult(400, "ai_assistant_model_unknown", "Unknown assistant model.");
+
+            if (AssistantModelCatalog.IsOpenCodeModel(model))
+            {
+                // Role first, so a non-learner learns nothing about whether the provider is switched on.
+                if (GetUserRole(ctx.User) != ApplicationUserRoles.Learner)
+                    return new ApiErrorResult(400, "ai_assistant_model_learner_only", "This model is only available to learners.");
+                if (!await IsOpenCodeActiveAsync(providerRegistry, ct))
+                    return new ApiErrorResult(400, "ai_assistant_model_unavailable", "This model is not available right now.");
+            }
 
             var saved = await orchestrator.SetThreadModelAsync(threadId, userId, model, ct);
             return saved ? Results.NoContent() : Results.NotFound();
         }).RequireRateLimiting("PerUserWrite");
 
-        // Two catalogs, never mixed: Claude (Anthropic API) and UBAG (browser).
+        // Catalogs, never mixed: Claude (Anthropic API), UBAG (browser) and, for
+        // learners only and only while its provider row is active, OpenCode.
         // `claude_web` is a UBAG browser target, not an Anthropic model.
-        group.MapGet("/models", () => Results.Ok(new
+        group.MapGet("/models", async (
+            [FromServices] IAiProviderRegistry providerRegistry,
+            HttpContext ctx,
+            CancellationToken ct = default) =>
         {
-            groups = new[]
+            var ubagModels = AssistantModelCatalog.UbagModels.ToArray();
+            var groups = new List<object>
             {
                 new { provider = AssistantModelCatalog.AnthropicProviderCode, label = "Claude (API)", models = AssistantModelCatalog.ClaudeApiModels },
-                new { provider = UbagProviderRouteDefaults.ProviderCode, label = "UBAG (browser)", models = AssistantModelCatalog.UbagModels.ToArray() },
-            },
-            models = AssistantModelCatalog.ClaudeApiModels
-                .Concat(AssistantModelCatalog.UbagModels)
-                .ToArray(),
-        })).RequireRateLimiting("PerUser");
+                new { provider = UbagProviderRouteDefaults.ProviderCode, label = "UBAG (browser)", models = ubagModels },
+            };
+            var models = AssistantModelCatalog.ClaudeApiModels.Concat(ubagModels);
+
+            if (GetUserRole(ctx.User) == ApplicationUserRoles.Learner
+                && await IsOpenCodeActiveAsync(providerRegistry, ct))
+            {
+                groups.Add(new { provider = OpenCodeProviderDefaults.ProviderCode, label = "OpenCode", models = AssistantModelCatalog.OpenCodeModels });
+                models = models.Concat(AssistantModelCatalog.OpenCodeModels);
+            }
+
+            return Results.Ok(new { groups, models = models.ToArray() });
+        }).RequireRateLimiting("PerUser");
 
         group.MapGet("/threads/{threadId}/messages", async (
             string threadId,
@@ -572,6 +596,16 @@ public static class AiAssistantEndpoints
                     // browser ids) wasn't checked at this entry point, so an
                     // unrecognized model string could be persisted with no
                     // rejection, silently breaking the role's assistant.
+                    //
+                    // OpenCode ids are per-conversation learner picks only: the
+                    // catalog's provider overrides the route's, so saving one
+                    // here would make OpenCode the feature default with no
+                    // route approval. Refused with its own code, not "unknown".
+                    if (AssistantModelCatalog.IsOpenCodeModel(roleConfig.Model.Trim()))
+                    {
+                        return new ApiErrorResult(400, "ai_assistant_model_not_defaultable", $"OpenCode model '{roleConfig.Model.Trim()}' can only be chosen per conversation by a learner; it cannot be the default for role '{role}'.");
+                    }
+
                     if (!AssistantModelCatalog.IsSelectable(roleConfig.Model.Trim()))
                     {
                         return new ApiErrorResult(400, "ai_assistant_model_unknown", $"Unknown assistant model '{roleConfig.Model}' for role '{role}'.");
@@ -755,6 +789,10 @@ public static class AiAssistantEndpoints
             return null;
         }
     }
+
+    /// <summary>True while the OpenCode provider row exists and an admin has it active.</summary>
+    private static async Task<bool> IsOpenCodeActiveAsync(IAiProviderRegistry providerRegistry, CancellationToken ct)
+        => await providerRegistry.FindByCodeAsync(OpenCodeProviderDefaults.ProviderCode, ct) is { IsActive: true };
 
     private static string AssistantFeatureCodeForRole(string role) => role switch
     {

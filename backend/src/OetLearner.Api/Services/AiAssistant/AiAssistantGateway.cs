@@ -5,6 +5,7 @@ using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Services.AiAssistant;
 
@@ -15,6 +16,11 @@ namespace OetLearner.Api.Services.AiAssistant;
 /// </summary>
 public interface IAiAssistantGateway
 {
+    /// <param name="conversationKey">Raw conversation (thread) id. Providers that need a stable
+    /// per-conversation session header pseudonymise it themselves; it is never logged here.</param>
+    /// <param name="isContinuation">True for ReAct iterations after the first. Only the daily
+    /// token-cap denial is waived then, so a tool loop that has already acted (e.g. written a
+    /// plan) can finish; every other quota refusal still applies.</param>
     IAsyncEnumerable<LlmStreamChunk> StreamCompleteWithToolsAsync(
         string featureCode,
         string? userId,
@@ -23,7 +29,9 @@ public interface IAiAssistantGateway
         string? modelOverride,
         CancellationToken ct,
         IReadOnlyList<AiProviderImageAttachment>? imageAttachments = null,
-        AiProviderDocumentAttachment? documentAttachment = null);
+        AiProviderDocumentAttachment? documentAttachment = null,
+        string? conversationKey = null,
+        bool isContinuation = false);
 }
 
 public sealed class AiAssistantGateway(
@@ -45,18 +53,44 @@ public sealed class AiAssistantGateway(
         string? modelOverride,
         [EnumeratorCancellation] CancellationToken ct,
         IReadOnlyList<AiProviderImageAttachment>? imageAttachments = null,
-        AiProviderDocumentAttachment? documentAttachment = null)
+        AiProviderDocumentAttachment? documentAttachment = null,
+        string? conversationKey = null,
+        bool isContinuation = false)
     {
         var startedAt = DateTimeOffset.UtcNow;
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         // Resolve provider + model via feature routing. A thread model
         // override is provider-aware: Claude API ids stay on anthropic,
-        // UBAG browser ids (duckai_web, claude_web, …) stay on ubag.
+        // UBAG browser ids (duckai_web, claude_web, …) stay on ubag,
+        // OpenCode ids stay on opencode.
         var route = await routeResolver.ResolveAsync(featureCode, ct);
         var requestedModel = modelOverride ?? route?.Model;
         var requestedProviderCode = AssistantModelCatalog.ProviderCodeForModel(requestedModel)
             ?? route?.ProviderCode;
+
+        // OpenCode failures never surface their cause to the learner (owner wording, no fallback
+        // provider); the specific class goes to the usage record only.
+        var isOpenCode = IsOpenCodeCode(requestedProviderCode);
+        if (isOpenCode && !string.Equals(featureCode, AiFeatureCodes.AiAssistantLearner, StringComparison.OrdinalIgnoreCase))
+        {
+            await RecordFailureAsync(
+                featureCode,
+                userId,
+                requestedProviderCode,
+                requestedModel,
+                AiCallOutcome.GatewayRefused,
+                "opencode_learner_only",
+                "OpenCode models are only available in the learner assistant.",
+                requestSystemPrompt: null,
+                requestUserPrompt: messages.LastOrDefault(m => m.Role == "user")?.Content,
+                startedAt,
+                stopwatch,
+                CancellationToken.None);
+            yield return new LlmTextChunk("This model is only available in the learner assistant. Please pick a Claude model instead.");
+            yield break;
+        }
+
         var resolvedProvider = await ResolveProviderAsync(requestedProviderCode, requestedModel, ct);
         var providerCode = resolvedProvider?.ProviderCode ?? requestedProviderCode ?? string.Empty;
         var model = resolvedProvider?.Model ?? requestedModel ?? string.Empty;
@@ -77,7 +111,9 @@ public sealed class AiAssistantGateway(
                 startedAt,
                 stopwatch,
                 CancellationToken.None);
-            yield return new LlmTextChunk("No AI provider is configured. Please contact an administrator.");
+            yield return new LlmTextChunk(isOpenCode
+                ? OpenCodeProviderDefaults.LearnerBusyMessage
+                : "No AI provider is configured. Please contact an administrator.");
             yield break;
         }
 
@@ -92,6 +128,24 @@ public sealed class AiAssistantGateway(
         if (quotaService is not null)
         {
             quotaDecision = await quotaService.TryReserveAsync(userId, featureCode, AiKeySource.Platform, ct);
+            if (!quotaDecision.Allowed && isContinuation && IsDailyCapOnlyDenial(quotaDecision))
+            {
+                // A tool loop that already acted (e.g. wrote a plan) must be able to say so. The
+                // reserve is a soft pre-check and the monthly cap is evaluated first, so a daily-only
+                // denial means the learner is still inside the monthly allowance.
+                logger.LogInformation(
+                    "AI Assistant continuing a tool loop past the daily cap for {FeatureCode} ({PolicyTrace}).",
+                    featureCode,
+                    quotaDecision.PolicyTrace);
+                quotaDecision = quotaDecision with
+                {
+                    Allowed = true,
+                    ErrorCode = null,
+                    ErrorMessage = null,
+                    PolicyTrace = quotaDecision.PolicyTrace + ".continuation_allowed",
+                };
+            }
+
             if (!quotaDecision.Allowed)
             {
                 await RecordFailureAsync(
@@ -251,6 +305,7 @@ public sealed class AiAssistantGateway(
             ToolChoice = tools.Count > 0 ? "auto" : null,
             ImageAttachments = effectiveImages,
             DocumentAttachment = documentAttachment,
+            SessionKey = conversationKey,
         };
 
         // UBAG's browser facade cannot serve tool calls (see
@@ -329,12 +384,12 @@ public sealed class AiAssistantGateway(
                     directRecorder,
                     lease,
                     providerCode,
-                    async () => await provider.CompleteAsync(request, ct),
+                    async () => await CompleteOnceAsync(provider, request, rejectEmpty: isOpenCode, ct),
                     ct);
             }
             else
             {
-                completion = await provider.CompleteAsync(request, ct);
+                completion = await CompleteOnceAsync(provider, request, rejectEmpty: isOpenCode, ct);
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -358,21 +413,27 @@ public sealed class AiAssistantGateway(
         catch (Exception ex)
         {
             logger.LogError(ex, "AI Assistant provider call failed for {FeatureCode}", featureCode);
+            var emptyCompletion = ex is EmptyCompletionException;
+            var errorCode = emptyCompletion ? "provider_empty_completion" : AiGatewayService.ClassifyError(ex);
             await RecordFailureAsync(
                 featureCode,
                 userId,
                 providerCode,
                 model,
                 AiCallOutcome.ProviderError,
-                "provider_error",
-                "Provider request failed.",
+                errorCode,
+                emptyCompletion
+                    ? "Provider returned an empty completion."
+                    : AiGatewayService.SanitiseProviderErrorMessage(ex, errorCode),
                 request.SystemPrompt,
                 request.UserPrompt,
                 startedAt,
                 stopwatch,
                 CancellationToken.None,
                 policyTrace: quotaDecision?.PolicyTrace);
-            errorMessage = "I encountered an error communicating with the AI service. Please try again.";
+            errorMessage = isOpenCode
+                ? OpenCodeProviderDefaults.LearnerBusyMessage
+                : "I encountered an error communicating with the AI service. Please try again.";
         }
 
         if (errorMessage != null)
@@ -619,6 +680,16 @@ public sealed class AiAssistantGateway(
         }
 
         var routeRow = await providerRegistry.FindByCodeAsync(providerCode, ct);
+
+        // An explicit-only provider (OpenCode) is reached only through its own active row. If the
+        // row is missing or inactive (a thread can stay pinned after an admin disables it) the call
+        // is refused: it must never fall through to a same-named direct provider, the OpenAI shims
+        // or the mock below.
+        if (AiProviderDefaultEligibility.IsExplicitOnlyCode(providerCode) && routeRow is not { IsActive: true })
+        {
+            return null;
+        }
+
         if (routeRow is not null)
         {
             var preferredName = ProviderNameForDialect(routeRow.Dialect);
@@ -682,13 +753,17 @@ public sealed class AiAssistantGateway(
         _ => null,
     };
 
+    // "The first active row with a key" is an implicit pick, so it skips rows that may only be chosen
+    // explicitly (AiProviderDefaultEligibility): the owner's Claude/Codex subscription sidecars (marker
+    // key; activating one for Speaking grading must not put assistant traffic on the owner's Max quota)
+    // and real-key explicit-only rows such as OpenCode.
     private async Task<AiProvider?> FirstCredentialedOpenAiCompatibleRowAsync(CancellationToken ct)
     {
         var rows = await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct);
         return rows.FirstOrDefault(row => row.IsActive
                                           && row.Dialect == AiProviderDialect.OpenAiCompatible
                                           && !string.IsNullOrWhiteSpace(row.EncryptedApiKey)
-                                          && !IsKeylessSubscriptionSidecar(row));
+                                          && AiProviderDefaultEligibility.IsDefaultEligible(row));
     }
 
     private async Task<AiProvider?> FirstCredentialedTextChatRowAsync(CancellationToken ct)
@@ -696,14 +771,33 @@ public sealed class AiAssistantGateway(
         var rows = await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct);
         return rows.FirstOrDefault(row => row.IsActive
                                           && !string.IsNullOrWhiteSpace(row.EncryptedApiKey)
-                                          && !IsKeylessSubscriptionSidecar(row));
+                                          && AiProviderDefaultEligibility.IsDefaultEligible(row));
     }
 
-    // The owner's Claude/Codex subscription sidecars (marker key, no real credential) are only ever
-    // reached by an explicit route or provider pin, never by "the first active row with a key":
-    // activating one for Speaking grading must not put assistant traffic on the owner's Max quota.
-    private static bool IsKeylessSubscriptionSidecar(AiProvider row)
-        => OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.IsMarkerKey(row.EncryptedApiKey);
+    private static bool IsOpenCodeCode(string? providerCode)
+        => string.Equals(providerCode?.Trim(), OpenCodeProviderDefaults.ProviderCode, StringComparison.OrdinalIgnoreCase);
+
+    // ErrorCode quota_exhausted with a ".daily.deny" trace is the daily safety cap alone: the monthly
+    // cap is checked first (AiQuotaService), so a monthly overrun traces ".monthly.deny" and stays refused.
+    private static bool IsDailyCapOnlyDenial(AiQuotaDecision decision)
+        => string.Equals(decision.ErrorCode, "quota_exhausted", StringComparison.Ordinal)
+           && decision.PolicyTrace.EndsWith(".daily.deny", StringComparison.Ordinal);
+
+    // For OpenCode an answer with neither text nor tool calls is a failed call (the learner would
+    // otherwise get an empty bubble); other providers keep their existing behaviour.
+    private static async Task<AiProviderCompletion> CompleteOnceAsync(
+        IAiModelProvider provider, AiProviderRequest request, bool rejectEmpty, CancellationToken ct)
+    {
+        var result = await provider.CompleteAsync(request, ct);
+        if (rejectEmpty && string.IsNullOrWhiteSpace(result.Text) && result.ToolCalls is not { Count: > 0 })
+        {
+            throw new EmptyCompletionException();
+        }
+
+        return result;
+    }
+
+    private sealed class EmptyCompletionException() : InvalidOperationException("Provider returned an empty completion.");
 
     private static string ResolveModel(string? requestedModel, string? providerDefaultModel, string providerName)
     {

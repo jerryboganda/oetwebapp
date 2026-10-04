@@ -41,4 +41,60 @@ public sealed class AssistantModelCatalogTests
             CoreAiProviderSeeder.AnthropicAllowedModelsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             AssistantModelCatalog.ClaudeApiModels);
     }
+
+    [Fact]
+    public void OpenCodeCatalog_IsTheCuratedList_AndDisjointFromClaudeAndUbag()
+    {
+        Assert.Equal(OpenCodeProviderDefaults.CuratedChatModels, AssistantModelCatalog.OpenCodeModels.ToArray());
+        Assert.NotEmpty(AssistantModelCatalog.OpenCodeModels);
+        Assert.Empty(AssistantModelCatalog.OpenCodeModels.Intersect(AssistantModelCatalog.ClaudeApiModels, StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(AssistantModelCatalog.OpenCodeModels.Intersect(AssistantModelCatalog.UbagModels, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void OpenCodeModels_AreThreadSelectable_ButNeverDefaultSelectable()
+    {
+        foreach (var model in AssistantModelCatalog.OpenCodeModels)
+        {
+            Assert.True(AssistantModelCatalog.IsOpenCodeModel(model));
+            Assert.True(AssistantModelCatalog.IsThreadSelectable(model));
+            // IsSelectable also guards the admin default-model save: an OpenCode id there would
+            // silently make OpenCode a feature default (the catalog's provider overrides the route's).
+            Assert.False(AssistantModelCatalog.IsSelectable(model));
+        }
+    }
+
+    [Fact]
+    public void ThreadSelectable_StillCoversClaudeAndUbag_AndRejectsUnknownIds()
+    {
+        Assert.True(AssistantModelCatalog.IsThreadSelectable("claude-sonnet-5"));
+        Assert.True(AssistantModelCatalog.IsThreadSelectable("claude_web"));
+        Assert.False(AssistantModelCatalog.IsThreadSelectable("gpt-4o"));
+        Assert.False(AssistantModelCatalog.IsThreadSelectable("qwen3.8-flash")); // gateway model on a protocol this client does not speak
+        Assert.False(AssistantModelCatalog.IsThreadSelectable(null));
+        Assert.False(AssistantModelCatalog.IsThreadSelectable("  "));
+        Assert.False(AssistantModelCatalog.IsOpenCodeModel("claude-sonnet-5"));
+        Assert.False(AssistantModelCatalog.IsOpenCodeModel("claude_web"));
+    }
+
+    [Fact]
+    public void IsOpenCodeModel_IsStrictOrdinal()
+    {
+        // Claude ids match case-insensitively; OpenCode ids must match exactly.
+        Assert.False(AssistantModelCatalog.IsOpenCodeModel("GLM-5.3-FLASH"));
+        Assert.False(AssistantModelCatalog.IsOpenCodeModel("glm-5.3-flash|extra"));
+        Assert.False(AssistantModelCatalog.IsOpenCodeModel("glm-5"));
+        Assert.False(AssistantModelCatalog.IsOpenCodeModel(null));
+        Assert.False(AssistantModelCatalog.IsOpenCodeModel(""));
+    }
+
+    [Fact]
+    public void OpenCodeModel_RoutesToOpenCode_NotAnthropicOrUbag()
+    {
+        Assert.Equal(OpenCodeProviderDefaults.ProviderCode, AssistantModelCatalog.ProviderCodeForModel("glm-5.3-flash"));
+        Assert.Equal(OpenCodeProviderDefaults.ProviderCode, AssistantModelCatalog.ProviderCodeForModel("glm-5.3"));
+        Assert.False(AssistantModelCatalog.IsClaudeApiModel("glm-5.3"));
+        Assert.False(AssistantModelCatalog.IsUbagModel("glm-5.3"));
+        Assert.Null(AssistantModelCatalog.ProviderCodeForModel("GLM-5.3"));
+    }
 }

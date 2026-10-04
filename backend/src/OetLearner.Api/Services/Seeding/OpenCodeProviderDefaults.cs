@@ -1,0 +1,68 @@
+namespace OetLearner.Api.Services.Seeding;
+
+// OpenCode inference-gateway provider (owner directive 2026-10-04, docs/AI-USAGE-POLICY.md §21).
+//
+// The learner chatbot reaches OpenCode through its OpenAI-compatible HTTP gateway (no CLI, no
+// sidecar) using the platform's own paid gateway API key, which the owner pastes into
+// /admin/ai-providers (encrypted, never returned). The row ships INACTIVE and KEYLESS: the
+// OpenCode terms ("own internal use only") and the TV-029 provider inventory are owner gates.
+//
+// The provider is reachable ONLY through an explicit choice (the per-thread model picker). It is
+// never an implicit default for any feature, whatever its failover priority — see
+// AiProviderDefaultEligibility.
+
+/// <summary>Canonical OpenCode provider registration values and routing constants.</summary>
+public static class OpenCodeProviderDefaults
+{
+    public const string ProviderCode = "opencode";
+    public const string ProviderName = "OpenCode (inference gateway)";
+
+    /// <summary>Zen: pay-as-you-go credits.</summary>
+    public const string ZenBaseUrl = "https://opencode.ai/zen/v1";
+
+    /// <summary>Go: subscription. Same key shape; entitlement differs from Zen.</summary>
+    public const string GoBaseUrl = "https://opencode.ai/zen/go/v1";
+
+    /// <summary>Documented chat-completions model on both Zen and Go, with native function calling.</summary>
+    public const string DefaultModel = "glm-5.3-flash";
+
+    /// <summary>Valid for both curated models (low / high / max). Bounds forced thinking so the
+    /// answer is not starved of output tokens.</summary>
+    public const string DefaultReasoningEffort = "low";
+
+    /// <summary>Highest number = last. Combined with the explicit-only guard, so the row can never
+    /// win an implicit "first active row" pick.</summary>
+    public const int FailoverPriority = 900;
+
+    /// <summary>Documented per-1M-token rates for <see cref="DefaultModel"/> ($0.15 in / $0.50 out),
+    /// expressed per 1K tokens for the pricing columns.</summary>
+    public const decimal DefaultPricePer1kPromptTokens = 0.00015m;
+    public const decimal DefaultPricePer1kCompletionTokens = 0.0005m;
+
+    /// <summary>Models served on the chat-completions protocol that this client speaks. Anything
+    /// else on the gateway uses /responses, /messages or a Google protocol and would be refused.
+    /// Free gateway models may train on submitted data and must never be listed here.</summary>
+    public static readonly string[] CuratedChatModels = ["glm-5.3-flash", "glm-5.3"];
+
+    public static string AllowedModelsCsv => string.Join(',', CuratedChatModels);
+
+    /// <summary>Exactly what a learner sees when an OpenCode turn fails for any provider reason
+    /// (owner wording). The specific failure class goes to the usage record, never to the learner.</summary>
+    public const string LearnerBusyMessage =
+        "The AI provider service is busy at the moment. Please try again later after a few minutes.";
+
+    /// <summary>Provider codes that may only be selected explicitly. A real-key row has no marker
+    /// key, so without this list it would qualify for every "first active credentialed row" pick.
+    /// A string[] so EF Core can translate <c>Contains</c>.</summary>
+    public static readonly string[] ExplicitOnlyCodes = [ProviderCode];
+
+    /// <summary>True for <c>opencode.ai</c> and any subdomain of it.</summary>
+    public static bool IsOpenCodeHost(string? host)
+        => !string.IsNullOrWhiteSpace(host)
+           && (host.Equals("opencode.ai", StringComparison.OrdinalIgnoreCase)
+               || host.EndsWith(".opencode.ai", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>True when <paramref name="baseUrl"/> is an absolute URL on an OpenCode host.</summary>
+    public static bool IsOpenCodeBaseUrl(string? baseUrl)
+        => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && IsOpenCodeHost(uri.Host);
+}

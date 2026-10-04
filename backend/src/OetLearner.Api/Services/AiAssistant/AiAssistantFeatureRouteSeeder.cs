@@ -17,6 +17,11 @@ public sealed class AiAssistantFeatureRouteSeeder(
         // Wait briefly for DB to be ready
         await Task.Delay(5000, ct);
 
+        await SeedAsync(ct);
+    }
+
+    internal async Task SeedAsync(CancellationToken ct)
+    {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
@@ -25,7 +30,9 @@ public sealed class AiAssistantFeatureRouteSeeder(
                                && provider.Category == AiProviderCategory.TextChat
                                && !string.IsNullOrWhiteSpace(provider.EncryptedApiKey)
                                // Never seed an assistant route onto a keyless subscription sidecar row.
-                               && provider.EncryptedApiKey != OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.MarkerKey)
+                               && provider.EncryptedApiKey != OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.MarkerKey
+                               // Nor onto an explicit-only provider (OpenCode): reachable only by a deliberate pick.
+                               && !OetLearner.Api.Services.Seeding.OpenCodeProviderDefaults.ExplicitOnlyCodes.Contains(provider.Code))
             .OrderBy(provider => provider.FailoverPriority)
             .FirstOrDefaultAsync(ct);
         if (defaultProvider is null)

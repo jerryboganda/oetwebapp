@@ -109,23 +109,27 @@ public static class AiProviderErrorParser
 
     private static readonly string[] RequestIdHeaders = ["request-id", "x-request-id"];
 
+    // The OpenCode gateway answers 401 for both a bad key AND an empty balance or a spent plan, so its
+    // error type, not the status, decides: the four limit types are quota, AuthError alone is auth
+    // (R1 runs before R2, so a 401 CreditsError is quota). Types arrive lower-cased by ToToken.
     private static readonly HashSet<string> QuotaTokens = new(StringComparer.OrdinalIgnoreCase)
     {
         "insufficient_quota", "billing_hard_limit_reached", "billing_not_active",
         "billing_error", "quota_exceeded", "credit_balance_too_low",
+        "creditserror", "monthlylimiterror", "gousagelimiterror", "freeusagelimiterror",
     };
 
     // A rate token blocks the phrase based quota match: OpenAI rate limit text mentions billing.
     private static readonly HashSet<string> RateGuardTokens = new(StringComparer.OrdinalIgnoreCase)
     {
-        "rate_limit_exceeded", "rate_limit_error", "requests", "tokens",
+        "rate_limit_exceeded", "rate_limit_error", "requests", "tokens", "ratelimiterror",
     };
 
     private static readonly HashSet<string> AuthTokens = new(StringComparer.OrdinalIgnoreCase)
     {
         "authentication_error", "permission_error", "invalid_api_key", "incorrect_api_key",
         "invalid_authentication", "unauthenticated", "permission_denied",
-        "unsupported_country_region_territory", "api_key_invalid",
+        "unsupported_country_region_territory", "api_key_invalid", "autherror",
     };
 
     private static readonly HashSet<string> OverloadedTokens = new(StringComparer.OrdinalIgnoreCase)
@@ -136,6 +140,7 @@ public static class AiProviderErrorParser
     private static readonly HashSet<string> RateTokens = new(StringComparer.OrdinalIgnoreCase)
     {
         "rate_limit_error", "rate_limit_exceeded", "requests", "tokens", "too_many_requests", "resource_exhausted",
+        "ratelimiterror",
     };
 
     private static readonly HashSet<string> ServerTokens = new(StringComparer.OrdinalIgnoreCase)
@@ -147,6 +152,7 @@ public static class AiProviderErrorParser
     {
         "invalid_request_error", "not_found_error", "request_too_large", "invalid_argument",
         "failed_precondition", "not_found", "model_not_found", "invalid_model", "bad_request",
+        "modelerror",
     };
 
     private static readonly string[] QuotaPhrases =

@@ -3,6 +3,7 @@ using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using OpenCodeDefaults = OetLearner.Api.Services.Seeding.OpenCodeProviderDefaults;
 using SidecarDefaults = OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults;
 
 namespace OetLearner.Api.Tests.Services;
@@ -276,6 +277,106 @@ public class AiGatewayRoutingTests
         Assert.NotNull(anthropicProvider.LastRequest);
         Assert.Equal(SidecarDefaults.ClaudeCode, anthropicProvider.LastRequest!.ProviderCode);
         Assert.Equal(SidecarDefaults.ClaudeModel, anthropicProvider.LastRequest.Model);
+    }
+
+    // OpenCode is a real-key row, so IsMarkerKey does not protect it: it is kept out of the implicit
+    // default by AiProviderDefaultEligibility (ExplicitOnlyCodes) and reached only by an explicit pin.
+
+    private static AiProvider OpenCodeRow(int failoverPriority = OpenCodeDefaults.FailoverPriority)
+        => ProviderRow(
+            OpenCodeDefaults.ProviderCode,
+            AiProviderDialect.OpenAiCompatible,
+            AiProviderCategory.TextChat,
+            failoverPriority,
+            OpenCodeDefaults.DefaultModel);
+
+    [Fact]
+    public async Task CompleteAsync_FallbackRegistrySelection_SkipsAKeyedExplicitOnlyOpenCodeRow_EvenAtTheBestPriority()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider, registryProvider },
+            providerRegistry: new FakeProviderRegistry(
+                // Lower number = tried first: without the guard OpenCode would win this pick.
+                OpenCodeRow(failoverPriority: 1),
+                ProviderRow("openai-platform", AiProviderDialect.OpenAiCompatible, AiProviderCategory.TextChat, 10, "text-default-model")));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        Assert.Equal("completion from registry", result.Completion);
+        Assert.Null(mockProvider.LastRequest);
+        Assert.NotNull(registryProvider.LastRequest);
+        Assert.Equal("openai-platform", registryProvider.LastRequest!.ProviderCode);
+        Assert.Equal("text-default-model", registryProvider.LastRequest.Model);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_FallbackRegistrySelection_UsesMock_WhenOnlyAnOpenCodeRowIsKeyed()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { mockProvider, registryProvider },
+            providerRegistry: new FakeProviderRegistry(OpenCodeRow()));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+        });
+
+        Assert.Equal("completion from mock", result.Completion);
+        Assert.Null(registryProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_InProduction_RefusesRatherThanDefaultingToAnOpenCodeRow()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { registryProvider },
+            providerRegistry: new FakeProviderRegistry(OpenCodeRow()),
+            hostEnvironment: new TestHostEnvironment("Production"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = AiFeatureCodes.WritingGrade,
+            }));
+
+        Assert.Null(registryProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ExplicitPin_StillReachesTheOpenCodeRow()
+    {
+        // Only the implicit default is closed: an explicit pin by code still resolves the row.
+        var registryProvider = new CapturingProvider("registry");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { registryProvider },
+            providerRegistry: new FakeProviderRegistry(OpenCodeRow()));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.WritingGrade,
+            Provider = OpenCodeDefaults.ProviderCode,
+        });
+
+        Assert.Equal("completion from registry", result.Completion);
+        Assert.NotNull(registryProvider.LastRequest);
+        Assert.Equal(OpenCodeDefaults.ProviderCode, registryProvider.LastRequest!.ProviderCode);
+        Assert.Equal(OpenCodeDefaults.DefaultModel, registryProvider.LastRequest.Model);
     }
 
     [Fact]

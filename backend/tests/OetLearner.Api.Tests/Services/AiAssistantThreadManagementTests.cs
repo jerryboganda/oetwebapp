@@ -151,7 +151,9 @@ public sealed class AiAssistantThreadManagementTests : IAsyncDisposable
             string? modelOverride,
             CancellationToken ct,
             IReadOnlyList<OetLearner.Api.Services.Rulebook.AiProviderImageAttachment>? imageAttachments = null,
-            OetLearner.Api.Services.Rulebook.AiProviderDocumentAttachment? documentAttachment = null)
+            OetLearner.Api.Services.Rulebook.AiProviderDocumentAttachment? documentAttachment = null,
+            string? conversationKey = null,
+            bool isContinuation = false)
         {
             await Task.Yield();
             yield break;

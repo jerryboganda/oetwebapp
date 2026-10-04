@@ -775,6 +775,22 @@ public sealed class AiProviderConnectionTester(
         var model = string.IsNullOrWhiteSpace(defaultModel) ? "openai/gpt-4o-mini" : defaultModel;
         var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        var maxTokens = fullPipeline ? 16 : 1;
+        var messages = new[]
+        {
+            new { role = "system", content = "Reply with the single word OK." },
+            new { role = "user", content = fullPipeline ? "ping — reply with a single word." : "ping" },
+        };
+        if (OpenCodeProviderDefaults.IsOpenCodeBaseUrl(baseUrl))
+        {
+            // OpenCode gateway: the same identity headers a real call sends (so the probe predicts
+            // runtime), and none of the UBAG/Azure extras below — a third-party gateway gets only
+            // what it documents, and its own key must not be echoed into a second header.
+            OpenCodeGatewayHeaders.Apply(req.Headers, sessionKey: null);
+            req.Content = JsonContent.Create(new { model, max_tokens = maxTokens, messages });
+            return req;
+        }
+
         // Some Azure-style endpoints prefer api-key header; harmless to set both.
         req.Headers.TryAddWithoutValidation("api-key", apiKey);
         // Unique nonce per probe so the UBAG facade's derived idempotency key
@@ -786,12 +802,8 @@ public sealed class AiProviderConnectionTester(
         req.Content = JsonContent.Create(new
         {
             model,
-            max_tokens = fullPipeline ? 16 : 1,
-            messages = new[]
-            {
-                new { role = "system", content = "Reply with the single word OK." },
-                new { role = "user", content = fullPipeline ? "ping — reply with a single word." : "ping" },
-            },
+            max_tokens = maxTokens,
+            messages,
             ubag_nonce = Guid.NewGuid().ToString("N"),
         });
         return req;
@@ -940,7 +952,7 @@ public sealed class AiProviderConnectionTester(
     }
 
     private static readonly Regex SecretPatterns = new(
-        @"(?:github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_\-]{20,}|sk-proj-[A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9_\-]{20,}|AIza[0-9A-Za-z_\-]{20,}|xox[baprs]-[A-Za-z0-9\-]{20,})",
+        @"(?:oc_sk_[A-Za-z0-9_\-]{16,}|github_pat_[A-Za-z0-9_]{20,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|ghu_[A-Za-z0-9]{20,}|ghs_[A-Za-z0-9]{20,}|ghr_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_\-]{20,}|sk-proj-[A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9_\-]{20,}|AIza[0-9A-Za-z_\-]{20,}|xox[baprs]-[A-Za-z0-9\-]{20,})",
         RegexOptions.Compiled | RegexOptions.IgnoreCase,
         TimeSpan.FromMilliseconds(50));
 }

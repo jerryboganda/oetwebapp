@@ -175,6 +175,74 @@ describe('AiProvidersPage — GitHub Copilot integration', () => {
     expect(payload.isActive).toBe(false);
   });
 
+  it.each([
+    ['OpenCode (inference gateway) - Zen', 'https://opencode.ai/zen/v1'],
+    ['OpenCode (inference gateway) - Go', 'https://opencode.ai/zen/go/v1'],
+  ])('exposes the "%s" preset: shared code, own base URL, priority 900, inactive', async (presetName, baseUrl) => {
+    mockFetch.mockResolvedValue([]);
+    mockCreate.mockResolvedValue({
+      id: 'opencode-1',
+      code: 'opencode',
+      apiKeyHint: '',
+    });
+
+    render(<AiProvidersPage />);
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+
+    await userEvent.click(screen.getByRole('button', { name: /Register provider/i }));
+    await userEvent.click(await screen.findByRole('button', { name: presetName }));
+    // The key hint appears once the preset sets code=opencode.
+    expect(screen.getByText(/TV-029/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /^Save$/ }));
+
+    await waitFor(() => expect(mockCreate).toHaveBeenCalledTimes(1));
+    const payload = mockCreate.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload.code).toBe('opencode');
+    expect(payload.name).toBe(presetName);
+    expect(payload.dialect).toBe('OpenAiCompatible');
+    expect(payload.category).toBe('TextChat');
+    expect(payload.baseUrl).toBe(baseUrl);
+    expect(payload.defaultModel).toBe('glm-5.3-flash');
+    expect(payload.pricePer1kPromptTokens).toBe(0.00015);
+    expect(payload.pricePer1kCompletionTokens).toBe(0.0005);
+    expect(payload.failoverPriority).toBe(900);
+    expect(payload.isActive).toBe(false);
+  });
+
+  it('shows the OpenCode key hint when editing the seeded opencode row', async () => {
+    mockFetch.mockResolvedValue([
+      {
+        id: 'opencode-1',
+        code: 'opencode',
+        name: 'OpenCode (inference gateway)',
+        dialect: 'OpenAiCompatible',
+        category: 'TextChat',
+        baseUrl: 'https://opencode.ai/zen/v1',
+        apiKeyHint: '',
+        defaultModel: 'glm-5.3-flash',
+        allowedModelsCsv: 'glm-5.3-flash,glm-5.3',
+        pricePer1kPromptTokens: 0.00015,
+        pricePer1kCompletionTokens: 0.0005,
+        retryCount: 2,
+        circuitBreakerThreshold: 5,
+        circuitBreakerWindowSeconds: 30,
+        failoverPriority: 900,
+        isActive: false,
+        createdAt: '',
+        updatedAt: '',
+      },
+    ]);
+
+    render(<AiProvidersPage />);
+    await waitFor(() => {
+      expect(screen.getAllByText('OpenCode (inference gateway)').length).toBeGreaterThan(0);
+    });
+
+    // DataTable renders desktop and mobile views, so Edit appears twice.
+    await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    expect(screen.getByText(/TV-029/)).toBeInTheDocument();
+  });
+
   it('lists a Judgment row only under the Judgment category filter', async () => {
     const base = {
       baseUrl: 'https://example.com',

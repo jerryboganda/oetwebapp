@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Services.Ai;
 
@@ -19,6 +20,9 @@ namespace OetLearner.Api.Services.Ai;
 ///   and Conversation transcription.</item>
 ///   <item><c>typesafe-jev</c> — TypeSafe Jev typed-judgment API (Judgment
 ///   category, seeded INACTIVE; activate after the key + connection test pass).</item>
+///   <item><c>opencode</c> — OpenCode inference gateway (OpenAI-compatible text chat, seeded
+///   INACTIVE and keyless; explicit-only, reached solely through the learner chatbot's model
+///   picker — see <see cref="AiProviderDefaultEligibility"/>).</item>
 /// </list>
 /// <para>
 /// Safety: strictly additive. Rows are seeded <b>keyless</b>
@@ -86,7 +90,8 @@ public sealed class CoreAiProviderSeeder(
                     DefaultModel = s.DefaultModel,
                     EncryptedApiKey = string.Empty,   // admin pastes the key in the UI
                     ApiKeyHint = string.Empty,
-                    AllowedModelsCsv = s.Code == "anthropic" ? AnthropicAllowedModelsCsv : string.Empty,
+                    AllowedModelsCsv = s.AllowedModelsCsv,
+                    ReasoningEffort = s.ReasoningEffort,
                     PricePer1kPromptTokens = s.PricePer1kPromptTokens,
                     PricePer1kCompletionTokens = s.PricePer1kCompletionTokens,
                     RetryCount = 2,
@@ -132,7 +137,8 @@ public sealed class CoreAiProviderSeeder(
             DefaultModel: AnthropicDefaultModel,
             PricePer1kPromptTokens: 0.003m,
             PricePer1kCompletionTokens: 0.015m,
-            FailoverPriority: 20),
+            FailoverPriority: 20,
+            AllowedModelsCsv: AnthropicAllowedModelsCsv),
         new CoreProviderSeed(
             Code: "mistral-ocr",
             Name: "Mistral OCR",
@@ -184,6 +190,26 @@ public sealed class CoreAiProviderSeeder(
             PricePer1kCompletionTokens: 0m,
             FailoverPriority: 28,
             IsActive: false),
+        // OpenCode inference gateway (owner directive 2026-10-04, docs/AI-USAGE-POLICY.md §21): keyless AND
+        // inactive. The OpenCode terms ("own internal use only") and the TV-029 provider inventory are owner
+        // gates, so the admin pastes the key and ticks Active only after both. Even once active it is never
+        // an implicit default (AiProviderDefaultEligibility): it is reached only through the learner
+        // chatbot's per-thread model picker. Zen base URL; the admin applies the Go preset if the connection
+        // test says the key belongs to that plan. AllowedModelsCsv is informational (the picker catalog
+        // is code-owned).
+        new CoreProviderSeed(
+            Code: OpenCodeProviderDefaults.ProviderCode,
+            Name: OpenCodeProviderDefaults.ProviderName,
+            Category: AiProviderCategory.TextChat,
+            Dialect: AiProviderDialect.OpenAiCompatible,
+            BaseUrl: OpenCodeProviderDefaults.ZenBaseUrl,
+            DefaultModel: OpenCodeProviderDefaults.DefaultModel,
+            PricePer1kPromptTokens: OpenCodeProviderDefaults.DefaultPricePer1kPromptTokens,
+            PricePer1kCompletionTokens: OpenCodeProviderDefaults.DefaultPricePer1kCompletionTokens,
+            FailoverPriority: OpenCodeProviderDefaults.FailoverPriority,
+            IsActive: false,
+            AllowedModelsCsv: OpenCodeProviderDefaults.AllowedModelsCsv,
+            ReasoningEffort: OpenCodeProviderDefaults.DefaultReasoningEffort),
     };
 }
 
@@ -198,4 +224,6 @@ public sealed record CoreProviderSeed(
     decimal PricePer1kPromptTokens,
     decimal PricePer1kCompletionTokens,
     int FailoverPriority,
-    bool IsActive = true);
+    bool IsActive = true,
+    string AllowedModelsCsv = "",
+    string? ReasoningEffort = null);

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
@@ -863,6 +864,700 @@ public sealed class RegistryBackedProviderTests
         finally
         {
             Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    // ── OpenAI-compatible hardening: tool calls, ids and empty completions (every provider) ─────────
+
+    private static AiProviderRequest ToolRequest() => new()
+    {
+        ProviderCode = "digitalocean-serverless",
+        Model = "glm-5",
+        SystemPrompt = "system",
+        UserPrompt = "user",
+        Tools = new[]
+        {
+            new AiToolDefinition("lookup_case", "Lookup case", "Lookup a case record.", AiToolCategory.Read, "{}"),
+        },
+        ToolChoice = "auto",
+    };
+
+    /// <summary>An OpenAI chat-completions body whose single message carries the given tool calls. A null id
+    /// omits the key; a null name serialises as JSON null.</summary>
+    private static string ToolCallsBody(string? content, params (string? Id, string? Name, string Args)[] calls)
+    {
+        var toolCalls = calls.Select(call =>
+        {
+            var entry = new Dictionary<string, object?>
+            {
+                ["type"] = "function",
+                ["function"] = new Dictionary<string, object?> { ["name"] = call.Name, ["arguments"] = call.Args },
+            };
+            if (call.Id is not null) entry["id"] = call.Id;
+            return entry;
+        }).ToList();
+
+        return JsonSerializer.Serialize(new
+        {
+            choices = new[]
+            {
+                new
+                {
+                    message = new { role = "assistant", content, tool_calls = toolCalls },
+                    finish_reason = "tool_calls",
+                },
+            },
+            model = "glm-5.3-flash",
+            usage = new { prompt_tokens = 5, completion_tokens = 3 },
+        });
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ContentNullWithToolCalls_ReturnsTheCallsInsteadOfAnEmptyCompletionFailure()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(
+            HttpStatusCode.OK, ToolCallsBody(null, ("call_1", "lookup_case", "{\"q\":1}"))))));
+
+        var completion = await provider.CompleteAsync(ToolRequest(), CancellationToken.None);
+
+        Assert.Equal(string.Empty, completion.Text);
+        var call = Assert.Single(completion.ToolCalls!);
+        Assert.Equal("call_1", call.Id);
+        Assert.Equal("lookup_case", call.ToolCode);
+        Assert.Equal("{\"q\":1}", call.ArgsJson);
+        Assert.Equal("tool_calls", completion.FinishReason);
+        Assert.Equal("glm-5.3-flash", completion.ServedModel);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ToolCallWithoutAnId_GetsASynthesisedOne()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(
+            HttpStatusCode.OK, ToolCallsBody(null, (null, "lookup_case", "{}"))))));
+
+        var completion = await provider.CompleteAsync(ToolRequest(), CancellationToken.None);
+
+        var call = Assert.Single(completion.ToolCalls!);
+        Assert.StartsWith("call_", call.Id);
+        Assert.False(string.IsNullOrWhiteSpace(call.Id));
+        Assert.Equal("lookup_case", call.ToolCode);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_TextWithOnlyAnEmptyNamedToolCall_ReturnsTheTextAndNoToolCalls()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(
+            HttpStatusCode.OK, ToolCallsBody("Here is the answer.", ("call_1", "", "{}"))))));
+
+        var completion = await provider.CompleteAsync(ToolRequest(), CancellationToken.None);
+
+        Assert.Equal("Here is the answer.", completion.Text);
+        Assert.Null(completion.ToolCalls);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_OnlyAnEmptyNamedToolCallAndNoText_IsAnEmptyCompletion_WithoutUbagWording()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(
+            HttpStatusCode.OK, ToolCallsBody(null, ("call_1", "", "{}"))))));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => provider.CompleteAsync(ToolRequest(), CancellationToken.None));
+
+        Assert.Contains("no text and no tool calls", ex.Message);
+        Assert.DoesNotContain("UBAG", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("browser job", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_NonUbagInvalidResponse_NeverMentionsUbag()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(JsonResponse(
+            HttpStatusCode.OK, "{\"choices\":[{}]}"))));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => provider.CompleteAsync(ToolRequest(), CancellationToken.None));
+
+        Assert.Contains("choices[0].message", ex.Message);
+        Assert.DoesNotContain("UBAG", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ReadOpenAiToolCalls_SynthesisesMissingOrEmptyIds_AndKeepsEveryIdUniqueWithinTheReply()
+    {
+        using var doc = JsonDocument.Parse(ToolCallsBody(
+            null,
+            (null, "a", "{}"),
+            ("", "b", "{}"),
+            ("dup", "c", "{}"),
+            ("dup", "d", "{}"),
+            ("keep", "e", "{}")));
+        var message = doc.RootElement.GetProperty("choices")[0].GetProperty("message");
+
+        var calls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message)!;
+
+        Assert.Equal(new[] { "a", "b", "c", "d", "e" }, calls.Select(call => call.ToolCode));
+        Assert.Equal(calls.Count, calls.Select(call => call.Id).Distinct(StringComparer.Ordinal).Count());
+        Assert.StartsWith("call_", calls[0].Id);
+        Assert.StartsWith("call_", calls[1].Id);
+        Assert.Equal("dup", calls[2].Id);     // the first holder keeps the model's own id
+        Assert.StartsWith("call_", calls[3].Id);
+        Assert.NotEqual("dup", calls[3].Id);
+        Assert.Equal("keep", calls[4].Id);
+    }
+
+    [Fact]
+    public void ReadOpenAiToolCalls_DropsEntriesWithAnEmptyBlankOrMissingName()
+    {
+        using var doc = JsonDocument.Parse(ToolCallsBody(
+            null,
+            ("call_1", "", "{}"),
+            ("call_2", "   ", "{}"),
+            ("call_3", null, "{}"),
+            ("call_4", "lookup_case", "{}")));
+        var message = doc.RootElement.GetProperty("choices")[0].GetProperty("message");
+
+        var call = Assert.Single(AiProviderPayloadBuilder.ReadOpenAiToolCalls(message)!);
+
+        Assert.Equal("call_4", call.Id);
+        Assert.Equal("lookup_case", call.ToolCode);
+    }
+
+    [Fact]
+    public void ReadOpenAiToolCalls_EveryEntryDropped_ReturnsNull()
+    {
+        using var doc = JsonDocument.Parse(ToolCallsBody(null, ("call_1", "", "{}"), ("call_2", null, "{}")));
+        var message = doc.RootElement.GetProperty("choices")[0].GetProperty("message");
+
+        Assert.Null(AiProviderPayloadBuilder.ReadOpenAiToolCalls(message));
+    }
+
+    // ── OpenCode gateway rows ───────────────────────────────────────────────────────────────────
+
+    private const string FakeGatewayKey = "fake-gateway-key-1234567890";
+
+    private const string OpenAiTextBody =
+        """{"choices":[{"message":{"role":"assistant","content":"hello"},"finish_reason":"stop"}],"model":"glm-5.3-flash","usage":{"prompt_tokens":5,"completion_tokens":3}}""";
+
+    private static AiProvider OpenCodeRow(string? reasoningEffort = "low", bool active = true) => new()
+    {
+        Id = OpenCodeProviderDefaults.ProviderCode,
+        Code = OpenCodeProviderDefaults.ProviderCode,
+        Name = OpenCodeProviderDefaults.ProviderName,
+        Dialect = AiProviderDialect.OpenAiCompatible,
+        Category = AiProviderCategory.TextChat,
+        BaseUrl = OpenCodeProviderDefaults.ZenBaseUrl,
+        EncryptedApiKey = "encrypted-test-key",
+        ApiKeyHint = "...test",
+        DefaultModel = OpenCodeProviderDefaults.DefaultModel,
+        ReasoningEffort = reasoningEffort,
+        IsActive = active,
+        FailoverPriority = OpenCodeProviderDefaults.FailoverPriority,
+        CreatedAt = DateTimeOffset.UtcNow,
+        UpdatedAt = DateTimeOffset.UtcNow,
+    };
+
+    private static AiProvider GenericRow(string code, int priority, string? reasoningEffort = null) => new()
+    {
+        Id = code,
+        Code = code,
+        Name = code,
+        Dialect = AiProviderDialect.OpenAiCompatible,
+        Category = AiProviderCategory.TextChat,
+        BaseUrl = "https://example.test/v1",
+        EncryptedApiKey = "encrypted-test-key",
+        ApiKeyHint = "...test",
+        DefaultModel = "glm-5",
+        ReasoningEffort = reasoningEffort,
+        IsActive = true,
+        FailoverPriority = priority,
+        CreatedAt = DateTimeOffset.UtcNow,
+        UpdatedAt = DateTimeOffset.UtcNow,
+    };
+
+    private static AiProviderRequest OpenCodeRequest(string? sessionKey = null, int? maxTokens = null) => new()
+    {
+        ProviderCode = OpenCodeProviderDefaults.ProviderCode,
+        Model = OpenCodeProviderDefaults.DefaultModel,
+        SystemPrompt = "system",
+        UserPrompt = "user",
+        SessionKey = sessionKey,
+        MaxTokens = maxTokens,
+    };
+
+    /// <summary>A provider over an in-memory, thread-safe registry (no DbContext, so concurrent calls are safe).</summary>
+    private static RegistryBackedProvider NewRowsProvider(
+        HttpMessageHandler handler,
+        IReadOnlyList<AiProvider>? rows = null,
+        AiProviderOptions? aiOptions = null,
+        OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate? gate = null,
+        IHttpClientFactory? factory = null)
+        => new(
+            factory ?? new StubHttpClientFactory(handler),
+            new FixedRegistry(rows ?? new[] { OpenCodeRow() }),
+            Options.Create(aiOptions ?? new AiProviderOptions()),
+            gate);
+
+    [Fact]
+    public async Task OpenCodeRow_SendsIdentityHeaders_ReasoningEffort_AndAtLeast6144MaxTokens()
+    {
+        HttpRequestMessage? captured = null;
+        string? body = null;
+        var provider = NewRowsProvider(new StubHandler(async req =>
+        {
+            captured = req;
+            body = await req.Content!.ReadAsStringAsync();
+            return JsonResponse(HttpStatusCode.OK, OpenAiTextBody);
+        }));
+
+        var completion = await provider.CompleteAsync(OpenCodeRequest(sessionKey: "thread-123", maxTokens: 1024), CancellationToken.None);
+
+        Assert.Equal("hello", completion.Text);
+        Assert.Equal("glm-5.3-flash", completion.ServedModel);
+        Assert.Equal("https://opencode.ai/zen/v1/chat/completions", captured!.RequestUri!.ToString());
+        Assert.Equal("Bearer", captured.Headers.Authorization!.Scheme);
+        Assert.Equal(FakeGatewayKey, captured.Headers.Authorization.Parameter);
+        Assert.StartsWith("OET-Platform/", captured.Headers.UserAgent.ToString());
+        Assert.True(captured.Headers.TryGetValues("x-opencode-session", out var sessionValues));
+        var session = Assert.Single(sessionValues!);
+        Assert.Matches("^oet-[0-9a-f]{24}$", session);
+        Assert.DoesNotContain("thread-123", session);
+
+        using var doc = JsonDocument.Parse(body!);
+        Assert.Equal("low", doc.RootElement.GetProperty("reasoning_effort").GetString());
+        Assert.Equal(6144, doc.RootElement.GetProperty("max_tokens").GetInt32());
+        Assert.False(doc.RootElement.GetProperty("stream").GetBoolean());
+    }
+
+    [Theory]
+    [InlineData(null, 6144)]
+    [InlineData(2000, 6144)]
+    [InlineData(6144, 6144)]
+    [InlineData(9000, 9000)]
+    public async Task OpenCodeRow_MaxTokens_IsNeverBelowTheThinkingFloor_AndNeverLowersAHigherRequest(int? requested, int expected)
+    {
+        string? body = null;
+        var provider = NewRowsProvider(new StubHandler(async req =>
+        {
+            body = await req.Content!.ReadAsStringAsync();
+            return JsonResponse(HttpStatusCode.OK, OpenAiTextBody);
+        }));
+
+        await provider.CompleteAsync(OpenCodeRequest(maxTokens: requested), CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(body!);
+        Assert.Equal(expected, doc.RootElement.GetProperty("max_tokens").GetInt32());
+    }
+
+    [Fact]
+    public async Task OpenCodeRow_SessionHeader_IsAStablePseudonymOfTheThreadId()
+    {
+        var seen = new List<string>();
+        var provider = NewRowsProvider(new StubHandler(req =>
+        {
+            seen.Add(req.Headers.GetValues("x-opencode-session").Single());
+            return Task.FromResult(JsonResponse(HttpStatusCode.OK, OpenAiTextBody));
+        }));
+
+        await provider.CompleteAsync(OpenCodeRequest(sessionKey: "thread-A"), CancellationToken.None);
+        await provider.CompleteAsync(OpenCodeRequest(sessionKey: "thread-A"), CancellationToken.None);
+        await provider.CompleteAsync(OpenCodeRequest(sessionKey: "thread-B"), CancellationToken.None);
+        await provider.CompleteAsync(OpenCodeRequest(sessionKey: null), CancellationToken.None);
+        await provider.CompleteAsync(OpenCodeRequest(sessionKey: "  "), CancellationToken.None);
+
+        Assert.Equal(seen[0], seen[1]);
+        Assert.NotEqual(seen[0], seen[2]);
+        Assert.Equal(seen[3], seen[4]);          // no thread id: the per-process fallback, stable
+        Assert.NotEqual(seen[0], seen[3]);
+        Assert.All(seen, value =>
+        {
+            Assert.Matches("^oet-[0-9a-f]{24}$", value);
+            Assert.True(value.Length <= 30, value);
+            Assert.DoesNotContain("thread", value, StringComparison.OrdinalIgnoreCase);
+        });
+
+        // Independent re-derivation: oet- + first 24 lowercase hex chars of SHA-256(thread id).
+        var expected = "oet-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes("thread-A"))).ToLowerInvariant()[..24];
+        Assert.Equal(expected, seen[0]);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task OpenCodeRow_WithoutARowReasoningEffort_SendsNoReasoningEffort_EvenWhenTheEnvDefaultIsSet(string? rowEffort)
+    {
+        string? body = null;
+        var provider = NewRowsProvider(
+            new StubHandler(async req =>
+            {
+                body = await req.Content!.ReadAsStringAsync();
+                return JsonResponse(HttpStatusCode.OK, OpenAiTextBody);
+            }),
+            new[] { OpenCodeRow(rowEffort) },
+            new AiProviderOptions { ReasoningEffort = "high" });
+
+        await provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(body!);
+        Assert.False(doc.RootElement.TryGetProperty("reasoning_effort", out _));
+    }
+
+    [Fact]
+    public async Task NonOpenCodeRow_KeepsTheNameBasedReasoningRule_AndTheEnvDefault()
+    {
+        var bodies = new List<string>();
+        var provider = NewRowsProvider(
+            new StubHandler(async req =>
+            {
+                bodies.Add(await req.Content!.ReadAsStringAsync());
+                return JsonResponse(HttpStatusCode.OK, OpenAiTextBody);
+            }),
+            new[] { GenericRow("openai-platform", 10, reasoningEffort: "low") },
+            new AiProviderOptions { ReasoningEffort = "medium" });
+
+        // glm-5 is not reasoning-capable by name: nothing is sent even though the row sets an effort.
+        await provider.CompleteAsync(new AiProviderRequest { Model = "glm-5", SystemPrompt = "s", UserPrompt = "u" }, CancellationToken.None);
+        // gpt-5 is: the row's own value is sent.
+        await provider.CompleteAsync(new AiProviderRequest { Model = "gpt-5-mini", SystemPrompt = "s", UserPrompt = "u" }, CancellationToken.None);
+
+        using var first = JsonDocument.Parse(bodies[0]);
+        using var second = JsonDocument.Parse(bodies[1]);
+        Assert.False(first.RootElement.TryGetProperty("reasoning_effort", out _));
+        Assert.Equal("low", second.RootElement.GetProperty("reasoning_effort").GetString());
+
+        // A reasoning-capable model on a row with no effort still inherits the env default.
+        bodies.Clear();
+        var inheriting = NewRowsProvider(
+            new StubHandler(async req =>
+            {
+                bodies.Add(await req.Content!.ReadAsStringAsync());
+                return JsonResponse(HttpStatusCode.OK, OpenAiTextBody);
+            }),
+            new[] { GenericRow("openai-platform", 10) },
+            new AiProviderOptions { ReasoningEffort = "medium" });
+        await inheriting.CompleteAsync(new AiProviderRequest { Model = "gpt-5-mini", SystemPrompt = "s", UserPrompt = "u" }, CancellationToken.None);
+        using var third = JsonDocument.Parse(bodies[0]);
+        Assert.Equal("medium", third.RootElement.GetProperty("reasoning_effort").GetString());
+    }
+
+    [Fact]
+    public async Task NonOpenCodeRow_GetsNoOpenCodeHeaders_AndKeepsTheStandardTimeoutAndMaxTokens()
+    {
+        HttpRequestMessage? captured = null;
+        string? body = null;
+        var factory = new CapturingHttpClientFactory(new StubHandler(async req =>
+        {
+            captured = req;
+            body = await req.Content!.ReadAsStringAsync();
+            return JsonResponse(HttpStatusCode.OK, OpenAiTextBody);
+        }));
+        var provider = NewRowsProvider(
+            handler: null!,
+            new[] { GenericRow("openai-platform", 10) },
+            factory: factory);
+
+        await provider.CompleteAsync(
+            new AiProviderRequest { ProviderCode = "openai-platform", Model = "glm-5", SystemPrompt = "s", UserPrompt = "u", MaxTokens = 1024, SessionKey = "thread-123" },
+            CancellationToken.None);
+
+        Assert.False(captured!.Headers.Contains("x-opencode-session"));
+        Assert.DoesNotContain("OET-Platform", captured.Headers.UserAgent.ToString());
+        Assert.Equal(TimeSpan.FromSeconds(300), factory.LastClient!.Timeout);
+        using var doc = JsonDocument.Parse(body!);
+        Assert.Equal(1024, doc.RootElement.GetProperty("max_tokens").GetInt32());
+    }
+
+    [Fact]
+    public async Task OpenCodeRow_UsesA100SecondHttpTimeout()
+    {
+        var factory = new CapturingHttpClientFactory(new StubHandler(_ => Task.FromResult(JsonResponse(HttpStatusCode.OK, OpenAiTextBody))));
+        var provider = NewRowsProvider(handler: null!, factory: factory);
+
+        await provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None);
+
+        Assert.Equal(TimeSpan.FromSeconds(100), factory.LastClient!.Timeout);
+    }
+
+    [Fact]
+    public async Task OpenCodeRow_ToolCallReplyWithNullContent_IsNotAnEmptyCompletion()
+    {
+        var provider = NewRowsProvider(new StubHandler(_ => Task.FromResult(JsonResponse(
+            HttpStatusCode.OK, ToolCallsBody(null, ("call_9", "lookup_case", "{}"), ("", "", "{}"))))));
+        var request = new AiProviderRequest
+        {
+            ProviderCode = OpenCodeProviderDefaults.ProviderCode,
+            Model = OpenCodeProviderDefaults.DefaultModel,
+            SystemPrompt = "system",
+            UserPrompt = "user",
+            Tools = new[] { new AiToolDefinition("lookup_case", "Lookup case", "Lookup a case record.", AiToolCategory.Read, "{}") },
+            ToolChoice = "auto",
+        };
+
+        var completion = await provider.CompleteAsync(request, CancellationToken.None);
+
+        var call = Assert.Single(completion.ToolCalls!);
+        Assert.Equal("call_9", call.Id);
+        Assert.Equal("lookup_case", call.ToolCode);
+    }
+
+    [Fact]
+    public async Task OpenCodeRow_EmptyCompletion_Throws()
+    {
+        var provider = NewRowsProvider(new StubHandler(_ => Task.FromResult(JsonResponse(
+            HttpStatusCode.OK, """{"choices":[{"message":{"role":"assistant","content":null},"finish_reason":"length"}]}"""))));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None));
+
+        Assert.Contains("no text and no tool calls", ex.Message);
+        Assert.Contains("finish_reason=length", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(401, """{"type":"error","error":{"type":"CreditsError","message":"No payment method. Add one at the console."}}""", AiProviderErrorClass.QuotaExhausted, "creditserror")]
+    [InlineData(401, """{"type":"error","error":{"type":"AuthError","message":"Invalid API key."}}""", AiProviderErrorClass.Auth, "autherror")]
+    [InlineData(401, """{"type":"error","error":{"type":"MonthlyLimitError","message":"Monthly limit reached."}}""", AiProviderErrorClass.QuotaExhausted, "monthlylimiterror")]
+    [InlineData(402, """{"error":{"message":"Insufficient account funds"}}""", AiProviderErrorClass.QuotaExhausted, null)]
+    [InlineData(429, """{"type":"error","error":{"type":"RateLimitError","message":"Rate limit exceeded."}}""", AiProviderErrorClass.RateLimited, "ratelimiterror")]
+    [InlineData(429, """{"type":"error","error":{"type":"GoUsageLimitError","message":"Go usage limit reached."}}""", AiProviderErrorClass.QuotaExhausted, "gousagelimiterror")]
+    [InlineData(503, """{"type":"error","error":{"type":"api_error","message":"Upstream unavailable."}}""", AiProviderErrorClass.Overloaded, "api_error")]
+    [InlineData(400, """{"type":"error","error":{"type":"ModelError","message":"Model rejected the request."}}""", AiProviderErrorClass.InvalidRequest, "modelerror")]
+    public async Task OpenCodeRow_NonSuccess_ThrowsATypedFailure_ClassifiedFromTheGatewayErrorType(
+        int status, string body, AiProviderErrorClass expectedClass, string? expectedType)
+    {
+        var provider = NewRowsProvider(new StubHandler(_ => Task.FromResult(JsonResponse((HttpStatusCode)status, body))));
+
+        var ex = await Assert.ThrowsAsync<AiProviderHttpException>(
+            () => provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None));
+
+        Assert.Equal(status, ex.StatusCode);
+        Assert.Equal(expectedClass, ex.ErrorClass);
+        Assert.Equal(expectedType, ex.ProviderError!.Type);
+        // The gateway's own text never enters the exception Message; AiRetryPolicy still reads "HTTP nnn".
+        var reason = new HttpResponseMessage((HttpStatusCode)status).ReasonPhrase;
+        Assert.Equal($"OpenCode call failed: HTTP {status} {reason}.", ex.Message);
+
+        // The assistant gateway records exactly these two values on the usage row.
+        var errorCode = AiGatewayService.ClassifyError(ex);
+        Assert.Equal(
+            expectedClass switch
+            {
+                AiProviderErrorClass.QuotaExhausted => "provider_quota_exhausted",
+                AiProviderErrorClass.RateLimited => "provider_429",
+                AiProviderErrorClass.Auth => "provider_auth",
+                AiProviderErrorClass.Overloaded => "provider_overloaded",
+                _ => "provider_invalid_request",
+            },
+            errorCode);
+        var classCode = expectedClass.ToCode();
+        Assert.Equal(
+            expectedType is null
+                ? $"Provider request failed with HTTP {status} ({classCode})."
+                : $"Provider request failed with HTTP {status} ({classCode}; {expectedType}).",
+            AiGatewayService.SanitiseProviderErrorMessage(ex, errorCode));
+    }
+
+    [Fact]
+    public async Task OpenCodeRow_RateLimit_KeepsRetryAfter_AndRedactsAnEchoedKeyFromTheCapturedText()
+    {
+        var provider = NewRowsProvider(new StubHandler(_ =>
+        {
+            var response = JsonResponse(
+                (HttpStatusCode)429,
+                "{\"error\":{\"type\":\"RateLimitError\",\"message\":\"slow down " + FakeGatewayKey + "\"}}");
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(9));
+            return Task.FromResult(response);
+        }));
+
+        var ex = await Assert.ThrowsAsync<AiProviderHttpException>(
+            () => provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None));
+
+        Assert.Equal(AiProviderErrorClass.RateLimited, ex.ErrorClass);
+        Assert.Equal(TimeSpan.FromSeconds(9), ex.RetryAfter);
+        Assert.DoesNotContain(FakeGatewayKey, ex.Message);
+        Assert.NotNull(ex.ProviderError!.Message);
+        Assert.DoesNotContain(FakeGatewayKey, ex.ProviderError.Message);
+        Assert.Contains("***REDACTED***", ex.ProviderError.Message);
+    }
+
+    [Fact]
+    public async Task OpenCodeRow_DoesNotTakeAPlatformGatePermit()
+    {
+        var gate = await SaturatedGateAsync();
+        var provider = NewRowsProvider(
+            new StubHandler(_ => Task.FromResult(JsonResponse(HttpStatusCode.OK, OpenAiTextBody))),
+            gate: gate);
+
+        // Every shared permit is held by other platform-key calls: a slow OpenCode call must neither wait
+        // behind them nor hold one, so it cannot stall Claude/Writing traffic.
+        var completion = await provider
+            .CompleteAsync(OpenCodeRequest(), CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal("hello", completion.Text);
+    }
+
+    [Fact]
+    public async Task OpenCodeRow_FifthConcurrentCall_FailsFastWithoutBeingSent_AndTheLaneRecovers()
+    {
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sent = 0;
+        var provider = NewRowsProvider(new StubHandler(async _ =>
+        {
+            Interlocked.Increment(ref sent);
+            await release.Task;
+            return JsonResponse(HttpStatusCode.OK, OpenAiTextBody);
+        }));
+        var inFlight = new List<Task<AiProviderCompletion>>();
+        try
+        {
+            for (var i = 0; i < 4; i++)
+                inFlight.Add(provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None));
+            await WaitUntilAsync(() => Volatile.Read(ref sent) == 4);
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None));
+
+            Assert.Contains("concurrency limit", ex.Message);
+            Assert.Equal(4, Volatile.Read(ref sent));   // the fifth never reached the network
+        }
+        finally
+        {
+            release.TrySetResult();
+            await Task.WhenAll(inFlight.Select(task => task.ContinueWith(_ => { })));
+        }
+
+        Assert.All(inFlight, task => Assert.Equal("hello", task.Result.Text));
+        // Every permit came back: a new call goes straight through.
+        var again = await provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal("hello", again.Text);
+    }
+
+    [Fact]
+    public async Task OpenCodeRow_LaneIsReleasedWhenACallFails()
+    {
+        var calls = 0;
+        var provider = NewRowsProvider(new StubHandler(_ => Task.FromResult(
+            Interlocked.Increment(ref calls) <= 5
+                ? JsonResponse(HttpStatusCode.ServiceUnavailable, """{"error":{"type":"api_error","message":"down"}}""")
+                : JsonResponse(HttpStatusCode.OK, OpenAiTextBody))));
+
+        // More failures than the lane has permits: a leaked permit would make the sixth call wait and fail.
+        for (var i = 0; i < 5; i++)
+        {
+            await Assert.ThrowsAsync<AiProviderHttpException>(
+                () => provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None));
+        }
+
+        var completion = await provider.CompleteAsync(OpenCodeRequest(), CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal("hello", completion.Text);
+    }
+
+    // ── Default selection: explicit-only and marker rows are never picked implicitly ────────────
+
+    [Fact]
+    public async Task CompleteAsync_WithoutAProviderCode_NeverPicksAnExplicitOnlyOrKeylessSidecarRow()
+    {
+        Uri? seen = null;
+        var sidecar = GenericRow(WritingSubscriptionProviderDefaults.CodexCode, 2);
+        sidecar.EncryptedApiKey = WritingSubscriptionProviderDefaults.MarkerKey;
+        sidecar.BaseUrl = WritingSubscriptionProviderDefaults.CodexBaseUrl;
+        var provider = NewRowsProvider(
+            new StubHandler(req =>
+            {
+                seen = req.RequestUri;
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, OpenAiTextBody));
+            }),
+            new[] { OpenCodeRow(), sidecar, GenericRow("openai-platform", 10) });
+
+        await provider.CompleteAsync(new AiProviderRequest { Model = "glm-5", SystemPrompt = "s", UserPrompt = "u" }, CancellationToken.None);
+
+        Assert.Equal("https://example.test/v1/chat/completions", seen!.ToString());
+    }
+
+    [Fact]
+    public async Task CompleteAsync_WithoutAProviderCode_AndOnlyIneligibleRowsActive_Throws_WithoutCallingAnyone()
+    {
+        var called = false;
+        var sidecar = GenericRow(WritingSubscriptionProviderDefaults.CodexCode, 2);
+        sidecar.EncryptedApiKey = WritingSubscriptionProviderDefaults.MarkerKey;
+        var provider = NewRowsProvider(
+            new StubHandler(_ =>
+            {
+                called = true;
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, OpenAiTextBody));
+            }),
+            new[] { OpenCodeRow(), sidecar });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(
+            new AiProviderRequest { Model = "glm-5", SystemPrompt = "s", UserPrompt = "u" }, CancellationToken.None));
+
+        Assert.Contains("No active OpenAI-compatible AI provider", ex.Message);
+        Assert.False(called);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ExplicitOpenCodeCode_SelectsTheRow_AndAnInactiveRowIsRefused()
+    {
+        var called = false;
+        var active = NewRowsProvider(new StubHandler(_ => Task.FromResult(JsonResponse(HttpStatusCode.OK, OpenAiTextBody))));
+        Assert.Equal("hello", (await active.CompleteAsync(OpenCodeRequest(), CancellationToken.None)).Text);
+
+        var inactive = NewRowsProvider(
+            new StubHandler(_ =>
+            {
+                called = true;
+                return Task.FromResult(JsonResponse(HttpStatusCode.OK, OpenAiTextBody));
+            }),
+            new[] { OpenCodeRow(active: false) });
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => inactive.CompleteAsync(OpenCodeRequest(), CancellationToken.None));
+
+        Assert.Contains("not active", ex.Message);
+        Assert.False(called);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (!condition())
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("The condition was not met within 10 seconds.");
+            await Task.Delay(10);
+        }
+    }
+
+    private sealed class FixedRegistry(IReadOnlyList<AiProvider> rows) : IAiProviderRegistry
+    {
+        public Task<AiProvider?> FindByCodeAsync(string code, CancellationToken ct)
+            => Task.FromResult(rows.FirstOrDefault(row =>
+                row.IsActive && string.Equals(row.Code, code, StringComparison.OrdinalIgnoreCase)));
+
+        public Task<IReadOnlyList<AiProvider>> ListActiveAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<AiProvider>>(rows
+                .Where(row => row.IsActive)
+                .OrderBy(row => row.FailoverPriority)
+                .ToList());
+
+        public Task<IReadOnlyList<AiProvider>> ListByCategoryAsync(AiProviderCategory category, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<AiProvider>>(rows
+                .Where(row => row.IsActive && row.Category == category)
+                .OrderBy(row => row.FailoverPriority)
+                .ToList());
+
+        public Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct)
+            => Task.FromResult<string?>(FakeGatewayKey);
+    }
+
+    private sealed class CapturingHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
+    {
+        public HttpClient? LastClient { get; private set; }
+
+        public HttpClient CreateClient(string name)
+        {
+            LastClient = new HttpClient(handler, disposeHandler: false);
+            return LastClient;
         }
     }
 

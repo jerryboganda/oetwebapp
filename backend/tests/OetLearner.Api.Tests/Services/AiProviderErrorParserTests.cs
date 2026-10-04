@@ -89,6 +89,95 @@ public sealed class AiProviderErrorParserTests
     private const string GeminiBillingPrecondition =
         """{"error":{"code":400,"message":"Gemini API free tier is not available in your country. Please enable billing on your project in Google AI Studio.","status":"FAILED_PRECONDITION"}}""";
 
+    // ── OpenCode inference gateway ({"type":"error","error":{"type":"<PascalCase>","message":"..."}}) ──
+    // 401 is overloaded there: a bad key (AuthError) and an empty balance or spent plan (CreditsError,
+    // MonthlyLimitError) share it, so the error type decides, not the status.
+    private const string OpenCodeAuthError =
+        """{"type":"error","error":{"type":"AuthError","message":"Invalid API key."}}""";
+    private const string OpenCodeCreditsError =
+        """{"type":"error","error":{"type":"CreditsError","message":"No payment method. Add a payment method in the console."}}""";
+    private const string OpenCodeMonthlyLimitError =
+        """{"type":"error","error":{"type":"MonthlyLimitError","message":"Monthly limit reached."}}""";
+    private const string OpenCodeFundsBody =
+        """{"error":{"message":"Insufficient account funds"}}""";
+    private const string OpenCodeRateLimitError =
+        """{"type":"error","error":{"type":"RateLimitError","message":"Rate limit exceeded. Please try again later."}}""";
+    private const string OpenCodeGoUsageLimitError =
+        """{"type":"error","error":{"type":"GoUsageLimitError","message":"Go usage limit reached."}}""";
+    private const string OpenCodeFreeUsageLimitError =
+        """{"type":"error","error":{"type":"FreeUsageLimitError","message":"Free usage limit reached."}}""";
+    private const string OpenCodeApiError =
+        """{"type":"error","error":{"type":"api_error","message":"Upstream unavailable."}}""";
+    private const string OpenCodeModelError =
+        """{"type":"error","error":{"type":"ModelError","message":"Model rejected the request."}}""";
+    private const string OpenCodeProtocolUnsupported =
+        """{"type":"error","error":{"type":"ModelProtocolUnsupported","message":"This model does not serve chat/completions."}}""";
+
+    [Theory]
+    [InlineData(401, OpenCodeAuthError, AiProviderErrorClass.Auth, "autherror")]
+    [InlineData(401, OpenCodeCreditsError, AiProviderErrorClass.QuotaExhausted, "creditserror")]
+    [InlineData(401, OpenCodeMonthlyLimitError, AiProviderErrorClass.QuotaExhausted, "monthlylimiterror")]
+    [InlineData(402, OpenCodeFundsBody, AiProviderErrorClass.QuotaExhausted, null)]
+    [InlineData(429, OpenCodeRateLimitError, AiProviderErrorClass.RateLimited, "ratelimiterror")]
+    [InlineData(429, OpenCodeGoUsageLimitError, AiProviderErrorClass.QuotaExhausted, "gousagelimiterror")]
+    [InlineData(429, OpenCodeFreeUsageLimitError, AiProviderErrorClass.QuotaExhausted, "freeusagelimiterror")]
+    [InlineData(503, OpenCodeApiError, AiProviderErrorClass.Overloaded, "api_error")]
+    [InlineData(500, OpenCodeApiError, AiProviderErrorClass.ServerError, "api_error")]
+    [InlineData(400, OpenCodeModelError, AiProviderErrorClass.InvalidRequest, "modelerror")]
+    [InlineData(400, OpenCodeProtocolUnsupported, AiProviderErrorClass.InvalidRequest, "modelprotocolunsupported")]
+    public void Parse_ClassifiesOpenCodeGatewayErrors_FromTheErrorTypeBeforeTheStatus(
+        int status, string body, AiProviderErrorClass expectedClass, string? expectedType)
+    {
+        // The runtime adapter parses OpenCode replies with the OpenAI envelope dialect.
+        var error = AiProviderErrorParser.Parse(
+            AiProviderErrorDialect.OpenAi, status, body, headers: null, apiKey: null, retainProviderText: true);
+
+        Assert.Equal(expectedClass, error.Class);
+        Assert.Equal(status, error.HttpStatus);
+        Assert.Equal(expectedType, error.Type);
+    }
+
+    [Fact]
+    public void Parse_OpenCodeRateLimitMentioningUsageLimits_StaysRateLimited()
+    {
+        // The rate token blocks the phrase-based quota match ("usage limits" is a quota phrase).
+        var body = """{"error":{"type":"RateLimitError","message":"Slow down: you are close to your usage limits."}}""";
+
+        var error = AiProviderErrorParser.Parse(
+            AiProviderErrorDialect.OpenAi, 429, body, headers: null, apiKey: null, retainProviderText: true);
+
+        Assert.Equal(AiProviderErrorClass.RateLimited, error.Class);
+    }
+
+    [Fact]
+    public void Parse_OpenCodeEchoedPromptTextOnA400_NeverFlipsTheClassToQuota()
+    {
+        // A 400 can echo learner text; for the OpenAI dialect the message phrases are ignored there.
+        var body = """{"error":{"type":"ModelError","message":"Bad request: your spend limit and out of credits"}}""";
+
+        var error = AiProviderErrorParser.Parse(
+            AiProviderErrorDialect.OpenAi, 400, body, headers: null, apiKey: null, retainProviderText: true);
+
+        Assert.Equal(AiProviderErrorClass.InvalidRequest, error.Class);
+    }
+
+    [Fact]
+    public void Parse_OpenCodeKeyShapedTokenInTheMessage_IsRedacted_EvenWhenItIsNotTheLiveKey()
+    {
+        // Built at runtime: a deliberately fake key of the gateway's shape, never a real credential.
+        var fakeKey = string.Concat("oc", "_sk_", "TESTFAKE", new string('0', 16));
+        var body = JsonSerializer.Serialize(new { error = new { type = "AuthError", message = $"rejected {fakeKey} for this request" } });
+
+        var error = AiProviderErrorParser.Parse(
+            AiProviderErrorDialect.OpenAi, 401, body, headers: null, apiKey: "some-other-live-key-12345", retainProviderText: true);
+
+        Assert.Equal(AiProviderErrorClass.Auth, error.Class);
+        Assert.NotNull(error.Message);
+        Assert.DoesNotContain(fakeKey, error.Message);
+        Assert.DoesNotContain("TESTFAKE", error.Message);
+        Assert.Contains("***REDACTED***", error.Message);
+    }
+
     [Theory]
     [InlineData(AiProviderErrorDialect.OpenAi, 429, OpenAiInsufficientQuota, AiProviderErrorClass.QuotaExhausted, "insufficient_quota", "insufficient_quota")]
     [InlineData(AiProviderErrorDialect.OpenAi, 429, OpenAiRateLimitMentioningBilling, AiProviderErrorClass.RateLimited, "requests", "rate_limit_exceeded")]

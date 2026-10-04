@@ -319,18 +319,34 @@ internal static class AiProviderPayloadBuilder
         }
 
         var output = new List<AiToolCall>();
+        var seenIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var call in calls.EnumerateArray())
         {
-            if (!call.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String) continue;
             if (!call.TryGetProperty("function", out var fn) || fn.ValueKind != JsonValueKind.Object) continue;
             if (!fn.TryGetProperty("name", out var name) || name.ValueKind != JsonValueKind.String) continue;
+            // Some models intermittently return an entry with an empty function name. Persisting it
+            // would put a call into the thread history that no provider accepts back (a sticky 400),
+            // so it is dropped; a reply with nothing else left is an empty completion.
+            var toolCode = name.GetString();
+            if (string.IsNullOrWhiteSpace(toolCode)) continue;
+
+            // The tool-result message is matched on this id, so it must exist and be unique within
+            // the reply: synthesise one when the model omitted it, left it empty or repeated one.
+            var id = call.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String
+                ? idEl.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(id) || !seenIds.Add(id))
+            {
+                do { id = "call_" + Guid.NewGuid().ToString("N"); } while (!seenIds.Add(id));
+            }
+
             var args = fn.TryGetProperty("arguments", out var arguments)
                 ? arguments.ValueKind == JsonValueKind.String ? arguments.GetString() : arguments.GetRawText()
                 : "{}";
             output.Add(new AiToolCall
             {
-                Id = id.GetString() ?? Guid.NewGuid().ToString("N"),
-                ToolCode = name.GetString() ?? string.Empty,
+                Id = id,
+                ToolCode = toolCode,
                 ArgsJson = string.IsNullOrWhiteSpace(args) ? "{}" : args!,
             });
         }

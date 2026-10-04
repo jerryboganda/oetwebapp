@@ -116,6 +116,19 @@ public sealed class RegistryBackedProvider(
 
     private static readonly TimeSpan UbagFacadeTimeout = TimeSpan.FromSeconds(300);
 
+    // OpenCode inference gateway (owner directive 2026-10-04). Slow paid-gateway calls get their own
+    // small lane instead of the shared platform gate, so they cannot stall Claude/Writing traffic;
+    // a full lane fails fast (the learner sees the busy message) rather than queueing.
+    private const int OpenCodeMaxInFlight = 4;
+    private static readonly TimeSpan OpenCodeLaneWait = TimeSpan.FromSeconds(5);
+    private static readonly SemaphoreSlim OpenCodeLane = new(OpenCodeMaxInFlight, OpenCodeMaxInFlight);
+
+    // Below the ~120 s edge read limit for a non-streamed call, so a stall surfaces as our own timeout.
+    private static readonly TimeSpan OpenCodeProviderTimeout = TimeSpan.FromSeconds(100);
+
+    // Forced thinking can spend the whole output budget before the first answer token.
+    private const int OpenCodeMinMaxTokens = 6144;
+
     private static bool IsUbagFacadeRequest(string baseUrl, AiProviderRequest request)
         => string.Equals(request.ProviderCode, "ubag", StringComparison.OrdinalIgnoreCase)
             || (Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
@@ -123,8 +136,13 @@ public sealed class RegistryBackedProvider(
 
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
-        var (baseUrl, apiKey, reasoningEffort) = await ResolveCredentialsAsync(request, ct);
+        var (baseUrl, apiKey, rowReasoningEffort) = await ResolveCredentialsAsync(request, ct);
+        var openCode = OpenCodeProviderDefaults.IsOpenCodeBaseUrl(baseUrl);
+        // OpenCode sends reasoning_effort only when its own row sets one: the env default is tuned
+        // for other vendors' models and must not leak onto the gateway.
+        var reasoningEffort = openCode ? rowReasoningEffort : rowReasoningEffort ?? options.Value.ReasoningEffort;
         Task<AiProviderCompletion> Invoke() => CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
+        if (openCode) return await RunOnOpenCodeLaneAsync(Invoke, ct);
         // The keyless subscription sidecar (writing-codex-sub) serialises every request on its own
         // CLI lane: a permit here would only be held while the call queues behind other grades and
         // would starve every other platform-key call in this process. The lane is its limiter.
@@ -133,6 +151,22 @@ public sealed class RegistryBackedProvider(
             || WritingSubscriptionProviderDefaults.IsMarkerKey(apiKey))
             return await Invoke();
         return await platformGate.RunAsync(_ => Invoke(), ct);
+    }
+
+    private static async Task<AiProviderCompletion> RunOnOpenCodeLaneAsync(
+        Func<Task<AiProviderCompletion>> work, CancellationToken ct)
+    {
+        if (!await OpenCodeLane.WaitAsync(OpenCodeLaneWait, ct))
+            throw new InvalidOperationException(
+                $"OpenCode provider is at its concurrency limit ({OpenCodeMaxInFlight} in flight); the request was not sent.");
+        try
+        {
+            return await work();
+        }
+        finally
+        {
+            OpenCodeLane.Release();
+        }
     }
 
     private async Task<(string baseUrl, string apiKey, string? reasoningEffort)> ResolveCredentialsAsync(AiProviderRequest request, CancellationToken ct)
@@ -148,9 +182,12 @@ public sealed class RegistryBackedProvider(
             .Where(p => p.Dialect == AiProviderDialect.OpenAiCompatible)
             .ToList();
         var explicitProviderCode = !string.IsNullOrWhiteSpace(request.ProviderCode);
+        // An explicit code still selects its row, even an explicit-only one (OpenCode) or a keyless
+        // sidecar. With no code only default-eligible rows qualify, so a request that names no
+        // provider can never land on a row nobody chose.
         var first = explicitProviderCode
             ? providers.FirstOrDefault(p => string.Equals(p.Code, request.ProviderCode, StringComparison.OrdinalIgnoreCase))
-            : providers.FirstOrDefault();
+            : providers.FirstOrDefault(AiProviderDefaultEligibility.IsDefaultEligible);
         if (explicitProviderCode && first is null)
         {
             throw new InvalidOperationException($"Requested OpenAI-compatible AI provider '{request.ProviderCode}' is not active or is not OpenAI-compatible.");
@@ -162,8 +199,9 @@ public sealed class RegistryBackedProvider(
                 reasoningEffort = first.ReasoningEffort!.Trim().ToLowerInvariant();
         }
 
+        // The per-row value only: CompleteAsync applies the env default, and only to non-OpenCode hosts.
         if (!string.IsNullOrWhiteSpace(baseUrl) && !string.IsNullOrWhiteSpace(apiKey))
-            return (baseUrl, apiKey, reasoningEffort ?? options.Value.ReasoningEffort);
+            return (baseUrl, apiKey, reasoningEffort);
 
         if (first is null)
             throw new InvalidOperationException("No active OpenAI-compatible AI provider registered.");
@@ -171,7 +209,7 @@ public sealed class RegistryBackedProvider(
         baseUrl ??= first.BaseUrl;
         apiKey ??= await registry.GetPlatformKeyAsync(first.Code, ct)
             ?? throw new InvalidOperationException($"Platform API key missing for provider {first.Code}.");
-        return (baseUrl, apiKey, reasoningEffort ?? options.Value.ReasoningEffort);
+        return (baseUrl, apiKey, reasoningEffort);
     }
 
     private async Task<AiProviderCompletion> CallOpenAiCompatibleAsync(
@@ -193,17 +231,22 @@ public sealed class RegistryBackedProvider(
             return await CallUbagTranscriptionAsync(baseUrl, apiKey, request, ct);
         }
 
+        var ubagFacade = IsUbagFacadeRequest(baseUrl, request);
+        var openCode = OpenCodeProviderDefaults.IsOpenCodeBaseUrl(baseUrl);
+
         var client = httpClientFactory.CreateClient("AiRegistryClient");
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        client.Timeout = IsUbagFacadeRequest(baseUrl, request) ? UbagFacadeTimeout : StandardProviderTimeout;
+        client.Timeout = openCode ? OpenCodeProviderTimeout : ubagFacade ? UbagFacadeTimeout : StandardProviderTimeout;
+        if (openCode) OpenCodeGatewayHeaders.Apply(client.DefaultRequestHeaders, request.SessionKey);
 
         var model = request.Model;
         var maxTokens = request.MaxTokens ?? 4096;
+        if (openCode) maxTokens = Math.Max(maxTokens, OpenCodeMinMaxTokens);
         var effort = string.IsNullOrWhiteSpace(reasoningEffort) ? "high" : reasoningEffort!.ToLowerInvariant();
-        var sendReasoning = IsReasoningCapable(model);
+        // OpenCode models are not in the name-based capability list: the row's own setting decides.
+        var sendReasoning = openCode ? !string.IsNullOrWhiteSpace(reasoningEffort) : IsReasoningCapable(model);
 
-        var ubagFacade = IsUbagFacadeRequest(baseUrl, request);
         var payload = new Dictionary<string, object?>
         {
             ["model"] = model,
@@ -245,26 +288,48 @@ public sealed class RegistryBackedProvider(
 
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
+        {
+            var status = (int)response.StatusCode;
+            if (openCode)
+            {
+                // The body is parsed into allow-listed tokens plus a redacted, capped text and never
+                // enters the exception Message; the class (quota/auth/rate/...) drives usage records.
+                var providerError = AiProviderErrorParser.Parse(
+                    AiProviderErrorDialect.OpenAi,
+                    status,
+                    body,
+                    response.Headers,
+                    apiKey,
+                    retainProviderText: true);
+                throw new AiProviderHttpException("OpenCode", status, response.ReasonPhrase, providerError.RetryAfter, providerError);
+            }
+
             throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure(
-                IsUbagFacadeRequest(baseUrl, request) ? "UBAG provider" : "AI provider",
-                (int)response.StatusCode,
+                ubagFacade ? "UBAG provider" : "AI provider",
+                status,
                 response.ReasonPhrase,
                 ExtractUbagErrorDetail(body)));
+        }
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
-        AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, "UBAG provider", out var choice, out var message);
+        AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, ubagFacade ? "UBAG provider" : "AI provider", out var choice, out var message);
         var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
-        if (string.IsNullOrWhiteSpace(text))
+        // Tool calls are read BEFORE the empty-text check: a normal tool-calling reply has
+        // content:null, and only "no text AND no tool calls" is an empty completion.
+        var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
+        if (string.IsNullOrWhiteSpace(text) && toolCalls is null)
         {
-            var emptyFinish = choice.TryGetProperty("finish_reason", out var emptyFinishEl) ? emptyFinishEl.GetString() : null;
-            throw new InvalidOperationException(
-                $"UBAG provider call failed: the browser job finished but returned no text (finish_reason={emptyFinish ?? "stop"}). Retry the request.");
+            var emptyFinish = choice.TryGetProperty("finish_reason", out var emptyFinishEl) && emptyFinishEl.ValueKind == JsonValueKind.String
+                ? emptyFinishEl.GetString()
+                : null;
+            throw new InvalidOperationException(ubagFacade
+                ? $"UBAG provider call failed: the browser job finished but returned no text (finish_reason={emptyFinish ?? "stop"}). Retry the request."
+                : $"AI provider call failed: the provider returned no text and no tool calls (finish_reason={emptyFinish ?? "stop"}).");
         }
         var servedModel = root.TryGetProperty("model", out var servedEl) && servedEl.ValueKind == JsonValueKind.String
             ? servedEl.GetString()
             : null;
-        var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
         if (toolCalls is null)
         {
             toolCalls = AiProviderPayloadBuilder.CoerceToolCallsFromJsonText(

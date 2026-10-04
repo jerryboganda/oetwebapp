@@ -336,6 +336,43 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     // "Test" (GET /v1/models) and only then tick Active.
     isActive: false,
   },
+  'opencode-zen': {
+    // Both OpenCode presets share the code `opencode` (OpenCodeProviderDefaults.ProviderCode):
+    // the code is unique, so there is one row and the preset only picks which endpoint it
+    // targets. Zen = pay-as-you-go credits. Reasoning effort is not copied by applyPreset;
+    // the seeded row carries `low`, otherwise set it in the form (see the hint below).
+    code: 'opencode',
+    name: 'OpenCode (inference gateway) - Zen',
+    dialect: 'OpenAiCompatible',
+    category: 'TextChat',
+    baseUrl: 'https://opencode.ai/zen/v1',
+    defaultModel: 'glm-5.3-flash',
+    // Documented glm-5.3-flash rates: $0.15 in / $0.50 out per 1M tokens.
+    pricePer1kPromptTokens: 0.00015,
+    pricePer1kCompletionTokens: 0.0005,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 900,
+    // Default to inactive — the OpenCode terms / TV-029 gate must clear first.
+    isActive: false,
+  },
+  'opencode-go': {
+    // Go = subscription. Same code and key shape as Zen; only the endpoint (entitlement) differs.
+    code: 'opencode',
+    name: 'OpenCode (inference gateway) - Go',
+    dialect: 'OpenAiCompatible',
+    category: 'TextChat',
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    defaultModel: 'glm-5.3-flash',
+    pricePer1kPromptTokens: 0.00015,
+    pricePer1kCompletionTokens: 0.0005,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 900,
+    isActive: false,
+  },
 };
 
 export default function AiProvidersPage() {
@@ -677,6 +714,15 @@ export default function AiProvidersPage() {
                   Typed-judgment provider (not chat): it never answers learners or becomes a default or route target.
                   Paste the API key here only; it is stored encrypted and shown as its last four characters, so never
                   put it in files. Save, run Test (a GET on /v1/models), and only then tick Active.
+                </p>
+              )}
+              {editing.code === 'opencode' && (
+                <p className="col-span-2 text-xs text-admin-fg-muted">
+                  OpenCode inference gateway (learner chat only, picked per thread, never an implicit default).
+                  Zen is pay-as-you-go credits, Go is a subscription. Paste the NEW key here only, never share it
+                  in chat. Save, then press Test. A 401 (auth) or a credits error means the key belongs to the other
+                  plan, so switch to the other endpoint (the Zen and Go presets set the Base URL). Set Reasoning
+                  effort to low, and keep Active off until the OpenCode terms / TV-029 gate is cleared.
                 </p>
               )}
             </div>

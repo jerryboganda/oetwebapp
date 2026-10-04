@@ -293,10 +293,11 @@ public sealed class AiGatewayService(
         // No explicit pin → consult the text-chat provider registry to honor
         // the active highest-priority row's dialect. Voice/OCR rows share the
         // registry but cannot service grounded chat completions. The keyless
-        // subscription sidecar rows (marker key, FailoverPriority 1 and 2) are
-        // never a default: they are reachable only by an explicit pin or a route
-        // set on purpose, so activating writing-claude-sub cannot make the Claude
-        // Max lane the fallthrough for every unrouted feature.
+        // subscription sidecar rows (marker key, FailoverPriority 1 and 2) and
+        // explicit-only rows (OpenCode) are never a default: they are reachable
+        // only by an explicit pin or a route set on purpose, so activating
+        // writing-claude-sub cannot make the Claude Max lane the fallthrough for
+        // every unrouted feature (AiProviderDefaultEligibility is the one rule).
         if (provider is null && string.IsNullOrWhiteSpace(request.Provider) && providerRegistry is not null)
         {
             try
@@ -304,7 +305,7 @@ public sealed class AiGatewayService(
                 var topRow = (await providerRegistry.ListByCategoryAsync(AiProviderCategory.TextChat, ct))
                     .Where(row => row.IsActive && row.Category == AiProviderCategory.TextChat)
                     .Where(row => !string.IsNullOrWhiteSpace(row.EncryptedApiKey))
-                    .Where(row => !OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.IsMarkerKey(row.EncryptedApiKey))
+                    .Where(AiProviderDefaultEligibility.IsDefaultEligible)
                     .OrderBy(row => row.FailoverPriority)
                     .FirstOrDefault();
                 if (topRow is not null)
@@ -1366,7 +1367,7 @@ public sealed class AiGatewayService(
         }
     }
 
-    private static string ClassifyError(Exception ex)
+    internal static string ClassifyError(Exception ex)
     {
         // Typed provider failures carry a parsed class: use it instead of guessing from message text.
         if (AiProviderErrorParser.FindHttpException(ex) is { } typed)
@@ -1394,7 +1395,7 @@ public sealed class AiGatewayService(
         return "provider_error";
     }
 
-    private static string SanitiseProviderErrorMessage(Exception ex, string errorCode)
+    internal static string SanitiseProviderErrorMessage(Exception ex, string errorCode)
     {
         // Typed failures get an allow-listed message built only from the status, the class code and
         // the sanitised provider error type token; provider text never reaches a usage row.
@@ -2633,6 +2634,12 @@ public sealed class AiProviderRequest
 
     /// <summary>See <see cref="AiGatewayRequest.ThinkingEffort"/>.</summary>
     public string? ThinkingEffort { get; init; }
+
+    /// <summary>Raw conversation/thread id for providers that want a stable per-conversation
+    /// session header (the OpenCode gateway adapter). The adapter pseudonymises it before it
+    /// leaves the process, so callers pass the raw id and never hash it themselves. Null for
+    /// every other provider and call.</summary>
+    public string? SessionKey { get; init; }
 }
 
 public sealed class AiProviderAudioAttachment

@@ -652,6 +652,124 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.Contains(result.Steps, s => s.Step == "model" && !s.Ok);
     }
 
+    // ── OpenCode inference gateway probe ───────────────────────────
+    // The Test button must predict runtime: same identity headers as a real call, none of the
+    // UBAG/Azure extras, and any key-shaped text the gateway echoes back is scrubbed.
+
+    private static string FakeGatewayKeyShape()
+        => string.Concat("oc", "_sk_", "TESTFAKE", new string('0', 16));
+
+    [Fact]
+    public async Task OpenCodeHost_ProbeSendsTheGatewayIdentityHeaders_AndNoUbagOrApiKeyExtras()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(
+            db, "secret-key-1234567890", baseUrl: OpenCodeProviderDefaults.ZenBaseUrl, dialect: AiProviderDialect.OpenAiCompatible);
+        HttpRequestMessage? captured = null;
+        string? body = null;
+        var tester = NewTester(db, async request =>
+        {
+            captured = request;
+            body = await request.Content!.ReadAsStringAsync();
+            return BuildResponse(HttpStatusCode.OK);
+        });
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.Equal(AiProviderTestStatuses.Ok, result.Status);
+        Assert.Equal("https://opencode.ai/zen/v1/chat/completions", captured!.RequestUri!.ToString());
+        Assert.Equal("secret-key-1234567890", captured.Headers.Authorization!.Parameter);
+        Assert.StartsWith("OET-Platform/", captured.Headers.UserAgent.ToString());
+        Assert.True(captured.Headers.TryGetValues("x-opencode-session", out var session));
+        Assert.Matches("^oet-[0-9a-f]{24}$", Assert.Single(session!));
+        Assert.False(captured.Headers.Contains("api-key"));
+        Assert.DoesNotContain("ubag_nonce", body!);
+    }
+
+    [Fact]
+    public async Task OpenCodeHost_ModelTestSendsTheSameHeaders()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(
+            db, "secret-key-1234567890", baseUrl: OpenCodeProviderDefaults.GoBaseUrl, dialect: AiProviderDialect.OpenAiCompatible);
+        HttpRequestMessage? captured = null;
+        string? body = null;
+        var tester = NewTester(db, async request =>
+        {
+            captured = request;
+            body = await request.Content!.ReadAsStringAsync();
+            return BuildResponse(HttpStatusCode.OK);
+        });
+
+        var result = await tester.TestProviderModelAsync("copilot", OpenCodeProviderDefaults.DefaultModel, default);
+
+        Assert.Equal(AiProviderTestStatuses.Ok, result.Status);
+        Assert.Equal("https://opencode.ai/zen/go/v1/chat/completions", captured!.RequestUri!.ToString());
+        Assert.StartsWith("OET-Platform/", captured.Headers.UserAgent.ToString());
+        Assert.True(captured.Headers.Contains("x-opencode-session"));
+        Assert.False(captured.Headers.Contains("api-key"));
+        Assert.DoesNotContain("ubag_nonce", body!);
+        using var doc = JsonDocument.Parse(body!);
+        Assert.Equal(OpenCodeProviderDefaults.DefaultModel, doc.RootElement.GetProperty("model").GetString());
+    }
+
+    [Fact]
+    public async Task NonOpenCodeHost_ProbeKeepsTheApiKeyHeaderAndTheUbagNonce_AndSendsNoGatewayHeaders()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        HttpRequestMessage? captured = null;
+        string? body = null;
+        var tester = NewTester(db, async request =>
+        {
+            captured = request;
+            body = await request.Content!.ReadAsStringAsync();
+            return BuildResponse(HttpStatusCode.OK);
+        });
+
+        await tester.TestProviderAsync("copilot", default);
+
+        Assert.True(captured!.Headers.TryGetValues("api-key", out var apiKeyValues));
+        Assert.Equal("secret-key-1234567890", Assert.Single(apiKeyValues!));
+        Assert.Contains("ubag_nonce", body!);
+        Assert.False(captured.Headers.Contains("x-opencode-session"));
+        Assert.DoesNotContain("OET-Platform", captured.Headers.UserAgent.ToString());
+    }
+
+    [Fact]
+    public async Task OpenCodeProbe_RedactsAKeyShapedTokenEchoedInTheErrorBody_EvenWhenItIsNotTheStoredKey()
+    {
+        var echoed = FakeGatewayKeyShape();
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(
+            db, "harmless-key-1234567890", baseUrl: OpenCodeProviderDefaults.ZenBaseUrl, dialect: AiProviderDialect.OpenAiCompatible);
+        var tester = NewTester(db, _ => Task.FromResult(BuildJsonError(
+            HttpStatusCode.Unauthorized, $"Invalid key {echoed}; rotate it.")));
+
+        var result = await tester.TestProviderAsync("copilot", default);
+
+        Assert.Equal(AiProviderTestStatuses.Auth, result.Status);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.DoesNotContain(echoed, result.ErrorMessage);
+        Assert.DoesNotContain("TESTFAKE", result.ErrorMessage);
+        Assert.Contains("***REDACTED***", result.ErrorMessage);
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.DoesNotContain("TESTFAKE", persisted.LastTestError ?? string.Empty);
+    }
+
+    [Theory]
+    [InlineData("TESTFAKE0000000000000000")]
+    [InlineData("abcdefghijklmnopqrstuvwxyz012345")]
+    [InlineData("Ab-Cd_Ef-Gh_Ij-Kl_Mn-Op_Qr-St_Uv")]
+    public void RedactSecrets_CoversTheOpenCodeKeyShape(string tail)
+    {
+        var key = string.Concat("oc", "_sk_", tail);
+
+        var redacted = AiProviderConnectionTester.RedactSecrets($"before {key} after", apiKey: null);
+
+        Assert.Equal("before ***REDACTED*** after", redacted);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
 
     private AiProviderConnectionTester NewTester(
