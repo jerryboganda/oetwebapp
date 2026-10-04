@@ -119,7 +119,8 @@ owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is th
   lowercase continuation sandwiched by a backchannel of at most 3 words, so it could not see the split a recovery caused before
   the 1 Oct time base change ([Transcript time base](#transcript-time-base)); the [transcript checks](#transcript-checks) of the
   production E2E can. How the saved times, pauses, whitespace and a reload are handled: [Saved transcript](#saved-transcript).
-- Prompt rules: candidate-first; TEACH-BACK (never fill the gap from the card; RULE_18 is the separate honest-response
+- Prompt rules: candidate-first and an explicit-invitation opening ([Opening, identity and voices](#opening-identity-and-voices));
+  TEACH-BACK (never fill the gap from the card; RULE_18 is the separate honest-response
   rule); and, added with this change and **pending verification**, never attribute unsaid treatments, tests or
   referrals to the doctor (2 of 5 post-#257 teach-back replies did).
 - The earlier production run matrix exercised transcript-only live voice and correctly reported that no audio was stored for
@@ -150,6 +151,40 @@ owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is th
   admin operation rows of RUN 2, 4 and 5, grade request to completed result) a card took 51 to 114 s, mostly 61-81 s, and every
   card of every run was graded by `writing-claude-sub` / `claude-opus-5-5`. Deploys stop the AI worker with a 90 s grace, so an in-flight grade is requeued and restarts from zero
   (derived from the code; not observed in production).
+
+## Opening, identity and voices
+
+Owner spec 4 Oct 2026 (live patient; prompt and provider configuration only, no change to the transport or the recorder):
+
+- **The patient waits to be invited.** It never speaks first. A greeting, an introduction, a name exchange or a pause is **not**
+  an invitation to tell the story: a bare "good morning" gets a brief greeting back (a few words) and the patient waits; "how may
+  I address you?" gets the name in a few words and the patient waits. The opening response comes only after an explicit
+  invitation to say why they are here ("what brings you in today?", "how can I help you?", "what seems to be the problem?",
+  "tell me what has been happening"). A narrow question gets a narrow answer; a clinical question asked before any
+  introduction is answered naturally and briefly, never with a comment on the order of the conversation. A return-visit card
+  (`Second Visit / Follow-up`, or a script that allows a second visit) adds one sentence confirming why they came back,
+  once the candidate has said what they want to go through. An INTERRUPTION POLICY paragraph asks the patient to wait four to
+  five seconds of silence before saying anything, and then only a few words. GPT-Live owns its turn detection and has **no VAD
+  settings** (OpenAI documents none), so these behaviours are controlled in the prompt; on Gemini the setup also asks for a
+  longer wait for the end of the candidate's turn (`realtimeInputConfig.automaticActivityDetection`:
+  `endOfSpeechSensitivity` LOW, `silenceDurationMs` 1200; the start of speech keeps its default so a real interruption still
+  stops the patient). A restored session answers the candidate's last line first only when it asked a question or invited the
+  patient to speak.
+- **A real, stable name** (`LiveVoicePatientIdentityResolver`). A card name is used as written; a blank or missing one gets a
+  plain fixed name (James or Jack, Anne or Sarah) chosen from the card id and gender, so the same card is the same person on
+  every provider, after a reconnect and after a failover. A speaker who is not the patient (a parent, carer, relative,
+  nurse...) gets their own name and the card name becomes the patient's. A blank `PatientName` is no longer stored as an empty
+  string on the create path. "Your name is X; a question about your name never starts your story" is in the instructions.
+- **Voices.** A two-by-two table per provider, gender by age band (under 45 / 45 and over), chosen from the card: OpenAI
+  GPT-Live `session.audio.output.voice` (fixed at session start; defaults quartz, willow, ripple, vesper: Australian, Irish,
+  Australian, British) and Gemini `generationConfig.speechConfig` (Leda, Kore, Orus, Charon; the ephemeral token may ignore
+  it: a Google forum report says so for the 3.1 live preview). Any cell can be overridden (`LIVEVOICE__OPENAIVOICEMALEOLDER`
+  and the like); a blank cell means the provider's own voice. The picks are **not verified by ear**: the owner's listening check
+  confirms or changes them.
+- **Silence fallback.** The browser's Gemini end-of-audio nudge now comes 5 s after an unanswered sentence (it was 8 s); the
+  restore still follows at 20 s.
+- **Checked by** the `opening-control` script of the production E2E (`checks.openingControl`): the patient never speaks first,
+  says at most about twenty words before the invitation (a greeting back, a name, a thank you) and answers the invitation.
 
 ## Provider failover
 

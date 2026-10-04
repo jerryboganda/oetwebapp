@@ -35,6 +35,9 @@
 // no-op (checks.gradeRetryIdempotent).
 // Saved transcripts are judged as the grader reads them: metrics.savedTranscripts[id].quality (Q1-Q11) and .wire (against what
 // the provider sent), summarised in checks.transcriptQuality / transcriptsMatchWire / candidateLabelsAreTheTape / noCrossCardLeak.
+// SCRIPT=opening-control (owner spec 4 Oct 2026): "Good morning.", a 2 s pause, a name question, "Please have a seat.", and last
+// "How can I help you today?". checks.openingControl: the patient never spoke first, told no story before the invitation
+// (at most ~20 words: a greeting back, a name, a thank you) and answered the invitation (see live-voice-opening-control.mjs).
 // Run by .github/workflows/speaking-live-voice-prod-e2e.yml (never locally).
 import { chromium, devices } from 'playwright';
 import fs from 'node:fs';
@@ -45,6 +48,7 @@ import {
   resultsWordingVerdict,
 } from './live-voice-served-provider.mjs';
 import { expectedLines, repeatedPatientSegments, scriptLines, speakerMatch, tokens, transcriptQuality, transcriptVerdict } from './live-voice-transcript-quality.mjs';
+import { openingControlVerdict } from './live-voice-opening-control.mjs';
 
 const APP = process.env.APP_URL ?? 'https://app.oetwithdrhesham.co.uk';
 const {
@@ -1088,7 +1092,9 @@ try {
       }
       metrics.savedTranscripts[card.id].quality = quality;
       metrics.savedTranscripts[card.id].wire = wireVerdict;
-      analysis[card.id] = { quality, wire: wireVerdict, segments };
+      const opening = SCRIPT_NAME === 'opening-control' ? openingControlVerdict({ segments }) : null;
+      if (opening) metrics.savedTranscripts[card.id].opening = opening;
+      analysis[card.id] = { quality, wire: wireVerdict, segments, opening };
     });
     if (cardList.length === 2 && analysis[cardList[0].id] && analysis[cardList[1].id]) {
       metrics.repeatedPatientText = repeatedPatientSegments(analysis[cardList[0].id].segments, analysis[cardList[1].id].segments);
@@ -1212,6 +1218,8 @@ try {
     candidateLabelsAreTheTape: decided(verdicts.map((v) => v.wire?.labelsAreTape)),
     // One stock patient sentence (the TEACH-BACK "you haven't told me what it is yet") may legitimately come back in both cards; a card saved twice repeats many.
     noCrossCardLeak: decided([...verdicts.map((v) => v.wire?.patientContained), metrics.repeatedPatientText ? metrics.repeatedPatientText.length < 2 : undefined]),
+    // SCRIPT=opening-control: the patient waited to be invited (null for every other script).
+    openingControl: decided(verdicts.map((v) => v.opening?.ok)),
     // The server recorded the transcript under the provider the panel showed while the card was live.
     savedProviderMatchesServed: reported.length && providerRows.length ? providerRows.every(([saved, shown]) => Boolean(saved) && saved === `realtime-${shown}`) : null,
     // GET .../results says what each session handed in: a live conversation's transcript, never a recording (live runs only).

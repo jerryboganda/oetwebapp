@@ -170,7 +170,7 @@ export const MAX_RECOVERIES = 2;
 /** The patient normally answers within ~3 s (slowest healthy replies seen ~19 s); the silent sessions of 30 Sep 2026 never answered. */
 export const STALL_MS = 20_000;
 /** Gemini only: an unanswered sentence first gets one end-of-audio nudge this long after it ended; a restore follows at STALL_MS. */
-export const GEMINI_NUDGE_MS = 8_000;
+export const GEMINI_NUDGE_MS = 5_000;
 const STALL_CHECK_MS = 1_000;
 /** A dropped WebRTC link that comes back by itself within this time is not a loss. */
 const PEER_DISCONNECT_GRACE_MS = 5_000;

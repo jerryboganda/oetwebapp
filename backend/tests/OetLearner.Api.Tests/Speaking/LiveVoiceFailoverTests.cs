@@ -1042,6 +1042,54 @@ public sealed class LiveVoiceFailoverTests
         Assert.Contains($"HIDDEN-{session.Marker}", openAi, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task EachProvider_IsAskedForTheCardsVoice_AndTheSamePersonSpeaksOnBoth()
+    {
+        // Owner spec 4 Oct 2026: a voice that fits the person, from the card alone, on every provider.
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+
+        await MintOpenAiAsync(rig, session);
+        await MintGeminiAsync(rig, session);
+
+        var card = await rig.Db.RolePlayCards.AsNoTracking().SingleAsync();
+        var identity = LiveVoicePatientIdentityResolver.Resolve(card);
+        using var openAi = JsonDocument.Parse(rig.Handler.Requests.Single(r => r.Uri.Host == OpenAiHost).Body!);
+        using var gemini = JsonDocument.Parse(rig.Handler.Requests.Single(r => r.Uri.Host == GeminiHost).Body!);
+
+        Assert.Equal(
+            LiveVoicePatientIdentityResolver.VoiceFor(identity, LiveVoiceProviders.OpenAi, rig.Options),
+            openAi.RootElement.GetProperty("session").GetProperty("audio").GetProperty("output").GetProperty("voice").GetString());
+        var setup = gemini.RootElement.GetProperty("bidiGenerateContentSetup");
+        Assert.Equal(
+            LiveVoicePatientIdentityResolver.VoiceFor(identity, LiveVoiceProviders.Gemini, rig.Options),
+            setup.GetProperty("generationConfig").GetProperty("speechConfig").GetProperty("voiceConfig")
+                .GetProperty("prebuiltVoiceConfig").GetProperty("voiceName").GetString());
+        Assert.Equal(
+            "END_SENSITIVITY_LOW",
+            setup.GetProperty("realtimeInputConfig").GetProperty("automaticActivityDetection").GetProperty("endOfSpeechSensitivity").GetString());
+        // The instructions (and so the name) are the same on both, as the test above pins.
+        Assert.Contains($"YOUR IDENTITY: your name is {identity.SpeakerName}", InstructionsOf(rig.Handler.Requests.Single(r => r.Uri.Host == OpenAiHost)), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WithNoVoiceConfigured_TheProviderBodiesCarryNoVoiceMemberAtAll()
+    {
+        var options = LiveVoiceTestKit.DefaultOptions();
+        options.OpenAiVoiceFemaleYounger = options.OpenAiVoiceFemaleOlder = options.OpenAiVoiceMaleYounger = options.OpenAiVoiceMaleOlder = string.Empty;
+        options.GeminiVoiceFemaleYounger = options.GeminiVoiceFemaleOlder = options.GeminiVoiceMaleYounger = options.GeminiVoiceMaleOlder = " ";
+        using var rig = LiveVoiceTestKit.Create(options);
+        var session = await SeedAsync(rig);
+
+        await MintOpenAiAsync(rig, session);
+        await MintGeminiAsync(rig, session);
+
+        using var openAi = JsonDocument.Parse(rig.Handler.Requests.Single(r => r.Uri.Host == OpenAiHost).Body!);
+        using var gemini = JsonDocument.Parse(rig.Handler.Requests.Single(r => r.Uri.Host == GeminiHost).Body!);
+        Assert.False(openAi.RootElement.GetProperty("session").TryGetProperty("audio", out _));
+        Assert.False(gemini.RootElement.GetProperty("bidiGenerateContentSetup").GetProperty("generationConfig").TryGetProperty("speechConfig", out _));
+    }
+
     // ── Recorded provider wins ───────────────────────────────────────
 
     [Fact]
@@ -1229,7 +1277,7 @@ public sealed class LiveVoiceFailoverTests
     private const string PersonaReminder =
         "END OF CONVERSATION SO FAR. You are still the patient: stay in role, never give medical advice or any disclaimer, use only the facts on your card, and in a teach-back repeat only what the doctor actually said.";
     private const string WaitForCandidate = PersonaReminder + " Wait for the candidate to speak next.";
-    private const string AnswerLastLineFirst = PersonaReminder + " The candidate's last line above has NOT been answered yet: answer it first, in role, in one or two short sentences.";
+    private const string AnswerLastLineFirst = PersonaReminder + " The candidate's last line above has NOT been answered yet. If it was a question or an invitation to speak, answer it first, in role, in one or two short sentences. If it was only a greeting, an introduction or a statement, reply in a few words at most and wait: do not start your story.";
     private const string EarlierTurnsOmitted = "(earlier turns omitted)";
 
     private static async Task<string> MintAsync(LiveVoiceRig rig, SeededLiveVoiceSession session, string provider)

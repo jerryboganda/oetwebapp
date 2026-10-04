@@ -54,7 +54,8 @@ public sealed class LiveVoiceInstructionBoundaryTests
         var text = Build();
         Assert.Contains("never speak first", text, StringComparison.Ordinal);
         Assert.Contains("Wait for the candidate to open the consultation", text, StringComparison.Ordinal);
-        Assert.Contains("opening response only after the candidate", text, StringComparison.Ordinal);
+        // A greeting, an introduction or a name is not an invitation: the opening response waits for an explicit one.
+        Assert.Contains("GIVE YOUR OPENING RESPONSE ONLY AFTER AN EXPLICIT INVITATION", text, StringComparison.Ordinal);
     }
 
     [Fact]

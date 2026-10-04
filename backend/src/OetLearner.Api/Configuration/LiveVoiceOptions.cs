@@ -27,6 +27,21 @@ public sealed class LiveVoiceOptions
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained";
     public string GeminiModel { get; set; } = "models/gemini-3.8-live";
 
+    // The voice the patient speaks with: a two-by-two table per provider, gender by age band (under 45 / 45 and over),
+    // chosen from the card (LiveVoicePatientIdentityResolver) so every card is the same person on every provider and after
+    // a failover. A blank cell means the provider's own default voice. The defaults are English voices (OpenAI GPT-Live
+    // documents quartz and ripple as Australian, willow as Irish, vesper as British); the owner confirms the picks by ear
+    // and can override any cell with LIVEVOICE__OPENAIVOICEMALEOLDER and the like. GPT-Live fixes the voice at session
+    // start, so it is sent when the session is created.
+    public string OpenAiVoiceFemaleYounger { get; set; } = "quartz";
+    public string OpenAiVoiceFemaleOlder { get; set; } = "willow";
+    public string OpenAiVoiceMaleYounger { get; set; } = "ripple";
+    public string OpenAiVoiceMaleOlder { get; set; } = "vesper";
+    public string GeminiVoiceFemaleYounger { get; set; } = "Leda";
+    public string GeminiVoiceFemaleOlder { get; set; } = "Kore";
+    public string GeminiVoiceMaleYounger { get; set; } = "Orus";
+    public string GeminiVoiceMaleOlder { get; set; } = "Charon";
+
     /// <summary>Kept so existing configuration still binds; it no longer has any effect. A Gemini
     /// token always lives until the role-play's hard stop plus 15 s (at most 1800 s from minting), so
     /// no value here can cut a conversation short (a 90 s lifetime did on 25 Sep 2026), and a larger

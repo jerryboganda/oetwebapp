@@ -221,7 +221,8 @@ public partial class AdminService
             InterlocutorRole = string.IsNullOrWhiteSpace(req.InterlocutorRole)
                 ? "Patient"
                 : req.InterlocutorRole.Trim(),
-            PatientName = req.PatientName?.Trim(),
+            // A blank name is no name: stored as "" it slipped past the live patient's "not supplied" fallback.
+            PatientName = string.IsNullOrWhiteSpace(req.PatientName) ? null : req.PatientName.Trim(),
             PatientAge = req.PatientAge?.Trim(),
             Background = req.Background?.Trim() ?? string.Empty,
             Tasks = cardTasks,

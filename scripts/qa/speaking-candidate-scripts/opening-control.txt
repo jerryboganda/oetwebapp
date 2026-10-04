@@ -1,0 +1,4 @@
+[after=2] Good morning.
+My name is Doctor Smith, one of the doctors here. How may I address you?
+Please have a seat.
+[after=12] How can I help you today?

@@ -226,7 +226,8 @@ public sealed class LiveVoiceContentReadinessService(
         {
             RolePlayCardId = card.Id,
             PatientBackground = card.Background,
-            OpeningResponse = "Hello. I would like to discuss the situation today.",
+            // Said only after the candidate has invited the patient to explain; never a greeting (the candidate greets first).
+            OpeningResponse = "I would like to talk about what has been going on.",
             Prompt1 = "Could you ask me to explain the situation?",
             Prompt2 = "Could you ask me to explain that in a little more detail?",
             Prompt3 = "Could you ask what help I would like?",

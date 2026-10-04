@@ -25,9 +25,9 @@ on:
         required: false
         default: rpc-54dc0a57ec3d4a97978b690379edd2d9
       script:
-        description: Candidate script (scripts/qa/speaking-candidate-scripts/<name>.txt). compare and full-lactose are written for the lactose practice card, not for exam mode. smoke-A and smoke-B are smoke with a different closing sentence, to tell two runs apart.
+        description: Candidate script (scripts/qa/speaking-candidate-scripts/<name>.txt). compare and full-lactose are written for the lactose practice card, not for exam mode. smoke-A and smoke-B are smoke with a different closing sentence, to tell two runs apart. opening-control checks the patient waits to be invited (a greeting, a name and a seat are not an invitation) and is short, for practice mode.
         type: choice
-        options: [short, full-lactose, generic, smoke, smoke-A, smoke-B, compare]
+        options: [short, full-lactose, generic, smoke, smoke-A, smoke-B, compare, opening-control]
         default: short
       voice:
         description: Candidate TTS voice (piper = natural neural en-GB; espeak = robotic)
@@ -187,7 +187,7 @@ jobs:
           SCRIPT_NAME: ${{ inputs.script }}
           VOICE: ${{ inputs.voice }}
           SCRIPT_FILE: scripts/qa/speaking-candidate-scripts/${{ inputs.script }}.txt
-        run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && cp scripts/qa/live-voice-browser-probes.mjs scripts/qa/live-voice-served-provider.mjs scripts/qa/live-voice-transcript-quality.mjs /tmp/pw/ && node /tmp/pw/e2e.mjs
+        run: cp scripts/qa/speaking-live-voice-browser-e2e.mjs /tmp/pw/e2e.mjs && cp scripts/qa/live-voice-browser-probes.mjs scripts/qa/live-voice-served-provider.mjs scripts/qa/live-voice-transcript-quality.mjs scripts/qa/live-voice-opening-control.mjs /tmp/pw/ && node /tmp/pw/e2e.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
