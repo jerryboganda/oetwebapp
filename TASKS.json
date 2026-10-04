@@ -232,7 +232,9 @@
       "verify": "build-images.yml and production-deploy.yml",
       "evidence": [
         "Static gate passed; deployment draft persisted in d6f7e0104 above Speaking ancestor 092e9434dc",
-        "DEPLOY-AUTH resolved with process-scoped native admin verification; Actions/live acceptance pending"
+        "DEPLOY-AUTH resolved with process-scoped native admin verification; shared default unchanged",
+        "37169434286: 30/30 protocol tests and component builds passed; required Writing compilation failed MSB3030 before execution",
+        "Live Jev validated matching UseAppHost=false in the verified reuse branch; correction plus permanent regression awaiting Actions"
       ],
       "files": ["SESSION_STATE.md", "TASKS.json", "VERIFICATION.md"]
     },

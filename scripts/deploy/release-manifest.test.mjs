@@ -120,6 +120,12 @@ test('the complete checkout preserves its mechanical pipeline contract', () => {
   assert.ok(failures.some((failure) => failure.includes('production rollout must live in exactly')));
 });
 
+test('Writing reference reuse preserves the executable settings of the API publish', () => {
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'build-images.yml'), 'utf8');
+  assert.match(workflow, /reference_args=\(-p:BuildProjectReferences=false -p:UseAppHost=false\)/);
+  assert.match(workflow, /\/p:UseAppHost=false/);
+});
+
 // Explicit offline Docker/HTTP fixtures exercise driver control flow only.
 // Real image builds, nginx validation and serving proof remain Actions/live gates.
 function rolloutFixture(mode) {

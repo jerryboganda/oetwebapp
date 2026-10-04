@@ -70,18 +70,19 @@ release provenance, protected storage, readiness or rollback.
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
 | ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| regressions | build-images.yml / guards | 37168983221 | FAIL |
-| images + SQL | build-images.yml | NOT RUN | NOT RUN |
-| Writing | build-images.yml / writing-model-answer-gate | NOT RUN | NOT RUN |
+| existing 30 protocol regressions | build-images.yml / guards | 37169434286 | PASS |
+| new apphost property regression | build-images.yml / guards | NOT RUN | NOT RUN |
+| verified release provenance | build-images.yml | NOT RUN | NOT RUN |
+| Writing | build-images.yml / writing-model-answer-gate | 37169434286 | FAIL |
 | deploy + live proof | production-deploy.yml + ship watcher | NOT RUN | NOT RUN |
 | cold benchmark | build-images.yml / benchmark dispatch | NOT RUN | NOT RUN |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
-- First Actions run 37168983221 executed 30 regressions: 29 passed, router-start failure injection did not match its padded command suffix. Live Jev validated the fixture-boundary correction without weakening the production failure path or rollback assertions. Re-run acceptance is pending; no production promotion occurred.
+- Run 37169434286 passed all 30 protocol regressions, four component builds and same-publish SQL. Required Writing compilation failed MSB3030: reused publish omitted apphost but test reference evaluation expected it. Live Jev validated matching UseAppHost=false in the verified reuse branch; real tests/count checks remain unchanged. New property regression and full release acceptance await the next Actions run.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 
 ## Next action
 
-1. Commit the corrected offline router-start fixture, then rerun pnpm run ship with process-scoped verified owner authentication. Own Actions through actual live proof and warm/cold/Writing measurements; restore privacy under the lease rule.
+1. Commit the corrected same-publish Writing apphost property and regression, then rerun pnpm run ship with process-scoped verified owner authentication. Own actual live proof and warm/cold/Writing measurements; inspect observed web-cache post-action overhead and retain only beneficial cache work. Restore privacy under the lease rule.

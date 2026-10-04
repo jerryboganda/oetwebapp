@@ -212,7 +212,7 @@ jobs:
               # This second project reference is not part of the API publish.
               dotnet build backend/scripts/StripeProductSeeder/StripeProductSeeder.csproj \
                 -c Release --no-restore --nologo -p:RunAnalyzers=false
-              reference_args=(-p:BuildProjectReferences=false)
+              reference_args=(-p:BuildProjectReferences=false -p:UseAppHost=false)
               echo "WRITING_API_REFERENCE_REUSE sha=$GITHUB_SHA sdk=$(dotnet --version)"
             else
               echo "::notice::SDK mismatch: explicitly compiling the API for Writing tests."
