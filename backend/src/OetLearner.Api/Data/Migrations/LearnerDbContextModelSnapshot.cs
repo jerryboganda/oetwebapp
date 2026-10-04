@@ -23160,6 +23160,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("GraderVersion")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
                     b.Property<int>("GrammarExpression")
                         .HasColumnType("integer");
 
@@ -23748,6 +23752,82 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("AttemptId", "TranscriptLineIndex");
 
                     b.ToTable("SpeakingFeedbackComments");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingGraderCalibrationSample", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ExcludedReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ExpertNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int?>("ExpertOverallScaled")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ExpertScoresJson")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("HasAudio")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LabelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LabelledById")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProfessionId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("PromotedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PromotedById")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("RolePlayCardId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SpeakingSessionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TranscriptId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SpeakingSessionId")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("SpeakingGraderCalibrationSamples");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SpeakingLiveRoom", b =>

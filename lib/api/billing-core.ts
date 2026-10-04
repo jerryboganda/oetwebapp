@@ -332,8 +332,10 @@ export interface LearnerAttemptHistoryItem {
   balanceSource?: string | null;
   creditsUsed: number;
   route: string;
-  /** Server-built display text for Speaking rows: "192/500" once scored, "Marking in progress" while grading, otherwise null. */
+  /** Server-built display text for Speaking rows: "190/500" once scored, "Marking in progress" while grading, "Grading didn't finish — retry is free" when it failed, otherwise null. */
   resultLabel?: string | null;
+  /** Speaking rows: the OET letter (A/B/C+/C/D/E) for the scored number; null until scored. */
+  grade?: string | null;
 }
 
 /**
@@ -357,6 +359,7 @@ export async function fetchMyAttemptHistory(limit = 100, subtest?: string): Prom
     creditsUsed: Number(item.creditsUsed ?? 0),
     route: String(item.route ?? '/submissions'),
     resultLabel: toNullableString(item.resultLabel),
+    grade: toNullableString(item.grade),
   }));
 }
 

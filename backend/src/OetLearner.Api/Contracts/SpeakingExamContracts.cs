@@ -70,7 +70,9 @@ public record SpeakingExamCardResult(
     string Status,                 // "scored" | "pending" | "awaiting_tutor"
     SpeakingAiAssessmentProjection? Assessment);
 
-/// <summary>Response from <c>GET /v1/speaking/exams/{id}/results</c>.</summary>
+/// <summary>Response from <c>GET /v1/speaking/exams/{id}/results</c>.
+/// <c>CombinedScaledScore</c> is the reported score (0–500, steps of 10); <c>Grade</c> is its OET
+/// letter and <c>ScoreLabel</c> is <c>provisional</c> until every card was graded by a calibrated grader.</summary>
 public record SpeakingExamResults(
     string ExamId,
     string Mode,
@@ -78,7 +80,9 @@ public record SpeakingExamResults(
     string OverallStatus,          // "scored" | "pending" | "awaiting_tutor"
     int? CombinedScaledScore,
     string? ReadinessBand,
-    IReadOnlyList<SpeakingExamCardResult> Cards);
+    IReadOnlyList<SpeakingExamCardResult> Cards,
+    string? Grade = null,
+    string? ScoreLabel = null);
 
 // ── Live-tutor exam (2026-06-11 rebuild) — TUTOR-ONLY views ─────────────────
 // The roleplayer (patient) card the human tutor plays. NEVER returned by any

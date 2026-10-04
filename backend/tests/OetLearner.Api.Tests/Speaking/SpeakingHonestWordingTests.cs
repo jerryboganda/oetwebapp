@@ -138,7 +138,7 @@ public sealed class SpeakingHonestWordingTests
             Assert.Equal(-1, noteAt);
         }
         // Rubric, scoring rules and output schema are the same for every kind of input.
-        Assert.StartsWith("You are an OET Speaking examiner scoring a single role-play session.", input, StringComparison.Ordinal);
+        Assert.StartsWith("You are an OET Speaking examiner scoring a single role-play session against the official", input, StringComparison.Ordinal);
         Assert.Contains("\"criterionScores\"", input, StringComparison.Ordinal);
         Assert.EndsWith("Now produce the strict JSON object specified above.", input.TrimEnd(), StringComparison.Ordinal);
         // The note changes neither the template identity nor the stored assessment's identity inputs.

@@ -829,12 +829,12 @@ public sealed class MockReportAggregationService(
                 InformationGathering: RoundHalfUp((ai1.InformationGathering + ai2.InformationGathering) / 2.0),
                 InformationGiving:    RoundHalfUp((ai1.InformationGiving    + ai2.InformationGiving)    / 2.0));
 
-            // Two paths to the combined scaled score: (a) project the
-            // averaged criterion scores via OetScoring; (b) average the two
-            // already-projected scaled scores. We use (a) so the result
-            // honours the canonical 70/30 anchor and stays stable even if a
-            // criterion is later re-rounded.
-            combinedScaled = OetScoring.SpeakingProjectedScaled(averagedScores);
+            // Two paths to the combined scaled score: (a) map the averaged
+            // criterion scores through OetScoring's reported-score table;
+            // (b) average the two already-mapped scaled scores. We use (a) so
+            // the result is the single 10-point reported number and stays
+            // stable even if a criterion is later re-rounded.
+            combinedScaled = OetScoring.SpeakingReportedScaled(averagedScores);
             bandCode = OetScoring.SpeakingReadinessBandCode(
                 OetScoring.SpeakingReadinessBandFromScaled(combinedScaled.Value));
 

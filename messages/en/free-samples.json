@@ -1,6 +1,6 @@
 {
-  "freeSample.speaking.allowance": "Free sample includes one full attempt + one free retry.",
-  "freeSample.speaking.retryCta": "Try Again - 1 Free Retry Remaining",
+  "freeSample.speaking.allowance": "Free sample includes one full attempt. New attempts require Speaking credits.",
+  "freeSample.speaking.gradingFailed": "Your role-play is saved but grading didn't finish — retry (no credits used)",
   "freeSample.writing.allowance": "Free sample includes one graded submission + one free revision.",
   "freeSample.writing.retryCta": "Revise & Resubmit - 1 Free Revision Remaining",
   "freeSample.writing.gradingFailed": "Your sample letter is saved but grading didn't finish — retry",

@@ -40,7 +40,7 @@ public sealed class JevSpeakingV11PlacementTests
         var source = Source("SpeakingAiAssessmentService.cs");
         var readiness = source.IndexOf("JevSpeakingAdvisor.CheckReadinessAsync(", StringComparison.Ordinal);
         var chain = source.IndexOf("SpeakingGradeChain.CompleteAsync(", StringComparison.Ordinal);
-        var scaled = source.IndexOf("OetScoring.SpeakingProjectedScaled(rubricScores)", StringComparison.Ordinal);
+        var scaled = source.IndexOf("OetScoring.SpeakingReportedScaled(rubricScores)", StringComparison.Ordinal);
         var crosscheck = source.IndexOf("JevSpeakingAdvisor.CrosscheckAsync(", StringComparison.Ordinal);
 
         Assert.True(readiness > 0 && crosscheck > 0);

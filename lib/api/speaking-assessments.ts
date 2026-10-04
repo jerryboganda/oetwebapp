@@ -158,6 +158,35 @@ export interface AiCriterionScore {
   evidenceQuotes: string[];
 }
 
+/** One strength or priority weakness in the candidate's report. `criterion` is a criterion code or `overall`. */
+export interface SpeakingFeedbackItem {
+  criterion: string;
+  text: string;
+  /** The candidate's own words, when the grader found some. */
+  quote?: string | null;
+  /** The one concrete thing to do differently next attempt (weaknesses only). */
+  action?: string | null;
+}
+
+/** One personalised practice drill built from this attempt. */
+export interface SpeakingReportDrill {
+  title: string;
+  criterion: string;
+  /** What the candidate did in this attempt. */
+  weakPoint: string;
+  /** What to rehearse next. */
+  practise: string;
+  /** A short example phrase or question to use. */
+  example?: string | null;
+}
+
+/** The coaching half of an AI result (owner spec 4 Oct 2026, sections 4 and 10). */
+export interface SpeakingFeedbackReport {
+  strengths: SpeakingFeedbackItem[];
+  priorityWeaknesses: SpeakingFeedbackItem[];
+  drills: SpeakingReportDrill[];
+}
+
 export interface AiAssessment {
   assessmentId: string;
   provider: string;
@@ -170,6 +199,12 @@ export interface AiAssessment {
   confidenceBand: string;
   generatedAt: string;
   isAdvisory: boolean;
+  /** OET letter for `estimatedScaledScore` (A | B | C+ | C | D | E); there is no B+. */
+  grade?: string | null;
+  /** `provisional` until the grader is calibrated, then `ai_practice_estimate`. Missing = provisional. */
+  scoreLabel?: string | null;
+  /** Strengths, priority weaknesses (each ending in an action) and personalised drills for this attempt. */
+  report?: SpeakingFeedbackReport | null;
   /** Optional: recommended remedial drills (slugs/ids); the learner page renders them on a tab. */
   recommendedDrills?: string[];
 }

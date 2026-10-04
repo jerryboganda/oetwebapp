@@ -43,7 +43,6 @@ vi.mock('@/lib/api/speaking-sessions', () => ({
 vi.mock('@/lib/api/speaking-simulation-v11', () => ({
   getSpeakingSimulationV11Assessment: mockV11Assessment,
   getSpeakingSimulationV11CombinedAssessment: mockV11Combined,
-  getSpeakingSimulationV11TutorOverride: vi.fn().mockResolvedValue(null),
   runSpeakingSimulationV11CombinedAssessment: vi.fn().mockResolvedValue(null),
 }));
 // Same labels as the real map.
@@ -94,9 +93,11 @@ const scoredResults = (overrides: Record<string, unknown> = {}) => ({
   mode: 'ai',
   state: 'completed',
   overallStatus: 'scored',
-  combinedScaledScore: 308,
+  combinedScaledScore: 310,
   readinessBand: 'borderline',
-  cards: [scoredCard(1, 'sess-a', 300, 'borderline'), scoredCard(2, 'sess-b', 316, 'borderline')],
+  grade: 'C+',
+  scoreLabel: 'provisional',
+  cards: [scoredCard(1, 'sess-a', 300, 'borderline'), scoredCard(2, 'sess-b', 320, 'borderline')],
   ...overrides,
 });
 
@@ -162,14 +163,54 @@ describe('Speaking exam results page', () => {
     ])('shows band %s as "%s", never the raw code', async (code, label) => {
       mockGetExamResults.mockResolvedValue(scoredResults({
         readinessBand: code,
-        cards: [scoredCard(1, 'sess-a', 300, code), scoredCard(2, 'sess-b', 316, code)],
+        cards: [scoredCard(1, 'sess-a', 300, code), scoredCard(2, 'sess-b', 320, code)],
       }));
       render(<SpeakingExamResultsPage />);
 
       expect(await screen.findByText(`Readiness band: ${label}`)).toBeInTheDocument();
-      expect(screen.getByText(label)).toBeInTheDocument();
       expect(screen.getAllByText(`Band: ${label}`)).toHaveLength(2);
       expect(document.body.textContent).not.toContain(code);
+    });
+
+    it('shows ONE final score out of 500 with the OET letter as the grade, never the band as the grade', async () => {
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByText('Grade C+')).toBeInTheDocument();
+      expect(screen.getByTestId('grade-value')).toHaveTextContent('310');
+      // The two cards keep their own breakdown beside the one combined result.
+      expect(screen.getByText('300/500')).toBeInTheDocument();
+      expect(screen.getByText('320/500')).toBeInTheDocument();
+    });
+
+    it.each<[number, string]>([
+      [450, 'A'], [430, 'B'], [350, 'B'], [340, 'C+'], [290, 'C'], [190, 'D'], [90, 'E'],
+    ])('derives the letter for a reported %i as Grade %s when the server sends none, and never B+', async (score, letter) => {
+      mockGetExamResults.mockResolvedValue(scoredResults({ combinedScaledScore: score, grade: undefined }));
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByText(`Grade ${letter}`)).toBeInTheDocument();
+      expect(document.body.textContent).not.toContain('B+');
+    });
+
+    it('labels the score provisional until the grader has been calibrated', async () => {
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByTestId('speaking-score-provisional')).toHaveTextContent('Provisional score — calibration in progress');
+    });
+
+    it('drops the provisional label once the server says the score is a calibrated practice estimate', async () => {
+      mockGetExamResults.mockResolvedValue(scoredResults({ scoreLabel: 'ai_practice_estimate' }));
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByText('AI practice estimate, not an official OET result.')).toBeInTheDocument();
+      expect(screen.queryByTestId('speaking-score-provisional')).not.toBeInTheDocument();
+    });
+
+    it('treats a payload with no label as provisional, never as a settled score', async () => {
+      mockGetExamResults.mockResolvedValue(scoredResults({ scoreLabel: undefined }));
+      render(<SpeakingExamResultsPage />);
+
+      expect(await screen.findByTestId('speaking-score-provisional')).toBeInTheDocument();
     });
 
     it('says the result is an AI practice estimate and not an official OET result', async () => {

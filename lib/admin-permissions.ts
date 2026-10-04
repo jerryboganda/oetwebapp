@@ -148,6 +148,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/private-speaking': [AdminPermission.ReviewOps],
   '/admin/speaking': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ReviewOps, AdminPermission.QualityAnalytics, AdminPermission.ContentPublish],
   '/admin/speaking/result-visibility': [AdminPermission.ContentWrite],
+  '/admin/speaking/grader-calibration': [AdminPermission.ContentWrite],
   '/admin/recalls/bulk-upload': [AdminPermission.ContentWrite],
   '/admin/settings': [AdminPermission.SystemAdmin],
   // Phase 3 — per-user Reading policy overrides
@@ -288,6 +289,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/speaking/simulation-v1.1': [AdminPermission.SystemAdmin],
   '/admin/speaking': [AdminPermission.ContentRead, AdminPermission.ContentWrite, AdminPermission.ReviewOps, AdminPermission.QualityAnalytics, AdminPermission.ContentPublish],
   '/admin/speaking/result-visibility': [AdminPermission.ContentWrite],
+  '/admin/speaking/grader-calibration': [AdminPermission.ContentWrite],
   '/admin/taxonomy': [AdminPermission.ContentRead],
   '/admin/users/import': [AdminPermission.UsersWrite],
   '/admin/users?tab=admins': [AdminPermission.SystemAdmin],

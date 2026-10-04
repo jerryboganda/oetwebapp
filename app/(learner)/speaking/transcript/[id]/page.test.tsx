@@ -79,16 +79,15 @@ describe('SpeakingTranscriptPage', () => {
     mockFetchSettingsSection.mockResolvedValue({ values: { lowBandwidthMode: false } });
   });
 
-  it('never links a candidate into the internal /speaking/rulebook route', async () => {
+  it('shows the finding but never an internal rule id or rulebook link to a candidate', async () => {
     render(<SpeakingTranscriptPage />);
 
     // Wait for the async transcript fetch to resolve and findings to render.
-    expect(await screen.findByText('RULE_22')).toBeInTheDocument();
+    expect(await screen.findByText(/Did not confirm patient identity/i)).toBeInTheDocument();
 
-    // The rule id and its message are still shown inline...
-    expect(screen.getByText(/Did not confirm patient identity/i)).toBeInTheDocument();
-    // ...but not as a link into the removed internal rulebook page.
-    expect(screen.getByText('RULE_22').closest('a')).toBeNull();
+    // The message is shown; the internal rule id and any rulebook link are not.
+    expect(screen.queryByText('RULE_22')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/RULE_\d+/);
     expect(document.querySelector('a[href^="/speaking/rulebook"]')).toBeNull();
   });
 });

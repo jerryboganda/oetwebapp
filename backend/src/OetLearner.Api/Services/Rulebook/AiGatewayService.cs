@@ -1452,7 +1452,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 
         var (passMark, passGrade) = ResolvePassMark(ctx);
         var applicable = SelectApplicableRules(book, ctx);
-        var systemPrompt = RenderSystemPrompt(book, applicable, ctx, passMark, passGrade);
+        var systemPrompt = RenderSystemPrompt(book, applicable, ctx, passMark, passGrade, SpeakingScoringCriteria(ctx));
         var taskInstruction = RenderTaskInstruction(ctx, passMark, passGrade);
 
         return new AiGroundedPrompt
@@ -1470,6 +1470,25 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 AppliedRuleIds = applicable.Select(r => r.Id).ToArray(),
             },
         };
+    }
+
+    /// <summary>
+    /// The official OET Speaking band descriptors (rulebooks/speaking/common/assessment-criteria.json),
+    /// only for a Speaking score call. A loader that cannot serve them (a test fake, a missing file)
+    /// means "omit the descriptor block", never a failed grade.
+    /// </summary>
+    private JsonElement? SpeakingScoringCriteria(AiGroundingContext ctx)
+    {
+        if (ctx.Kind != RuleKind.Speaking || ctx.Task != AiTaskMode.Score) return null;
+        try
+        {
+            var criteria = loader.GetAssessmentCriteria(RuleKind.Speaking);
+            return criteria.ValueKind == JsonValueKind.Object ? criteria : null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private static (int passMark, string passGrade) ResolvePassMark(AiGroundingContext ctx)
@@ -1540,7 +1559,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         return [context];
     }
 
-    private static string RenderSystemPrompt(OetRulebook book, List<OetRule> applicable, AiGroundingContext ctx, int passMark, string passGrade)
+    private static string RenderSystemPrompt(OetRulebook book, List<OetRule> applicable, AiGroundingContext ctx, int passMark, string passGrade, JsonElement? speakingCriteria)
     {
         var critical = applicable.Where(r => r.Severity == RuleSeverity.Critical).ToList();
         var major = applicable.Where(r => r.Severity == RuleSeverity.Major).ToList();
@@ -1556,8 +1575,8 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         if (!string.IsNullOrWhiteSpace(ctx.CandidateCountry)) sb.AppendLine($"Candidate target country: {ctx.CandidateCountry}");
         sb.AppendLine($"Applied pass mark: {passMark}/500 (Grade {passGrade})");
         sb.AppendLine();
-        AppendScoringSection(sb, ctx);
-        AppendRulesBlock(sb, critical, major, applicable.Count);
+        AppendScoringSection(sb, ctx, speakingCriteria);
+        AppendRulesBlock(sb, ctx, critical, major, applicable.Count);
         AppendConversationContext(sb, ctx);
         AppendGuardrails(sb, ctx);
         AppendReplyFormat(sb, ctx);
@@ -1598,7 +1617,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         }
     }
 
-    private static void AppendScoringSection(StringBuilder sb, AiGroundingContext ctx)
+    private static void AppendScoringSection(StringBuilder sb, AiGroundingContext ctx, JsonElement? speakingCriteria)
     {
         sb.AppendLine("## Canonical OET Scoring (non-negotiable)");
         sb.AppendLine();
@@ -1626,21 +1645,45 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             sb.AppendLine();
             sb.AppendLine("The OET Assessor (NOT the interlocutor) scores the audio recording after the exam against these 9 criteria. You MUST produce one score per criterion — never aggregate Clinical Communication into a single number.");
             sb.AppendLine();
-            sb.AppendLine("**Linguistic Criteria (4, each scored 0–6):**");
-            sb.AppendLine("1. `intelligibility` — Intelligibility (pronunciation, stress, intonation, rhythm; L1 accent effect on clarity)");
-            sb.AppendLine("2. `fluency` — Fluency (speed, hesitation, self-correction, sustained utterances)");
-            sb.AppendLine("3. `appropriateness` — Appropriateness of Language (register, tone, lexis; explaining technical matters in lay terms)");
-            sb.AppendLine("4. `grammar` — Resources of Grammar & Expression (range, accuracy, flexibility of grammar and vocabulary)");
-            sb.AppendLine();
-            sb.AppendLine("**Clinical Communication Criteria (5, each scored 0–3 — level descriptors: 3=Adept, 2=Competent, 1=Partially effective, 0=Ineffective):**");
-            sb.AppendLine("5. `relationshipBuilding` — Relationship Building (greeting/introductions, attentive respectful attitude, non-judgemental approach, empathy)");
-            sb.AppendLine("6. `patientPerspective` — Understanding & Incorporating the Patient's Perspective (eliciting ideas/concerns/expectations, picking up cues, relating explanations back)");
-            sb.AppendLine("7. `providingStructure` — Providing Structure (sequencing the interview purposefully, signposting changes in topic, organising explanations)");
-            sb.AppendLine("8. `informationGathering` — Information Gathering (facilitating narrative, open-then-closed questions, avoiding compound/leading questions, clarifying, summarising)");
-            sb.AppendLine("9. `informationGiving` — Information Giving (establishing prior knowledge, pausing, encouraging reactions, checking understanding, discovering further needs)");
-            sb.AppendLine();
-            sb.AppendLine("Every feedback item MUST cite (a) the criterion code from this list AND (b) at least one rule ID from the active rulebook. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected.");
-            sb.AppendLine();
+            if (ctx.Task == AiTaskMode.Score && speakingCriteria is { } descriptors)
+            {
+                // The official band descriptors name every criterion and the code it is reported under, so the
+                // short list below is not repeated (it carried the legacy `grammar` / `providingStructure` codes).
+                sb.AppendLine("Report each criterion under exactly the code shown in its heading below. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected. The reply shape is given in the user message.");
+                sb.AppendLine();
+                AppendSpeakingBandDescriptors(sb, descriptors);
+                AppendSpeakingScoringPrinciples(sb);
+            }
+            else
+            {
+                // NOTE: these numbered lines are read verbatim by tests/writing-regression/prompt_builder.py (the
+                // Writing regression gate hashes them). Do not reword them; Score replies use the descriptor block above.
+                sb.AppendLine("**Linguistic Criteria (4, each scored 0–6):**");
+                sb.AppendLine("1. `intelligibility` — Intelligibility (pronunciation, stress, intonation, rhythm; L1 accent effect on clarity)");
+                sb.AppendLine("2. `fluency` — Fluency (speed, hesitation, self-correction, sustained utterances)");
+                sb.AppendLine("3. `appropriateness` — Appropriateness of Language (register, tone, lexis; explaining technical matters in lay terms)");
+                sb.AppendLine("4. `grammar` — Resources of Grammar & Expression (range, accuracy, flexibility of grammar and vocabulary)");
+                sb.AppendLine();
+                sb.AppendLine("**Clinical Communication Criteria (5, each scored 0–3 — level descriptors: 3=Adept, 2=Competent, 1=Partially effective, 0=Ineffective):**");
+                sb.AppendLine("5. `relationshipBuilding` — Relationship Building (greeting/introductions, attentive respectful attitude, non-judgemental approach, empathy)");
+                sb.AppendLine("6. `patientPerspective` — Understanding & Incorporating the Patient's Perspective (eliciting ideas/concerns/expectations, picking up cues, relating explanations back)");
+                sb.AppendLine("7. `providingStructure` — Providing Structure (sequencing the interview purposefully, signposting changes in topic, organising explanations)");
+                sb.AppendLine("8. `informationGathering` — Information Gathering (facilitating narrative, open-then-closed questions, avoiding compound/leading questions, clarifying, summarising)");
+                sb.AppendLine("9. `informationGiving` — Information Giving (establishing prior knowledge, pausing, encouraging reactions, checking understanding, discovering further needs)");
+                sb.AppendLine();
+                if (ctx.Task == AiTaskMode.Score)
+                {
+                    // Band descriptors unavailable: still reply under the codes the Speaking JSON template uses.
+                    sb.AppendLine("Report each criterion under the code shown above, except that `grammar` is reported as `grammarExpression` and `providingStructure` as `structure`. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected. The reply shape is given in the user message.");
+                    sb.AppendLine();
+                    AppendSpeakingScoringPrinciples(sb);
+                }
+                else
+                {
+                    sb.AppendLine("Every feedback item MUST cite (a) the criterion code from this list AND (b) at least one rule ID from the active rulebook. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected.");
+                    sb.AppendLine();
+                }
+            }
             sb.AppendLine("### Architectural rule — Interlocutor vs Assessor");
             sb.AppendLine();
             sb.AppendLine("- **Interlocutor** (actor in the role play): facilitates the role play, reads warm-up questions, plays the patient/carer. The interlocutor NEVER grades.");
@@ -1662,17 +1705,138 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         }
     }
 
-    private static void AppendRulesBlock(StringBuilder sb, List<OetRule> critical, List<OetRule> major, int appliedTotal)
+    /// <summary>
+    /// The published OET band descriptors, rendered from rulebooks/speaking/common/assessment-criteria.json
+    /// under the criterion codes the grader replies with. These — not the rulebook rules — decide a score.
+    /// </summary>
+    private static void AppendSpeakingBandDescriptors(StringBuilder sb, JsonElement criteria)
     {
+        sb.AppendLine("### Official OET band descriptors (the marking authority)");
+        sb.AppendLine();
+        sb.AppendLine("Score every criterion against these published descriptors. They, not the rulebook rules further below, decide each number.");
+        sb.AppendLine();
+
+        if (criteria.TryGetProperty("linguisticCriteria", out var linguistic)
+            && linguistic.TryGetProperty("dimensions", out var dimensions)
+            && dimensions.ValueKind == JsonValueKind.Array)
+        {
+            sb.AppendLine("**Linguistic criteria — each scored 0–6:**");
+            foreach (var dimension in dimensions.EnumerateArray())
+            {
+                var id = ReadJsonText(dimension, "id");
+                var title = ReadJsonText(dimension, "title");
+                if (id is null || title is null
+                    || !dimension.TryGetProperty("bands", out var bands) || bands.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                sb.AppendLine($"- `{SpeakingCriterionCode(id)}` — {title}");
+                for (var band = 6; band >= 0; band--)
+                {
+                    var text = ReadJsonText(bands, band.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    if (text is not null) sb.AppendLine($"  - {band}: {text}");
+                }
+            }
+            sb.AppendLine();
+        }
+
+        if (criteria.TryGetProperty("clinicalCommunicationCriteria", out var clinical)
+            && clinical.ValueKind == JsonValueKind.Object)
+        {
+            var levels = new List<string>();
+            if (clinical.TryGetProperty("levels", out var levelNames) && levelNames.ValueKind == JsonValueKind.Object)
+            {
+                for (var level = 3; level >= 0; level--)
+                {
+                    var name = ReadJsonText(levelNames, level.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    if (name is not null) levels.Add($"{level} = {name}");
+                }
+            }
+
+            var levelText = levels.Count > 0 ? " (" + string.Join(", ", levels) + ")" : string.Empty;
+            sb.AppendLine("**Clinical communication criteria — each scored 0–3" + levelText + "; judge how effectively the candidate meets the indicators of each criterion:**");
+            if (clinical.TryGetProperty("clusters", out var clusters) && clusters.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var cluster in clusters.EnumerateArray())
+                {
+                    var id = ReadJsonText(cluster, "id");
+                    var title = ReadJsonText(cluster, "title");
+                    if (id is null || title is null) continue;
+
+                    sb.AppendLine($"- `{SpeakingCriterionCode(id)}` — {title}");
+                    if (!cluster.TryGetProperty("indicators", out var indicators) || indicators.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var indicator in indicators.EnumerateArray())
+                    {
+                        var indicatorId = ReadJsonText(indicator, "id");
+                        var text = ReadJsonText(indicator, "text");
+                        if (indicatorId is not null && text is not null) sb.AppendLine($"  - {indicatorId}: {text}");
+                    }
+                }
+            }
+            sb.AppendLine();
+        }
+    }
+
+    /// <summary>
+    /// How a Speaking score is reached. Owner spec 4 Oct 2026: rules guide how evidence is read and never
+    /// create a second penalty; clinical-knowledge accuracy is not a criterion; one event counts once.
+    /// </summary>
+    private static void AppendSpeakingScoringPrinciples(StringBuilder sb)
+    {
+        sb.AppendLine("### How to score (mandatory)");
+        sb.AppendLine();
+        sb.AppendLine("1. Score each criterion holistically against its band descriptor above, from the evidence in the candidate's transcript. A criterion score is one judgement of the whole performance, not a tally of rule breaches.");
+        sb.AppendLine("2. The rulebook below is interpretation guidance: it explains what strong and weak Speaking look like. A rule is NEVER a separate deduction. Wording such as \"costs marks\" or \"auto-mark-deduction\" in a rule describes the criterion that rule belongs to — it is not an extra penalty on top of the criterion score.");
+        sb.AppendLine("3. Count each event against at most ONE criterion — the one it most directly evidences. Never lower two criteria for the same behaviour.");
+        sb.AppendLine("4. Medical or clinical knowledge accuracy is NOT assessed in OET Speaking, so never mark a candidate down for it as such. A confusing, vague or mistaken clinical explanation lowers only the communication criterion it actually affects (Information giving, or Appropriateness of language when the explanation is not in lay terms).");
+        sb.AppendLine("5. Talk about the connection or equipment (\"can you hear me\", checking the line or microphone) is not part of the performance: do not assess it, and do not let it affect any criterion.");
+        sb.AppendLine("6. When an ACOUSTIC EVIDENCE block is supplied, it sets the intelligibility score and its fluency observations inform — but do not replace — your fluency judgement. When none is supplied, estimate intelligibility from the transcript alone and say in its rationale that no audio evidence was available.");
+        sb.AppendLine("7. Everything the candidate will read (rationales, strengths, advice) must be plain language tied to the published criteria. Never write rule IDs (for example RULE_13), internal codes or JSON field names in it.");
+        sb.AppendLine();
+    }
+
+    private static string? ReadJsonText(JsonElement element, string property)
+        => element.ValueKind == JsonValueKind.Object
+           && element.TryGetProperty(property, out var value)
+           && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    /// <summary>The reply code for a criterion id in assessment-criteria.json.</summary>
+    private static string SpeakingCriterionCode(string id) => id switch
+    {
+        "resources" => "grammarExpression",
+        "A" => "relationshipBuilding",
+        "B" => "patientPerspective",
+        "C" => "structure",
+        "D" => "informationGathering",
+        "E" => "informationGiving",
+        _ => id,
+    };
+
+    private static void AppendRulesBlock(StringBuilder sb, AiGroundingContext ctx, List<OetRule> critical, List<OetRule> major, int appliedTotal)
+    {
+        // Speaking: the rules explain how evidence is read; they are never deductions (owner spec 4 Oct 2026).
+        var speaking = ctx.Kind == RuleKind.Speaking;
         sb.AppendLine("## Active Rulebook");
         sb.AppendLine();
         sb.AppendLine($"Applied rules for this task: {appliedTotal} (critical: {critical.Count}, major: {major.Count}).");
         sb.AppendLine();
-        sb.AppendLine("### CRITICAL rules (violations are auto-mark-deductions; flag them first)");
+        if (speaking)
+        {
+            sb.AppendLine("These rules describe what strong and weak Speaking performance look like. Use them to read the evidence under the criterion each one belongs to; they guide your judgement and are never a list of deductions.");
+            sb.AppendLine();
+        }
+        sb.AppendLine(speaking
+            ? "### Key rules (interpretation guidance — not deductions)"
+            : "### CRITICAL rules (violations are auto-mark-deductions; flag them first)");
         sb.AppendLine();
         foreach (var rule in critical) sb.AppendLine(FormatRule(rule));
         sb.AppendLine();
-        sb.AppendLine("### MAJOR rules (significant feedback items)");
+        sb.AppendLine(speaking
+            ? "### Further rules (interpretation guidance)"
+            : "### MAJOR rules (significant feedback items)");
         sb.AppendLine();
         // Every applicable active rule must be visible to the grader — the canonical
         // registry has no minor/info tier, so silently sampling the first N major
@@ -1693,7 +1857,9 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
     {
         sb.AppendLine("## Guardrails (STRICT)");
         sb.AppendLine();
-        sb.AppendLine("1. Cite rule IDs explicitly in every feedback finding (e.g. \"OW-001\", \"RULE_27\").");
+        sb.AppendLine(ctx.Kind == RuleKind.Speaking && ctx.Task == AiTaskMode.Score
+            ? "1. Never write rule IDs (e.g. \"RULE_13\") or internal codes in any text the candidate will read; describe each observation in plain language tied to a published criterion."
+            : "1. Cite rule IDs explicitly in every feedback finding (e.g. \"OW-001\", \"RULE_27\").");
         sb.AppendLine("2. Do NOT invent, rename, or extend rules. If a concern falls outside the rulebook, say so plainly.");
         sb.AppendLine("3. Do NOT produce a numeric grade that contradicts the country-aware scoring table above.");
         sb.AppendLine("4. Do NOT replace expert grading — your output is advisory. Mark it clearly as AI-generated.");
@@ -1702,7 +1868,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine("7. Use the same tone Dr. Hesham uses: professional, specific, example-driven.");
         sb.AppendLine(ctx.Kind switch
         {
-            RuleKind.Speaking => "8. For speaking: respect the 13-stage consultation state machine and the Breaking Bad News 7-step protocol when analysing transcripts.",
+            RuleKind.Speaking => "8. For speaking: use the 13-stage consultation state machine and, on Breaking Bad News cards, the 7-step protocol as context for the structure and relationship evidence in a transcript — never as a checklist of deductions.",
             RuleKind.Grammar => "8. For grammar authoring: every exercise you emit must cite at least one grammar rule ID (e.g. \"G02.1\") in appliedRuleIds. If a concept falls outside the rulebook, omit it rather than invent.",
             RuleKind.Pronunciation => "8. For pronunciation: every finding MUST cite a rule ID from the pronunciation rulebook (e.g. \"P01.1\", \"P04.1\"). Never invent a phoneme or stress-pattern rule. If the input shows issues outside the rulebook, describe them as observations rather than scored findings.",
             RuleKind.Vocabulary => "8. For vocabulary authoring: every term MUST cite at least one vocabulary rule ID (e.g. \"V02.1\") in appliedRuleIds. Definitions must be clinically accurate, concise (≤ 25 words), and written in formal healthcare register. Example sentences must mirror OET letter register. Never include brand names, trademarks, or colloquialisms. Never invent a rule ID.",
@@ -1733,6 +1899,13 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine();
         switch (ctx.Task)
         {
+            // The Speaking grader requests its own JSON in the user message (nine criteria, rationales,
+            // evidence quotes). The Writing-shaped envelope below (criteriaScores keyed by Writing
+            // criteria, estimatedScaledScore, estimatedGrade, passed) contradicted it, and the server
+            // computes the score and grade itself, so the model is never asked for them.
+            case AiTaskMode.Score when ctx.Kind == RuleKind.Speaking:
+                sb.AppendLine("Reply with exactly the JSON object requested in the user message (no extra prose). Do not add a score, grade or pass/fail verdict of your own: the server derives them from your nine criterion scores.");
+                break;
             case AiTaskMode.Score:
                 sb.AppendLine("Return a SINGLE JSON object:");
                 sb.AppendLine("```json");
@@ -2090,7 +2263,9 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Writing => ctx.Task == AiTaskMode.GenerateContent
                 ? $"Task: produce or validate an OET Writing Model Answer ({WritingLetterTypeLabel(ctx)}) strictly from the provided case notes and task, under the active rulebook and the owner house style."
                 : $"Task: analyse the candidate's OET Writing letter ({WritingLetterTypeLabel(ctx)}) against the active rulebook, and produce rule-cited feedback.",
-            RuleKind.Speaking => $"Task: analyse the candidate's OET Speaking transcript ({RequireCardType(ctx)}) against the active rulebook, and produce rule-cited feedback.",
+            RuleKind.Speaking => ctx.Task == AiTaskMode.Score
+                ? $"Task: score the candidate's OET Speaking performance ({RequireCardType(ctx)}) against the official band descriptors above, using the active rulebook as interpretation guidance only."
+                : $"Task: analyse the candidate's OET Speaking transcript ({RequireCardType(ctx)}) against the active rulebook, and produce rule-cited feedback.",
             RuleKind.Grammar => "Task: produce a grammar teaching draft (title, content blocks, exercises) grounded in the grammar rulebook. Every exercise must cite ≥1 grammar rule ID in appliedRuleIds.",
             RuleKind.Pronunciation => ctx.Task switch
             {

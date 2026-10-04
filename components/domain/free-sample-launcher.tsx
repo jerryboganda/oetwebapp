@@ -26,14 +26,17 @@ export interface FreeSampleLauncherProps {
   className?: string;
 }
 
-// Exact owner copy (retry addendum, 23 Sep 2026) lives in messages/{en,ar}/free-samples.json.
+// Exact owner copy lives in messages/{en,ar}/free-samples.json. Writing keeps its one free revision; a
+// completed Speaking attempt has NO free retry (owner spec 4 Oct 2026): repeating the card is a new paid
+// attempt, and only a failed grade can be re-run for free (the grading_failed state).
 const ALLOWANCE_KEY: Record<FreeSampleSubtest, string> = {
   speaking: 'freeSample.speaking.allowance',
   writing: 'freeSample.writing.allowance',
 };
-const RETRY_KEY: Record<FreeSampleSubtest, string> = {
-  speaking: 'freeSample.speaking.retryCta',
-  writing: 'freeSample.writing.retryCta',
+const WRITING_REVISION_KEY = 'freeSample.writing.retryCta';
+const GRADING_FAILED_KEY: Record<FreeSampleSubtest, string> = {
+  speaking: 'freeSample.speaking.gradingFailed',
+  writing: 'freeSample.writing.gradingFailed',
 };
 
 export function FreeSampleLauncher({
@@ -89,11 +92,16 @@ export function FreeSampleLauncher({
       footer = note(t(ALLOWANCE_KEY[subtest]));
       break;
     case 'retry_available':
+      // Speaking has no free retry: show the sample as spent rather than advertise one that does not exist.
+      if (subtest === 'speaking') {
+        footer = note(t('freeSample.completed'));
+        break;
+      }
       // Server route; Writing falls back to the revise page of the last graded letter.
       href = option.route ?? (option.lastSubmissionId
         ? `/writing/submissions/${encodeURIComponent(option.lastSubmissionId)}/revise`
         : null);
-      footer = note(t(RETRY_KEY[subtest]), 'cta');
+      footer = note(t(WRITING_REVISION_KEY), 'cta');
       break;
     case 'in_progress':
       // Writing: the server routes the letter being graded to its grading page,
@@ -104,10 +112,10 @@ export function FreeSampleLauncher({
       footer = note(t('freeSample.inProgress'));
       break;
     case 'grading_failed':
-      // Retry grading of the SAME saved letter (server route). Never the start
+      // Retry grading of the SAME saved attempt (server route). Never the start
       // route: a fresh start could spend a second free use.
       href = option.route;
-      footer = note(t('freeSample.writing.gradingFailed'), 'cta');
+      footer = note(t(GRADING_FAILED_KEY[subtest]), 'cta');
       break;
     case 'unavailable':
       footer = note(t('freeSample.unavailable'));

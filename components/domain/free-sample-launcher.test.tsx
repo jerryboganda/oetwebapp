@@ -209,10 +209,12 @@ describe('FreeSampleLauncher', () => {
       const card = await screen.findByTestId('free-card');
       expect(mockList).toHaveBeenCalledWith('speaking');
       expect(card).toHaveAttribute('href', '/speaking/roleplay/rpc-med?free=1');
-      expect(card).toHaveTextContent('Free sample includes one full attempt + one free retry.');
+      expect(card).toHaveTextContent('Free sample includes one full attempt. New attempts require Speaking credits.');
+      // A completed Speaking attempt has no free retry (owner spec 4 Oct 2026).
+      expect(card).not.toHaveTextContent(/free retry/i);
     });
 
-    it('retry_available: "Try Again" links back to the same card', async () => {
+    it('never advertises a free retry for a completed Speaking attempt, even if the server still says retry_available', async () => {
       mockList.mockResolvedValue([{
         ...SPEAKING_AVAILABLE,
         state: 'retry_available',
@@ -223,8 +225,25 @@ describe('FreeSampleLauncher', () => {
       render(<FreeSampleLauncher {...SPEAKING_PROPS} />);
 
       const card = await screen.findByTestId('free-card');
-      expect(card).toHaveAttribute('href', '/speaking/roleplay/rpc-med?free=1');
-      expect(card).toHaveTextContent('Try Again - 1 Free Retry Remaining');
+      expect(card).toBeDisabled();
+      expect(card).not.toHaveAttribute('href');
+      expect(card).toHaveTextContent('Free sample completed');
+      expect(card).not.toHaveTextContent(/try again/i);
+      expect(card).not.toHaveTextContent(/free retry/i);
+    });
+
+    it('grading_failed: re-runs grading of the SAME saved role-play and says no credits are used', async () => {
+      mockList.mockResolvedValue([{
+        ...SPEAKING_AVAILABLE,
+        state: 'grading_failed',
+        route: '/speaking/sessions/s-1/results',
+      }]);
+      render(<FreeSampleLauncher {...SPEAKING_PROPS} />);
+
+      const card = await screen.findByTestId('free-card');
+      expect(card).toHaveAttribute('href', '/speaking/sessions/s-1/results');
+      expect(card).toHaveTextContent("Your role-play is saved but grading didn't finish — retry (no credits used)");
+      expect(card).not.toHaveTextContent(/sample letter/i);
     });
 
     it('in_progress: "Your result is being processed" links to the result', async () => {

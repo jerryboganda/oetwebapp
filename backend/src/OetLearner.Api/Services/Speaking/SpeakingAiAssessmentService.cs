@@ -17,7 +17,7 @@ namespace OetLearner.Api.Services.Speaking;
 /// rulebook-grounded <see cref="IAiGatewayService"/>. The output is an
 /// advisory <see cref="SpeakingAiAssessment"/> row — the canonical
 /// scaled score is ALWAYS recomputed via
-/// <see cref="OetScoring.SpeakingProjectedScaled(OetScoring.SpeakingCriterionScores)"/>
+/// <see cref="OetScoring.SpeakingReportedScaled(OetScoring.SpeakingCriterionScores)"/>
 /// rather than trusting the AI's own number. Per-criterion scores are
 /// clamped to the OET rubric (linguistic 0–6, clinical 0–3).
 ///
@@ -41,7 +41,22 @@ public sealed class SpeakingAiAssessmentService(
     ITypeSafeJudgmentService? judgments = null,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null)
 {
-    private const string PromptTemplateId = "speaking.score.v2";
+    // v3 (4 Oct 2026): the system prompt now carries the official OET band descriptors and the
+    // "rules guide, never deduct" principles; the model is no longer asked for a readiness band
+    // (the server derives it, with the score and grade, from the nine criterion scores).
+    internal const string PromptTemplateId = "speaking.score.v3";
+
+    /// <summary>Version of the audio stage that fed Intelligibility; "audio-none" = transcript only.</summary>
+    internal const string AudioStageVersion = "audio-none";
+
+    /// <summary>
+    /// The exact grader behind a score: prompt template | raw→reported mapping | audio stage. A score is
+    /// provisional until THIS string (with the grading model) has passed calibration, so changing any of the
+    /// three starts an uncalibrated version.
+    /// </summary>
+    internal static string GraderVersion
+        => $"{PromptTemplateId}|{OetScoring.SpeakingMappingVersion}|{AudioStageVersion}";
+
     private const string ProviderName = "ai_gateway";
     private const string ModelId = "gateway-default";
 
@@ -51,8 +66,9 @@ public sealed class SpeakingAiAssessmentService(
     // header so this template focuses on the JSON contract the AI must
     // return for the speaking-grade feature.
     // ---------------------------------------------------------------------
-    private const string PROMPT_TEMPLATE_V2 = """
-You are an OET Speaking examiner scoring a single role-play session.
+    private const string PROMPT_TEMPLATE_V3 = """
+You are an OET Speaking examiner scoring a single role-play session against the official
+OET band descriptors given in the system prompt.
 Return ONLY a strict JSON object with this exact shape (no markdown, no
 prose, no code fences):
 
@@ -68,13 +84,29 @@ prose, no code fences):
     "informationGathering": { "score": 0, "rationale": "", "evidenceQuotes": [] },
     "informationGiving":    { "score": 0, "rationale": "", "evidenceQuotes": [] }
   },
-  "readinessBand": "not_ready|developing|borderline|exam_ready|strong",
   "overallSummary": "",
   "confidenceBand": "low|medium|high",
-  "strengths": [],
-  "improvements": [],
-  "recommendedDrillKinds": []
+  "strengths": [
+    { "criterion": "relationshipBuilding", "text": "", "quote": "" }
+  ],
+  "priorityWeaknesses": [
+    { "criterion": "patientPerspective", "text": "", "quote": "", "action": "" }
+  ],
+  "drills": [
+    { "title": "", "criterion": "patientPerspective", "weakPoint": "", "practise": "", "example": "" }
+  ]
 }
+
+Coaching rules (the candidate reads all of this — plain language, no rule IDs):
+  * `strengths`: 2 to 4 specific things the candidate did well, each tied to a criterion code and, where
+    possible, a verbatim `quote` of 3–10 words from the transcript.
+  * `priorityWeaknesses`: 2 to 5 issues that most affected the score, most important first. `text` says what
+    happened and why it mattered; `quote` is the candidate's own words where possible; `action` is ONE
+    concrete thing to do differently next attempt. Every weakness must end with an `action`.
+  * `drills`: 2 to 5 practice drills built from THIS attempt. `weakPoint` is what the candidate did,
+    `practise` is what to rehearse, `example` is a short example phrase or question they could use.
+  * Use only the criterion codes from the scoring rubric. Do not invent evidence: if there is no quote, leave
+    `quote` empty.
 
 Scoring rules:
   * Linguistic criteria (intelligibility, fluency, appropriateness,
@@ -82,12 +114,18 @@ Scoring rules:
   * Clinical communication criteria (relationshipBuilding,
     patientPerspective, structure, informationGathering,
     informationGiving) use the OET 0–3 band scale.
+  * For each criterion pick the band whose descriptor best fits the WHOLE
+    performance. One event lowers at most one criterion.
   * Each `evidenceQuotes` entry MUST be a verbatim substring of the
     candidate's transcript turns. Quote 3–10 words.
-  * `rationale` must explain WHY the score was awarded, citing the
-    relevant criterion descriptor.
+  * `rationale` must explain WHY the score was awarded, in plain language the
+    candidate can read, citing what the band descriptor expects. Never write
+    rule IDs or internal codes in it.
   * `overallSummary` is 2–4 sentences of advisory feedback. Never claim
-    this is an official OET score.
+    this is an official OET score, and never state a score out of 500 or a
+    grade: the server derives both from your nine criterion scores.
+  * Anything said before the role-play begins, or about the connection or
+    equipment, is not part of the performance — ignore it.
   * Candidate transcript segments marked `"interrupted": true` mean the
     candidate started speaking BEFORE the patient had finished their
     response (they cut the patient off). Weigh repeated or abrupt
@@ -201,7 +239,7 @@ Scoring rules:
                 Kind = RuleKind.Speaking,
                 Profession = profession,
                 Task = AiTaskMode.Score,
-                CardType = "role_play",
+                CardType = RulebookCardToken(card),
             });
         }
         catch (PromptNotGroundedException)
@@ -225,7 +263,9 @@ Scoring rules:
         // sessions returned above), and `judgments` null (corpus harness) means zero Jev calls.
         var jevOptions = isMock ? null : typeSafeOptions?.Value;
         var jevActive = judgments is not null && JevSpeakingAdvisor.AnyActive(jevOptions);
-        var jevTranscript = jevActive ? JevSpeakingAdvisor.TranscriptFromSegmentsJson(transcript.SegmentsJson) : string.Empty;
+        var jevTranscript = jevActive
+            ? JevSpeakingAdvisor.TranscriptFromSegmentsJson(SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson))
+            : string.Empty;
         var jevCard = jevActive
             ? JevSpeakingAdvisor.CardSummary(card.ScenarioTitle, card.Setting, card.CandidateRole, card.ClinicalTopic, card.Tasks)
             : string.Empty;
@@ -298,7 +338,7 @@ Scoring rules:
                 "The AI scoring service returned an invalid response. Please retry.");
         }
 
-        var transcriptText = ExtractTranscriptText(transcript.SegmentsJson);
+        var transcriptText = ExtractTranscriptText(SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson));
         foreach (var (code, criterion) in parsed.CriterionScores)
         {
             foreach (var quote in criterion.EvidenceQuotes)
@@ -324,7 +364,9 @@ Scoring rules:
             InformationGathering: ScoreOf(parsed, "informationGathering", 0, 3),
             InformationGiving:    ScoreOf(parsed, "informationGiving",    0, 3));
 
-        var scaled = OetScoring.SpeakingProjectedScaled(rubricScores);
+        // The REPORTED score (0–500, multiple of 10): the one number the grade, readiness band
+        // and pass line all derive from, so a score shown as 350 can never read "Borderline".
+        var scaled = OetScoring.SpeakingReportedScaled(rubricScores);
         var readinessBand = OetScoring.SpeakingReadinessBandCode(
             OetScoring.SpeakingReadinessBandFromScaled(scaled));
         var confidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand);
@@ -370,6 +412,16 @@ Scoring rules:
         var jevPayload = JevSpeakingAdvisor.AdvisoryPayload(jevReadiness, jevCrosscheck);
         if (jevPayload is not null) rationalesPayload[JevSpeakingAdvisor.AdvisoryKey] = jevPayload;
 
+        // The coaching report (strengths, priority weaknesses, drills) rides in the same JSON under a
+        // reserved key, exactly as stored here; it is scrubbed of internal IDs only when a candidate reads it.
+        var report = parsed.Report;
+        if (report.Strengths.Count > 0 || report.PriorityWeaknesses.Count > 0 || report.Drills.Count > 0)
+        {
+            rationalesPayload[ReportKey] = JsonSerializer.SerializeToElement(
+                new { version = 1, strengths = report.Strengths, priorityWeaknesses = report.PriorityWeaknesses, drills = report.Drills },
+                ReportJson);
+        }
+
         var row = new SpeakingAiAssessment
         {
             Id = assessmentId,
@@ -379,6 +431,7 @@ Scoring rules:
             Provider = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedProvider) ? ProviderName : aiResult.ResolvedProvider.Trim(), 32),
             ModelId = Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedModel) ? ModelId : aiResult.ResolvedModel.Trim(), 96),
             PromptTemplateId = PromptTemplateId,
+            GraderVersion = GraderVersion,
             Intelligibility = rubricScores.Intelligibility,
             Fluency = rubricScores.Fluency,
             Appropriateness = rubricScores.Appropriateness,
@@ -443,7 +496,42 @@ Scoring rules:
             throw;
         }
 
-        return ProjectAssessment(row, parsed.CriterionScores);
+        // Project from the stored row so the response a learner gets straight after grading is exactly what
+        // every later read shows (clamped scores, internal rule IDs scrubbed from the text).
+        return ProjectAssessment(row, RehydrateCriterionScores(row));
+    }
+
+    /// <summary>
+    /// The rulebook's card-scoped rule token for a card. The Speaking rulebooks scope some rules to
+    /// <c>breaking_bad_news</c>, <c>follow_up</c> and <c>already_known_patient</c> cards; the grader
+    /// always passed the generic <c>role_play</c> token, so those rules never reached the cards they
+    /// describe. Everything else keeps <c>role_play</c> (the rules that apply to every card).
+    /// </summary>
+    internal static string RulebookCardToken(RolePlayCard card)
+    {
+        static bool Is(string? value, string expected)
+            => string.Equals(value?.Trim(), expected, StringComparison.OrdinalIgnoreCase);
+
+        if (Is(card.PrimaryCategory, "Breaking Bad News") || HasSecondaryTag(card.SecondaryTagsJson, "Breaking Bad News"))
+            return "breaking_bad_news";
+        if (Is(card.PrimaryCategory, "Second Visit / Follow-up")) return "follow_up";
+        if (Is(card.PrimaryCategory, "Already Known Patient")) return "already_known_patient";
+        return "role_play";
+    }
+
+    private static bool HasSecondaryTag(string? secondaryTagsJson, string tag)
+    {
+        if (string.IsNullOrWhiteSpace(secondaryTagsJson)) return false;
+        try
+        {
+            var tags = JsonSerializer.Deserialize<string[]>(secondaryTagsJson);
+            return tags is not null
+                && tags.Any(t => string.Equals(t?.Trim(), tag, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     public async Task<SpeakingAiAssessmentProjection?> GetLatestAsync(
@@ -467,21 +555,31 @@ Scoring rules:
         SpeakingAiAssessment row,
         IDictionary<string, CriterionScore> criterionScores)
     {
+        // A legacy row stored the unrounded heuristic number (e.g. 345 → shown as 350) and a band
+        // computed on it; the grade and band are always recomputed from the reported value so the
+        // three can never disagree.
+        var reported = OetScoring.OetReportedScaledScore(row.EstimatedScaledScore);
         return new SpeakingAiAssessmentProjection(
             AssessmentId: row.Id,
             Provider: row.Provider,
             ModelId: row.ModelId,
             PromptTemplateId: row.PromptTemplateId,
             CriterionScores: criterionScores,
-            EstimatedScaledScore: OetScoring.OetReportedScaledScore(row.EstimatedScaledScore),
-            ReadinessBand: row.ReadinessBand,
-            OverallSummary: row.OverallSummary,
+            EstimatedScaledScore: reported,
+            ReadinessBand: OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(reported)),
+            // Internal rule IDs never reach a candidate (the stored text stays as the model wrote it).
+            OverallSummary: SpeakingLearnerText.ScrubRuleIds(row.OverallSummary),
             ConfidenceBand: row.ConfidenceBand,
             GeneratedAt: row.GeneratedAt,
-            IsAdvisory: row.IsAdvisory);
+            IsAdvisory: row.IsAdvisory,
+            Grade: OetScoring.OetGradeLetterFromScaled(reported),
+            // Provisional until this exact grader version (with its model) has passed calibration;
+            // a legacy row has no version and is always provisional.
+            ScoreLabel: OetScoring.SpeakingScoreLabel(row.GraderVersion, row.ModelId),
+            Report: ReadStoredReport(row.PerCriterionRationalesJson));
     }
 
-    private static IDictionary<string, CriterionScore> RehydrateCriterionScores(SpeakingAiAssessment row)
+    internal static IDictionary<string, CriterionScore> RehydrateCriterionScores(SpeakingAiAssessment row)
     {
         var rationales = ReadRationales(row.PerCriterionRationalesJson);
         IDictionary<string, CriterionScore> result = new Dictionary<string, CriterionScore>(StringComparer.OrdinalIgnoreCase)
@@ -504,7 +602,7 @@ Scoring rules:
             return new CriterionScore(
                 Score: score,
                 MaxScore: max,
-                Rationale: found ? (packed.Rationale ?? string.Empty) : string.Empty,
+                Rationale: found ? SpeakingLearnerText.ScrubRuleIds(packed.Rationale) : string.Empty,
                 EvidenceQuotes: found ? (packed.EvidenceQuotes ?? Array.Empty<string>()) : Array.Empty<string>());
         }
     }
@@ -558,7 +656,7 @@ Scoring rules:
         SpeakingCardType? cardType)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(PROMPT_TEMPLATE_V2);
+        sb.AppendLine(PROMPT_TEMPLATE_V3);
         sb.AppendLine();
         // Hidden card type — marking guidance only. NEVER shown to the learner.
         if (cardType is not null)
@@ -612,12 +710,15 @@ Scoring rules:
             sb.AppendLine("NOTE: This role-play was a live voice conversation with no audio recording (transcript only), so the feedback text must never tell the candidate to listen to or check a recording.");
             sb.AppendLine();
         }
+        // The graded evidence starts at the real role-play: the opening connection check ("can you hear
+        // me" / "go ahead") is stripped here, while the stored segments and their hash are untouched.
+        var gradedSegments = SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson);
         sb.AppendLine("---- TRANSCRIPT (latest revision) ----");
-        sb.AppendLine(transcript.SegmentsJson);
+        sb.AppendLine(gradedSegments);
         sb.AppendLine();
         // Server-computed so sparse per-segment flags cannot be overlooked
         // in a long transcript.
-        var (interruptionCount, interruptedAtMs) = ComputeInteractionSignals(transcript.SegmentsJson);
+        var (interruptionCount, interruptedAtMs) = ComputeInteractionSignals(gradedSegments);
         sb.AppendLine("---- INTERACTION SIGNALS (server-computed) ----");
         sb.AppendLine(JsonSerializer.Serialize(new
         {
@@ -672,6 +773,160 @@ Scoring rules:
             new(StringComparer.OrdinalIgnoreCase);
         public string? OverallSummary { get; init; }
         public string? ConfidenceBand { get; init; }
+        public SpeakingFeedbackReport Report { get; init; } = EmptyReport;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Coaching report (strengths, priority weaknesses, drills)
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Reserved key beside the nine criterion rationales in <c>PerCriterionRationalesJson</c> (the same
+    /// pattern as the Jev advisory); no migration, and nothing that looks up a criterion code sees it.</summary>
+    private const string ReportKey = "_report";
+
+    private const int MaxStrengths = 4;
+    private const int MaxWeaknesses = 5;
+    private const int MaxDrills = 5;
+    private const int MaxTextLength = 500;
+    private const int MaxQuoteLength = 240;
+
+    private static readonly SpeakingFeedbackReport EmptyReport = new(
+        Array.Empty<SpeakingFeedbackItem>(),
+        Array.Empty<SpeakingFeedbackItem>(),
+        Array.Empty<SpeakingReportDrill>());
+
+    private static readonly JsonSerializerOptions ReportJson = new(JsonSerializerDefaults.Web);
+
+    private static SpeakingFeedbackReport ParseReport(JsonElement root)
+        => new(
+            ReadFeedbackItems(root, "strengths", MaxStrengths, withAction: false),
+            ReadFeedbackItems(root, "priorityWeaknesses", MaxWeaknesses, withAction: true),
+            ReadDrills(root, "drills", MaxDrills));
+
+    private static List<SpeakingFeedbackItem> ReadFeedbackItems(JsonElement root, string property, int max, bool withAction)
+    {
+        var items = new List<SpeakingFeedbackItem>();
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty(property, out var array)
+            || array.ValueKind != JsonValueKind.Array)
+        {
+            return items;
+        }
+
+        foreach (var element in array.EnumerateArray())
+        {
+            if (items.Count >= max) break;
+            string? text;
+            string? quote = null;
+            string? action = null;
+            var criterion = "overall";
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                text = element.GetString();
+            }
+            else if (element.ValueKind == JsonValueKind.Object)
+            {
+                text = TryReadString(element, "text");
+                quote = TryReadString(element, "quote");
+                action = TryReadString(element, "action");
+                criterion = ReportCriterion(TryReadString(element, "criterion"));
+            }
+            else
+            {
+                continue;
+            }
+
+            var clippedText = Clip(text, MaxTextLength);
+            if (clippedText is null) continue;
+            items.Add(new SpeakingFeedbackItem(
+                criterion,
+                clippedText,
+                Clip(quote, MaxQuoteLength),
+                withAction ? Clip(action, MaxTextLength) : null));
+        }
+
+        return items;
+    }
+
+    private static List<SpeakingReportDrill> ReadDrills(JsonElement root, string property, int max)
+    {
+        var drills = new List<SpeakingReportDrill>();
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty(property, out var array)
+            || array.ValueKind != JsonValueKind.Array)
+        {
+            return drills;
+        }
+
+        foreach (var element in array.EnumerateArray())
+        {
+            if (drills.Count >= max) break;
+            if (element.ValueKind != JsonValueKind.Object) continue;
+
+            var weakPoint = Clip(TryReadString(element, "weakPoint"), MaxTextLength);
+            var practise = Clip(TryReadString(element, "practise") ?? TryReadString(element, "practice"), MaxTextLength);
+            if (weakPoint is null || practise is null) continue;
+
+            var title = Clip(TryReadString(element, "title"), 120) ?? Clip(practise, 80)!;
+            drills.Add(new SpeakingReportDrill(
+                title,
+                ReportCriterion(TryReadString(element, "criterion")),
+                weakPoint,
+                practise,
+                Clip(TryReadString(element, "example"), MaxTextLength)));
+        }
+
+        return drills;
+    }
+
+    /// <summary>One of the nine criterion codes (canonical spelling), or <c>overall</c>.</summary>
+    private static string ReportCriterion(string? raw)
+    {
+        var code = CanonicalCriterionCode(raw?.Trim() ?? string.Empty);
+        return RequiredCriteria.FirstOrDefault(c => string.Equals(c, code, StringComparison.OrdinalIgnoreCase)) ?? "overall";
+    }
+
+    private static string? Clip(string? value, int max)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return null;
+        return trimmed.Length <= max ? trimmed : trimmed[..max];
+    }
+
+    /// <summary>The stored report, read back for a candidate: internal rule IDs scrubbed from every sentence
+    /// (the quotes are the candidate's own words and stay as spoken). Null when the grade has none.</summary>
+    internal static SpeakingFeedbackReport? ReadStoredReport(string? rationalesJson)
+    {
+        if (string.IsNullOrWhiteSpace(rationalesJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(rationalesJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty(ReportKey, out var stored))
+            {
+                return null;
+            }
+
+            var report = ParseReport(stored);
+            if (report.Strengths.Count == 0 && report.PriorityWeaknesses.Count == 0 && report.Drills.Count == 0) return null;
+
+            static string S(string value) => SpeakingLearnerText.ScrubRuleIds(value);
+            static string? SN(string? value) => value is null ? null : SpeakingLearnerText.ScrubRuleIds(value);
+            return new SpeakingFeedbackReport(
+                report.Strengths.Select(i => i with { Text = S(i.Text) }).ToList(),
+                report.PriorityWeaknesses.Select(i => i with { Text = S(i.Text), Action = SN(i.Action) }).ToList(),
+                report.Drills.Select(d => d with
+                {
+                    Title = S(d.Title),
+                    WeakPoint = S(d.WeakPoint),
+                    Practise = S(d.Practise),
+                    Example = SN(d.Example),
+                }).ToList());
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The nine criteria every reply must score. A missing or non-numeric one makes the
@@ -749,6 +1004,8 @@ Scoring rules:
                 CriterionScores = scores,
                 OverallSummary = TryReadString(root, "overallSummary"),
                 ConfidenceBand = TryReadString(root, "confidenceBand"),
+                // Coaching content is best-effort: a reply without it still grades, it just has no report.
+                Report = ParseReport(root),
             };
         }
         catch

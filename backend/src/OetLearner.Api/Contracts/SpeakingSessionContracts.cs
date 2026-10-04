@@ -71,11 +71,30 @@ public record CriterionScore(
     string Rationale,
     string[] EvidenceQuotes);
 
+/// <summary>One strength or priority weakness in the candidate's report. <c>Criterion</c> is one of the nine
+/// criterion codes (or <c>overall</c>); <c>Quote</c> is the candidate's own words when the grader found some;
+/// <c>Action</c> is the one concrete thing to do differently next attempt (weaknesses only).</summary>
+public sealed record SpeakingFeedbackItem(string Criterion, string Text, string? Quote, string? Action);
+
+/// <summary>One personalised practice drill built from this attempt: what the candidate did, what to rehearse,
+/// and a short example phrase or question to use.</summary>
+public sealed record SpeakingReportDrill(string Title, string Criterion, string WeakPoint, string Practise, string? Example);
+
+/// <summary>The coaching half of an AI Speaking result (owner spec 4 Oct 2026, sections 4 and 10): 2–4
+/// strengths, 2–5 priority weaknesses that each end in an action, and personalised drills. Plain language —
+/// internal rule IDs are scrubbed before it reaches a candidate.</summary>
+public sealed record SpeakingFeedbackReport(
+    IReadOnlyList<SpeakingFeedbackItem> Strengths,
+    IReadOnlyList<SpeakingFeedbackItem> PriorityWeaknesses,
+    IReadOnlyList<SpeakingReportDrill> Drills);
+
 /// <summary>Response from <c>POST /v1/speaking/sessions/{id}/ai-assess</c>
 /// and <c>GET /v1/speaking/sessions/{id}/ai-assessment</c>. Always
-/// advisory — the headline <c>EstimatedScaledScore</c> is recomputed
-/// through <see cref="OetLearner.Api.Services.OetScoring.SpeakingProjectedScaled(OetLearner.Api.Services.OetScoring.SpeakingCriterionScores)"/>
-/// so the 0–500 number is the single source of truth.</summary>
+/// advisory — the headline <c>EstimatedScaledScore</c> is the reported score
+/// (<see cref="OetLearner.Api.Services.OetScoring.SpeakingReportedScaled(OetLearner.Api.Services.OetScoring.SpeakingCriterionScores)"/>:
+/// 0–500 in steps of 10), the single number the grade, readiness band and pass line derive from.
+/// <c>Grade</c> is the OET letter for that number; <c>ScoreLabel</c> is <c>provisional</c> until the
+/// grader has been calibrated against expert-labelled performances, then <c>ai_practice_estimate</c>.</summary>
 public record SpeakingAiAssessmentProjection(
     string AssessmentId,
     string Provider,
@@ -87,7 +106,10 @@ public record SpeakingAiAssessmentProjection(
     string OverallSummary,
     string ConfidenceBand,
     DateTimeOffset GeneratedAt,
-    bool IsAdvisory);
+    bool IsAdvisory,
+    string? Grade = null,
+    string? ScoreLabel = null,
+    SpeakingFeedbackReport? Report = null);
 
 /// <summary>POST /v1/speaking/sessions/{id}/consent body. The learner
 /// confirms a specific consent version which the session and any

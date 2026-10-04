@@ -294,7 +294,9 @@ public sealed class SpeakingEvaluationPipeline(
         evaluation.State = AsyncState.Completed;
         evaluation.StatusReasonCode = "canonical_speaking_assessment";
         evaluation.StatusMessage = "Scored by the canonical Speaking assessment pipeline.";
-        evaluation.ScoreRange = BuildScoreRange(projection.EstimatedScaledScore);
+        // One reported score in 10-point steps (the projection already carries it); the former
+        // "332-362"-style band was invented precision and not an OET reporting format.
+        evaluation.ScoreRange = projection.EstimatedScaledScore.ToString(System.Globalization.CultureInfo.InvariantCulture);
         evaluation.ConfidenceBand = projection.ConfidenceBand switch
         {
             "high" => ConfidenceBand.High,
@@ -381,112 +383,6 @@ public sealed class SpeakingEvaluationPipeline(
         }));
     }
 
-    private static string BuildEvaluationUserInput(
-        ContentItem content,
-        Attempt attempt,
-        IReadOnlyList<SpeakingTranscriptLine> transcript,
-        IReadOnlyList<LintFinding> findings)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine($"Task title: {content.Title}");
-        sb.AppendLine($"Scenario type: {content.ScenarioType ?? "general_roleplay"}");
-        sb.AppendLine($"Profession: {content.ProfessionId ?? "medicine"}");
-        sb.AppendLine($"Audio metadata: {attempt.AudioMetadataJson}");
-        sb.AppendLine();
-        sb.AppendLine("Transcript JSON:");
-        sb.AppendLine(JsonSupport.Serialize(transcript.Select(line => new
-        {
-            line.Id,
-            line.Speaker,
-            line.Text,
-            line.StartTime,
-            line.EndTime
-        })));
-        sb.AppendLine();
-        sb.AppendLine("Deterministic rulebook audit findings:");
-        sb.AppendLine(JsonSupport.Serialize(findings.Select(f => new
-        {
-            f.RuleId,
-            severity = f.Severity.ToString().ToLowerInvariant(),
-            f.Message,
-            f.Quote,
-            f.FixSuggestion
-        })));
-        sb.AppendLine();
-        sb.AppendLine("Score this attempt as advisory Speaking feedback only. Cite speaking rule IDs and preserve the universal 350/500 pass anchor.");
-        return sb.ToString();
-    }
-
-    private static (int? scaledScore, IReadOnlyList<GatewayFinding> findings, OetScoring.SpeakingCriterionScores? criterionScores) ParseGatewayScore(
-        string completion,
-        IReadOnlyList<string> allowedRuleIds)
-    {
-        if (string.IsNullOrWhiteSpace(completion)) return (null, Array.Empty<GatewayFinding>(), null);
-
-        var start = completion.IndexOf('{');
-        var end = completion.LastIndexOf('}');
-        if (start < 0 || end <= start) return (null, Array.Empty<GatewayFinding>(), null);
-
-        try
-        {
-            using var document = JsonDocument.Parse(completion[start..(end + 1)]);
-            var root = document.RootElement;
-            int? score = null;
-            if (root.TryGetProperty("estimatedScaledScore", out var scoreElement) && scoreElement.TryGetInt32(out var parsedScore))
-            {
-                score = parsedScore;
-            }
-
-            var findings = new List<GatewayFinding>();
-            if (root.TryGetProperty("findings", out var findingsElement) && findingsElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var item in findingsElement.EnumerateArray())
-                {
-                    var ruleId = ReadJsonString(item, "ruleId");
-                    if (string.IsNullOrWhiteSpace(ruleId) || !allowedRuleIds.Contains(ruleId, StringComparer.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    findings.Add(new GatewayFinding(
-                        ruleId,
-                        ReadJsonString(item, "severity") ?? "info",
-                        ReadJsonString(item, "message") ?? "Rulebook finding.",
-                        ReadJsonString(item, "quote"),
-                        ReadJsonString(item, "fixSuggestion")));
-                }
-            }
-
-            // Extract per-criterion scores when the AI emits them. The
-            // grounded prompt may carry a "criterionScores" object with the
-            // 9 stable keys (4 linguistic 0-6, 5 clinical 0-3). Out-of-range
-            // values are clamped by OetScoring.SpeakingProjectedScaled.
-            OetScoring.SpeakingCriterionScores? criterionScores = null;
-            if (root.TryGetProperty("criterionScores", out var critElement)
-                && critElement.ValueKind == JsonValueKind.Object)
-            {
-                int Read6(string key) => ReadJsonInt(critElement, key) ?? 0;
-                int Read3(string key) => ReadJsonInt(critElement, key) ?? 0;
-                criterionScores = new OetScoring.SpeakingCriterionScores(
-                    Intelligibility:      Read6("intelligibility"),
-                    Fluency:              Read6("fluency"),
-                    Appropriateness:      Read6("appropriateness"),
-                    GrammarExpression:    Read6("grammarExpression"),
-                    RelationshipBuilding: Read3("relationshipBuilding"),
-                    PatientPerspective:   Read3("patientPerspective"),
-                    Structure:            Read3("structure"),
-                    InformationGathering: Read3("informationGathering"),
-                    InformationGiving:    Read3("informationGiving"));
-            }
-
-            return (score, findings, criterionScores);
-        }
-        catch
-        {
-            return (null, Array.Empty<GatewayFinding>(), null);
-        }
-    }
-
     private static List<UnifiedFinding> MergeFindings(
         IReadOnlyList<LintFinding> ruleFindings,
         IReadOnlyList<GatewayFinding> gatewayFindings)
@@ -548,47 +444,6 @@ public sealed class SpeakingEvaluationPipeline(
         }
 
         return cloned;
-    }
-
-    private static int EstimateScaledScore(
-        IReadOnlyList<UnifiedFinding> findings,
-        IReadOnlyList<SpeakingTranscriptLine> transcript,
-        Attempt attempt)
-    {
-        var score = 390;
-        foreach (var finding in findings)
-        {
-            score -= SeverityRank(finding.Severity) switch
-            {
-                0 => 45,
-                1 => 28,
-                2 => 14,
-                _ => 6
-            };
-        }
-
-        var candidateWords = transcript
-            .Where(line => string.Equals(line.Speaker, "candidate", StringComparison.OrdinalIgnoreCase))
-            .Sum(line => Regex.Matches(line.Text ?? string.Empty, @"\b[\w']+\b").Count);
-
-        if (candidateWords < 40) score -= 30;
-        var duration = ReadDurationSeconds(attempt.AudioMetadataJson);
-        if (duration is > 0 and < 90) score -= 15;
-
-        return score;
-    }
-
-    private static string BuildScoreRange(int scaledEstimate)
-    {
-        var lower = ClampScaled(scaledEstimate - 18);
-        var upper = ClampScaled(scaledEstimate + 12);
-        if (lower == 330 && upper == 360)
-        {
-            lower = 332;
-            upper = 362;
-        }
-
-        return $"{lower}-{upper}";
     }
 
     private static ConfidenceBand ResolveConfidence(
@@ -822,8 +677,6 @@ public sealed class SpeakingEvaluationPipeline(
         "minor" => 2,
         _ => 3
     };
-
-    private static int ClampScaled(int score) => Math.Clamp(score, OetScoring.ScaledMin, OetScoring.ScaledMax);
 
     private static int SecondsToMilliseconds(double seconds) => (int)Math.Round(seconds * 1000);
 

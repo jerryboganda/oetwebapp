@@ -19,6 +19,8 @@ export interface RulebookFindingsPanelProps {
   className?: string;
   inactiveMessage?: string;
   ruleHref?: (ruleId: string) => string;
+  /** Candidate-facing surfaces never show internal rule ids (Speaking spec §R3). */
+  hideRuleIds?: boolean;
 }
 
 const severityBadge: Record<RuleSeverity, { label: string; variant: 'danger' | 'warning' | 'success' | 'muted'; icon: typeof ShieldAlert }> = {
@@ -50,6 +52,7 @@ export function RulebookFindingsPanel({
   className,
   inactiveMessage,
   ruleHref,
+  hideRuleIds = false,
 }: RulebookFindingsPanelProps) {
   const [filter, setFilter] = useState<FilterMode>('all');
 
@@ -130,7 +133,7 @@ export function RulebookFindingsPanel({
             const severity = severityBadge[finding.severity];
             const Icon = severity.icon;
 
-            const ruleLabel = ruleHref ? (
+            const ruleLabel = hideRuleIds ? null : ruleHref ? (
               <Link
                 href={ruleHref(finding.ruleId)}
                 className="text-xs font-black uppercase tracking-widest text-primary underline-offset-4 hover:underline"

@@ -443,7 +443,8 @@ public partial class LearnerService
             var family1 = NormalizeExamFamilyCode(attempt1.ExamFamilyCode);
             if (s1.HasValue && s2.HasValue)
             {
-                combinedScaled = (int)Math.Round((s1.Value + s2.Value) / 2.0, MidpointRounding.AwayFromZero);
+                // Average of two reported scores can end in 5; report in 10-point steps.
+                combinedScaled = OetScoring.OetReportedScaledScore((s1.Value + s2.Value) / 2.0);
                 combinedBandCode = ScoringService.ReadinessBandCode(family1, combinedScaled.Value);
             }
 

@@ -275,9 +275,11 @@ public sealed class DualAssessmentTests : IAsyncLifetime
                 null, null, null, null, null),
             CancellationToken.None);
 
-        var expected = OetScoring.SpeakingProjectedScaled(
+        // The submitted score is the single reported number: 0-500, always a multiple of 10.
+        var expected = OetScoring.SpeakingReportedScaled(
             new OetScoring.SpeakingCriterionScores(5, 4, 5, 4, 2, 3, 2, 2, 3));
         Assert.Equal(expected, result.EstimatedScaledScore);
+        Assert.Equal(0, result.EstimatedScaledScore % 10);
     }
 
     [Fact]
@@ -622,7 +624,7 @@ public sealed class DualAssessmentTests : IAsyncLifetime
         var scores = new OetScoring.SpeakingCriterionScores(
             linguistic[0], linguistic[1], linguistic[2], linguistic[3],
             clinical[0], clinical[1], clinical[2], clinical[3], clinical[4]);
-        var scaled = OetScoring.SpeakingProjectedScaled(scores);
+        var scaled = OetScoring.SpeakingReportedScaled(scores);
         _db.SpeakingAiAssessments.Add(new SpeakingAiAssessment
         {
             Id = aiId,

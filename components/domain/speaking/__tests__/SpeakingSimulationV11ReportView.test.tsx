@@ -4,7 +4,6 @@ import type {
   SpeakingSimulationV11Criterion,
   SpeakingSimulationV11AssessmentReport,
   SpeakingSimulationV11AssessmentResponse,
-  SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { speakingSimulationV11AudioPath } from '@/lib/api/speaking-simulation-v11';
@@ -139,30 +138,15 @@ describe('SpeakingSimulationV11ReportView wording by input kind', () => {
     expect(screen.getByText(/the authoritative audio, transcript, or assessment pipeline could not be verified/)).toBeInTheDocument();
   });
 
-  it('shows a tutor revision separately from the original AI practice estimate', () => {
-    const tutorOverride: SpeakingSimulationV11LearnerTutorOverride = {
-      overrideId: 'override-1',
-      assessmentId: 'a1',
-      estimatedPracticeScore: 374,
-      scoreRangeLow: 350,
-      scoreRangeHigh: 395,
-      reason: 'Reviewed against the full conversation.',
-      overrideReportJson: '{}',
-      createdAt: '2026-10-03T12:00:00Z',
-    };
+  it('never shows a human-tutor revision or an internal reason code on an AI report', () => {
+    const review = { ...response('a'), status: 'TechnicalReview', report: null, technicalReviewCode: 'transcript_missing' };
+    const { container, rerender } = render(<SpeakingSimulationV11ReportView sessionId="s1" response={review} />);
 
-    render(
-      <SpeakingSimulationV11ReportView
-        sessionId="s1"
-        response={response('a')}
-        tutorOverride={tutorOverride}
-      />,
-    );
+    expect(container.textContent).not.toContain('transcript_missing');
+    expect(container.textContent).not.toMatch(/Reason:/);
 
-    expect(screen.getByText('Human tutor revision')).toBeInTheDocument();
-    expect(screen.getByText('Reviewed range: 350-400')).toBeInTheDocument();
-    expect(screen.getByText('Reviewed against the full conversation.')).toBeInTheDocument();
-    expect(screen.getByText(/AI report above remains preserved as the original practice estimate/)).toBeInTheDocument();
+    rerender(<SpeakingSimulationV11ReportView sessionId="s1" response={response('a')} />);
+    expect(container.textContent).not.toMatch(/tutor/i);
   });
 });
 

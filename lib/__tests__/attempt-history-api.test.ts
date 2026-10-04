@@ -29,7 +29,8 @@ describe('fetchMyAttemptHistory', () => {
           balanceSource: 'shared',
           creditsUsed: 4,
           route: '/speaking/exam/spx_1/results',
-          resultLabel: '192/500',
+          resultLabel: '190/500',
+          grade: 'D',
         },
       ],
     });
@@ -46,10 +47,24 @@ describe('fetchMyAttemptHistory', () => {
         balanceSource: 'shared',
         creditsUsed: 4,
         route: '/speaking/exam/spx_1/results',
-        resultLabel: '192/500',
+        resultLabel: '190/500',
+        grade: 'D',
       },
     ]);
     expect(mockApiRequest).toHaveBeenCalledWith('/v1/me/attempts?limit=50&subtest=speaking');
+  });
+
+  it('maps a missing grade to null so only scored Speaking rows show a letter', async () => {
+    mockApiRequest.mockResolvedValue({
+      items: [
+        { attemptId: 'att_r1', subtest: 'reading', title: 'Reading Part A paper', startedAt: '2026-09-30T09:00:00Z', status: 'completed', creditsUsed: 0, route: '/reading/paper/rp_1' },
+        { attemptId: 'spx_2', subtest: 'speaking', title: 'Full Speaking Mock', startedAt: '2026-10-01T10:00:00Z', status: 'completed', creditsUsed: 4, route: '/speaking/exam/spx_2/results', resultLabel: "Grading didn't finish — retry is free", grade: null },
+      ],
+    });
+
+    const rows = await fetchMyAttemptHistory();
+
+    expect(rows.map((row) => row.grade)).toEqual([null, null]);
   });
 
   it('maps a missing, null or empty label to null so rows without a result show none', async () => {

@@ -146,17 +146,6 @@ export interface SpeakingSimulationV11AssessmentResponse {
   generatedAt: string;
 }
 
-export interface SpeakingSimulationV11LearnerTutorOverride {
-  overrideId: string;
-  assessmentId: string;
-  estimatedPracticeScore: number;
-  scoreRangeLow: number;
-  scoreRangeHigh: number;
-  reason: string;
-  overrideReportJson: string;
-  createdAt: string;
-}
-
 export function runSpeakingSimulationV11Assessment(sessionId: string) {
   return apiClient.post<SpeakingSimulationV11AssessmentResponse>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/v1.1-assess`,
@@ -185,10 +174,4 @@ export function getSpeakingSimulationV11CombinedAssessment(examId: string) {
 
 export function speakingSimulationV11AudioPath(sessionId: string, recordingId: string) {
   return `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/v1.1-audio/${encodeURIComponent(recordingId)}`;
-}
-
-export function getSpeakingSimulationV11TutorOverride(sessionId: string) {
-  return apiClient.get<SpeakingSimulationV11LearnerTutorOverride>(
-    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/v1.1-tutor-override`,
-  );
 }

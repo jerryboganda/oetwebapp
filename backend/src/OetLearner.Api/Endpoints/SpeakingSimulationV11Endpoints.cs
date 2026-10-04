@@ -98,7 +98,17 @@ public static class SpeakingSimulationV11Endpoints
     {
         var userId = ResolveUserId(http);
         _ = await exams.GetExamForLearnerAsync(userId, id, ct);
-        return Results.Ok(await assessor.RunCombinedAssessmentAsync(id, ct));
+        // 4 Oct 2026 (owner spec): the nine official criteria are the only scoring model. The ten
+        // weighted v1.1 criteria no longer score new work; a combined report that was already
+        // produced stays readable so history is not lost.
+        var existing = await assessor.GetLatestCombinedAsync(id, ct);
+        return existing is null
+            ? Results.Conflict(new
+            {
+                errorCode = "speaking_v11_retired",
+                message = "The v1.1 combined report is no longer generated. Your Full Mock result is on the results page.",
+            })
+            : Results.Ok(existing);
     }
 
     private static async Task<IResult> GetLearnerAudioAsync(

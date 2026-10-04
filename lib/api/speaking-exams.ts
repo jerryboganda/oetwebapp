@@ -105,6 +105,8 @@ export interface SpeakingExamAssessment {
   confidenceBand: string;
   generatedAt: string;
   isAdvisory: boolean;
+  grade?: string | null;
+  scoreLabel?: string | null;
 }
 
 export interface SpeakingExamCardResult {
@@ -119,9 +121,14 @@ export interface SpeakingExamResults {
   mode: SpeakingExamMode;
   state: SpeakingExamState;
   overallStatus: 'scored' | 'pending' | 'awaiting_tutor';
+  /** Reported score: 0–500 in steps of 10. */
   combinedScaledScore?: number | null;
   readinessBand?: string | null;
   cards: SpeakingExamCardResult[];
+  /** OET letter for `combinedScaledScore`; there is no B+. */
+  grade?: string | null;
+  /** `provisional` until every card was graded by a calibrated grader. Missing = provisional. */
+  scoreLabel?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

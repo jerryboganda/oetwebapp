@@ -37,10 +37,8 @@ import {
 import {
   getSpeakingSimulationV11Assessment,
   getSpeakingSimulationV11CombinedAssessment,
-  getSpeakingSimulationV11TutorOverride,
   runSpeakingSimulationV11CombinedAssessment,
   type SpeakingSimulationV11AssessmentResponse,
-  type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
 import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
 import {
@@ -50,6 +48,12 @@ import {
   speakingInputKind,
 } from '@/lib/speaking/input-kind';
 import { CountUp } from '@/components/ui/count-up';
+import { oetReportedGradeFromScaled } from '@/lib/scoring';
+import {
+  isProvisionalScore,
+  PROVISIONAL_SCORE_BODY,
+  PROVISIONAL_SCORE_TITLE,
+} from '@/lib/speaking/score-label';
 
 const POLL_INTERVAL_MS = 4_000;
 /** ~10 minutes of polling, then "Check again" (the result persists server-side). */
@@ -80,7 +84,6 @@ export default function SpeakingExamResultsPage() {
   const [results, setResults] = useState<SpeakingExamResults | null>(null);
   const [v11Cards, setV11Cards] = useState<Record<string, SpeakingSimulationV11AssessmentResponse>>({});
   const [v11Transcripts, setV11Transcripts] = useState<Record<string, SpeakingTranscriptPayload | null>>({});
-  const [v11TutorOverrides, setV11TutorOverrides] = useState<Record<string, SpeakingSimulationV11LearnerTutorOverride | null>>({});
   const [v11Combined, setV11Combined] = useState<SpeakingSimulationV11AssessmentResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,16 +115,14 @@ export default function SpeakingExamResultsPage() {
             requestedCardAssessmentsRef.current.add(card.sessionId);
             void runAiAssessment(card.sessionId).catch(() => undefined);
           }
-          const [assessment, transcriptResponse, tutorOverride] = await Promise.all([
+          const [assessment, transcriptResponse] = await Promise.all([
             usesV11 ? getSpeakingSimulationV11Assessment(card.sessionId).catch(() => null) : null,
             getSpeakingSessionTranscript(card.sessionId).catch(() => null),
-            usesV11 ? getSpeakingSimulationV11TutorOverride(card.sessionId).catch(() => null) : null,
           ]);
           return {
             sessionId: card.sessionId,
             assessment,
             transcript: transcriptResponse?.transcript ?? null,
-            tutorOverride,
             gradingStatus,
             usesV11,
           };
@@ -129,19 +130,16 @@ export default function SpeakingExamResultsPage() {
       );
       const nextCards: Record<string, SpeakingSimulationV11AssessmentResponse> = {};
       const nextTranscripts: Record<string, SpeakingTranscriptPayload | null> = {};
-      const nextTutorOverrides: Record<string, SpeakingSimulationV11LearnerTutorOverride | null> = {};
       const nextStatus: Record<string, SpeakingSessionResultsStatus | null> = {};
       for (const item of cardDetails) {
         if (!item) continue;
         if (item.assessment) nextCards[item.sessionId] = item.assessment;
         nextTranscripts[item.sessionId] = item.transcript;
-        nextTutorOverrides[item.sessionId] = item.tutorOverride;
         nextStatus[item.sessionId] = item.gradingStatus;
       }
       setCardStatus(nextStatus);
       setV11Cards(nextCards);
       setV11Transcripts(nextTranscripts);
-      setV11TutorOverrides(nextTutorOverrides);
 
       const anyV11 = cardDetails.some((item) => item?.usesV11);
       let combined = anyV11 ? await getSpeakingSimulationV11CombinedAssessment(examId).catch(() => null) : null;
@@ -297,7 +295,6 @@ export default function SpeakingExamResultsPage() {
           sessionId={firstCardSessionId}
           response={v11Combined}
           transcriptsBySessionId={v11Transcripts}
-          tutorOverridesBySessionId={v11TutorOverrides}
           title="Full Speaking mock report"
           inputKind={commonInputKind(results.cards.filter((card) => card.sessionId).map((card) => kindOf(card.sessionId)))}
         />
@@ -318,7 +315,6 @@ export default function SpeakingExamResultsPage() {
           sessionId={firstV11SessionId}
           response={firstV11Card}
           transcript={v11Transcripts[firstV11SessionId]}
-          tutorOverride={v11TutorOverrides[firstV11SessionId]}
           title="Speaking card report"
           inputKind={kindOf(firstV11SessionId)}
         />
@@ -331,6 +327,10 @@ export default function SpeakingExamResultsPage() {
   const awaitingTutor = results.overallStatus === 'awaiting_tutor';
   const band = results.readinessBand || null;
   const bandColour = band ? bandTone(band) : 'success';
+  // The badge is the OET letter for the reported score (never B+), not the readiness band.
+  const gradeLetter = typeof results.combinedScaledScore === 'number'
+    ? results.grade ?? oetReportedGradeFromScaled(results.combinedScaledScore)
+    : null;
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -362,7 +362,7 @@ export default function SpeakingExamResultsPage() {
             }
             gaugeLabel="/ 500"
             gaugeColor={`var(--color-${bandColour})`}
-            grade={band ? { label: bandLabel(band), tone: bandColour } : null}
+            grade={gradeLetter ? { label: `Grade ${gradeLetter}`, tone: bandColour } : null}
             stats={results.cards.map((card) => ({
               label: `Card ${card.cardNumber === 1 ? 'A' : 'B'}`,
               value: card.assessment ? `${card.assessment.estimatedScaledScore}/500` : '—',
@@ -380,6 +380,12 @@ export default function SpeakingExamResultsPage() {
             <p className="mt-0.5 text-xs leading-relaxed text-muted">
               Use it to see how ready you are. Official OET results can only be obtained from an OET test session.
             </p>
+            {isProvisionalScore(results.scoreLabel) ? (
+              <p className="mt-2 text-xs leading-relaxed text-navy" data-testid="speaking-score-provisional">
+                <span className="font-semibold text-warning-strong">{PROVISIONAL_SCORE_TITLE}.</span>{' '}
+                {PROVISIONAL_SCORE_BODY}
+              </p>
+            ) : null}
           </div>
         </div>
       )}

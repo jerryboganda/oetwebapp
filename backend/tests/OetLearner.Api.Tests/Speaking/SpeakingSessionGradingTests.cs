@@ -275,7 +275,7 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
             storageOptions);
     }
 
-    private void SeedTranscript(string sessionId)
+    private void SeedTranscript(string sessionId, string? segmentsJson = null)
     {
         _db.SpeakingTranscripts.Add(new SpeakingTranscript
         {
@@ -283,7 +283,7 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
             SpeakingSessionId = sessionId,
             Provider = "live-roleplay",
             Language = "en",
-            SegmentsJson = FakeTranscriptionProvider.SegmentsJson,
+            SegmentsJson = segmentsJson ?? FakeTranscriptionProvider.SegmentsJson,
             IsLatest = true,
             WordCount = 11,
             MeanConfidence = 0.9,
@@ -632,14 +632,14 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
 
     // ── Classic assessor: reply contract, provenance and the grading chain ──
 
-    private async Task<string> SeedFinishedSessionWithTranscriptAsync()
+    private async Task<string> SeedFinishedSessionWithTranscriptAsync(string? segmentsJson = null)
     {
         var sessions = new SpeakingSessionService(_db, compliance: BuildCompliance());
         var created = await sessions.CreateSessionAsync(UserId, new CreateSpeakingSessionRequest("rpc-grading", "ai_self_practice"), default);
         await sessions.FinishWarmupAsync(UserId, created.SessionId, default);
         await sessions.StartRolePlayAsync(UserId, created.SessionId, default);
         await sessions.EndSessionAsync(UserId, created.SessionId, default);
-        SeedTranscript(created.SessionId);
+        SeedTranscript(created.SessionId, segmentsJson);
         return created.SessionId;
     }
 
@@ -818,6 +818,74 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
         Assert.Equal("ai_gateway", row.Provider);
         Assert.Equal("gateway-default", row.ModelId);
+    }
+
+    [Fact]
+    public async Task Assessor_DoesNotGradeTheOpeningConnectionCheck_ButTheStoredTranscriptKeepsIt()
+    {
+        // Owner spec 4 Oct 2026 section 7.2: "Hi, can you hear me" / "Yeah, I hear you. Go ahead." is not performance.
+        const string segments =
+            """[{"speaker":"candidate","startMs":1000,"endMs":2000,"text":"Hi, can you hear me?"},{"speaker":"patient","startMs":3000,"endMs":4500,"text":"Yeah, I hear you. Go ahead."},{"speaker":"candidate","startMs":6000,"endMs":9000,"text":"Hello, I am the doctor looking after you today."}]""";
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync(segments);
+        var gateway = new SwitchableAiGateway();
+
+        await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        var call = Assert.Single(gateway.Requests);
+        Assert.DoesNotContain("can you hear me", call.UserInput, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Go ahead", call.UserInput, StringComparison.Ordinal);
+        Assert.Contains("Hello, I am the doctor looking after you today.", call.UserInput, StringComparison.Ordinal);
+        // The stored transcript is untouched: technical logs keep the connection check.
+        var stored = await _db.SpeakingTranscripts.AsNoTracking().SingleAsync(t => t.SpeakingSessionId == sessionId);
+        Assert.Contains("can you hear me", stored.SegmentsJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Assessor_StoresTheGraderVersion_AndReportsOneNumberGradeBandAndAProvisionalLabel()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        var gateway = new SwitchableAiGateway { ResolvedProvider = "writing-claude-sub", ResolvedModel = "claude-opus-5-5" };
+
+        var projection = await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
+
+        var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
+        Assert.Equal("speaking.score.v3", row.PromptTemplateId);
+        Assert.Equal("speaking.score.v3|speaking-map.v0-heuristic|audio-none", row.GraderVersion);
+        // 5+5+5+5 and 3+2+2+2+2 = 31/39: reported 400, Grade B, Exam-ready — one number for all three.
+        Assert.Equal(400, row.EstimatedScaledScore);
+        Assert.Equal(400, projection.EstimatedScaledScore);
+        Assert.Equal("B", projection.Grade);
+        Assert.Equal("exam_ready", projection.ReadinessBand);
+        // No grader version has passed calibration yet, so the score is provisional.
+        Assert.Equal("provisional", projection.ScoreLabel);
+    }
+
+    [Fact]
+    public async Task LegacyStoredScore_IsReReportedInTenPointSteps_WithTheBandAndGradeDerivedFromIt()
+    {
+        var sessionId = await SeedFinishedSessionWithTranscriptAsync();
+        _db.SpeakingAiAssessments.Add(new SpeakingAiAssessment
+        {
+            Id = "spa_legacy",
+            SpeakingSessionId = sessionId,
+            TranscriptId = "tx-legacy",
+            Provider = "ai_gateway",
+            ModelId = "gateway-default",
+            EstimatedScaledScore = 345, // stored unrounded by the old grader
+            ReadinessBand = "borderline", // computed on the unrounded number
+            GeneratedAt = DateTimeOffset.UtcNow,
+            IsAdvisory = true,
+        });
+        await _db.SaveChangesAsync();
+
+        var projection = await BuildAssessor(new SwitchableAiGateway()).GetLatestAsync(sessionId, default);
+
+        Assert.NotNull(projection);
+        // Shown as 350 and therefore Grade B and Exam-ready — never "350 / Borderline".
+        Assert.Equal(350, projection!.EstimatedScaledScore);
+        Assert.Equal("B", projection.Grade);
+        Assert.Equal("exam_ready", projection.ReadinessBand);
+        Assert.Equal("provisional", projection.ScoreLabel);
     }
 
     [Fact]

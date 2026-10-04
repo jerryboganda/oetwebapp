@@ -210,6 +210,37 @@ public sealed class LearnerAttemptHistorySpeakingTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ScoredRows_CarryTheOetGradeLetter_AndAGradeThatFailedIsItsOwnState()
+    {
+        var started = DateTimeOffset.UtcNow.AddHours(-6);
+        await using var db = new LearnerDbContext(_options);
+        AddPractice(db, "sps_g_scored", SpeakingSessionState.Finished, AttemptState.Submitted, started);
+        AddAssessment(db, "sps_g_scored", 350);
+        AddPractice(db, "sps_g_failed", SpeakingSessionState.Finished, AttemptState.Submitted, started.AddMinutes(30));
+        AddFailedGrade(db, "sps_g_failed");
+        AddPractice(db, "sps_g_waiting", SpeakingSessionState.Finished, AttemptState.Submitted, started.AddMinutes(60));
+        AddExam(db, "spx_g_scored", SpeakingExamState.Completed, started.AddMinutes(90), combinedSnapshot: 430);
+        AddExam(db, "spx_g_failed", SpeakingExamState.Completed, started.AddMinutes(120));
+        AddAssessment(db, "sps_spx_g_failed_a", 360);
+        AddFailedGrade(db, "sps_spx_g_failed_b");
+        await db.SaveChangesAsync();
+
+        var rows = (await HistoryAsync(db)).ToDictionary(item => item.AttemptId);
+
+        Assert.Equal("B", rows["att_sps_g_scored"].Grade);
+        Assert.Equal("B", rows["spx_g_scored"].Grade);
+        Assert.Equal("430/500", rows["spx_g_scored"].ResultLabel);
+
+        // Retry is free, so the history says so instead of "Marking in progress" forever.
+        Assert.Equal("Grading didn't finish — retry is free", rows["att_sps_g_failed"].ResultLabel);
+        Assert.Equal("Grading didn't finish — retry is free", rows["spx_g_failed"].ResultLabel);
+        Assert.Null(rows["att_sps_g_failed"].Grade);
+        Assert.Null(rows["spx_g_failed"].Grade);
+        Assert.Equal("Marking in progress", rows["att_sps_g_waiting"].ResultLabel);
+        Assert.Null(rows["att_sps_g_waiting"].Grade);
+    }
+
+    [Fact]
     public async Task LegacySpeakingAttemptWithoutASession_IsUnchanged()
     {
         var started = DateTimeOffset.UtcNow.AddHours(-3);
@@ -470,6 +501,23 @@ public sealed class LearnerAttemptHistorySpeakingTests : IAsyncLifetime
             Reason = AiPackageCreditReason.RefundOnFailure,
             ReferenceId = releaseReference,
             CreatedAt = at,
+        });
+
+    /// <summary>A grading operation that ran out of retries for <paramref name="sessionId"/>.</summary>
+    private static void AddFailedGrade(LearnerDbContext db, string sessionId)
+        => db.AiOperations.Add(new AiOperation
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Module = "speaking",
+            FeatureCode = AiFeatureCodes.SpeakingGrade,
+            UserId = UserId,
+            ResourceType = "speaking_session",
+            ResourceId = sessionId,
+            IdempotencyKey = $"speaking.assess:{sessionId}",
+            ResourceSlotKey = $"slot:{sessionId}",
+            State = AiOperationState.FailedTerminal,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
         });
 
     private static void AddAssessment(LearnerDbContext db, string sessionId, int score)

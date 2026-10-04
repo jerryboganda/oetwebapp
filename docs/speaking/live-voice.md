@@ -434,8 +434,8 @@ clip path.
 - **Grader.** For a transcript whose `Provider` starts with `realtime-`, the classic grader's input carries one extra line before
   the transcript saying that the role-play has no full-session audio recording and that the feedback must never tell the
   candidate to listen to or check a recording. Grading remains transcript-only; candidate clip capture supports playback and
-  v1.1 acoustic assessment, not a change to the classic grader. The template id (`speaking.score.v2`), rubric, scoring rules and output schema are
-  unchanged. The gateway's request digest covers the input, so a live-voice grade that straddles the deploy can be asked of the
+  v1.1 acoustic assessment, not a change to the classic grader. The template id (`speaking.score.v2`), rubric, scoring rules and output schema were
+  unchanged by that change (the template moved to `speaking.score.v3` on 4 Oct 2026 — see [scoring.md](scoring.md)). The gateway's request digest covers the input, so a live-voice grade that straddles the deploy can be asked of the
   provider twice; the stored assessment is still deduplicated by its identity hash and the hold is committed once.
 - **Not changed on purpose** (owner/legal decision): the Rules and consent screen (it still reads "Your audio is recorded and
   graded by AI" before each card), the consent versions and the backend consent and retention texts.
