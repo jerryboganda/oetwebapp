@@ -271,7 +271,8 @@
       "evidence": [
         "Live validated Jev selected native copy-time ownership and stable dependency partition after a genuine 91.524-second changed-web image pull (p .99/confidence .99)",
         "Dockerfile retains root-owned dependencies/server.js and nextjs-owned .next/public; native checksum/ownership assertions and one protocol regression written",
-        "Actions image build, exact physical serving proof and new inclusive timing not run yet"
+        "F6 build 37175518557 passed 38 protocol checks and native COPY partition; failed before image publication because Alpine BusyBox rejects GNU sha256sum --check/--quiet. No rollout or five-minute result",
+        "Literal correction uses the native advertised -c/-s flags and keeps every checksum/owner assertion; successful image execution, exact physical serving proof and new inclusive timing remain"
       ],
       "files": ["Dockerfile", "scripts/deploy/release-manifest.test.mjs", "DEPLOYMENT.md"]
     }

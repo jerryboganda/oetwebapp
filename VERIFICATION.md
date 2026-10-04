@@ -6,6 +6,13 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 03:59 | CI triage | CI triage | 37175679848 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | f6e8381e8 |
+| 2026-10-04 03:59 | CI triage | CI triage | 37175668851 | Classify the failed run (jev-1.13.0)=success | SUCCESS | f6e8381e8 |
+| 2026-10-04 03:59 | Deploy production | Deploy production | 37175668864 | Resolve the build to deploy=skipped Apply migration SQL (if the API changed)=skipped Roll out to the VPS=skipped | SKIPPED | f6e8381e8 |
+| 2026-10-04 03:56 | CI triage | CI triage | 37175530624 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | f6e8381e8 |
+| 2026-10-04 03:56 | CI triage | CI triage | 37175520700 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | f6e8381e8 |
+| 2026-10-04 03:56 | SBOM and SCA | SBOM and SCA | 37175518675 | sbom-sca=success | SUCCESS | f6e8381e8 |
+| 2026-10-04 03:56 | Build images | Build images | 37175518557 | Syntax gate (seconds)=success Deployment contract guards=success Detect what changed=success build-web=failure Retag unchanged api=success Retag unchanged agent-gateway=success Retag unchanged db-backup=success build-backup=skipped build-api=skipped Writing grader regression (on change)=skipped build-agent-gateway=skipped Writing model-answer gate (on change)=skipped Publish verified release prove | FAILURE | f6e8381e8 |
 | 2026-10-04 03:38 | CI triage | CI triage | 37174663391 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e96e762ac |
 | 2026-10-04 03:34 | CI triage | CI triage | 37174460733 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e96e762ac |
 | 2026-10-04 03:33 | CI triage | CI triage | 37174402472 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e96e762ac |

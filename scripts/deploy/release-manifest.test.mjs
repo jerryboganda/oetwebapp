@@ -163,7 +163,9 @@ test('web runtime preserves standalone bytes and owners without recursive owners
   assert.match(runtime, /COPY --from=builder --chown=nextjs:nodejs \/app\/\.next\/static \.\/\.next\/static/);
   assert.match(runtime, /COPY --from=builder --chown=nextjs:nodejs \/app\/public \.\/public/);
   assert.match(runtime, /RUN --mount=type=bind,from=builder,source=\/app\/\.next\/standalone,target=\/standalone/);
-  assert.match(runtime, /sha256sum --check --quiet \/tmp\/standalone\.sha256/);
+  assert.match(runtime, /sha256sum -cs \/tmp\/standalone\.sha256/);
+  assert.doesNotMatch(runtime, /sha256sum --check|--quiet/);
+  assert.match(runtime, /WEB_RUNTIME_BYTES_AND_OWNERS_OK/);
   assert.match(runtime, /chown nextjs:nodejs \/app\/\.next \/app\/\.next\/cache \/app\/public/);
   for (const path of ['.next', 'public', 'node_modules', 'server.js']) {
     const owner = path.startsWith('.') || path === 'public' ? '10001:10001' : '0:0';

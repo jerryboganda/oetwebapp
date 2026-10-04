@@ -3,9 +3,9 @@
 Session: deployment-latency
 Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
 Mode: execute
-Updated: 2026-10-04T03:50:46Z
+Updated: 2026-10-04T04:06:40Z
 Branch: main
-HEAD: e96e762acfbe363d12a7b3b049e64600c8b6878b
+HEAD: f6e8381e892d71fe1f8f7a6c401e2373829b5f1e
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -59,6 +59,7 @@ release provenance, protected storage, readiness or rollback.
 - D-16 Forced-Writing cold build-only benchmark 37173946904 evaluated 3 gate sources versus 666 default sources, reused apphost-consistent API references and executed 26/26 tests. Workflow elapsed was 310 seconds; no promotion or cold-live result.
 - D-17 Genuine changed-web release e96e762ac: build 37174218390 reused the exact f13 API/backup/gateway digests, cached Next compilation took 5.7 seconds, and production 37174402463 verified green physical serving images. Inclusive timing was 582.880 seconds; driver public-live was 528.521 seconds. SQL was actually skipped on deployed-API proof.
 - D-18 Live Jev selected native web copy-time ownership and stable dependency layers (p .99, confidence .99) after a measured 91.524-second image pull. Preserve original bytes, root-owned dependencies, nextjs-owned .next/public, entrypoint and health gates; native image assertions and live timing remain required.
+- D-19 F6 build 37175518557 passed 38 protocol checks and native copy partition but failed before publication: Alpine BusyBox rejects GNU sha256sum --check/--quiet. Use its natively advertised -c/-s flags, retain checksum/owner assertions and rerun on Actions. Production was not promoted; e96 remains live.
 
 ## Touched files
 
@@ -91,16 +92,16 @@ release provenance, protected storage, readiness or rollback.
 | native PowerShell 5.1/7 actual-source cases | ax-check.yml / self-test matrix | 37174084749 | PASS |
 | follow-up serving/timing | production-deploy.yml + ship watcher | 37173143817 | PASS |
 | genuine changed-web/reused-API serving/timing | build-images.yml + production-deploy.yml + ship watcher | 37174402463 | PASS |
-| web stable layers, original bytes and ownership | build-images.yml / build-web | NOT RUN | NOT RUN |
+| web stable layers, original bytes and ownership | build-images.yml / build-web | 37175518557 | FAIL |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
 - The first inclusive result missed 300 seconds. API publish was 181 seconds, Writing 72 seconds, parallel image pulls 88.621 seconds and actual API readiness 76.594 seconds. Direct HTTP readiness already polls every three seconds; changing Docker health intervals would not address it.
-- The 300-second target remains unmet: f13 measured 569.457 seconds; changed-web/reused-API e96 measured 582.880. Its pull was 91.524 seconds and native target readiness was 94.649 seconds. Do not replace measured safety gates with optimistic timing. Web copy-time ownership/source partition is written but not natively executed yet.
+- The 300-second target remains unmet: f13 measured 569.457 seconds; changed-web/reused-API e96 measured 582.880. Its pull was 91.524 seconds and native target readiness was 94.649 seconds. Do not replace measured safety gates with optimistic timing. Web partition executed, but the BusyBox checksum flag correction needs a successful native image build/live measurement.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
 
 ## Next action
 
-1. Commit only the owned web-layer/protocol/doc/state paths, ship through the existing lease and verify original-byte/ownership assertions plus exact public serving. Record that release's inclusive timing, finalize evidence/continuity and restore privacy only when the native lease/queue guard permits it.
+1. Commit only the literal BusyBox checksum correction, its regression and genuine failed-build evidence/state; ship through the lease and verify the original-byte/owner assertions plus exact serving. Then dispatch the existing QA backend=always path once for the descendant's preserved fixture repairs, record actual timings and finalize continuity/privacy under the native guard.

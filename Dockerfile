@@ -69,12 +69,13 @@ RUN --mount=type=bind,from=builder,source=/app/.next/standalone,target=/standalo
     && cd /standalone \
     && find . -type f -exec sha256sum {} + > /tmp/standalone.sha256 \
     && cd /app \
-    && sha256sum --check --quiet /tmp/standalone.sha256 \
+    && sha256sum -cs /tmp/standalone.sha256 \
     && rm /tmp/standalone.sha256 \
     && test "$(stat -c '%u:%g' .next)" = "10001:10001" \
     && test "$(stat -c '%u:%g' public)" = "10001:10001" \
     && test "$(stat -c '%u:%g' node_modules)" = "0:0" \
-    && test "$(stat -c '%u:%g' server.js)" = "0:0"
+    && test "$(stat -c '%u:%g' server.js)" = "0:0" \
+    && echo "WEB_RUNTIME_BYTES_AND_OWNERS_OK"
 
 EXPOSE 3000
 
