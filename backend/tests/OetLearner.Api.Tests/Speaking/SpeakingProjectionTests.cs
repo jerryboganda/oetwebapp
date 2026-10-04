@@ -44,8 +44,9 @@ public class SpeakingProjectionTests
     [Fact]
     public void ProjectedScaledFromPercentage_InterpolatesLinearly()
     {
-        // 75% → midway between 350 and 400 = 375
+        // The stored practice projection stays exact; candidate reporting is quantized separately.
         Assert.Equal(375, OetScoring.SpeakingProjectedScaledFromPercentage(75));
+        Assert.Equal(380, OetScoring.OetReportedScaledScore(375));
     }
 
     [Fact]

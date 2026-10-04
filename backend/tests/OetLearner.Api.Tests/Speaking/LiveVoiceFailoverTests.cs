@@ -758,6 +758,57 @@ public sealed class LiveVoiceFailoverTests
     }
 
     [Fact]
+    public async Task CandidateAudioCapture_PersistsNormalizedConsentGatedMicrophoneClip()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var provider = await MintOpenAiAsync(rig, session);
+        var audio = new byte[] { 1, 2, 3, 4 };
+
+        var result = await rig.Service.CaptureCandidateAudioAsync(
+            session.UserId,
+            session.SessionId,
+            provider.ProviderSessionId,
+            audio,
+            "audio/webm;codecs=opus",
+            1_001,
+            CancellationToken.None);
+
+        var recording = await rig.Db.SpeakingRecordings.SingleAsync();
+        Assert.Equal(recording.Id, result.RecordingId);
+        Assert.Equal(SpeakingRecordingSource.ConversationHub, recording.Source);
+        Assert.Equal("audio/webm", recording.MimeType);
+        Assert.Equal("audio/webm", result.MimeType);
+        Assert.Equal(audio.Length, recording.SizeBytes);
+        Assert.Equal(2, recording.DurationSeconds);
+    }
+
+    [Fact]
+    public async Task CandidateAudioCapture_RequiresCurrentRecordingConsent()
+    {
+        using var rig = LiveVoiceTestKit.Create();
+        var session = await SeedAsync(rig);
+        var provider = await MintOpenAiAsync(rig, session);
+        var recordingConsent = await rig.Db.SpeakingComplianceConsents
+            .SingleAsync(x => x.UserId == session.UserId
+                && x.ConsentType == SpeakingComplianceConsentTypes.Recording);
+        rig.Db.SpeakingComplianceConsents.Remove(recordingConsent);
+        await rig.Db.SaveChangesAsync();
+
+        var error = await Assert.ThrowsAsync<ApiException>(() => rig.Service.CaptureCandidateAudioAsync(
+            session.UserId,
+            session.SessionId,
+            provider.ProviderSessionId,
+            new byte[] { 1, 2, 3, 4 },
+            "audio/webm",
+            1_000,
+            CancellationToken.None));
+
+        Assert.Equal("live_voice_consent_required", error.ErrorCode);
+        Assert.Empty(await rig.Db.SpeakingRecordings.ToListAsync());
+    }
+
+    [Fact]
     public async Task BothProvidersFailing_LeavesNoCandidate_AndTheDtoFlagFalse()
     {
         using var rig = LiveVoiceTestKit.Create();

@@ -32,6 +32,7 @@ import { listFreeSamples, type FreeSampleOption } from '@/lib/api/free-samples';
 import {
   OET_SCALED_MAX,
   WRITING_RAW_MAX,
+  oetReportedScoreFromScaled,
   writingRawTotalFromCriterionScores,
 } from '@/lib/scoring';
 import { TutorVoiceNotePlayer } from '@/components/domain/writing/TutorVoiceNotePlayer';
@@ -205,7 +206,9 @@ export default function WritingSubmissionResultsPage() {
   // Addendum Rev8 §12.4/§19.4); the raw criteria total stays as secondary
   // context. A mock keeps its tutor's human grade as the headline (zero AI).
   const practiceScore = assessmentVisible && !(isMock && grade)
-    ? assessment?.estimatedPracticeScore ?? null
+    ? assessment?.estimatedPracticeScore == null
+      ? null
+      : oetReportedScoreFromScaled(assessment.estimatedPracticeScore)
     : null;
   const freeSampleForThisLetter = freeSample && submission && freeSample.contentId === submission.scenarioId
     ? freeSample

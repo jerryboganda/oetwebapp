@@ -51,6 +51,13 @@ export interface LiveVoiceTranscriptSegmentInput {
   endMs: number;
   text: string;
   confidence?: number | null;
+  sourceRecordingId?: string;
+}
+
+export interface LiveVoiceAudioCaptureResponse {
+  recordingId: string;
+  mimeType: string;
+  durationSeconds: number;
 }
 
 export interface LiveVoiceTranscriptResponse {
@@ -124,4 +131,18 @@ export function persistLiveVoiceTranscript(
   },
 ): Promise<LiveVoiceTranscriptResponse> {
   return apiClient.post<LiveVoiceTranscriptResponse>(`${sessionPath(sessionId)}/transcript`, input);
+}
+
+export function captureLiveVoiceAudioTurn(
+  sessionId: string,
+  input: { providerSessionId: string; audio: Blob; durationMs: number },
+): Promise<LiveVoiceAudioCaptureResponse> {
+  const form = new FormData();
+  form.append('audio', input.audio, 'candidate-audio');
+  form.append('providerSessionId', input.providerSessionId);
+  form.append('durationMs', String(input.durationMs));
+  return apiClient.postForm<LiveVoiceAudioCaptureResponse>(
+    `${sessionPath(sessionId)}/audio-turns`,
+    form,
+  );
 }

@@ -209,7 +209,7 @@ export function PrepCountdown({
             {formatTime(remaining)}
           </span>
           <span className="mt-1 eyebrow text-muted">
-            {isWarning ? 'Wrap up' : 'minutes:seconds'}
+            minutes:seconds
           </span>
         </motion.div>
       </div>

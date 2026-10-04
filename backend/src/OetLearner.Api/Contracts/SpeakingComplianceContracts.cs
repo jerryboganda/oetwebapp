@@ -54,6 +54,7 @@ public record MyRecordingRow(
     string ScenarioTitle,
     int DurationSeconds,
     string MimeType,
+    string Source,
     bool IsArchived,
     DateTimeOffset? RetentionExpiresAt);
 

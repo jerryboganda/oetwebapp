@@ -14,7 +14,10 @@ public sealed record SpeakingSimulationV11EvidenceResult(
     decimal? ConfidenceScore,
     string? SourceTranscriptId = null,
     string? SourceRecordingId = null,
-    bool IsPrimary = true);
+    bool IsPrimary = true,
+    string? SourceCardSlot = null,
+    string? SourceSpeakingSessionId = null,
+    int? SourceAudioOffsetMs = null);
 
 public sealed record SpeakingSimulationV11CriterionResult(
     string CriterionCode,

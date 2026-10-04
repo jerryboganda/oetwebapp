@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Endpoints;
@@ -48,6 +49,14 @@ public static class LiveVoiceEndpoints
             .WithSummary("Persist the completed native provider transcript for assessment.")
             .Produces<LiveVoiceTranscriptResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status409Conflict);
+
+        learner.MapPost("/{id}/audio-turns", CaptureCandidateAudioAsync)
+            .WithSummary("Persist a consented short microphone clip captured during a live-voice candidate turn.")
+            .Produces<LiveVoiceAudioCaptureResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status409Conflict)
+            .WithMetadata(
+                new RequestSizeLimitAttribute(30L * 1024 * 1024),
+                new RequestFormLimitsAttribute { MultipartBodyLengthLimit = 30L * 1024 * 1024 });
 
         return app;
     }
@@ -104,6 +113,53 @@ public static class LiveVoiceEndpoints
     {
         var result = await liveVoice.PersistTranscriptAsync(ResolveUserId(http), id, request, ct);
         return Results.Ok(result);
+    }
+
+    private static async Task<IResult> CaptureCandidateAudioAsync(
+        HttpContext http,
+        string id,
+        LiveVoiceService liveVoice,
+        IConversationOptionsProvider conversationOptions,
+        CancellationToken ct)
+    {
+        if (!http.Request.HasFormContentType)
+        {
+            throw ApiException.Validation(
+                "live_voice_audio_multipart_required",
+                "Upload candidate audio as multipart/form-data.");
+        }
+
+        var form = await http.Request.ReadFormAsync(ct);
+        var audioFile = form.Files.GetFile("audio")
+            ?? throw ApiException.Validation(
+                "live_voice_audio_required",
+                "Attach the candidate audio in the audio field.");
+        var audioOptions = await conversationOptions.GetAsync(ct);
+        if (audioFile.Length <= 0 || audioFile.Length > audioOptions.MaxAudioBytes || audioFile.Length > int.MaxValue)
+        {
+            throw ApiException.Validation(
+                "live_voice_audio_size_invalid",
+                "The candidate audio recording is empty or exceeds the configured limit.");
+        }
+        if (!long.TryParse(form["durationMs"], out var durationMs))
+        {
+            throw ApiException.Validation(
+                "live_voice_audio_duration_invalid",
+                "The candidate audio duration is invalid.");
+        }
+
+        await using var source = audioFile.OpenReadStream();
+        using var buffer = new MemoryStream((int)audioFile.Length);
+        await source.CopyToAsync(buffer, ct);
+        var stored = await liveVoice.CaptureCandidateAudioAsync(
+            ResolveUserId(http),
+            id,
+            form["providerSessionId"].ToString(),
+            buffer.ToArray(),
+            audioFile.ContentType,
+            durationMs,
+            ct);
+        return Results.Ok(stored);
     }
 
     private static string ResolveUserId(HttpContext http)

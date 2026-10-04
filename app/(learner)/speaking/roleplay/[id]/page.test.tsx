@@ -137,7 +137,7 @@ describe('Speaking role-play entry: Rules + consent before any timer', () => {
     ]);
     render(<RoleCardPreview />);
 
-    expect(await screen.findByText('Free sample includes one full attempt + one free retry.')).toBeInTheDocument();
+    expect(await screen.findByText('Free sample includes one full attempt. New attempts require Speaking credits.')).toBeInTheDocument();
     expect(screen.getByTestId('speaking-card-credit-cost')).toHaveTextContent(/no ai credit/i);
 
     await user.click(screen.getByRole('checkbox'));

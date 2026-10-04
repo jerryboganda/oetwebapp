@@ -231,7 +231,7 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
         var (item, medCard) = await FreeSampleServiceTests.SeedCardAsync(_db, "medicine", cardNumber: 1);
         var learner = await SeedLearnerAsync(activeProfessionId: "medicine");
         var service = new FreeSampleService(_db);
-        for (var i = 0; i < FreeSampleService.SuccessLimit; i++)
+        for (var i = 0; i < FreeSampleService.SpeakingSuccessLimit; i++)
         {
             var attemptId = await FreeSampleServiceTests.SeedAttemptAsync(_db, learner, item, AttemptState.InProgress);
             Assert.True(await service.TryClaimAsync(learner, "speaking", medCard, FreeSampleUse.KindLegacyAttempt, attemptId, CancellationToken.None));

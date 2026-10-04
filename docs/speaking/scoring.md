@@ -7,6 +7,15 @@
 | `SpeakingAiAssessment` | Advisory AI score (`IsAdvisory = true`) | Reference only — never displayed as official |
 | `SpeakingTutorAssessment` | Human tutor score | Authoritative when `IsFinal = true` |
 
+## v1.1 card and Full Mock estimates
+
+The released v1.1 practice rubric has ten weighted criteria. A card assessment scores all ten; a completed two-card AI Full
+Mock assesses the nine non-acoustic criteria holistically from candidate turns on both cards, then carries forward the
+arithmetic mean of the two separately verified card-level intelligibility/pronunciation scores. It never infers acoustic
+quality from transcripts. The Full Mock report retains both card breakdowns and source-linked evidence identifies the
+original card, Speaking session, transcript turn, and audio clip. These estimates remain practice-only and are not calibrated
+against an expert-labelled benchmark.
+
 ## Criteria (9 total)
 
 ### Linguistic (0–6 scale each)

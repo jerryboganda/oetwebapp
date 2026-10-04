@@ -98,7 +98,7 @@ describe('results copy by input kind', () => {
 
   it('explains that a live conversation has no audio to play back', () => {
     expect(LIVE_TRANSCRIPT_NOTE).toBe(
-      'Live conversations cannot be played back here. This transcript is what was marked.',
+      'The full conversation is not stored as one replayable recording. Short microphone clips are available with verified candidate-transcript evidence. Echo cancellation is enabled, but speaker audio may still be picked up by your microphone.',
     );
     expect(LIVE_TRANSCRIPT_NOTE).not.toMatch(/processing|being graded|analysing|check again/i);
   });

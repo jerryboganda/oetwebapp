@@ -327,11 +327,6 @@ export default function SpeakingSessionRecordingPage() {
           onVoiceStopReady={handleVoiceStopReady}
           onSpeakingStarted={handleSpeakingStarted}
         />
-        {isWarning ? (
-          <p className="text-center text-sm font-medium text-danger-strong" role="status">
-            30 seconds left — wrap up. Your role-play submits automatically at 00:00.
-          </p>
-        ) : null}
       </main>
 
       <div

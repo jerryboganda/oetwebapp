@@ -26,6 +26,7 @@ import {
   type SpeakingCriterionCode,
   type TutorAssessment,
 } from '@/lib/api/speaking-assessments';
+import { oetReportedGradeFromScaled, oetReportedScoreFromScaled } from '@/lib/scoring';
 
 export type DualAssessmentColumnKind = 'ai' | 'tutor';
 
@@ -214,6 +215,11 @@ export function DualAssessmentColumn({
   showReadinessBand = true,
 }: DualAssessmentColumnProps) {
   const styles = KIND_STYLES[kind];
+  const reportedScore = assessment
+    ? isAiAssessment(assessment)
+      ? oetReportedScoreFromScaled(assessment.estimatedScaledScore)
+      : Math.round(assessment.estimatedScaledScore)
+    : null;
 
   return (
     <Card
@@ -264,10 +270,15 @@ export function DualAssessmentColumn({
               </span>
               <div className="flex items-baseline gap-3">
                 <span className="text-4xl font-bold text-navy">
-                  {Math.round(assessment.estimatedScaledScore)}
+                  {reportedScore}
                 </span>
                 <span className="text-sm text-muted">/ 500</span>
               </div>
+              {isAiAssessment(assessment) && reportedScore != null ? (
+                <p className="text-sm font-semibold text-navy">
+                  Grade {oetReportedGradeFromScaled(reportedScore)}
+                </p>
+              ) : null}
               {showReadinessBand ? (
                 <Badge variant={kind === 'ai' ? 'info' : 'success'}>
                   {readinessBandLabel(assessment.readinessBand)}

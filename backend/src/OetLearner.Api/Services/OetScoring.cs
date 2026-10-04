@@ -528,6 +528,20 @@ public static class OetScoring
     }
 
     /// <summary>
+    /// Round a scaled score for candidate-facing OET-style reporting without
+    /// changing the underlying score used by pass/fail or calibration logic.
+    /// </summary>
+    public static int OetReportedScaledScore(double scaled)
+    {
+        if (double.IsNaN(scaled)) return 0;
+        var bounded = Math.Clamp(scaled, ScaledMin, ScaledMax);
+        return (int)Math.Clamp(
+            Math.Round(bounded / 10.0, MidpointRounding.AwayFromZero) * 10,
+            ScaledMin,
+            ScaledMax);
+    }
+
+    /// <summary>
     /// Project full Speaking criterion scores into a Speaking pass/fail result.
     /// </summary>
     public static SpeakingResult SpeakingProjectedBand(SpeakingCriterionScores scores)

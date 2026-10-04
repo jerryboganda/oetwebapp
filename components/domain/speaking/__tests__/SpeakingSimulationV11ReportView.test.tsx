@@ -1,9 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
+  SpeakingSimulationV11Criterion,
   SpeakingSimulationV11AssessmentReport,
   SpeakingSimulationV11AssessmentResponse,
+  SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
+import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { speakingSimulationV11AudioPath } from '@/lib/api/speaking-simulation-v11';
 
 vi.mock('@/lib/api', () => ({
   fetchAuthorizedObjectUrl: vi.fn(),
@@ -106,14 +110,13 @@ describe('SpeakingSimulationV11ReportView wording by input kind', () => {
     expect(screen.getByRole('heading', { name: 'Transcript and source audio' })).toBeInTheDocument();
   });
 
-  it('says live conversations have no playback, and never promises source audio', async () => {
+  it('identifies live microphone clips without promising full-session playback or perfect isolation', async () => {
     render(<SpeakingSimulationV11ReportView sessionId="s1" response={response('a')} inputKind="live_voice" />);
     await openTranscriptTab();
 
     expect(screen.getByRole('heading', { name: 'Transcript of your live conversation' })).toBeInTheDocument();
-    expect(screen.getByText(/Live conversations cannot be played back here\./)).toBeInTheDocument();
-    expect(screen.queryByText(/source audio/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Audio playback is available/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Short microphone clips are available when transcript evidence has a verified source recording\./)).toBeInTheDocument();
+    expect(screen.getByText(/speaker audio may still be picked up by your microphone\./)).toBeInTheDocument();
   });
 
   it('stays neutral when the input kind is not known yet', async () => {
@@ -122,7 +125,7 @@ describe('SpeakingSimulationV11ReportView wording by input kind', () => {
 
     expect(screen.getByRole('heading', { name: 'Transcript' })).toBeInTheDocument();
     expect(screen.queryByText(/source audio/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/only for evidence linked to a recording\. Live conversations have no playback here\./)).toBeInTheDocument();
+    expect(screen.getByText('Audio playback is available only for evidence linked to a verified source recording.')).toBeInTheDocument();
   });
 
   it('does not blame audio in the technical-review notice of a live conversation', () => {
@@ -134,5 +137,109 @@ describe('SpeakingSimulationV11ReportView wording by input kind', () => {
 
     rerender(<SpeakingSimulationV11ReportView sessionId="s1" response={review} />);
     expect(screen.getByText(/the authoritative audio, transcript, or assessment pipeline could not be verified/)).toBeInTheDocument();
+  });
+
+  it('shows a tutor revision separately from the original AI practice estimate', () => {
+    const tutorOverride: SpeakingSimulationV11LearnerTutorOverride = {
+      overrideId: 'override-1',
+      assessmentId: 'a1',
+      estimatedPracticeScore: 374,
+      scoreRangeLow: 350,
+      scoreRangeHigh: 395,
+      reason: 'Reviewed against the full conversation.',
+      overrideReportJson: '{}',
+      createdAt: '2026-10-03T12:00:00Z',
+    };
+
+    render(
+      <SpeakingSimulationV11ReportView
+        sessionId="s1"
+        response={response('a')}
+        tutorOverride={tutorOverride}
+      />,
+    );
+
+    expect(screen.getByText('Human tutor revision')).toBeInTheDocument();
+    expect(screen.getByText('Reviewed range: 350-400')).toBeInTheDocument();
+    expect(screen.getByText('Reviewed against the full conversation.')).toBeInTheDocument();
+    expect(screen.getByText(/AI report above remains preserved as the original practice estimate/)).toBeInTheDocument();
+  });
+});
+
+describe('SpeakingSimulationV11ReportView source audio evidence', () => {
+  it('plays a combined-report candidate clip from its own session at its clip-relative offset', async () => {
+    const user = userEvent.setup();
+    const evidence = {
+      evidenceType: 'audio_acoustic',
+      evidenceStatus: 'supported' as const,
+      primaryCriterionCode: 'intelligibility_pronunciation',
+      turnNumber: 3,
+      quoteText: 'Please tell me more.',
+      startMs: 4_250,
+      endMs: 6_000,
+      finding: 'Clear articulation.',
+      action: 'Keep this pace.',
+      confidenceLabel: 'high',
+      confidenceScore: 0.9,
+      sourceTranscriptId: 'transcript-a',
+      sourceRecordingId: 'candidate-clip-a',
+      isPrimary: true,
+      sourceCardSlot: 'a',
+      sourceSpeakingSessionId: 'source-session-a',
+      sourceAudioOffsetMs: 0,
+    };
+    const criterion: SpeakingSimulationV11Criterion = {
+      criterionCode: 'intelligibility_pronunciation',
+      label: 'Intelligibility & pronunciation',
+      weight: 10,
+      rawScore: 80,
+      weightedScore: 8,
+      scoreBand: 'strong',
+      rationale: 'Source-linked audio supports this result.',
+      evidence: [evidence],
+      strength: null,
+      weakness: null,
+      action: null,
+      confidenceLabel: 'high',
+      confidenceScore: 0.9,
+    };
+    const combinedReport = {
+      ...report('combined'),
+      criteria: [criterion],
+    };
+    const combinedResponse = {
+      ...response('combined'),
+      report: combinedReport,
+    };
+    const audio = {
+      currentTime: -1,
+      addEventListener: vi.fn(),
+      play: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+    } as unknown as HTMLAudioElement;
+    const audioConstructor = vi.fn(() => audio);
+    vi.stubGlobal('Audio', audioConstructor);
+    vi.mocked(fetchAuthorizedObjectUrl).mockResolvedValue('blob:candidate-clip');
+
+    try {
+      render(
+        <SpeakingSimulationV11ReportView
+          sessionId="exam-first-session"
+          response={combinedResponse}
+          inputKind="live_voice"
+        />,
+      );
+      await user.click(screen.getByRole('button', { name: 'criteria' }));
+      await user.click(screen.getByRole('button', { name: 'Play 0:04' }));
+
+      expect(fetchAuthorizedObjectUrl).toHaveBeenCalledWith(
+        speakingSimulationV11AudioPath('source-session-a', 'candidate-clip-a'),
+      );
+      expect(audio.currentTime).toBe(0);
+      expect(audio.play).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.mocked(fetchAuthorizedObjectUrl).mockReset();
+    }
   });
 });

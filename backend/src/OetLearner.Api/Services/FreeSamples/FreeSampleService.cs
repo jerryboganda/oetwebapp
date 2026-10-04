@@ -14,7 +14,7 @@ namespace OetLearner.Api.Services.FreeSamples;
 /// <c>grading_failed</c> | <c>completed</c> | <c>unavailable</c></param>
 /// <param name="Route">Where the learner goes next (start, revise, or the result
 /// being processed); null for <c>completed</c> / <c>unavailable</c>.</param>
-/// <param name="SuccessfulCount">Uses that produced a result (0..<see cref="FreeSampleService.SuccessLimit"/>).</param>
+/// <param name="SuccessfulCount">Uses that produced a result (up to the subtest-specific limit).</param>
 /// <param name="LastResultRoute">Result page of the latest successful use.</param>
 /// <param name="LastSubmissionId">Resource id of the latest successful use (Writing:
 /// the submission to revise, "D"; Speaking: the session / legacy attempt id).</param>
@@ -25,16 +25,16 @@ public sealed record FreeSampleOffer(
     string? Route,
     int SuccessfulCount,
     string? LastResultRoute,
-    string? LastSubmissionId)
+    string? LastSubmissionId,
+    int Limit = FreeSampleService.SuccessLimit)
 {
-    public int Limit => FreeSampleService.SuccessLimit;
-    public int Remaining => Math.Max(0, FreeSampleService.SuccessLimit - SuccessfulCount);
+    public int Remaining => Math.Max(0, Limit - SuccessfulCount);
 }
 
 /// <summary>
 /// Free Mocks (owner 2026-09-22, retry addendum 2026-09-23): every learner gets
-/// exactly TWO successful AI-graded results per subtest (Speaking, Writing), both
-/// on the SAME designated item of their own profession. A use is consumed only
+/// exactly TWO successful Writing results and ONE successful Speaking result,
+/// each on the SAME designated item of their own profession. A use is consumed only
 /// when it produces a result — start/exit, mic/upload failure and grading
 /// failure never count. The claim pins profession + item forever (no reset via
 /// device, session, route or profession change). The server alone decides what
@@ -49,7 +49,7 @@ public interface IFreeSampleService
 
     /// <summary>Read-only: may the learner start (or restart) a free use of
     /// <paramref name="contentRef"/> right now? True only for their own
-    /// profession's pinned item, while fewer than two results exist and no use
+    /// profession's pinned item, while a result slot remains and no use
     /// is being graded. Writing: scenario id. Speaking: card id or content-item id.</summary>
     Task<bool> IsOfferedAsync(string userId, string subtest, string contentRef, CancellationToken ct);
 
@@ -75,6 +75,10 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
 
     /// <summary>Successful results per learner per subtest (owner addendum 23 Sep 2026).</summary>
     public const int SuccessLimit = 2;
+    public const int SpeakingSuccessLimit = 1;
+
+    public static int SuccessLimitFor(string subtest)
+        => subtest == Speaking ? SpeakingSuccessLimit : SuccessLimit;
 
     /// <summary>Master switch (dark launch + kill switch): free samples are granted
     /// ONLY while a <c>FeatureFlag</c> row with this key exists and is Enabled.
@@ -114,6 +118,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
     {
         if (!IsSupported(subtest) || !await IsEnabledAsync(ct)) return [];
 
+        var successLimit = SuccessLimitFor(subtest);
         var ownProfession = await GetLearnerProfessionAsync(userId, ct);
         var claim = await GetClaimAsync(userId, subtest, ct);
         if (claim is not null)
@@ -126,7 +131,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
 
             string state;
             string? route = null;
-            if (successes.Count >= SuccessLimit)
+            if (successes.Count >= successLimit)
             {
                 state = StateCompleted;
             }
@@ -145,7 +150,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             else if (failed is not null)
             {
                 state = StateGradingFailed;
-                route = GradingRoute(failed.SubmissionId);
+                route = subtest == Writing ? GradingRoute(failed.SubmissionId) : failed.ResultRoute;
             }
             else if (last is null)
             {
@@ -162,7 +167,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             }
             return [new FreeSampleOffer(
                 claim.Profession, claim.ContentId, state, route,
-                successes.Count, last?.ResultRoute, last?.SubmissionId)];
+                successes.Count, last?.ResultRoute, last?.SubmissionId, successLimit)];
         }
 
         // CRITICAL SECURITY FIX (22 Sep 2026 handoff, item 2): only ever the
@@ -174,8 +179,8 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
 
         var picks = await ResolvePicksAsync(subtest, ct);
         return picks.TryGetValue(ownProfession, out var ownPick)
-            ? [new FreeSampleOffer(ownProfession, ownPick, StateAvailable, StartRoute(subtest, ownPick), 0, null, null)]
-            : [new FreeSampleOffer(ownProfession, null, StateUnavailable, null, 0, null, null)];
+            ? [new FreeSampleOffer(ownProfession, ownPick, StateAvailable, StartRoute(subtest, ownPick), 0, null, null, successLimit)]
+            : [new FreeSampleOffer(ownProfession, null, StateUnavailable, null, 0, null, null, successLimit)];
     }
 
     public async Task<bool> IsOfferedAsync(string userId, string subtest, string contentRef, CancellationToken ct)
@@ -198,7 +203,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             // this sample is being graded.
             return claim.ContentId == content.ContentId
                 && claim.Profession == ownProfession
-                && HasOpenSlot(await LoadUsesAsync(claim, tracking: false, ct), exceptResourceId: null);
+                && HasOpenSlot(await LoadUsesAsync(claim, tracking: false, ct), exceptResourceId: null, subtest: subtest);
         }
 
         var picks = await ResolvePicksAsync(subtest, ct);
@@ -280,7 +285,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
         // otherwise it may only produce a result while a slot is left and no
         // OTHER use of the sample is being graded — so a retried failed use can
         // never become a third success.
-        return own is not null && (own.State == UseState.Done || HasOpenSlot(uses, resourceId));
+        return own is not null && (own.State == UseState.Done || HasOpenSlot(uses, resourceId, subtest));
     }
 
     /// <summary>Grading gate for a Speaking session: the session itself is a bound
@@ -330,10 +335,10 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
 
     private sealed record ResolvedContent(string Profession, string ContentId);
 
-    /// <summary>Fewer than <see cref="SuccessLimit"/> results and nothing else of
+    /// <summary>Fewer than the subtest's result limit and nothing else of
     /// the sample in grading (<paramref name="exceptResourceId"/> excluded).</summary>
-    private static bool HasOpenSlot(IReadOnlyList<UseStatus> uses, string? exceptResourceId)
-        => uses.Count(u => u.State == UseState.Done && u.Use.ResourceId != exceptResourceId) < SuccessLimit
+    private static bool HasOpenSlot(IReadOnlyList<UseStatus> uses, string? exceptResourceId, string subtest)
+        => uses.Count(u => u.State == UseState.Done && u.Use.ResourceId != exceptResourceId) < SuccessLimitFor(subtest)
             && !uses.Any(u => u.State == UseState.Grading && u.Use.ResourceId != exceptResourceId);
 
     private async Task<bool> BindAsync(
@@ -344,7 +349,7 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
         var uses = await LoadUsesAsync(claim, tracking: true, ct);
         var own = uses.FirstOrDefault(u => u.Use.ResourceId == resourceId);
         if (own is { State: UseState.Done }) return true; // idempotent re-entry of a produced result
-        if (!HasOpenSlot(uses, resourceId)) return false;
+        if (!HasOpenSlot(uses, resourceId, claim.Subtest)) return false;
 
         var now = DateTimeOffset.UtcNow;
         var released = new List<object>();

@@ -69,9 +69,11 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
     {
         var candidateVisible = report.Status == WritingAssessmentV11Status.CandidateReady
             && report.CandidateReportVisible;
-        var score = report.CandidateNumericScoreEnabled && candidateVisible
+        int? score = report.CandidateNumericScoreEnabled && candidateVisible
             ? report.EstimatedPracticeScore
             : null;
+        if (score is { } unroundedScore)
+            score = OetLearner.Api.Services.OetScoring.OetReportedScaledScore(unroundedScore);
         var gradeBand = score is { } scoreValue
             ? OetLearner.Api.Services.OetScoring.OetGradeLabel(
                 OetLearner.Api.Services.OetScoring.OetGradeLetterFromScaled(scoreValue))

@@ -72,7 +72,13 @@ public sealed record LiveVoiceTranscriptSegment(
     int StartMs,
     int EndMs,
     string Text,
-    double? Confidence = null);
+    double? Confidence = null,
+    string? SourceRecordingId = null);
+
+public sealed record LiveVoiceAudioCaptureResponse(
+    string RecordingId,
+    string MimeType,
+    int DurationSeconds);
 
 public sealed record LiveVoiceTranscriptResponse(
     string TranscriptId,

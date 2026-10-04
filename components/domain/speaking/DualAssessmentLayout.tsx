@@ -29,6 +29,7 @@ export interface DualAssessmentLayoutProps {
   aiPlaceholderCta?: ReactNode;
   showFullCriteria?: boolean;
   showReadinessBand?: boolean;
+  showTutorAssessment?: boolean;
 }
 
 function pickLargestDelta(
@@ -108,15 +109,16 @@ export function DualAssessmentLayout({
   aiPlaceholderCta,
   showFullCriteria = true,
   showReadinessBand = true,
+  showTutorAssessment = true,
 }: DualAssessmentLayoutProps) {
   const { ai, tutor, divergence } = data;
-  const bothPresent = !!ai && !!tutor;
+  const bothPresent = showTutorAssessment && !!ai && !!tutor;
 
   return (
     <div className="flex flex-col gap-4" data-testid="dual-assessment-layout">
       {bothPresent && divergence && <DivergenceBanner divergence={divergence} />}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={cn('grid gap-4', showTutorAssessment ? 'md:grid-cols-2' : 'md:grid-cols-1')}>
         <DualAssessmentColumn
           kind="ai"
           title="AI Assessment"
@@ -134,23 +136,25 @@ export function DualAssessmentLayout({
           }
           placeholderCta={aiPlaceholderCta}
         />
-        <DualAssessmentColumn
-          kind="tutor"
-          title="Tutor Assessment"
-          assessment={tutor}
-          showFullCriteria={showFullCriteria}
-          showReadinessBand={showReadinessBand}
-          attribution={
-            tutor
-              ? {
-                  name: tutor.tutorName,
-                  photoUrl: tutor.tutorPhotoUrl,
-                  submittedAt: tutor.submittedAt,
-                }
-              : undefined
-          }
-          placeholderCta={tutorPlaceholderCta}
-        />
+        {showTutorAssessment ? (
+          <DualAssessmentColumn
+            kind="tutor"
+            title="Tutor Assessment"
+            assessment={tutor}
+            showFullCriteria={showFullCriteria}
+            showReadinessBand={showReadinessBand}
+            attribution={
+              tutor
+                ? {
+                    name: tutor.tutorName,
+                    photoUrl: tutor.tutorPhotoUrl,
+                    submittedAt: tutor.submittedAt,
+                  }
+                : undefined
+            }
+            placeholderCta={tutorPlaceholderCta}
+          />
+        ) : null}
       </div>
 
       {/* Universal advisory disclaimer */}
@@ -162,10 +166,14 @@ export function DualAssessmentLayout({
       >
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
         <div>
-          <p className="font-bold">Both estimates are advisory, not an official OET score.</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted">
-            Use this dual view to triangulate your readiness. Official OET results can only be obtained from an OET test session.
-          </p>
+          <p className="font-bold">{showTutorAssessment
+            ? 'Both estimates are advisory, not an official OET score.'
+            : 'This AI practice estimate is not an official OET score.'}</p>
+          {showTutorAssessment ? (
+            <p className="mt-0.5 text-xs leading-relaxed text-muted">
+              Use this dual view to triangulate your readiness. Official OET results can only be obtained from an OET test session.
+            </p>
+          ) : null}
         </div>
       </Card>
     </div>

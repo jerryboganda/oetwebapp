@@ -101,33 +101,23 @@ describe('Speaking session results: processing → result, never a dead end', ()
     expect(await screen.findByText('Grading your role-play…')).toBeInTheDocument();
   });
 
-  it('free sample with one result: primary CTA "Try Again - 1 Free Retry Remaining" to the same card', async () => {
+  it('shows completion after the free Speaking attempt and directs new attempts to the paid route', async () => {
     mockGetSession.mockResolvedValue({ ...SESSION, isFreeSample: true });
     mockGetResults.mockResolvedValue({ assessmentState: 'completed', retryable: false, failureReason: null });
     mockListFreeSamples.mockResolvedValue([
-      { professionId: 'medicine', contentId: 'rpc-1', state: 'retry_available', route: '/speaking/roleplay/rpc-1?free=1' },
-    ]);
-    render(<SpeakingSessionResultsPage />);
-
-    const cta = await screen.findByRole('link', { name: 'Try Again - 1 Free Retry Remaining' });
-    expect(cta).toHaveAttribute('href', '/speaking/roleplay/rpc-1?free=1');
-    // No paid "reattempt" of the free card.
-    expect(screen.queryByText('Reattempt this speaking card')).not.toBeInTheDocument();
-  });
-
-  it('free sample after the second result: "Free sample completed"', async () => {
-    mockListFreeSamples.mockResolvedValue([
-      { professionId: 'medicine', contentId: 'rpc-1', state: 'completed', route: null },
+      { professionId: 'medicine', contentId: 'rpc-1', state: 'completed', route: null, limit: 1, successfulCount: 1, remaining: 0 },
     ]);
     render(<SpeakingSessionResultsPage />);
 
     expect(await screen.findByText('Free sample completed')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /free retry/i })).not.toBeInTheDocument();
+    const cta = await screen.findByRole('link', { name: 'Start new attempt' });
+    expect(cta).toHaveAttribute('href', '/speaking/roleplay/rpc-1');
+    expect(screen.getByText('This free sample is complete. Repeating the card starts a new attempt and uses Speaking credits.')).toBeInTheDocument();
   });
 
   describe('wording follows what the learner handed in', () => {
     const PROCESSING = { assessmentState: 'processing', retryable: false, failureReason: null };
-    const LIVE_NOTE = 'Live conversations cannot be played back here. This transcript is what was marked.';
+    const LIVE_NOTE = 'The full conversation is not stored as one replayable recording. Short microphone clips are available with verified candidate-transcript evidence. Echo cancellation is enabled, but speaker audio may still be picked up by your microphone.';
 
     it.each<[string | undefined, RegExp]>([
       ['live_voice', /^We saved the transcript of your live conversation on .+ and queued it for marking\.$/],

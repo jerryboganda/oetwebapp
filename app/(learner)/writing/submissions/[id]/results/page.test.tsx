@@ -333,7 +333,7 @@ describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 
 
     // The AI Estimated Practice Score /500 + grade band is the headline even
     // though the older /grade data also loaded; raw total stays secondary.
-    expect(screen.getByTestId('ai-estimated-score')).toHaveTextContent('382/500');
+    expect(screen.getByTestId('ai-estimated-score')).toHaveTextContent('380/500');
     expect(screen.getByTestId('ai-grade-band')).toHaveTextContent('Grade B');
     expect(screen.getByText('33/38')).toBeInTheDocument();
     expect(screen.queryByText('writing.submissions.results.estimatedBand')).not.toBeInTheDocument();

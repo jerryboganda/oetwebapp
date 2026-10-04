@@ -16,8 +16,8 @@ using AiCreditReservationService = OetLearner.Api.Services.Ai.AiCreditReservatio
 namespace OetLearner.Api.Tests.FreeSamples;
 
 /// <summary>
-/// Free sample retry addendum (owner 23 Sep 2026): each learner gets exactly TWO
-/// successful AI-graded results per subtest, both on the SAME pinned item of
+/// Free sample retry contract: Writing allows TWO successful AI-graded results
+/// and Speaking allows ONE, both on the SAME pinned item of
 /// their own profession. Only a produced result counts (start/exit, failed or
 /// abandoned uses never do), a third is refused, a profession change neither
 /// resets nor moves the allowance, and two racing binds for the last slot
@@ -283,7 +283,7 @@ public sealed class FreeSampleRetryPolicyTests
     }
 
     [Fact]
-    public async Task Speaking_RestartingRebindsForFree_TwoResultsThenTheCardIsPaid()
+    public async Task Speaking_RestartingRebindsForFree_OneResultThenTheCardIsPaid()
     {
         await using var db = NewDb();
         await EnableAsync(db);
@@ -312,24 +312,18 @@ public sealed class FreeSampleRetryPolicyTests
         Assert.False((await sessions.CreateSessionAsync("u1", Practice(card), default)).IsFreeSample);
 
         await MarkAssessedAsync(db, first.SessionId);
-        var retry = (await svc.ListAsync("u1", "speaking", default)).Single();
-        Assert.Equal(FreeSampleService.StateRetryAvailable, retry.State);
-        Assert.Equal(FreeSampleService.StartRoute("speaking", card), retry.Route); // same card
-        Assert.Equal($"/speaking/sessions/{first.SessionId}/results", retry.LastResultRoute);
-        Assert.Equal(first.SessionId, retry.LastSubmissionId);
-
-        var second = await sessions.CreateSessionAsync("u1", Practice(card), default);
-        Assert.True(second.IsFreeSample);
-        await MarkAssessedAsync(db, second.SessionId);
-
         var done = (await svc.ListAsync("u1", "speaking", default)).Single();
         Assert.Equal(FreeSampleService.StateCompleted, done.State);
+        Assert.Equal(FreeSampleService.SpeakingSuccessLimit, done.Limit);
+        Assert.Equal(1, done.SuccessfulCount);
         Assert.Equal(0, done.Remaining);
         Assert.Null(done.Route);
+        Assert.Equal($"/speaking/sessions/{first.SessionId}/results", done.LastResultRoute);
+        Assert.Equal(first.SessionId, done.LastSubmissionId);
 
-        var third = await sessions.CreateSessionAsync("u1", Practice(card), default);
-        Assert.False(third.IsFreeSample);
-        var ex = await Assert.ThrowsAsync<ApiException>(() => sessions.FinishWarmupAsync("u1", third.SessionId, default));
+        var paidRetry = await sessions.CreateSessionAsync("u1", Practice(card), default);
+        Assert.False(paidRetry.IsFreeSample);
+        var ex = await Assert.ThrowsAsync<ApiException>(() => sessions.FinishWarmupAsync("u1", paidRetry.SessionId, default));
         Assert.Equal("ai_credits_insufficient", ex.ErrorCode);
     }
 

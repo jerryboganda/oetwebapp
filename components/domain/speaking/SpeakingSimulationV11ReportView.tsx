@@ -15,6 +15,7 @@ import {
   type SpeakingSimulationV11Evidence,
   type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
+import { oetReportedGradeFromScaled, oetReportedScoreFromScaled } from '@/lib/scoring';
 import type { SpeakingInputKind } from '@/lib/speaking/input-kind';
 
 interface SpeakingSimulationV11ReportViewProps {
@@ -26,8 +27,7 @@ interface SpeakingSimulationV11ReportViewProps {
   tutorOverridesBySessionId?: Record<string, SpeakingSimulationV11LearnerTutorOverride | null>;
   title?: string;
   /**
-   * What the learner handed in. Omitted or 'recording' keeps the audio wording; 'live_voice' says
-   * there is no audio; null (nothing known yet) stays neutral.
+   * What the learner handed in. Live voice may have short, evidence-linked mic clips; null stays neutral.
    */
   inputKind?: SpeakingInputKind | null;
 }
@@ -87,7 +87,10 @@ function EvidenceAudioButton({
     try {
       if (!audioRef.current) {
         const objectUrl = await fetchAuthorizedObjectUrl(
-          speakingSimulationV11AudioPath(sessionId, evidence.sourceRecordingId),
+          speakingSimulationV11AudioPath(
+            evidence.sourceSpeakingSessionId || sessionId,
+            evidence.sourceRecordingId,
+          ),
         );
         objectUrlRef.current = objectUrl;
         const audio = new Audio(objectUrl);
@@ -96,7 +99,7 @@ function EvidenceAudioButton({
       }
       const audio = audioRef.current;
       if (!audio) return;
-      audio.currentTime = Math.max(0, (evidence.startMs ?? 0) / 1000);
+      audio.currentTime = Math.max(0, (evidence.sourceAudioOffsetMs ?? evidence.startMs ?? 0) / 1000);
       await audio.play();
       setLoading(false);
     } catch (err) {
@@ -179,7 +182,12 @@ function CriterionCard({
             >
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                 <span className="font-semibold">{evidence.evidenceType}</span>
-                {evidence.turnNumber ? <span>Turn {evidence.turnNumber}</span> : null}
+                {evidence.turnNumber ? (
+                  <span>
+                    {evidence.sourceCardSlot ? `Card ${evidence.sourceCardSlot.toUpperCase()} · ` : ''}
+                    Turn {evidence.turnNumber}
+                  </span>
+                ) : null}
                 {evidence.startMs != null ? <span>{formatTime(evidence.startMs)}–{formatTime(evidence.endMs)}</span> : null}
                 <span className="rounded-full bg-surface px-2 py-0.5">
                   {evidence.evidenceStatus === 'supported'
@@ -222,17 +230,35 @@ function CardBreakdownCard({
           <p className="mt-1 text-xs text-muted">
             Confidence: <span className="font-semibold text-navy">{breakdown.confidenceLabel}</span>
             {' · '}Range: <span className="font-semibold text-navy">
-              {breakdown.scoreRangeLow ?? '—'}–{breakdown.scoreRangeHigh ?? '—'}
+              {breakdown.scoreRangeLow == null ? '—' : oetReportedScoreFromScaled(breakdown.scoreRangeLow)}
+              –{breakdown.scoreRangeHigh == null ? '—' : oetReportedScoreFromScaled(breakdown.scoreRangeHigh)}
             </span>
           </p>
         </div>
         <div className="text-right">
           <span className="text-2xl font-black tabular-nums text-navy">
-            {breakdown.estimatedPracticeScore ?? '—'}
+            {breakdown.estimatedPracticeScore == null
+              ? '—'
+              : oetReportedScoreFromScaled(breakdown.estimatedPracticeScore)}
           </span>
           <span className="ml-1 text-xs text-muted">/ 500</span>
+          {breakdown.estimatedPracticeScore != null ? (
+            <p className="text-xs font-semibold text-muted">
+              Grade {oetReportedGradeFromScaled(breakdown.estimatedPracticeScore)}
+            </p>
+          ) : null}
         </div>
       </div>
+      {tutorOverride ? (
+        <div className="mt-4 rounded-lg border border-success/30 bg-success/10 p-3">
+          <p className="eyebrow text-success-strong">Human tutor revision</p>
+          <p className="mt-1 text-sm font-semibold text-navy">
+            {oetReportedScoreFromScaled(tutorOverride.estimatedPracticeScore)} / 500 · range{' '}
+            {oetReportedScoreFromScaled(tutorOverride.scoreRangeLow)}-{oetReportedScoreFromScaled(tutorOverride.scoreRangeHigh)}
+          </p>
+          <p className="mt-1 text-xs text-navy">{tutorOverride.reason}</p>
+        </div>
+      ) : null}
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {breakdown.criteria.map((criterion) => (
           <CriterionCard
@@ -242,13 +268,6 @@ function CardBreakdownCard({
           />
         ))}
       </div>
-      {tutorOverride ? (
-        <div className="mt-4 rounded-lg border border-success/30 bg-success/10 p-3">
-          <p className="eyebrow text-success-strong">Human tutor revision</p>
-          <p className="mt-1 text-sm font-semibold text-navy">{tutorOverride.estimatedPracticeScore} / 500 · range {tutorOverride.scoreRangeLow}-{tutorOverride.scoreRangeHigh}</p>
-          <p className="mt-1 text-xs text-navy">{tutorOverride.reason}</p>
-        </div>
-      ) : null}
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <Card className="p-4">
           <h3 className="text-sm font-semibold text-navy">Strengths</h3>
@@ -333,9 +352,12 @@ export function SpeakingSimulationV11ReportView({
   inputKind,
 }: SpeakingSimulationV11ReportViewProps) {
   const report = response.report;
-  const score = report?.estimatedPracticeScore ?? response.estimatedPracticeScore;
-  const rangeLow = report?.scoreRangeLow ?? response.scoreRangeLow;
-  const rangeHigh = report?.scoreRangeHigh ?? response.scoreRangeHigh;
+  const rawScore = report?.estimatedPracticeScore ?? response.estimatedPracticeScore;
+  const score = rawScore == null ? null : oetReportedScoreFromScaled(rawScore);
+  const rawRangeLow = report?.scoreRangeLow ?? response.scoreRangeLow;
+  const rawRangeHigh = report?.scoreRangeHigh ?? response.scoreRangeHigh;
+  const rangeLow = rawRangeLow == null ? null : oetReportedScoreFromScaled(rawRangeLow);
+  const rangeHigh = rawRangeHigh == null ? null : oetReportedScoreFromScaled(rawRangeHigh);
   const disclaimer = report?.graphDisclaimer || response.graphDisclaimer;
   const [activeTab, setActiveTab] = useState<'overview' | 'criteria' | 'transcript' | 'plan'>('overview');
   const cardBreakdowns = report?.cardBreakdowns ?? [];
@@ -375,16 +397,16 @@ export function SpeakingSimulationV11ReportView({
     );
   }
 
-  // A live conversation keeps only its transcript, so it must not promise audio; the audio wording stays for recordings.
+  // Live voice uses short, consented microphone clips linked to candidate evidence, not one full-session recording.
   const transcriptCopy = inputKind === 'live_voice'
     ? {
       heading: 'Transcript of your live conversation',
-      note: 'Live conversations cannot be played back here. This is the transcript that was marked.',
+      note: 'Short microphone clips are available when transcript evidence has a verified source recording. The app does not make a full-session recording or directly record provider playback; echo cancellation is enabled, but speaker audio may still be picked up by your microphone.',
     }
     : inputKind === null
       ? {
         heading: 'Transcript',
-        note: 'Audio playback is available only for evidence linked to a recording. Live conversations have no playback here.',
+        note: 'Audio playback is available only for evidence linked to a verified source recording.',
       }
       : {
         heading: 'Transcript and source audio',
@@ -402,7 +424,7 @@ export function SpeakingSimulationV11ReportView({
             <p className="eyebrow text-primary">{title}</p>
             <h1 className="mt-1 text-2xl font-bold text-navy">AI Estimated Practice Score</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">
-              This is a calibrated practice estimate based on the released v1.1 rubric and source-linked evidence.
+              This practice estimate uses the released v1.1 rubric and source-linked evidence. Its score mapping is not calibrated against an expert-labelled benchmark.
             </p>
             <p className="mt-3 inline-flex items-center gap-2 rounded-md bg-background-light px-3 py-2 text-xs font-semibold text-navy">
               <CircleAlert className="h-4 w-4" aria-hidden />
@@ -419,6 +441,11 @@ export function SpeakingSimulationV11ReportView({
               <div className="grid h-24 w-24 place-items-center rounded-full bg-surface text-center">
                 <span className="text-3xl font-black tabular-nums text-navy">{score ?? '—'}</span>
                 <span className="text-2xs font-semibold text-muted">/ 500</span>
+                {score != null ? (
+                  <span className="text-xs font-semibold text-muted">
+                    Grade {oetReportedGradeFromScaled(score)}
+                  </span>
+                ) : null}
               </div>
             </div>
             <div className="text-sm">
@@ -450,11 +477,18 @@ export function SpeakingSimulationV11ReportView({
         <Card className="border-success/30 bg-success/10 p-5">
           <p className="eyebrow text-success-strong">Human tutor revision</p>
           <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <p className="text-xl font-bold text-navy">{tutorOverride.estimatedPracticeScore} / 500</p>
-            <p className="text-sm text-navy">Reviewed range: {tutorOverride.scoreRangeLow}-{tutorOverride.scoreRangeHigh}</p>
+            <p className="text-xl font-bold text-navy">
+              {oetReportedScoreFromScaled(tutorOverride.estimatedPracticeScore)} / 500
+            </p>
+            <p className="text-sm text-navy">
+              Reviewed range: {oetReportedScoreFromScaled(tutorOverride.scoreRangeLow)}-
+              {oetReportedScoreFromScaled(tutorOverride.scoreRangeHigh)}
+            </p>
           </div>
           <p className="mt-2 text-sm leading-relaxed text-navy">{tutorOverride.reason}</p>
-          <p className="mt-2 text-xs text-success-strong">The AI report above remains preserved as the original practice estimate; this human revision is shown separately.</p>
+          <p className="mt-2 text-xs text-success-strong">
+            The AI report above remains preserved as the original practice estimate; this human revision is shown separately.
+          </p>
         </Card>
       ) : null}
 
@@ -463,7 +497,7 @@ export function SpeakingSimulationV11ReportView({
           <div>
             <h2 className="text-lg font-semibold text-navy">Card breakdowns</h2>
             <p className="mt-1 text-sm text-muted">
-              The combined estimate is derived only from these two independently valid card reports.
+              The combined estimate assesses communication across both independently verified cards; card reports and source-linked evidence remain available below.
             </p>
           </div>
           <div className="space-y-4">

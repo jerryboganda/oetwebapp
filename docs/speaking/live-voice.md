@@ -18,6 +18,10 @@
 >   failure texts and the grader's input stop implying an audio recording for a live conversation
 >   ([Results wording by input kind](#results-wording-by-input-kind)), and the exam results page shows the band by label, an
 >   advisory note, per-card links and an honest not-completed state ([Exam results page](#exam-results-page)).
+> - **Live microphone clips (implemented after the runs above; not production-verified):** current consented live sessions
+>   store short clips from the learner microphone during detected speech, linked to verified transcript evidence. The app
+>   does not make a full-session recording or directly record provider playback; browser echo cancellation cannot guarantee
+>   that provider or background audio is excluded ([Consent and disclosure](#consent-and-disclosure)).
 > - **Microphone wording** names the live control and never a recording ([Microphone error wording](#microphone-error-wording)).
 > - **Credits:** the Card A hold is taken first in `finish-intro` (a refused hold leaves the exam in Intro), `ai_exam` can no
 >   longer be created through `POST /v1/speaking/sessions`, and the reservation insert survives a cancelled request
@@ -118,11 +122,13 @@ owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is th
 - Prompt rules: candidate-first; TEACH-BACK (never fill the gap from the card; RULE_18 is the separate honest-response
   rule); and, added with this change and **pending verification**, never attribute unsaid treatments, tests or
   referrals to the doctor (2 of 5 post-#257 teach-back replies did).
-- No audio is stored. The learner results pages say what was handed in: for a live conversation "We saved the transcript of
-  your live conversation{ on DATE} and queued it for marking." (banner, practice sessions only), "Your live conversation
-  transcript is being marked." while grading and, on the Transcript tab, the audio player strip is hidden and an info note says
-  "No audio recording is stored for live conversations, so there is nothing to play back. This transcript is what was marked." Grading sees
-  the transcript only ([Results wording by input kind](#results-wording-by-input-kind)).
+- The earlier production run matrix exercised transcript-only live voice and correctly reported that no audio was stored for
+  that build. Current code stores consented short clips captured from the learner's microphone during local speech activity;
+  it does not make a full-session recording or directly record provider playback. Browser echo cancellation is enabled but
+  cannot guarantee isolation, so provider or background audio may still be picked up by the microphone. Learner result
+  wording identifies the transcript as the graded submission, hides the full-session recorder player, and exposes only
+  verified source-linked microphone clips in the v1.1 report. This newer clip path is implemented but is not
+  production-verified ([Results wording by input kind](#results-wording-by-input-kind)).
 - A connection that drops mid-conversation, or a patient that stays silent, is restored automatically up to twice per card
   ([Mid-session recovery](#mid-session-recovery)); after that (or for a run the server pinned, QA accounts only) the error is
   shown as before. A provider that cannot *start* is replaced by the other one automatically
@@ -386,17 +392,22 @@ has had speech in flight at the close yet, so neither drain has been exercised b
 
 ## Results wording by input kind
 
-Live voice stores no audio, so a results page that says "We received your recording" is wrong for it. The pages therefore say
-what was actually handed in. **Verified in production on 1 Oct 2026** by the production E2E (`inputKindLiveVoice`,
+Live voice stores consented short microphone clips captured during detected learner speech and linked to verified candidate
+transcript evidence—not a full-session recording. A results page that says "We received your recording" is still wrong for
+it. The pages therefore say what was actually handed in. Browser echo cancellation is enabled, but cannot guarantee that
+provider or background audio is excluded from a microphone clip.
+**Transcript wording was verified in production on 1 Oct 2026** by the production E2E (`inputKindLiveVoice`,
 `resultsWordingHonest` and `noProviderNamesInUi` green on RUN 1, RUN 5 and RUN 6, see [Credits, History and wording
-checks](#credits-history-and-wording-checks)); the rehearsal on the old build had failed the same checks (the page said "We
-received your recording").
+checks](#credits-history-and-wording-checks)); those runs predate consented microphone-clip capture and do not verify the current
+clip path.
 
 - **Server: `inputKind`.** `GET /v1/speaking/sessions/{id}/results` returns it besides `assessmentState`, `retryable`,
   `failureReason`, `isFreeSample`, `cardId` and `usesV11` (camelCase; `null` is serialised as JSON `null`):
-  - `"recording"`: the session has a non-warm-up `SpeakingRecording` row, archived or not (it wins over a transcript);
-  - `"live_voice"`: otherwise, its latest transcript was saved by the live voice flow (its `Provider` starts with
-    `LiveVoiceService.TranscriptProviderPrefix`, `realtime-`): no audio exists;
+  - `"recording"`: the session has a non-warm-up recorder or tutor recording, archived or not;
+  - `"live_voice"`: its latest transcript was saved by the live voice flow (its `Provider` starts with
+    `LiveVoiceService.TranscriptProviderPrefix`, `realtime-`) or it has a non-warm-up candidate clip from
+    `ConversationHub`; linked microphone clips may exist, but the app does not make a full-session recording or directly
+    record provider playback;
   - `null`: otherwise, meaning nothing has been received yet (a recorder card before its upload lands, or a live transcript
     save that failed or has not arrived) or an older server.
 - **Browser.** One pure module, `lib/speaking/input-kind.ts`, decides the wording: `speakingInputKind(isTutorRoom, serverKind)`
@@ -406,20 +417,21 @@ received your recording").
 - Persistent results copy never contains "processing", "being graded", "analysing" or "Check again": the production QA script
   (`waitForGrade` in `scripts/qa/speaking-live-voice-browser-e2e.mjs`) reads those words as "still grading".
 - **Transcript tab and report.** `TranscriptPlayerWithComments` takes an opt-in `hideAudioPlayer` (default `false`: the expert
-  console is unchanged). The learner page passes `hideAudioPlayer={inputKind !== 'recording'}`, which drops the audio player
-  strip, turns the `[mm:ss]` chips into plain text and no longer marks the first segment as playing, and shows the note
-  "No audio recording is stored for live conversations, so there is nothing to play back. This transcript is what was marked." only for
-  `live_voice`. The V1.1 report view takes an optional `inputKind`: omitted or `recording` keeps "Transcript and source audio";
-  `live_voice` says "Transcript of your live conversation" and that no audio recording is stored for live conversations (and words its
-  technical-review notice from the transcript, not from audio); `null` says "Transcript".
+  console is unchanged). The learner page passes `hideAudioPlayer={inputKind !== 'recording'}`, which hides the full-session
+  player and turns the `[mm:ss]` chips into plain text. For `live_voice`, the V1.1 report view says "Transcript of your live
+  conversation", explains that it is not a full-session recording and that mic clips may pick up speaker audio, and offers
+  clips only for verified source-linked evidence; playback uses the source session and clip-relative offset. Its
+  technical-review notice correctly identifies missing transcript/assessment evidence rather than blaming absent
+  full-session audio. `null` stays neutral.
 - **Backend texts that changed** (learner-visible). The live voice consent refusals now read "Accept the Speaking consent before
   starting the live AI patient." and "Accept the current Speaking consent before starting the live AI patient."; the grading
   failure reasons read "We couldn't finish grading your role-play. Try grading again. You won't be charged twice." and "Your
   role-play could not be scored automatically. Try grading again." The recorder-only texts "No speech could be detected in the
   recording." and "We couldn't transcribe your recording. Try grading again." are kept.
 - **Grader.** For a transcript whose `Provider` starts with `realtime-`, the classic grader's input carries one extra line before
-  the transcript saying that the role-play had no audio recording (transcript only) and that the feedback must never tell the
-  candidate to listen to or check a recording. The template id (`speaking.score.v2`), rubric, scoring rules and output schema are
+  the transcript saying that the role-play has no full-session audio recording and that the feedback must never tell the
+  candidate to listen to or check a recording. Grading remains transcript-only; candidate clip capture supports playback and
+  v1.1 acoustic assessment, not a change to the classic grader. The template id (`speaking.score.v2`), rubric, scoring rules and output schema are
   unchanged. The gateway's request digest covers the input, so a live-voice grade that straddles the deploy can be asked of the
   provider twice; the stored assessment is still deduplicated by its identity hash and the hold is committed once.
 - **Not changed on purpose** (owner/legal decision): the Rules and consent screen (it still reads "Your audio is recorded and
@@ -452,8 +464,8 @@ in production on 1 Oct 2026** by the RUN 5 and RUN 6 wording check; the other it
 
 Exam-card pages show no submission banner (the card's `submittedAt` stays empty): for cards the live wording appears while
 grading and in the Transcript tab note. Other copy was aligned the same way: the Speaking tour ("How your answers are saved"),
-the recordings page (no audio recording is stored for live conversations, so they are not listed there), the AI tooltip ("based on your
-transcript") and the admin "Submission received" toggle.
+the recordings page (which now lists consented live microphone clips and distinguishes them from tutor/recorder audio),
+the AI tooltip ("based on your transcript") and the admin "Submission received" toggle.
 
 ## Consent and disclosure
 
@@ -1009,7 +1021,8 @@ What the matrix did **not** run: a pinned run (the flag was never created), an O
   against 1.6-1.8 s, p95 4.0 s against 2.1-2.3 s) and it stops talking sooner when interrupted (0.1-0.5 s against 1.2-2.2 s).
   The harness checks `transcriptQuality` Q5 and `failoverAsRequested` read these Gemini events as failures; excluding a spontaneous
   stall window and a lost reply is a harness follow-up. The matrix also showed every card's grader note stating that confidence is
-  low because a live conversation has no audio for the linguistic criteria: the AI score of a live role-play is transcript-only.
+  low because the classic live-role-play grader receives transcript text only for linguistic criteria; consented microphone
+  clips linked to candidate transcript spans are used by the separate v1.1 acoustic assessment when its evidence gates pass.
 - Admin `GET /v1/admin/ai/operations?featureCode=speaking.grade&state=Leased` listed 82 operations without a resource id that stay
   Leased (their lease is refreshed every 30-60 min; the oldest was created on 30 Sep 19:43). They did not block or double-charge
   any grade in the matrix (credits exact, one `GradingDeduct` row per card); the cause (a first gateway attempt that never reaches
@@ -1026,9 +1039,10 @@ What the matrix did **not** run: a pinned run (the flag was never created), an O
 - Gemini vs OpenAI: the 1 Oct matrix gives graded runs of both (above), but voice quality, realism and card adherence are
   listening judgements that no harness reads (the blind A/B listening set is the owner's input). Claude grading is $0 marginal on
   the Max subscription sidecar; the Anthropic API route still has no credit and is only the fallback.
-- The Rules and consent screen still reads "Your audio is recorded and graded by AI" before a live conversation, which stores
-  no audio: an owner/legal decision. The results copy itself was fixed on 1 Oct 2026 ([Results wording by input
-  kind](#results-wording-by-input-kind), pending production verification).
+- The Rules and consent screen says short clips are captured from the learner microphone during detected speech, the app
+  does not make a full-session recording or directly record provider playback, and browser echo cancellation cannot guarantee
+  isolation. The results copy was aligned to the same limit ([Results wording by input kind](#results-wording-by-input-kind));
+  this clip path is implemented but not production-verified.
 - Recovery is best-effort (two restores per card, none for a run the server pinned). Measured in production on 1 Oct 2026
   (OpenAI, build 74ca2607b, compare script, unpinned): a dropped data channel at 60 s had a new session offered 0.6 s later and
   connected 1.7 s after the drop (2 OpenAI offers, 308/500), but the saved transcript was corrupted: 16 segments instead of the

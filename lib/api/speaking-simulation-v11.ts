@@ -24,6 +24,9 @@ export interface SpeakingSimulationV11Evidence {
   sourceTranscriptId: string | null;
   sourceRecordingId: string | null;
   isPrimary: boolean;
+  sourceCardSlot?: string | null;
+  sourceSpeakingSessionId?: string | null;
+  sourceAudioOffsetMs?: number | null;
 }
 
 export interface SpeakingSimulationV11Criterion {

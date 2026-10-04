@@ -338,6 +338,17 @@ export function oetGradeFromScaled(scaled: number): OetGrade {
   return 'E';
 }
 
+/** Round a score for candidate-facing OET reporting without changing scoring thresholds. */
+export function oetReportedScoreFromScaled(scaled: number): number {
+  const value = clampInt(scaled, OET_SCALED_MIN, OET_SCALED_MAX);
+  return Math.min(OET_SCALED_MAX, Math.max(OET_SCALED_MIN, Math.floor(value / 10 + 0.5) * 10));
+}
+
+/** Grade corresponding to the candidate-facing ten-point reported score. */
+export function oetReportedGradeFromScaled(scaled: number): OetGrade {
+  return oetGradeFromScaled(oetReportedScoreFromScaled(scaled));
+}
+
 /** Human-friendly grade label, e.g. "Grade B" or "Grade C+". */
 export function oetGradeLabel(grade: OetGrade): string {
   return `Grade ${grade}`;

@@ -279,7 +279,7 @@ describe('Speaking page', () => {
       expect(follows(library, exam)).toBe(true);
       expect(follows(exam, tutor)).toBe(true);
       expect(free).toHaveTextContent('Free Speaking Mock');
-      expect(free).toHaveTextContent('Free sample includes one full attempt + one free retry.');
+      expect(free).toHaveTextContent('Free sample includes one full attempt. New attempts require Speaking credits.');
     });
 
     it('links straight to the offered card — no cross-profession picker', async () => {

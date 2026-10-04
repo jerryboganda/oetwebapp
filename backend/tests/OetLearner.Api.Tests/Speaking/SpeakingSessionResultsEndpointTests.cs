@@ -59,12 +59,13 @@ public sealed class SpeakingSessionResultsEndpointTests : IClassFixture<TestWebA
             (await owner.GetAsync($"/v1/speaking/sessions/sps_missing_{Guid.NewGuid():N}/results")).StatusCode);
     }
 
-    // inputKind tells the results pages what the learner handed in, so a live conversation (a saved
-    // transcript, no audio at all) is never described as a recording.
+    // Live microphone clips do not turn a live conversation into a recorder-fallback submission.
     [Theory]
     [InlineData("realtime_transcript", "live_voice")]
     [InlineData("recording", "recording")]
-    [InlineData("recording_and_realtime_transcript", "recording")]
+    [InlineData("recording_and_realtime_transcript", "live_voice")]
+    [InlineData("live_candidate_clip", "live_voice")]
+    [InlineData("recording_and_live_candidate_clip", "live_voice")]
     [InlineData("archived_recording", "recording")]
     [InlineData("warmup_recording_only", null)]
     [InlineData("warmup_recording_and_realtime_transcript", "live_voice")]
@@ -87,6 +88,13 @@ public sealed class SpeakingSessionResultsEndpointTests : IClassFixture<TestWebA
             case "recording_and_realtime_transcript":
                 await SeedTranscriptAsync(sessionId, realtime);
                 await SeedRecordingAsync(sessionId);
+                break;
+            case "live_candidate_clip":
+                await SeedRecordingAsync(sessionId, source: SpeakingRecordingSource.ConversationHub);
+                break;
+            case "recording_and_live_candidate_clip":
+                await SeedRecordingAsync(sessionId);
+                await SeedRecordingAsync(sessionId, source: SpeakingRecordingSource.ConversationHub);
                 break;
             case "archived_recording":
                 // A retention-swept recording is still what the learner handed in.
@@ -147,16 +155,24 @@ public sealed class SpeakingSessionResultsEndpointTests : IClassFixture<TestWebA
         await db.SaveChangesAsync();
     }
 
-    private async Task SeedRecordingAsync(string sessionId, bool isWarmup = false, bool isArchived = false)
+    private async Task SeedRecordingAsync(
+        string sessionId,
+        bool isWarmup = false,
+        bool isArchived = false,
+        SpeakingRecordingSource source = SpeakingRecordingSource.ClientMediaRecorder)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         db.SpeakingRecordings.Add(new SpeakingRecording
         {
-            Id = isWarmup ? $"srec_warmup_{Guid.NewGuid():N}" : SpeakingSessionRecordingService.RecordingIdFor(sessionId),
+            Id = isWarmup ? $"srec_warmup_{Guid.NewGuid():N}"
+                : source == SpeakingRecordingSource.ConversationHub
+                    ? $"spv11_rec_{Guid.NewGuid():N}"
+                    : SpeakingSessionRecordingService.RecordingIdFor(sessionId),
             SpeakingSessionId = sessionId,
             MediaAssetId = $"smed_{Guid.NewGuid():N}",
             Sha256 = string.Empty,
+            Source = source,
             IsWarmup = isWarmup,
             IsArchived = isArchived,
             CreatedAt = DateTimeOffset.UtcNow,

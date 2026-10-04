@@ -5,7 +5,8 @@
  * Pure on purpose: the results-page tests mock '@/lib/api/speaking-sessions' with a
  * fixed export list, so nothing here may live in (or import from) lib/api.
  *
- * - `live_voice`: a transcript of the live conversation. No audio exists.
+ * - `live_voice`: a transcript of the live conversation, with optional
+ *   consented microphone clips linked to verified candidate-transcript evidence.
  * - `recording`: an audio recording (recorder fallback, or a human tutor room).
  * - `null`: nothing received yet, or a server that does not say. Copy stays neutral.
  *
@@ -26,9 +27,9 @@ export function commonInputKind(kinds: ReadonlyArray<Kind>): Kind {
   return first !== null && kinds.every((kind) => kind === first) ? first : null;
 }
 
-/** Info note above a live conversation's transcript: there is no audio to play. */
+/** The full conversation is not stored as one replayable recording. */
 export const LIVE_TRANSCRIPT_NOTE =
-  'Live conversations cannot be played back here. This transcript is what was marked.';
+  'The full conversation is not stored as one replayable recording. Short microphone clips are available with verified candidate-transcript evidence. Echo cancellation is enabled, but speaker audio may still be picked up by your microphone.';
 
 /** Body of the "Submission received" banner. `onLabel` is the already-formatted date, if known. */
 export function submissionReceivedCopy(kind: Kind, onLabel?: string | null): string {

@@ -66,9 +66,7 @@ public sealed class SpeakingSimulationV11AudioCaptureService(
         }
 
         var options = await conversationOptions.GetAsync(ct);
-        var normalizedMimeType = string.IsNullOrWhiteSpace(mimeType)
-            ? "audio/webm"
-            : mimeType.Trim().ToLowerInvariant();
+        var normalizedMimeType = NormalizeMimeType(mimeType);
 
         if (!options.AllowedMimeTypes.Contains(normalizedMimeType, StringComparer.OrdinalIgnoreCase))
         {
@@ -214,6 +212,11 @@ public sealed class SpeakingSimulationV11AudioCaptureService(
         "audio/wav" or "audio/x-wav" => "wav",
         _ => "webm",
     };
+
+    internal static string NormalizeMimeType(string? mimeType)
+        => string.IsNullOrWhiteSpace(mimeType)
+            ? "audio/webm"
+            : mimeType.Split(';', 2)[0].Trim().ToLowerInvariant();
 }
 
 public sealed record SpeakingSimulationV11AudioCaptureResult(

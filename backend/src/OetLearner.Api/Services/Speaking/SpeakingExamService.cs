@@ -677,7 +677,11 @@ public sealed class SpeakingExamService(
             Mode: SpeakingExamModes.ToCode(exam.Mode),
             State: SpeakingExamStates.ToCode(exam.State),
             OverallStatus: overall,
-            CombinedScaledScore: combined ?? (exam.CombinedScaledSnapshot is { } s ? (int)Math.Round(s) : null),
+            CombinedScaledScore: combined is { } reportedCombined
+                ? OetScoring.OetReportedScaledScore(reportedCombined)
+                : exam.CombinedScaledSnapshot is { } snapshot
+                    ? OetScoring.OetReportedScaledScore(snapshot)
+                    : null,
             ReadinessBand: band ?? exam.ReadinessBandSnapshot,
             Cards: cards);
     }
@@ -763,7 +767,7 @@ public sealed class SpeakingExamService(
             ModelId: report.ModelName ?? string.Empty,
             PromptTemplateId: report.PromptTemplateId ?? string.Empty,
             CriterionScores: new Dictionary<string, CriterionScore>(),
-            EstimatedScaledScore: score,
+            EstimatedScaledScore: OetScoring.OetReportedScaledScore(score),
             ReadinessBand: OetScoring.SpeakingReadinessBandCode(OetScoring.SpeakingReadinessBandFromScaled(score)),
             OverallSummary: string.Empty,
             ConfidenceBand: report.ConfidenceLabel ?? "medium",

@@ -5,6 +5,7 @@ import { describeMicrophoneError } from '@/lib/mobile/speaking-recorder';
 import {
   createGeminiLiveToken,
   createOpenAiLiveOffer,
+  captureLiveVoiceAudioTurn,
   getLiveVoicePreflight,
   persistLiveVoiceTranscript,
   persistLiveVoiceTurn,
@@ -189,6 +190,7 @@ export interface SpeechSpan {
 const SPEECH_LEVEL = 0.05;
 const SPEECH_END_SILENCE_MS = 700;
 const MIN_SPEECH_BURST_MS = 400;
+const PATIENT_AUDIO_TAIL_MS = 750;
 
 export interface SpeechTracker {
   /** Feeds one meter sample; returns the burst that just ended (after SPEECH_END_SILENCE_MS of quiet), if any. */
@@ -196,6 +198,23 @@ export interface SpeechTracker {
   /** The burst in progress, if any. */
   active: () => { startMs: number } | null;
   reset: () => void;
+}
+
+interface ActiveCandidateAudioCapture {
+  recorder: MediaRecorder;
+  chunks: Blob[];
+  startMs: number;
+  providerSessionId: string;
+  sessionId: string;
+}
+
+interface FailedCandidateAudioCapture {
+  audio: Blob;
+  durationMs: number;
+  startMs: number;
+  endMs: number;
+  providerSessionId: string;
+  sessionId: string;
 }
 
 /**
@@ -466,6 +485,32 @@ export function inOrderOfStart(segments: readonly LiveVoiceTranscriptSegmentInpu
   return [...segments].sort((a, b) => a.startMs - b.startMs);
 }
 
+export interface CandidateAudioRecordingSpan {
+  startMs: number;
+  endMs: number;
+  recordingId: string;
+}
+
+export function linkCandidateAudioToTranscript(
+  segments: readonly LiveVoiceTranscriptSegmentInput[],
+  recordings: readonly CandidateAudioRecordingSpan[],
+): LiveVoiceTranscriptSegmentInput[] {
+  return segments.map((segment) => {
+    if (segment.speaker !== 'candidate' || segment.sourceRecordingId) return segment;
+    const recording = recordings
+      .map((candidate) => ({
+        candidate,
+        overlapMs: Math.max(
+          0,
+          Math.min(segment.endMs, candidate.endMs) - Math.max(segment.startMs, candidate.startMs),
+        ),
+      }))
+      .filter((match) => match.overlapMs > 0)
+      .sort((left, right) => right.overlapMs - left.overlapMs)[0]?.candidate;
+    return recording ? { ...segment, sourceRecordingId: recording.recordingId } : segment;
+  });
+}
+
 /**
  * The patient is a person in a consultation, never an assistant. Gemini nevertheless appends a safety disclaimer to some
  * replies ("This information is for educational purposes and is not medical advice; please see a healthcare professional"),
@@ -503,6 +548,7 @@ export const transcriptCheckpointKey = (sessionId: string) => `${CHECKPOINT_KEY_
 interface TranscriptCheckpoint {
   sessionId: string;
   segments: LiveVoiceTranscriptSegmentInput[];
+  audioRecordings: CandidateAudioRecordingSpan[];
   /** The last turn number sent, so a restored hook carries on counting. */
   turnIndex: number;
   /** Date.now() when the role-play's clock started (the first provider session went live): a reload rebuilds the clock from it. */
@@ -517,7 +563,18 @@ function isStoredSegment(value: unknown): boolean {
   return (segment.speaker === 'candidate' || segment.speaker === 'patient')
     && typeof segment.text === 'string' && segment.text.trim() !== ''
     && typeof segment.startMs === 'number' && Number.isFinite(segment.startMs)
-    && typeof segment.endMs === 'number' && Number.isFinite(segment.endMs);
+    && typeof segment.endMs === 'number' && Number.isFinite(segment.endMs)
+    && (segment.sourceRecordingId === undefined
+      || (typeof segment.sourceRecordingId === 'string' && segment.sourceRecordingId.length <= 64));
+}
+
+function isStoredAudioRecording(value: unknown): value is CandidateAudioRecordingSpan {
+  if (!value || typeof value !== 'object') return false;
+  const recording = value as Record<string, unknown>;
+  return typeof recording.recordingId === 'string' && recording.recordingId.length <= 64
+    && typeof recording.startMs === 'number' && Number.isFinite(recording.startMs)
+    && typeof recording.endMs === 'number' && Number.isFinite(recording.endMs)
+    && recording.endMs >= recording.startMs;
 }
 
 /** The stored copy of this session's conversation; null when there is none, it is not this session's, it is too old or malformed, or storage is unavailable. */
@@ -529,12 +586,14 @@ function readTranscriptCheckpoint(sessionId: string): TranscriptCheckpoint | nul
     const stored: unknown = JSON.parse(raw);
     const value: Record<string, unknown> = stored !== null && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
     const { segments, turnIndex, originEpochMs, savedAt } = value;
+    const audioRecordings = value.audioRecordings ?? [];
     const now = Date.now();
     if (
       value.sessionId !== sessionId
       // Recent, and not from the future: a tampered or skewed stamp must not slip past the age limit.
       || typeof savedAt !== 'number' || !(savedAt >= now - CHECKPOINT_TTL_MS && savedAt <= now + CHECKPOINT_CLOCK_SKEW_MS)
       || !Array.isArray(segments) || segments.length === 0 || !segments.every(isStoredSegment)
+      || !Array.isArray(audioRecordings) || !audioRecordings.every(isStoredAudioRecording)
       || typeof turnIndex !== 'number' || !Number.isInteger(turnIndex) || turnIndex < 0
       // The clock origin is rebuilt from this: an absurd value (0, the future) would put every new segment time out of range.
       || typeof originEpochMs !== 'number' || !Number.isFinite(originEpochMs)
@@ -546,7 +605,12 @@ function readTranscriptCheckpoint(sessionId: string): TranscriptCheckpoint | nul
     return {
       sessionId,
       // Only the fields the server takes: whatever else sits in storage is never sent.
-      segments: (segments as LiveVoiceTranscriptSegmentInput[]).map(({ speaker, startMs, endMs, text }) => ({ speaker, startMs, endMs, text })),
+      segments: (segments as LiveVoiceTranscriptSegmentInput[]).map(
+        ({ speaker, startMs, endMs, text, sourceRecordingId }) => ({
+          speaker, startMs, endMs, text, ...(sourceRecordingId ? { sourceRecordingId } : {}),
+        }),
+      ),
+      audioRecordings: audioRecordings as CandidateAudioRecordingSpan[],
       turnIndex,
       originEpochMs,
       savedAt,
@@ -631,6 +695,8 @@ export function useSpeakingRealtimeVoice(
   // Tags the turn ids of one mount: after a reload the same Speaking session gets a new hook instance, and the server
   // drops a repeated (session, clientTurnId) as a duplicate, so the ids of two instances must never meet.
   const runTagRef = useRef('');
+  const activeSessionIdRef = useRef(sessionId);
+  activeSessionIdRef.current = sessionId;
   const segmentsRef = useRef<LiveVoiceTranscriptSegmentInput[]>([]);
   // True once THIS mount took in words. A conversation restored after a reload does not count: a first connect that
   // fails then may still fail over to the other provider (the server replays the saved turns into either one).
@@ -660,6 +726,15 @@ export function useSpeakingRealtimeVoice(
   const muteTurnRef = useRef(false);
   const speechTrackerRef = useRef<SpeechTracker>(createSpeechTracker());
   const candidateSpansRef = useRef<SpeechSpan[]>([]);
+  const activeCandidateAudioRef = useRef<ActiveCandidateAudioCapture | null>(null);
+  const candidateAudioRecordingsRef = useRef<CandidateAudioRecordingSpan[]>([]);
+  const pendingCandidateAudioRef = useRef<Promise<boolean>[]>([]);
+  const failedCandidateAudioRef = useRef<FailedCandidateAudioCapture[]>([]);
+  const candidateAudioUnavailableRef = useRef(false);
+  const candidateAudioSuppressedRef = useRef(false);
+  const patientAudioPlaybackRef = useRef(false);
+  const patientAudioTailTimerRef = useRef<number | undefined>(undefined);
+  const stopCandidateAudioRef = useRef<(() => Promise<boolean>) | null>(null);
   const assignedBurstStartRef = useRef(-1);
   // One clock for the whole role-play (see markSessionLive): performance.now() when the FIRST provider session went live,
   // the same instant as Date.now() (a reload rebuilds the clock from it), and how long after the origin the CURRENT
@@ -668,6 +743,16 @@ export function useSpeakingRealtimeVoice(
   const originEpochRef = useRef<number | null>(null);
   const sessionOffsetMsRef = useRef(0);
   const checkpointTimerRef = useRef<number | undefined>(undefined);
+
+  const finishPatientAudioPlayback = useCallback(() => {
+    if (!patientAudioPlaybackRef.current) return;
+    patientAudioPlaybackRef.current = false;
+    window.clearTimeout(patientAudioTailTimerRef.current);
+    patientAudioTailTimerRef.current = window.setTimeout(() => {
+      patientAudioTailTimerRef.current = undefined;
+      if (!speechTrackerRef.current.active()) candidateAudioSuppressedRef.current = false;
+    }, PATIENT_AUDIO_TAIL_MS);
+  }, []);
 
   // Per-provider teardown between failover attempts. Handlers are detached BEFORE close(): a WebSocket
   // closes asynchronously, and a stale onclose would flip the next attempt to 'error'. The microphone,
@@ -684,6 +769,7 @@ export function useSpeakingRealtimeVoice(
       } catch {}
     });
     playbackSourcesRef.current.clear();
+    finishPatientAudioPlayback();
     const channel = dataChannelRef.current;
     if (channel) {
       channel.onopen = null;
@@ -727,6 +813,7 @@ export function useSpeakingRealtimeVoice(
   }, []);
 
   const closeTransport = useCallback(() => {
+    void stopCandidateAudioRef.current?.();
     resetProviderTransport();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -751,7 +838,8 @@ export function useSpeakingRealtimeVoice(
     });
     playbackSourcesRef.current.clear();
     nextPlaybackTimeRef.current = outputContextRef.current?.currentTime ?? 0;
-  }, []);
+    finishPatientAudioPlayback();
+  }, [finishPatientAudioPlayback]);
 
   const prepare = useCallback(async () => {
     if (!sessionId) return;
@@ -804,6 +892,7 @@ export function useSpeakingRealtimeVoice(
     writeTranscriptCheckpoint({
       sessionId,
       segments: segmentsRef.current,
+      audioRecordings: candidateAudioRecordingsRef.current,
       turnIndex: turnIndexRef.current,
       originEpochMs,
       savedAt: Date.now(),
@@ -812,6 +901,137 @@ export function useSpeakingRealtimeVoice(
   const scheduleCheckpoint = useCallback(() => {
     if (checkpointTimerRef.current === undefined) checkpointTimerRef.current = window.setTimeout(flushCheckpoint, CHECKPOINT_WRITE_DELAY_MS);
   }, [flushCheckpoint]);
+
+  const saveCandidateAudio = useCallback(async (capture: FailedCandidateAudioCapture): Promise<boolean> => {
+    try {
+      const stored = await captureLiveVoiceAudioTurn(capture.sessionId, {
+        providerSessionId: capture.providerSessionId,
+        audio: capture.audio,
+        durationMs: capture.durationMs,
+      });
+      if (activeSessionIdRef.current !== capture.sessionId) return true;
+      candidateAudioRecordingsRef.current.push({
+        startMs: capture.startMs,
+        endMs: capture.endMs,
+        recordingId: stored.recordingId,
+      });
+      segmentsRef.current = linkCandidateAudioToTranscript(
+        segmentsRef.current,
+        candidateAudioRecordingsRef.current,
+      );
+      scheduleCheckpoint();
+      return true;
+    } catch {
+      if (activeSessionIdRef.current === capture.sessionId) {
+        failedCandidateAudioRef.current.push(capture);
+        setError('Your voice recording could not be saved. Please try again before leaving this role-play.');
+      }
+      return false;
+    }
+  }, [scheduleCheckpoint, sessionId]);
+
+  const startCandidateAudioCapture = useCallback((stream: MediaStream, startedAt: number) => {
+    if (activeCandidateAudioRef.current) return;
+    const providerSessionId = providerSessionIdRef.current;
+    if (!providerSessionId) return;
+    if (typeof MediaRecorder === 'undefined') {
+      candidateAudioUnavailableRef.current = true;
+      setError('This browser cannot securely record your Speaking response. Use an updated Chrome, Edge, Safari or the mobile app.');
+      return;
+    }
+
+    try {
+      const recorder = new MediaRecorder(stream);
+      const capture: ActiveCandidateAudioCapture = {
+        recorder,
+        chunks: [],
+        startMs: sinceOrigin(startedAt),
+        providerSessionId,
+        sessionId,
+      };
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) capture.chunks.push(event.data);
+      };
+      recorder.start();
+      activeCandidateAudioRef.current = capture;
+    } catch {
+      candidateAudioUnavailableRef.current = true;
+      setError('This browser could not record your Speaking response. Please use an updated browser and try again.');
+    }
+  }, [sessionId, sinceOrigin]);
+
+  const stopCandidateAudioCapture = useCallback((): Promise<boolean> => {
+    const capture = activeCandidateAudioRef.current;
+    if (!capture) return Promise.resolve(true);
+    activeCandidateAudioRef.current = null;
+    const endMs = sinceOrigin(performance.now());
+    const durationMs = Math.max(1, endMs - capture.startMs);
+    const task = new Promise<boolean>((resolve) => {
+      const finish = (audio: Blob) => {
+        if (audio.size === 0) {
+          candidateAudioUnavailableRef.current = true;
+          setError('No candidate audio was captured for this response. Please try again before leaving this role-play.');
+          resolve(false);
+          return;
+        }
+        void saveCandidateAudio({
+          audio,
+          durationMs,
+          startMs: capture.startMs,
+          endMs,
+          providerSessionId: capture.providerSessionId,
+          sessionId: capture.sessionId,
+        }).then(resolve);
+      };
+
+      capture.recorder.onstop = () => {
+        finish(new Blob(capture.chunks, { type: capture.recorder.mimeType || 'audio/webm' }));
+      };
+      capture.recorder.onerror = () => {
+        candidateAudioUnavailableRef.current = true;
+        setError('Your voice recording stopped unexpectedly. Please try again before leaving this role-play.');
+        resolve(false);
+      };
+      try {
+        if (capture.recorder.state === 'recording') capture.recorder.stop();
+        else finish(new Blob(capture.chunks, { type: capture.recorder.mimeType || 'audio/webm' }));
+      } catch {
+        candidateAudioUnavailableRef.current = true;
+        setError('Your voice recording could not be finished. Please try again before leaving this role-play.');
+        resolve(false);
+      }
+    });
+    pendingCandidateAudioRef.current.push(task);
+    return task;
+  }, [saveCandidateAudio, sinceOrigin]);
+
+  const beginPatientAudioPlayback = useCallback(() => {
+    window.clearTimeout(patientAudioTailTimerRef.current);
+    patientAudioTailTimerRef.current = undefined;
+    patientAudioPlaybackRef.current = true;
+    candidateAudioSuppressedRef.current = true;
+    void stopCandidateAudioCapture();
+  }, [stopCandidateAudioCapture]);
+
+  const flushCandidateAudio = useCallback(async (): Promise<boolean> => {
+    await stopCandidateAudioCapture();
+    while (pendingCandidateAudioRef.current.length > 0) {
+      const pending = pendingCandidateAudioRef.current.splice(0);
+      if ((await Promise.all(pending)).some((saved) => !saved)) break;
+    }
+
+    if (failedCandidateAudioRef.current.length > 0) {
+      const failed = [...failedCandidateAudioRef.current];
+      failedCandidateAudioRef.current = [];
+      for (const capture of failed) {
+        if (!(await saveCandidateAudio(capture))) return false;
+      }
+    }
+
+    return !candidateAudioUnavailableRef.current && failedCandidateAudioRef.current.length === 0;
+  }, [saveCandidateAudio, stopCandidateAudioCapture]);
+
+  stopCandidateAudioRef.current = stopCandidateAudioCapture;
 
   // A reload, a closed tab or a backgrounded page can end this document without any cleanup running, so the copy is also
   // written the moment the page is hidden. Leaving the card writes it one last time: a save that then fails must keep it.
@@ -840,6 +1060,9 @@ export function useSpeakingRealtimeVoice(
     // Where a provider that gives no timing (Gemini) put this speaker's words; never triggers the late-fragment rule.
     timing?: { startMs: number; endMs: number },
   ) => {
+    if (speaker === 'patient' && text.trim()) {
+      beginPatientAudioPlayback();
+    }
     // GPT-Live sends the space between two words as a delta of its own: it is kept, but only on the end of the same
     // speaker's last segment (see appendTranscriptFragment); anywhere else a blank fragment has nothing to join.
     const lastSegment = segmentsRef.current[segmentsRef.current.length - 1];
@@ -851,6 +1074,10 @@ export function useSpeakingRealtimeVoice(
     // Arrival stamp for a fragment with no provider timing, on the role-play clock.
     const arrived = sinceOrigin(now);
     const late = appendTranscriptFragment(segmentsRef.current, speaker, fragment, exact, spoken ?? timing ?? { startMs: arrived, endMs: arrived }, Boolean(spoken));
+    segmentsRef.current = linkCandidateAudioToTranscript(
+      segmentsRef.current,
+      candidateAudioRecordingsRef.current,
+    );
     heardRef.current = true;
     setCaptions((current) => {
       const index = late
@@ -863,7 +1090,7 @@ export function useSpeakingRealtimeVoice(
     });
     if (speaker === 'candidate') setAwaitingCandidateStart(false);
     scheduleCheckpoint();
-  }, [scheduleCheckpoint, sinceOrigin]);
+  }, [beginPatientAudioPlayback, scheduleCheckpoint, sinceOrigin]);
 
   // Takes the pending turn synchronously, so fragments that arrive while a save
   // is in flight start the next turn instead of being cleared with this one.
@@ -958,6 +1185,22 @@ export function useSpeakingRealtimeVoice(
 
   const handleOpenAiEvent = useCallback((value: Record<string, unknown>) => {
     const type = providerEventType(value).toLowerCase();
+    if (
+      (type.includes('output_audio') || type.includes('response.audio'))
+      && !type.endsWith('.done')
+      && type !== 'response.done'
+    ) {
+      beginPatientAudioPlayback();
+    }
+    if (
+      type === 'response.done'
+      || type === 'response.cancelled'
+      || type.includes('output_audio.done')
+      || type.includes('response.audio.done')
+      || type === 'session.closed'
+    ) {
+      finishPatientAudioPlayback();
+    }
     // Before the link is live an event ends the attempt (so the next provider can be tried); after, it is a mid-conversation fault.
     const pending = pendingAttemptOf(attemptRef);
     if (type.includes('error')) {
@@ -1016,7 +1259,7 @@ export function useSpeakingRealtimeVoice(
     else pendingPatientRef.current += delta;
     flushIfLong();
     setPhase(speaker === 'patient' ? 'speaking' : 'listening');
-  }, [addCaption, flushIfLong, queueFlush]);
+  }, [addCaption, beginPatientAudioPlayback, finishPatientAudioPlayback, flushIfLong, queueFlush]);
 
   const handleGeminiMessage = useCallback((value: Record<string, unknown>) => {
     if (value.setupComplete || value.setup_complete) {
@@ -1076,6 +1319,7 @@ export function useSpeakingRealtimeVoice(
         const inline = (partRecord.inlineData ?? partRecord.inline_data) as Record<string, unknown> | undefined;
         const data = inline?.data;
         if (typeof data !== 'string') continue;
+        beginPatientAudioPlayback();
         lastPatientOutputAtRef.current = performance.now();
         if (muteTurnRef.current) continue;
         const outputContext = outputContextRef.current;
@@ -1085,7 +1329,10 @@ export function useSpeakingRealtimeVoice(
         source.buffer = buffer;
         source.connect(outputContext.destination);
         playbackSourcesRef.current.add(source);
-        source.addEventListener('ended', () => playbackSourcesRef.current.delete(source), { once: true });
+        source.addEventListener('ended', () => {
+          playbackSourcesRef.current.delete(source);
+          if (playbackSourcesRef.current.size === 0) finishPatientAudioPlayback();
+        }, { once: true });
         const startAt = Math.max(outputContext.currentTime, nextPlaybackTimeRef.current);
         source.start(startAt);
         nextPlaybackTimeRef.current = startAt + buffer.duration;
@@ -1095,10 +1342,11 @@ export function useSpeakingRealtimeVoice(
     if (serverContent.turnComplete || serverContent.turn_complete) {
       turnPatientTextRef.current = '';
       muteTurnRef.current = false;
+      if (playbackSourcesRef.current.size === 0) finishPatientAudioPlayback();
       void queueFlush();
       setPhase('listening');
     }
-  }, [captureTranscript, interruptPlayback, queueFlush]);
+  }, [beginPatientAudioPlayback, captureTranscript, finishPatientAudioPlayback, interruptPlayback, queueFlush]);
 
   const configureMeter = useCallback((stream: MediaStream, context: AudioContext) => {
     const source = context.createMediaStreamSource(stream);
@@ -1118,7 +1366,19 @@ export function useSpeakingRealtimeVoice(
       }
       const level = Math.min(1, Math.sqrt(sum / values.length) * 3);
       setMicLevel(level);
+      const activeBefore = speechTrackerRef.current.active();
       const span = speechTrackerRef.current.update(level, performance.now());
+      const activeNow = speechTrackerRef.current.active();
+      if (
+        activeBefore && !activeNow
+        && !patientAudioPlaybackRef.current
+        && patientAudioTailTimerRef.current === undefined
+      ) {
+        candidateAudioSuppressedRef.current = false;
+      }
+      if (activeNow && !candidateAudioSuppressedRef.current && !patientAudioPlaybackRef.current) {
+        startCandidateAudioCapture(stream, activeNow.startMs);
+      }
       if (span) {
         candidateSpansRef.current.push(span);
         if (candidateSpansRef.current.length > 40) candidateSpansRef.current.shift();
@@ -1132,7 +1392,7 @@ export function useSpeakingRealtimeVoice(
       meterFrameRef.current = window.requestAnimationFrame(tick);
     };
     meterFrameRef.current = window.requestAnimationFrame(tick);
-  }, []);
+  }, [startCandidateAudioCapture]);
 
   const waitForIce = useCallback(async (peer: RTCPeerConnection) => {
     if (peer.iceGatheringState === 'complete') return;
@@ -1578,7 +1838,6 @@ export function useSpeakingRealtimeVoice(
     const current = () => runRef.current === run;
     const provider = providerRef.current;
     const providerSessionId = providerSessionIdRef.current;
-    const segments = segmentsRef.current;
     if (!provider || !providerSessionId) {
       // Nothing ever went live, so there is nothing to save: leaving must never wait on a failed or cancelled start.
       stoppingRef.current = true;
@@ -1620,17 +1879,29 @@ export function useSpeakingRealtimeVoice(
       // The per-turn rows are advisory: a turn that cannot be saved must not keep the transcript from being saved.
       await flushPromiseRef.current.catch(() => undefined);
       await flushPendingTurn().catch(() => undefined);
+      if (!(await flushCandidateAudio())) {
+        throw new Error('Your voice recording could not be saved. Please try again before leaving this role-play.');
+      }
       // The conversation is over: release the microphone and provider before the (retryable) save.
       if (current()) closeTransport();
       // The server rejects an empty transcript, and there is nothing to grade in one.
-      if (segments.length > 0) {
-        await persistLiveVoiceTranscript(sessionId, { provider, providerSessionId, segments: inOrderOfStart(withoutPatientDisclaimers(segments)) });
+      const finalSegments = linkCandidateAudioToTranscript(
+        segmentsRef.current,
+        candidateAudioRecordingsRef.current,
+      );
+      segmentsRef.current = finalSegments;
+      if (finalSegments.length > 0) {
+        await persistLiveVoiceTranscript(sessionId, {
+          provider,
+          providerSessionId,
+          segments: inOrderOfStart(withoutPatientDisclaimers(finalSegments)),
+        });
       }
       // Saved: the refresh-safe copy has done its job (a failed save keeps it, so a reload can still bring it back).
       clearTranscriptCheckpoint(sessionId);
       releaseSession();
       if (current()) {
-        if (segments.length > 0) setEnded(true);
+        if (finalSegments.length > 0) setEnded(true);
         setConnection('ended');
       }
       return true;
@@ -1654,7 +1925,7 @@ export function useSpeakingRealtimeVoice(
       }
       return false;
     }
-  }, [closeTransport, flushPendingTurn, sessionId]);
+  }, [closeTransport, flushCandidateAudio, flushPendingTurn, sessionId]);
 
   // Single-flight: overlapping callers (the exam page's 3 s polls, the unmount cleanup) share one save.
   const stop = useCallback((): Promise<boolean> => {
@@ -1687,6 +1958,14 @@ export function useSpeakingRealtimeVoice(
     pinnedRef.current = false;
     speechTrackerRef.current.reset();
     candidateSpansRef.current = [];
+    activeCandidateAudioRef.current = null;
+    pendingCandidateAudioRef.current = [];
+    failedCandidateAudioRef.current = [];
+    window.clearTimeout(patientAudioTailTimerRef.current);
+    patientAudioTailTimerRef.current = undefined;
+    patientAudioPlaybackRef.current = false;
+    candidateAudioUnavailableRef.current = false;
+    candidateAudioSuppressedRef.current = false;
     assignedBurstStartRef.current = -1;
     candidateSpokeUntilRef.current = null;
     providerRef.current = null;
@@ -1700,6 +1979,7 @@ export function useSpeakingRealtimeVoice(
     // new provider session lands after everything that was saved (see markSessionLive). Any other session starts empty.
     const restored = sessionId ? readTranscriptCheckpoint(sessionId) : null;
     segmentsRef.current = restored?.segments ?? [];
+    candidateAudioRecordingsRef.current = restored?.audioRecordings ?? [];
     turnIndexRef.current = restored?.turnIndex ?? 0;
     originEpochRef.current = restored?.originEpochMs ?? null;
     originRef.current = restored ? performance.now() - Math.max(0, Date.now() - restored.originEpochMs) : null;

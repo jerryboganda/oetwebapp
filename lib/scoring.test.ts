@@ -24,6 +24,8 @@ import {
   normalizeWritingCountry,
   oetGradeFromScaled,
   oetGradeLabel,
+  oetReportedGradeFromScaled,
+  oetReportedScoreFromScaled,
   oetRawToScaled,
   deriveWritingResultFromCriteria,
 } from './scoring';
@@ -134,6 +136,25 @@ describe('OET scoring — oetGradeFromScaled', () => {
   it('oetGradeLabel prefixes "Grade "', () => {
     expect(oetGradeLabel('B')).toBe('Grade B');
     expect(oetGradeLabel('C+')).toBe('Grade C+');
+  });
+});
+
+describe('OET reporting score', () => {
+  it.each([
+    [0, 0],
+    [304, 300],
+    [305, 310],
+    [375, 380],
+    [496, 500],
+    [-4, 0],
+    [508, 500],
+  ])('rounds %i to the nearest ten as %i', (score, expected) => {
+    expect(oetReportedScoreFromScaled(score)).toBe(expected);
+  });
+
+  it('maps the displayed score to its reported grade without changing the raw grade helper', () => {
+    expect(oetReportedGradeFromScaled(345)).toBe('B');
+    expect(oetGradeFromScaled(345)).toBe('C+');
   });
 });
 

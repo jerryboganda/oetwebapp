@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Speaking;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -307,8 +308,22 @@ internal static class LiveVoiceTestKit
             new LiveVoiceContentReadinessService(db, null, NullLogger<LiveVoiceContentReadinessService>.Instance),
             state,
             clock,
-            log);
+            log,
+            new SpeakingSimulationV11AudioCaptureService(
+                db,
+                new StubFileStorage(),
+                new LiveVoiceConversationOptionsProvider(),
+                Options.Create(new SpeakingComplianceOptions()),
+                NullLogger<SpeakingSimulationV11AudioCaptureService>.Instance));
         return new LiveVoiceRig(service, db, state, handler, log, clock, options);
+    }
+
+    private sealed class LiveVoiceConversationOptionsProvider : IConversationOptionsProvider
+    {
+        public Task<ConversationOptions> GetAsync(CancellationToken ct = default)
+            => Task.FromResult(new ConversationOptions());
+
+        public void Invalidate() { }
     }
 
     /// <summary>

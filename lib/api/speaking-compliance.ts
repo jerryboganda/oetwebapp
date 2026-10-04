@@ -110,6 +110,7 @@ export interface MyRecordingRow {
   scenarioTitle: string;
   durationSeconds: number;
   mimeType: string | null;
+  source: 'ClientMediaRecorder' | 'LiveKitEgress' | 'ConversationHub' | string;
   isArchived: boolean;
   retentionExpiresAt: string | null;
 }

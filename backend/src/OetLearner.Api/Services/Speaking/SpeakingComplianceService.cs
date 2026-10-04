@@ -304,6 +304,7 @@ public sealed class SpeakingComplianceService(
                 c != null ? c.ScenarioTitle : "(scenario unavailable)",
                 r.DurationSeconds,
                 r.MimeType,
+                r.Source.ToString(),
                 r.IsArchived,
                 r.RetentionExpiresAt))
             .Take(500)

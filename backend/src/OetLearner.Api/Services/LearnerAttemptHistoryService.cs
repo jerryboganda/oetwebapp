@@ -356,7 +356,7 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
 
         if (exam.CombinedScaledSnapshot is { } combined)
         {
-            return $"{(int)Math.Round(combined)}/500";
+            return $"{OetScoring.OetReportedScaledScore(combined)}/500";
         }
 
         if (exam.SessionAId is { } cardA
@@ -364,7 +364,7 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
             && cardScores.TryGetValue(cardA, out var scoreA)
             && cardScores.TryGetValue(cardB, out var scoreB))
         {
-            return $"{(int)Math.Round((scoreA + scoreB) / 2.0)}/500";
+            return $"{OetScoring.OetReportedScaledScore((scoreA + scoreB) / 2.0)}/500";
         }
 
         return exam.State == SpeakingExamState.Completed ? MarkingInProgress : null;
@@ -374,7 +374,7 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
     {
         if (cardScores.TryGetValue(card.Id, out var score))
         {
-            return $"{score}/500";
+            return $"{OetScoring.OetReportedScaledScore(score)}/500";
         }
 
         // A tutor-marked session never gets an AI result, so it is not "in progress" either.

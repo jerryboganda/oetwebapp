@@ -19,18 +19,21 @@
 
 ### Live voice (AI patient): what is stored
 
-- **No audio recording is stored by this app** for a live-voice role-play. It keeps the transcript text with segment timing
-  (`SpeakingTranscripts`, provider `realtime-openai` / `realtime-gemini`) and per-turn working rows (`SpeakingPatientTurns`).
-  The voice provider (OpenAI or Google) receives the microphone audio in real time and may retain bounded session audio under
-  its own policy ([disclosure](live-voice.md#consent-and-disclosure)).
-- `LIVEVOICE__RETENTIONDAYS` (30) wipes only the per-turn working rows. The final transcript, the v1.1 turn evidence and the
-  feedback quotes of a live-voice session have **no expiry code**: the audio sweep above is keyed on `SpeakingRecording`
-  rows, which a live-voice session never has. Whether those should expire is an owner/legal decision.
+- Short, consent-gated clips are captured from the learner's microphone during local speech activity and stored as
+  `SpeakingRecording` / `MediaAsset` rows through the existing `IFileStorage` path. The app does not make a full-session
+  recording or directly record provider playback. Browser echo cancellation is enabled but cannot guarantee isolation:
+  provider or background audio may still be picked up by the microphone. Transcript segments reference their source
+  recording; clips with no verified transcript overlap are not attributed to a candidate segment. Microphone audio is
+  also streamed live to the disclosed voice provider, which may retain bounded session audio under its own policy
+  ([disclosure](live-voice.md#consent-and-disclosure)).
+- The existing `SpeakingAudioRetentionWorker` applies the approved Speaking recording retention window and learner erasure
+  path to these clips. `LIVEVOICE__RETENTIONDAYS` separately wipes per-turn working rows. The final transcript and v1.1
+  turn evidence still have no expiry code; whether those should expire is an owner/legal decision.
 - While a card runs, a copy of the conversation (that session's words only, no tokens or provider ids) is kept in the tab's
   `sessionStorage` for up to 15 minutes so a page refresh does not lose it; it is removed after the transcript is saved
   ([Refresh behaviour](live-voice.md#refresh-behaviour)).
-- The consent screen still says "Your audio is recorded and graded by AI" (one recording consent text shared with the
-  recorder fallback): owner/legal decision ([Known open items](live-voice.md#known-open-items)).
+- The Rules and consent screen discloses short live microphone clips linked to candidate transcript evidence, their retention period and provider processing
+  before recording begins; the server still requires versioned recording, AI-processing and retention consents.
 
 ## Learner rights
 

@@ -3,12 +3,13 @@ import { ApiError } from '@/lib/api/client';
 import type { LiveVoicePreflight } from '@/lib/api/speaking-live-voice';
 import { FakeAudioContext, FakeNode, FakePeer, FakeSocket, FakeStream } from './helpers/realtime-fakes';
 
-const { mockPreflight, mockOffer, mockToken, mockTurn, mockTranscript } = vi.hoisted(() => ({
+const { mockPreflight, mockOffer, mockToken, mockTurn, mockTranscript, mockAudioCapture } = vi.hoisted(() => ({
   mockPreflight: vi.fn(),
   mockOffer: vi.fn(),
   mockToken: vi.fn(),
   mockTurn: vi.fn(),
   mockTranscript: vi.fn(),
+  mockAudioCapture: vi.fn(),
 }));
 
 vi.mock('@/lib/api/speaking-live-voice', () => ({
@@ -17,6 +18,7 @@ vi.mock('@/lib/api/speaking-live-voice', () => ({
   createGeminiLiveToken: mockToken,
   persistLiveVoiceTurn: mockTurn,
   persistLiveVoiceTranscript: mockTranscript,
+  captureLiveVoiceAudioTurn: mockAudioCapture,
 }));
 
 import {
@@ -31,6 +33,29 @@ import {
 
 let frameCallback: FrameRequestCallback | null = null;
 const getUserMedia = vi.fn();
+
+class FakeMediaRecorder {
+  static instances: FakeMediaRecorder[] = [];
+  state: RecordingState = 'inactive';
+  mimeType = 'audio/webm;codecs=opus';
+  ondataavailable: MediaRecorder['ondataavailable'] = null;
+  onstop: MediaRecorder['onstop'] = null;
+  onerror: MediaRecorder['onerror'] = null;
+
+  constructor(_stream: MediaStream) {
+    FakeMediaRecorder.instances.push(this);
+  }
+
+  start() {
+    this.state = 'recording';
+  }
+
+  stop() {
+    this.state = 'inactive';
+    this.ondataavailable?.({ data: new Blob(['candidate voice'], { type: 'audio/webm' }) } as BlobEvent);
+    this.onstop?.(new Event('stop') as Event);
+  }
+}
 
 const preflight = (overrides: Partial<LiveVoicePreflight> = {}): LiveVoicePreflight => ({
   provider: 'gemini',
@@ -148,17 +173,19 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    for (const fn of [mockPreflight, mockOffer, mockToken, mockTurn, mockTranscript, getUserMedia]) fn.mockReset();
+    for (const fn of [mockPreflight, mockOffer, mockToken, mockTurn, mockTranscript, mockAudioCapture, getUserMedia]) fn.mockReset();
     mockPreflight.mockResolvedValue(preflight());
     mockOffer.mockImplementation(async () => offerAnswer(`oai-session-${FakePeer.instances.length}`));
     let minted = 0;
     mockToken.mockImplementation(async () => token(`gem-session-${++minted}`));
     mockTurn.mockResolvedValue({ sessionId: 's1', sequenceNumber: 1, duplicate: false, advisoryStatus: null });
     mockTranscript.mockResolvedValue({ transcriptId: 't1', provider: 'realtime-gemini', wordCount: 3, meanConfidence: 0, generatedAt: '2026-10-01T12:00:00Z' });
+    mockAudioCapture.mockResolvedValue({ recordingId: 'clip-1', mimeType: 'audio/webm', durationSeconds: 1 });
     getUserMedia.mockImplementation(async () => new FakeStream());
     FakePeer.instances = [];
     FakeSocket.instances = [];
     FakeAudioContext.instances = [];
+    FakeMediaRecorder.instances = [];
     FakeNode.amplitude = 0;
     frameCallback = null;
     vi.stubGlobal('RTCPeerConnection', FakePeer);
@@ -243,6 +270,67 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     expect(result.current.provider).toBe('openai');
     expect(result.current.failedOver).toBe(false);
     expect(result.current.recoveries).toBe(1);
+  });
+
+  it('suppresses mic capture during Gemini patient playback and its tail, then resumes after quiet', async () => {
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+    const { result } = await mount();
+    expect(await startVoice(result)).toBe(true);
+
+    await mic('speech', 500);
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+
+    await geminiSays(0, {
+      serverContent: {
+        modelTurn: {
+          parts: [{ inlineData: { data: 'AAAAAA==', mimeType: 'audio/pcm;rate=24000' } }],
+        },
+        turnComplete: true,
+      },
+    });
+    expect(FakeMediaRecorder.instances[0].state).toBe('inactive');
+    expect(FakeAudioContext.instances.at(-1)?.sources).toHaveLength(1);
+
+    await mic('speech', 500);
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+
+    await act(async () => {
+      FakeAudioContext.instances.at(-1)?.sources[0].finish();
+    });
+    await mic('quiet', 800);
+    await advance(800);
+    await mic('speech', 500);
+    expect(FakeMediaRecorder.instances).toHaveLength(2);
+
+    expect(await stopVoice(result)).toBe(true);
+  });
+
+  it('suppresses mic capture during OpenAI patient output and its tail, then resumes after quiet', async () => {
+    vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+    mockPreflight.mockResolvedValue(preflight({ provider: 'openai', candidates: ['openai', 'gemini'] }));
+    const { result } = await mount();
+    expect(await startVoice(result)).toBe(true);
+
+    await mic('speech', 500);
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+
+    await act(async () => {
+      channel(0).emit({ type: 'response.output_audio.delta', delta: 'AAAAAA==' });
+    });
+    expect(FakeMediaRecorder.instances[0].state).toBe('inactive');
+
+    await mic('speech', 500);
+    expect(FakeMediaRecorder.instances).toHaveLength(1);
+
+    await act(async () => {
+      channel(0).emit({ type: 'response.done' });
+    });
+    await mic('quiet', 800);
+    await advance(800);
+    await mic('speech', 500);
+    expect(FakeMediaRecorder.instances).toHaveLength(2);
+
+    expect(await stopVoice(result)).toBe(true);
   });
 
   it('gives a dropped peer connection 5 s to heal before restoring it, and restores a failed one at once', async () => {

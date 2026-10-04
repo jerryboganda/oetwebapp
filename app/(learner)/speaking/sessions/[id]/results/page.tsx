@@ -1,19 +1,16 @@
 'use client';
 
 /**
- * Learner: dual-scoring results view for a speaking session.
+ * Learner-facing AI result and recovery view for a speaking session.
  *
  * Part of the interlocutor-trainee practice route tree
  * (`app/speaking/sessions/[id]/*`) — not the candidate exam results page,
  * which lives under `app/speaking/exam/[id]`.
  *
  * Three tabs:
- * - Overview: DualAssessmentLayout (AI + Tutor side-by-side + divergence banner)
+ * - Overview: AI assessment only; tutor services remain a separate product flow.
  * - Transcript: TranscriptPlayerWithComments (readOnly — comments are tutor-only)
- * - Recommended drills: list of slugs/titles from AI.recommendedDrills + tutor.recommendedDrills
- *
- * If tutor is null, the layout's tutor column shows a CTA "Request tutor review
- * (uses 1 credit)" — visually disabled for now (credit gating wires in later).
+ * - Recommended drills: AI recommendations only.
  *
  * 23 Sep 2026: never a dead end. While grading runs the page polls every
  * 3 s with backoff (capped, then "Check again"); a failed + retryable grade
@@ -28,7 +25,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { BookOpen, Loader2, Mic, UserPlus } from 'lucide-react';
+import { BookOpen, Loader2, Mic } from 'lucide-react';
 
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -60,9 +57,7 @@ import {
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import {
   getSpeakingSimulationV11Assessment,
-  getSpeakingSimulationV11TutorOverride,
   type SpeakingSimulationV11AssessmentResponse,
-  type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
 import {
   LIVE_TRANSCRIPT_NOTE,
@@ -72,27 +67,6 @@ import {
   submissionReceivedCopy,
   type SpeakingInputKind,
 } from '@/lib/speaking/input-kind';
-
-function TutorReviewCta() {
-  return (
-    <div className="flex flex-col items-start gap-2">
-      <p className="text-sm font-semibold text-navy">No tutor review yet</p>
-      <p className="text-xs leading-relaxed text-muted">
-        A calibrated OET tutor can review this session and provide nuanced feedback that AI may miss.
-      </p>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled
-        aria-disabled
-        title="Coming soon. Credit gating not yet enabled."
-      >
-        <UserPlus className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-        Request tutor review (uses 1 credit)
-      </Button>
-    </div>
-  );
-}
 
 function AiProcessingCta() {
   return (
@@ -168,13 +142,6 @@ function GradingStatus({
 }
 
 function FreeSampleNext({ row }: { row: FreeSampleOption | null }) {
-  if (row?.state === 'retry_available' && row.route) {
-    return (
-      <Button asChild fullWidth size="lg" data-testid="speaking-free-retry-cta">
-        <Link href={row.route}>Try Again - 1 Free Retry Remaining</Link>
-      </Button>
-    );
-  }
   if (row?.state === 'completed') {
     return (
       <p className="rounded-lg border border-border bg-background-light px-3 py-2 text-center text-sm font-semibold text-muted" data-testid="speaking-free-completed">
@@ -201,7 +168,6 @@ export default function SpeakingSessionResultsPage() {
 
   const [data, setData] = useState<DualAssessmentResponse | null>(null);
   const [v11, setV11] = useState<SpeakingSimulationV11AssessmentResponse | null>(null);
-  const [v11TutorOverride, setV11TutorOverride] = useState<SpeakingSimulationV11LearnerTutorOverride | null>(null);
   const [session, setSession] = useState<SpeakingSessionDetail | null>(null);
   const [visibility, setVisibility] = useState<SpeakingResultVisibilityDto | null>(null);
   const [transcript, setTranscript] = useState<SpeakingTranscriptPayload | null>(null);
@@ -213,7 +179,6 @@ export default function SpeakingSessionResultsPage() {
   const [pollAttempt, setPollAttempt] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const trackedAiAssessmentRef = useRef(false);
-  const trackedTutorAssessmentRef = useRef(false);
 
   const load = useCallback(async (showSpinner = true) => {
     if (!sessionId) return;
@@ -228,18 +193,16 @@ export default function SpeakingSessionResultsPage() {
       const usesV11 = statusResponse?.usesV11 === true;
       const assessmentPromise = learnerGetDualAssessment(sessionId).catch(() => null);
       const v11Promise = usesV11 ? getSpeakingSimulationV11Assessment(sessionId).catch(() => null) : null;
-      const v11TutorOverridePromise = usesV11 ? getSpeakingSimulationV11TutorOverride(sessionId).catch(() => null) : null;
       const transcriptPromise = visibilityDto?.showTranscript !== false
         ? getSpeakingSessionTranscript(sessionId).catch(() => null)
         : Promise.resolve(null);
 
       const freePromise = listFreeSamples('speaking').catch(() => []);
 
-      const [v11Response, assessmentResponse, transcriptResponse, tutorOverrideResponse, freeRows] = await Promise.all([
+      const [v11Response, assessmentResponse, transcriptResponse, freeRows] = await Promise.all([
         v11Promise,
         assessmentPromise,
         transcriptPromise,
-        v11TutorOverridePromise,
         freePromise,
       ]);
       setStatus(statusResponse);
@@ -248,10 +211,9 @@ export default function SpeakingSessionResultsPage() {
       setVisibility(visibilityDto);
       setData(assessmentResponse);
       setV11(v11Response);
-      setV11TutorOverride(tutorOverrideResponse);
       setTranscript(transcriptResponse?.transcript ?? null);
     } catch (err) {
-      const msg = err instanceof ApiError ? err.message : 'Failed to load assessment.';
+      const msg = err instanceof ApiError ? err.userMessage : 'Could not load this assessment. Please try again.';
       setErrorMsg(msg);
     } finally {
       setLoading(false);
@@ -317,10 +279,8 @@ export default function SpeakingSessionResultsPage() {
   const showSubmissionReceived = visibility?.showSubmissionReceived ?? true;
   const showAiEstimate = visibility?.showAiEstimate ?? true;
   const showReadinessBand = visibility?.showReadinessBand ?? true;
-  const showTutorScore = visibility?.showTutorScore ?? true;
   const showFullCriteria = visibility?.showFullCriteria ?? true;
   const showTranscript = visibility?.showTranscript ?? true;
-  const showTutorComments = visibility?.showTutorComments ?? true;
   const showRecommendedDrills = visibility?.showRecommendedDrills ?? true;
   const allowReattempt = visibility?.allowReattempt ?? true;
 
@@ -329,11 +289,11 @@ export default function SpeakingSessionResultsPage() {
     return {
       sessionId: data.sessionId,
       ai: showAiEstimate ? data.ai : null,
-      tutor: showTutorScore ? data.tutor : null,
-      tutorHistory: showTutorScore ? data.tutorHistory : [],
-      divergence: showAiEstimate && showTutorScore ? data.divergence : null,
+      tutor: null,
+      tutorHistory: [],
+      divergence: null,
     };
-  }, [data, showAiEstimate, showTutorScore]);
+  }, [data, showAiEstimate]);
 
   useEffect(() => {
     if (visibleData?.ai && !trackedAiAssessmentRef.current) {
@@ -341,13 +301,6 @@ export default function SpeakingSessionResultsPage() {
       trackSpeaking('ai_assessment_viewed', {
         sessionId,
         estimatedBand: visibleData.ai.readinessBand,
-      });
-    }
-    if (visibleData?.tutor && !trackedTutorAssessmentRef.current) {
-      trackedTutorAssessmentRef.current = true;
-      trackSpeaking('tutor_assessment_viewed', {
-        sessionId,
-        estimatedBand: visibleData.tutor.readinessBand,
       });
     }
   }, [sessionId, visibleData]);
@@ -360,7 +313,6 @@ export default function SpeakingSessionResultsPage() {
     if (!showRecommendedDrills) return [] as string[];
     const all = new Set<string>();
     visibleData?.ai?.recommendedDrills?.forEach((d) => all.add(d));
-    visibleData?.tutor?.recommendedDrills?.forEach((d) => all.add(d));
     return Array.from(all);
   }, [showRecommendedDrills, visibleData]);
 
@@ -398,14 +350,9 @@ export default function SpeakingSessionResultsPage() {
     />
   );
 
-  const hiddenTutorPlaceholder = (
-    <VisibilityLockedCta
-      title="Tutor review hidden"
-      body="This result visibility profile hides the tutor score and review details for learners on this card."
-    />
-  );
-
-  const reattemptHref = session && !session.isFreeSample ? `/speaking/roleplay/${encodeURIComponent(session.card.cardId)}` : '/speaking/selection';
+  const reattemptHref = session
+    ? `/speaking/roleplay/${encodeURIComponent(session.card.cardId)}`
+    : '/speaking/selection';
   const submissionAtLabel = session?.submittedAt
     ? new Date(session.submittedAt).toLocaleString()
     : null;
@@ -447,7 +394,6 @@ export default function SpeakingSessionResultsPage() {
             sessionId={sessionId}
             response={v11}
             transcript={showTranscript ? transcript : null}
-            tutorOverride={v11TutorOverride}
             inputKind={inputKind}
           />
         </div>
@@ -503,16 +449,18 @@ export default function SpeakingSessionResultsPage() {
         {gradingStatus}
         <FreeSampleNext row={freeRow} />
 
-        {allowReattempt && !isFreeSession ? (
+        {allowReattempt && session ? (
           <Card padding="md" className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold text-navy">Reattempt this speaking card</p>
+              <p className="text-sm font-semibold text-navy">Start a new Speaking attempt</p>
               <p className="text-xs leading-relaxed text-muted">
-                Start another practice attempt with the same scenario from the learner speaking check flow.
+                {isFreeSession
+                  ? 'This free sample is complete. Repeating the card starts a new attempt and uses Speaking credits.'
+                  : 'Completed attempts cannot be replayed for free. Starting again uses Speaking credits.'}
               </p>
             </div>
             <Button variant="outline" size="sm" asChild>
-              <Link href={reattemptHref}>Open speaking check</Link>
+              <Link href={reattemptHref}>Start new attempt</Link>
             </Button>
           </Card>
         ) : null}
@@ -522,21 +470,16 @@ export default function SpeakingSessionResultsPage() {
         <TabPanel id="overview" activeTab={activeTab}>
           <DualAssessmentLayout
             data={layoutData}
-            tutorPlaceholderCta={showTutorScore ? <TutorReviewCta /> : hiddenTutorPlaceholder}
             aiPlaceholderCta={showAiEstimate ? <AiProcessingCta /> : hiddenAiPlaceholder}
             showFullCriteria={showFullCriteria}
             showReadinessBand={showReadinessBand}
+            showTutorAssessment={false}
           />
         </TabPanel>
 
         {showTranscript ? (
           <TabPanel id="transcript" activeTab={activeTab}>
             <div className="space-y-3">
-              {!showTutorComments ? (
-                <InlineAlert variant="info" title="Tutor comments hidden">
-                  This result visibility profile hides tutor comments. The transcript remains available for review.
-                </InlineAlert>
-              ) : null}
               {inputKind === 'live_voice' ? (
                 <InlineAlert variant="info" live="polite">
                   {LIVE_TRANSCRIPT_NOTE}

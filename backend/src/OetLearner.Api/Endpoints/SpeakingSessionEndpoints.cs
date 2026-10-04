@@ -356,30 +356,42 @@ public static class SpeakingSessionEndpoints
             // Pages call the v1.1 report endpoints only when true; otherwise
             // they 404 on every poll.
             usesV11 = await canonical.UsesV11Async(id, ct),
-            // What the learner handed in, so the pages never say "recording" for a live conversation.
+            // What the learner handed in, so the pages do not describe a live conversation as a full-session recording.
             inputKind = await ReadInputKindAsync(db, id, ct),
         });
     }
 
     /// <summary>
-    /// "recording" when audio was uploaded for the role-play (recorder fallback, or the tutor room's
-    /// egress), archived or not; otherwise "live_voice" when the latest transcript was saved by the live
-    /// voice flow (it has no audio at all); otherwise null (nothing has arrived yet). The unscored
-    /// warm-up recording is not the role-play, so it never counts.
+    /// "live_voice" when the latest transcript or a saved microphone clip came from the live
+    /// voice flow; otherwise "recording" when role-play audio was uploaded for recorder fallback or
+    /// tutor egress, archived or not; otherwise null. The unscored warm-up recording never counts.
     /// </summary>
     private static async Task<string?> ReadInputKindAsync(LearnerDbContext db, string sessionId, CancellationToken ct)
     {
+        var liveTranscript = await db.SpeakingTranscripts.AsNoTracking()
+            .AnyAsync(t => t.SpeakingSessionId == sessionId
+                && t.IsLatest
+                && t.Provider.StartsWith(LiveVoiceService.TranscriptProviderPrefix), ct);
+        if (liveTranscript)
+        {
+            return "live_voice";
+        }
+
+        var liveCandidateAudio = await db.SpeakingRecordings.AsNoTracking()
+            .AnyAsync(r => r.SpeakingSessionId == sessionId
+                && !r.IsWarmup
+                && r.Source == SpeakingRecordingSource.ConversationHub, ct);
+        if (liveCandidateAudio)
+        {
+            return "live_voice";
+        }
+
         if (await db.SpeakingRecordings.AsNoTracking()
                 .AnyAsync(r => r.SpeakingSessionId == sessionId && !r.IsWarmup, ct))
         {
             return "recording";
         }
-
-        var liveTranscript = await db.SpeakingTranscripts.AsNoTracking()
-            .AnyAsync(t => t.SpeakingSessionId == sessionId
-                && t.IsLatest
-                && t.Provider.StartsWith(LiveVoiceService.TranscriptProviderPrefix), ct);
-        return liveTranscript ? "live_voice" : null;
+        return null;
     }
 
     // ─────────────────────────────────────────────────────────────────

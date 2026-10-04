@@ -521,11 +521,6 @@ export default function SpeakingExamPage() {
               onVoiceStopReady={handleVoiceStopReady}
             />
           )}
-          {secondsLeft != null && secondsLeft <= 30 ? (
-            <p className="flex items-center justify-center gap-2 text-sm font-medium text-rose-600">
-              <AlertTriangle className="h-4 w-4" /> Wrap up — the next card starts automatically.
-            </p>
-          ) : null}
         </section>
       )}
     </div>

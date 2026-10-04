@@ -2,6 +2,7 @@ using System.Text.Json;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Hubs;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Conversation;
 using OetLearner.Api.Services.Conversation.Asr;
 using OetLearner.Api.Services.Rulebook;
@@ -172,12 +173,13 @@ public sealed class SpeakingSimulationV11AcceptanceTests
     }
 
     [Fact]
-    public void S10_practice_score_uses_released_weights_and_500_projection()
+    public void S10_practice_score_uses_released_weights_and_canonical_500_projection()
     {
         var weighted = SpeakingSimulationV11Contracts.RubricCriteria.Criteria
             .Sum(c => 100m * c.Weight / 100m);
         Assert.Equal(100m, weighted);
-        Assert.Equal(500, (int)Math.Round(weighted * 5m));
+        Assert.Equal(350, OetScoring.SpeakingProjectedScaledFromPercentage(70));
+        Assert.Equal(500, OetScoring.SpeakingProjectedScaledFromPercentage((double)weighted));
     }
 
     [Fact]
@@ -277,6 +279,37 @@ public sealed class SpeakingSimulationV11AcceptanceTests
         Assert.Contains(nameof(SpeakingSimulationV11TurnTelemetry.CostComponentsJson), names);
         Assert.DoesNotContain(names, name => name.Equals("RawAudio", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(names, name => name.Equals("TranscriptText", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("audio/webm;codecs=opus", "audio/webm")]
+    [InlineData(" Audio/OGG ; codecs=opus", "audio/ogg")]
+    [InlineData(null, "audio/webm")]
+    public void Candidate_audio_capture_normalizes_browser_mime_parameters(string? input, string expected)
+    {
+        Assert.Equal(expected, SpeakingSimulationV11AudioCaptureService.NormalizeMimeType(input));
+    }
+
+    [Fact]
+    public void Combined_assessment_parser_requires_all_non_acoustic_criteria_without_inventing_acoustics()
+    {
+        var criteria = SpeakingSimulationV11Contracts.RubricCriteria.Criteria
+            .Where(x => x.CriterionCode != "intelligibility_pronunciation")
+            .ToArray();
+        var body = JsonSerializer.Serialize(new
+        {
+            criteria = criteria.Select(c => new
+            {
+                criterionCode = c.CriterionCode,
+                score = 75,
+                rationale = "Supported by a candidate transcript quote.",
+                evidence = new[] { new { evidenceType = "quote", quote = "Please tell me more.", turnNumber = 1 } },
+            }),
+            confidence = new { label = "medium", score = .7, rangeLow = 300, rangeHigh = 400 },
+        });
+
+        Assert.NotNull(SpeakingSimulationV11AssessmentService.ParseAssessment(body, criteria));
+        Assert.Null(SpeakingSimulationV11AssessmentService.ParseAssessment(body));
     }
 
     private static byte[] BuildWave(IReadOnlyList<short> samples, int sampleRateHz = 16_000)

@@ -108,9 +108,8 @@ public class SpeakingSimulationV11Assessment
     [MaxLength(64)]
     public string? RolePlayCardId { get; set; }
 
-    /// <summary>"card" for a single role-play or "combined" for the
-    /// derived two-card report. Combined rows never contain invented
-    /// transcript evidence.</summary>
+    /// <summary>"card" for a single role-play or "combined" for a
+    /// source-grounded two-card Full Mock report.</summary>
     [MaxLength(16)]
     public string AssessmentKind { get; set; } = "card";
 

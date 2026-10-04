@@ -42,7 +42,8 @@ public sealed class LiveVoiceService(
     LiveVoiceContentReadinessService contentReadiness,
     LiveVoiceProviderProbeState providerProbeState,
     TimeProvider clock,
-    ILogger<LiveVoiceService> logger) : ILiveVoiceProviderSessionCloser
+    ILogger<LiveVoiceService> logger,
+    SpeakingSimulationV11AudioCaptureService audioCapture) : ILiveVoiceProviderSessionCloser
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     // SpeakingPatientTurns.Role is varchar(16): "live_voice_session" (18) made every
@@ -415,6 +416,35 @@ public sealed class LiveVoiceService(
         }
 
         var segments = request.Segments.Select(NormalizeSegment).ToArray();
+        if (segments.Any(x => x.Speaker != "candidate" && x.SourceRecordingId is not null))
+        {
+            throw ApiException.Validation(
+                "live_voice_patient_audio_not_allowed",
+                "Only candidate transcript segments may reference a stored recording.");
+        }
+
+        var sourceRecordingIds = segments
+            .Where(x => x.Speaker == "candidate" && x.SourceRecordingId is not null)
+            .Select(x => x.SourceRecordingId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (sourceRecordingIds.Length > 0)
+        {
+            var ownedRecordingIds = await db.SpeakingRecordings.AsNoTracking()
+                .Where(x => sourceRecordingIds.Contains(x.Id)
+                    && x.SpeakingSessionId == context.Session.Id
+                    && !x.IsArchived
+                    && !x.IsWarmup)
+                .Select(x => x.Id)
+                .ToListAsync(ct);
+            if (ownedRecordingIds.Count != sourceRecordingIds.Length)
+            {
+                throw ApiException.Validation(
+                    "live_voice_candidate_audio_invalid",
+                    "A candidate audio recording is not available for this Speaking session.");
+            }
+        }
+
         var previous = await db.SpeakingTranscripts
             .Where(x => x.SpeakingSessionId == context.Session.Id && x.IsLatest)
             .ToListAsync(ct);
@@ -446,6 +476,38 @@ public sealed class LiveVoiceService(
             WordCount: transcript.WordCount,
             MeanConfidence: transcript.MeanConfidence,
             GeneratedAt: transcript.GeneratedAt);
+    }
+
+    public async Task<LiveVoiceAudioCaptureResponse> CaptureCandidateAudioAsync(
+        string userId,
+        string sessionId,
+        string providerSessionId,
+        byte[] audio,
+        string mimeType,
+        long durationMs,
+        CancellationToken ct)
+    {
+        var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Write, ct);
+        await EnsureConsentAsync(context, ct);
+        _ = await EnsureProviderSessionAsync(context.Session.Id, providerSessionId, ct);
+        if (durationMs is <= 0 or > 600_000)
+        {
+            throw ApiException.Validation(
+                "live_voice_audio_duration_invalid",
+                "The candidate audio duration is invalid.");
+        }
+
+        var stored = await audioCapture.CaptureTurnAsync(
+            context.Session,
+            audio,
+            mimeType,
+            isWarmup: false,
+            durationMs,
+            ct);
+        return new LiveVoiceAudioCaptureResponse(
+            stored.RecordingId,
+            stored.MimeType,
+            stored.DurationSeconds);
     }
 
     private async Task<LiveVoiceContext> LoadContextAsync(
@@ -1381,6 +1443,9 @@ public sealed class LiveVoiceService(
             EndMs = end,
             Text = text,
             Confidence = segment.Confidence.HasValue ? Math.Clamp(segment.Confidence.Value, 0, 1) : null,
+            SourceRecordingId = string.IsNullOrWhiteSpace(segment.SourceRecordingId)
+                ? null
+                : segment.SourceRecordingId.Trim(),
         };
     }
 

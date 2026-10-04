@@ -163,6 +163,20 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task MyRecordings_IdentifiesConsentedLiveCandidateClips()
+    {
+        const string ownerId = "learner-live-clip-list";
+        var (_, recordingId) = await SeedSessionWithRecordingAsync(
+            ownerId, source: SpeakingRecordingSource.ConversationHub);
+
+        var response = await _svc.GetMyRecordingsAsync(ownerId, CancellationToken.None);
+
+        var recording = Assert.Single(response.Recordings);
+        Assert.Equal(recordingId, recording.RecordingId);
+        Assert.Equal(SpeakingRecordingSource.ConversationHub.ToString(), recording.Source);
+    }
+
+    [Fact]
     public async Task ConsentVersioning_StoresRevocations()
     {
         const string userId = "learner-consents-1";
@@ -206,7 +220,8 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
 
     private async Task<(string sessionId, string recordingId)> SeedSessionWithRecordingAsync(
         string userId,
-        DateTimeOffset? retentionExpiresAt = null)
+        DateTimeOffset? retentionExpiresAt = null,
+        SpeakingRecordingSource source = SpeakingRecordingSource.ClientMediaRecorder)
     {
         var contentItemId = $"ci-{Guid.NewGuid():N}";
         _db.ContentItems.Add(new ContentItem
@@ -267,7 +282,7 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
             SpeakingSessionId = sessionId,
             MediaAssetId = assetId,
             Kind = SpeakingRecordingKind.Audio,
-            Source = SpeakingRecordingSource.ClientMediaRecorder,
+            Source = source,
             DurationSeconds = 60,
             SizeBytes = 1024,
             Sha256 = new string('a', 64),

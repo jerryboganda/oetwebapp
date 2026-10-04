@@ -82,7 +82,7 @@ export default function SpeakingRecordingsPage() {
         icon={Mic}
         accent="speaking"
         title="My speaking recordings"
-        description="Manage the audio captured during your role-plays. Live AI patient conversations are not listed here; their audio is retained for a limited period and the transcript is what is marked. You can delete a recording at any time. Recordings are also automatically removed after the retention window expires."
+        description="Manage saved Speaking audio, including consented short microphone clips linked to candidate speech in live AI-patient conversations. The app does not make a full-session recording or directly record provider playback. Browser echo cancellation is enabled, but speaker or background audio may still be picked up by your microphone. You can delete any item at any time; saved audio is also automatically removed after its retention window expires."
       />
 
       {!rows ? (
@@ -94,8 +94,8 @@ export default function SpeakingRecordingsPage() {
           {rows.length === 0 ? (
             <EmptyState
               icon={<Mic className="h-8 w-8" />}
-              title="You don't have any saved recordings."
-              description="Live AI patient conversations don't appear here; their transcript is what is marked."
+              title="You don't have any saved Speaking audio."
+              description="Recorder submissions, tutor-room recordings and consented live microphone clips appear here when available."
             />
           ) : (
             <ul className="space-y-3">
@@ -110,6 +110,13 @@ export default function SpeakingRecordingsPage() {
                             <Badge variant="muted">{r.mode}</Badge>
                             <Badge variant="muted">
                               {WRITING_PROFESSION_LABELS[r.professionId as keyof typeof WRITING_PROFESSION_LABELS] ?? r.professionId}
+                            </Badge>
+                            <Badge variant="muted">
+                              {r.source === 'ConversationHub'
+                                ? 'Live microphone clip'
+                                : r.source === 'LiveKitEgress'
+                                  ? 'Live tutor recording'
+                                  : 'Role-play recording'}
                             </Badge>
                             {r.isArchived && <Badge variant="warning">archived</Badge>}
                           </div>

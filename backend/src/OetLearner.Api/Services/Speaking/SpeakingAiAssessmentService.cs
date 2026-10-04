@@ -473,7 +473,7 @@ Scoring rules:
             ModelId: row.ModelId,
             PromptTemplateId: row.PromptTemplateId,
             CriterionScores: criterionScores,
-            EstimatedScaledScore: row.EstimatedScaledScore,
+            EstimatedScaledScore: OetScoring.OetReportedScaledScore(row.EstimatedScaledScore),
             ReadinessBand: row.ReadinessBand,
             OverallSummary: row.OverallSummary,
             ConfidenceBand: row.ConfidenceBand,
