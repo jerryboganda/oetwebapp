@@ -2,10 +2,10 @@
 
 Session: deployment-latency
 Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
-Mode: execute
-Updated: 2026-10-04T05:35:37Z
+Mode: blocked
+Updated: 2026-10-04T05:55:54Z
 Branch: main
-HEAD: 88b2567dd9b3cc1414dd6692db4e78405e6b9bbf
+HEAD: e7485ce2fec757c158e1b381d271f65f4d136478
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -68,6 +68,10 @@ release provenance, protected storage, readiness or rollback.
 - D-25 At 05:29Z, 37177363819 frontend/placement and backend shards 2/3/5/6 passed. All six native backend Release builds passed; shard 4 job 111363914610 failed Test (shard 4), while shard 1 was still testing. Speaking owner received the exact failure for scoped triage; no whole-backend PASS claim.
 - D-26 Final 37177363819 failed only shard 4/dependent gate; shard 1 also passed. Source owner traced the preserved raw397/actual400 assertion to aggregation of rounded learner DTOs (live Jev production_regression p .99/confidence .98). Released one-file fix carries selected persisted raw scores alongside card results, preserving public400, raw snapshots/readiness and holds; both private callers wired. No test relaxed.
 - D-27 Live Jev selected existing manual Writing Rev8 CI's arbitrary dotnet_filter lane (p .97/confidence .96) for scoped Speaking regression, not new workflow machinery. All production/browser/AI controls stay false/empty. It regenerates canonical rulebooks; prove selected tests actually execute and keep original production byte/serving evidence separate.
+- D-28 Released scoring correction committed/pushed as e7485ce2f (push started 05:40:33.186Z). Exactly one manual filtered run 37180640839 confirmed same SHA; both Speaking classes selected. Every production/browser/AI switch false; source owner received SHA/run IDs.
+- D-29 E748 build 37180577765 passed 38 protocol cases and original API byte verification; new same-publish SQL was verified/applied in production 37180764537. Green physical web/API images, aliases and all three public HTTP 200/release headers verified. Inclusive watcher 510.240s, driver 460.272s; pull 22.908s, initial readiness 68.965s, recheck 13.755s and cutover 7.464s. Target unmet.
+- D-30 Native 37180640839 TRX executed/passed 67/67 with zero skipped/failed, including original raw397/public400 and all three hold/clean/classic selectors. Whole-solution compile job 111372344831 and frontend 111372344713 passed; scoped Vitest executed only the report-view file's 12 cases, not hook tests inferred from inputs. This lane regenerates canonical rulebooks and is separate from production-byte proof.
+- D-31 Source owner received and independently confirmed exact e748 serving/regression proof; no further Speaking edits needed. New full QA 37180577741 remains active at 05:55Z (frontend/placement and shard5 passed); never claim whole-QA green. Live validated Jev selected verified best effort with blocked privacy (p/confidence 1), not speculative boot rewrites, weakened gates or unmeasured five-minute claims.
 
 ## Touched files
 
@@ -83,6 +87,7 @@ release provenance, protected storage, readiness or rollback.
 | backend/Dockerfile.runtime + backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj | stable publish layers with byte verification; deployment-only Writing source set |
 | docs/ops/deploy-gate.md + AGENTS.md + deployment/validation instructions | current pipeline-only operational contract |
 | SESSION_STATE.md + TASKS.json + PROGRESS.md | owned task state and durable handoff |
+| backend/src/OetLearner.Api/Services/Speaking/SpeakingExamService.cs | selected persisted raw scores for internal aggregation, unchanged public rounded results |
 
 ## Verification gates
 
@@ -103,17 +108,21 @@ release provenance, protected storage, readiness or rollback.
 | 38 protocol tests and actual web bytes/owners | build-images.yml / guards + build-web | 37176154885 | PASS |
 | final serving/timing and native API reuse | production-deploy.yml + ship watcher | 37176403559 | PASS |
 | preserved frontend repairs, backend explicitly skipped | qa-smoke.yml / frontend-unit | 37176154904 | PASS |
-| repaired raw-score aggregation regression | writing-rev8-ci.yml / scoped dotnet_filter | .github/workflows/writing-rev8-ci.yml | NOT RUN |
+| repaired raw-score aggregation, 67 actual tests and zero skips | writing-rev8-ci.yml / backend job 111372344856 / Test | 37180640839 | PASS |
+| whole-solution compile and scoped frontend | writing-rev8-ci.yml / jobs 111372344831 + 111372344713 | 37180640839 | PASS |
+| latest 38 protocol cases and original API runtime bytes | build-images.yml / guards + build-api | 37180577765 | PASS |
+| new same-publish SQL verification/application | production-deploy.yml / job 111372763414 | 37180764537 | PASS |
+| latest API-change physical/public serving and measured timing | production-deploy.yml / job 111372825658 + ship watcher | 37180764537 | PASS |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
-- The 300-second target remains unmet. Verified inclusive releases measured 744.784 -> 569.457 -> 582.880 -> 529.552 seconds. The final release was cold web compilation with healthy API reuse, not a full cold/Writing-live release. Cold forced-Writing build-only took 310 seconds. Direct HTTP readiness already polls every three seconds; do not remove gates or claim warm projections as measured acceptance.
-- QA 37177363819 predates the source correction and failed its single raw-score snapshot assertion. All other shards and frontend passed. Released source-only correction still requires a new pipeline release and actual focused regression evidence; no whole-backend PASS claim.
+- The 300-second target remains unmet. Verified inclusive releases measured 744.784 -> 569.457 -> 582.880 -> 529.552 -> 510.240 seconds under different observed conditions. Latest e748 rebuilt the API/reused web; full cold/Writing-live remains unmeasured. Cold forced-Writing build-only took 310 seconds. Direct readiness already polls every three seconds; never remove gates or present projections as acceptance.
+- QA 37177363819 predates the correction and retains its genuine single raw-score assertion failure. E748 source correction is now actually live and 67/67 focused regressions passed. New full QA 37180577741 is still active; no whole-backend PASS claim, duplicate dispatch or pending-run replacement.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
-- At 04:26Z, it was the only queued/in-progress record, the ship lock/lease were free and the repository was PUBLIC. Specific deletion approval was requested; the owner was unavailable, so no authorization was granted and no history was deleted.
+- At 05:50Z, the ship lock/lease were free and the repository was PUBLIC; native queue guard saw 25907015352 plus 37180577741. Specific May-record deletion approval was previously requested; owner unavailable, no authorization granted and no history deleted.
 
 ## Next action
 
-1. Commit only the released SpeakingExamService.cs correction plus owned actual evidence/state; ship and follow exact production serving proof. Dispatch the existing Writing Rev8 CI custom filter for SpeakingSessionGradingTests/SpeakingExamServiceTests with production/AI/browser controls off, capture real tests and return SHA/run IDs to the source owner. Restore privacy only with native guard and fresh specific authorization; delete no history or bypass safety.
+1. Persist the final owned documentation/evidence through the normal documentation-only ship; e748 is already the verified runtime release. Do not redispatch or rewrite runtime code. Privacy remains blocked: obtain specific authorization for the empty May record or wait for native resolution, let active QA finish, then require ship.mjs --may-flip-private before restoring PRIVATE. Do not delete history or bypass the guard.

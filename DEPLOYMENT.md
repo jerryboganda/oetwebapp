@@ -222,6 +222,21 @@ not establish a five-minute guarantee or cold-live acceptance on free runners.
 Required gates remain intact. Long-running full QA is separate from public-live
 acceptance; a superseded pending QA run with zero jobs is not test evidence.
 
+The API-change/unchanged-web correction `e7485ce2f` (build `37180577765`,
+deploy `37180764537`) verified exact green physical/public serving in
+**510.240 seconds** inclusive, or **460.272 seconds** to the driver public-live
+marker. Its new API compilation supplied the migration artifact, which was
+verified and applied rather than skipped. Native image pulling took 22.908
+seconds, initial readiness 68.965 seconds, the readiness recheck 13.755 seconds,
+and router cutover 7.464 seconds; backup/gateway services were reused.
+All 38 deployment protocol cases passed. A preserved raw-score regression
+exposed by full QA was corrected without changing its assertions: manual
+filtered run `37180640839` executed and passed all 67 selected Speaking cases
+with zero skipped, plus the whole-solution compile and scoped frontend checks.
+That is focused correction evidence, not a claim that the separate six-shard
+QA run passed. The latest inclusive result is approximately **8 minutes
+30 seconds**, still above the five-minute target on the approved free runners.
+
 Migrations normally come from the build API publish artifact. Startup migration
 is an opt-in (`AUTO_MIGRATE` → `Bootstrap__AutoMigrate`, default `false`).
 

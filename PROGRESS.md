@@ -11,13 +11,15 @@ Last updated: 2026-10-04
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
-## Active checkpoint - Preserved Speaking regression, native repair underway (2026-10-04)
+## Active checkpoint - Verified API correction and measured deployment closeout (2026-10-04)
 
-- Final deployment evidence/docs commit 88b2567dd shipped with bound NOTHING_TO_DEPLOY proof; production remains the verified 068 release.
+- E7485ce2f is actually live in green: build37180577765 passed38 protocol/original-byte checks; production37180764537 verified/applied same-publish SQL and exact physical/public serving.
+- Inclusive push-to-verified-live510.240s; driver460.272s, image pull22.908s, initial readiness68.965s, recheck13.755s and router cutover7.464s. Five-minute target remains unmet under approved free-runner scope.
 - One forced QA 37177363819 passed frontend, all six default backend builds and shards 1/2/3/5/6; only shard4/dependent gate failed.
-- Existing raw snapshot assertion expected397/actual400 traced rounded learner DTOs entering internal aggregation; live Jev production_regression p.99/confidence.98.
-- Source owner released one-file tuple/raw-score fix preserving public400, readiness/holds and selected assessment identity; no fixture relaxed. Native new-source/pipeline/regression evidence remains.
-- Existing manual filtered CI is Jev-approved; no new workflow, local computation, production browser or provider call. Empty May queue privacy closure remains authorization-blocked.
+- Raw397/public400 regression repaired in one source using selected persisted tuple scores; readiness/holds preserved and assertions unchanged. Native37180640839 TRX executed/passed67/67, zero skipped, including exact regression/hold/classic/clean cases.
+- Whole-solution compile111372344831/frontend111372344713 green; scoped Vitest12 cases in report-view file only. Manual lane regenerates canonical rulebooks, not a substitute for actual production-byte proof.
+- Source owner independently confirmed/released correction. Live validated Jev p/confidence1 selected truthful best-effort closeout, not speculative startup rewrites or weakened gates.
+- New fullQA37180577741 remains active, no whole-suite green claim. PUBLIC restoration is blocked by empty May25907015352 lacking specific deletion approval; native guard/lease never bypassed.
 
 ## Previous checkpoint - Deployment acceleration, measured free-runner target misses (2026-10-04)
 
@@ -30,7 +32,7 @@ Last updated: 2026-10-04
 - AX 37174084749 passed actual-source cases on native Windows 5.1/Linux 7.6.6; forced-Writing benchmark 37173946904 passed 3/666 evaluated sources and 26 tests in 310 seconds build-only.
 - Genuine changed-web/reused-API e96: build 37174218390 passed, deploy 37174402463 verified green at 582.880 seconds inclusive (driver 528.521); Next compile 5.7s, image pull 91.524s, native readiness 94.649s.
 - Corrected web-layer release 0689edfd0: build 37176154885 passed 38 tests and actual byte/owner assertions; deploy 37176403559 verified blue at 529.552s inclusive (driver 491.713s). Cold Next 89s, pull 54.659s, reused-API readiness 14.482s.
-- Frontend QA 37176154904 passed; preserved backend fixtures still need one forced evidence run. Target unmet and full cold/Writing-live unmeasured; private restoration faces the inconsistent empty May queue.
+- Frontend QA 37176154904 passed; preserved backend correction evidence is now recorded above. Target unmet and full cold/Writing-live unmeasured; private restoration faces the inconsistent empty May queue.
 
 ## Previous checkpoint — AX: externalized agent working memory (2026-10-01)
 

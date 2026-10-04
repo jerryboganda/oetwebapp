@@ -6,6 +6,12 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 05:48 | CI triage | CI triage | 37180950749 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e7485ce2f |
+| 2026-10-04 05:44 | CI triage | CI triage | 37180764506 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | e7485ce2f |
+| 2026-10-04 05:44 | Deploy production | Deploy production | 37180764537 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | e7485ce2f |
+| 2026-10-04 05:42 | Writing Rev8 CI | Writing Rev8 CI | 37180640839 | Frontend (tsc + scoped vitest + changed-file lint)=success Canonical Writing rulebooks (build + --check)=success Backend compile gate (whole solution)=success Backend Writing/Rulebook tests (.NET)=success Live production Writing report (read-only browser)=skipped Read-only Writing failure diagnostics=skipped Read-only Writing grading diagnostics (latest failures)=skipped Jev typed software review  | SUCCESS | e7485ce2f |
+| 2026-10-04 05:40 | Build images | Build images | 37180577765 | Deployment contract guards=success Detect what changed=success Syntax gate (seconds)=success Writing grader regression (on change)=skipped build-api=success Retag unchanged agent-gateway=success Retag unchanged db-backup=success Retag unchanged web=success build-web=skipped build-backup=skipped build-agent-gateway=skipped Publish verified release provenance=success Writing model-answer gate (on ch | SUCCESS | e7485ce2f |
+| 2026-10-04 05:40 | Speaking Module CI | Speaking Module CI | 37180577773 | migrations-check=success secrets-scan=success | SUCCESS | e7485ce2f |
 | 2026-10-04 05:35 | CI triage | CI triage | 37180309411 | Classify the failed run (jev-1.13.0)=success | SUCCESS | 88b2567dd |
 | 2026-10-04 04:42 | CI triage | CI triage | 37177776890 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 88b2567dd |
 | 2026-10-04 04:33 | QA Smoke | QA Smoke | 37177363819 | Placement entry contracts=success Frontend unit (vitest + lint + tsc + build)=success Detect what changed=success Backend tests (.NET) · shard 2/6=success Backend tests (.NET) · shard 1/6=success Backend tests (.NET) · shard 6/6=success Backend tests (.NET) · shard 4/6=failure Backend tests (.NET) · shard 5/6=success Backend tests (.NET) · shard 3/6=success QA gate (all suites green)=failure | FAILURE | 88b2567dd |
