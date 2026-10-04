@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import type { Submission } from '@/lib/mock-data';
 
 const {
@@ -299,6 +299,17 @@ describe('Speaking page', () => {
       await screen.findByText('Start Speaking Exam');
       expect(screen.queryByTestId('speaking-free-mock-card')).not.toBeInTheDocument();
     });
+  });
+
+  it('links Speaking submissions to the Speaking-only history view', async () => {
+    render(<SpeakingPage />);
+
+    const card = await screen.findByTestId('speaking-submissions-card');
+    expect(card).toHaveTextContent('Speaking submissions');
+    expect(within(card).getByRole('link', { name: /View Speaking submissions/ })).toHaveAttribute(
+      'href',
+      '/submissions?subtest=speaking',
+    );
   });
 
   it('links Book a Tutor to the private-speaking booking page', async () => {

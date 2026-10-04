@@ -86,10 +86,27 @@ prose, no code fences):
   },
   "overallSummary": "",
   "confidenceBand": "low|medium|high",
-  "strengths": [],
-  "improvements": [],
-  "recommendedDrillKinds": []
+  "strengths": [
+    { "criterion": "relationshipBuilding", "text": "", "quote": "" }
+  ],
+  "priorityWeaknesses": [
+    { "criterion": "patientPerspective", "text": "", "quote": "", "action": "" }
+  ],
+  "drills": [
+    { "title": "", "criterion": "patientPerspective", "weakPoint": "", "practise": "", "example": "" }
+  ]
 }
+
+Coaching rules (the candidate reads all of this — plain language, no rule IDs):
+  * `strengths`: 2 to 4 specific things the candidate did well, each tied to a criterion code and, where
+    possible, a verbatim `quote` of 3–10 words from the transcript.
+  * `priorityWeaknesses`: 2 to 5 issues that most affected the score, most important first. `text` says what
+    happened and why it mattered; `quote` is the candidate's own words where possible; `action` is ONE
+    concrete thing to do differently next attempt. Every weakness must end with an `action`.
+  * `drills`: 2 to 5 practice drills built from THIS attempt. `weakPoint` is what the candidate did,
+    `practise` is what to rehearse, `example` is a short example phrase or question they could use.
+  * Use only the criterion codes from the scoring rubric. Do not invent evidence: if there is no quote, leave
+    `quote` empty.
 
 Scoring rules:
   * Linguistic criteria (intelligibility, fluency, appropriateness,
@@ -395,6 +412,16 @@ Scoring rules:
         var jevPayload = JevSpeakingAdvisor.AdvisoryPayload(jevReadiness, jevCrosscheck);
         if (jevPayload is not null) rationalesPayload[JevSpeakingAdvisor.AdvisoryKey] = jevPayload;
 
+        // The coaching report (strengths, priority weaknesses, drills) rides in the same JSON under a
+        // reserved key, exactly as stored here; it is scrubbed of internal IDs only when a candidate reads it.
+        var report = parsed.Report;
+        if (report.Strengths.Count > 0 || report.PriorityWeaknesses.Count > 0 || report.Drills.Count > 0)
+        {
+            rationalesPayload[ReportKey] = JsonSerializer.SerializeToElement(
+                new { version = 1, strengths = report.Strengths, priorityWeaknesses = report.PriorityWeaknesses, drills = report.Drills },
+                ReportJson);
+        }
+
         var row = new SpeakingAiAssessment
         {
             Id = assessmentId,
@@ -548,10 +575,11 @@ Scoring rules:
             Grade: OetScoring.OetGradeLetterFromScaled(reported),
             // Provisional until this exact grader version (with its model) has passed calibration;
             // a legacy row has no version and is always provisional.
-            ScoreLabel: OetScoring.SpeakingScoreLabel(row.GraderVersion, row.ModelId));
+            ScoreLabel: OetScoring.SpeakingScoreLabel(row.GraderVersion, row.ModelId),
+            Report: ReadStoredReport(row.PerCriterionRationalesJson));
     }
 
-    private static IDictionary<string, CriterionScore> RehydrateCriterionScores(SpeakingAiAssessment row)
+    internal static IDictionary<string, CriterionScore> RehydrateCriterionScores(SpeakingAiAssessment row)
     {
         var rationales = ReadRationales(row.PerCriterionRationalesJson);
         IDictionary<string, CriterionScore> result = new Dictionary<string, CriterionScore>(StringComparer.OrdinalIgnoreCase)
@@ -745,6 +773,160 @@ Scoring rules:
             new(StringComparer.OrdinalIgnoreCase);
         public string? OverallSummary { get; init; }
         public string? ConfidenceBand { get; init; }
+        public SpeakingFeedbackReport Report { get; init; } = EmptyReport;
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // Coaching report (strengths, priority weaknesses, drills)
+    // ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Reserved key beside the nine criterion rationales in <c>PerCriterionRationalesJson</c> (the same
+    /// pattern as the Jev advisory); no migration, and nothing that looks up a criterion code sees it.</summary>
+    private const string ReportKey = "_report";
+
+    private const int MaxStrengths = 4;
+    private const int MaxWeaknesses = 5;
+    private const int MaxDrills = 5;
+    private const int MaxTextLength = 500;
+    private const int MaxQuoteLength = 240;
+
+    private static readonly SpeakingFeedbackReport EmptyReport = new(
+        Array.Empty<SpeakingFeedbackItem>(),
+        Array.Empty<SpeakingFeedbackItem>(),
+        Array.Empty<SpeakingDrillItem>());
+
+    private static readonly JsonSerializerOptions ReportJson = new(JsonSerializerDefaults.Web);
+
+    private static SpeakingFeedbackReport ParseReport(JsonElement root)
+        => new(
+            ReadFeedbackItems(root, "strengths", MaxStrengths, withAction: false),
+            ReadFeedbackItems(root, "priorityWeaknesses", MaxWeaknesses, withAction: true),
+            ReadDrills(root, "drills", MaxDrills));
+
+    private static List<SpeakingFeedbackItem> ReadFeedbackItems(JsonElement root, string property, int max, bool withAction)
+    {
+        var items = new List<SpeakingFeedbackItem>();
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty(property, out var array)
+            || array.ValueKind != JsonValueKind.Array)
+        {
+            return items;
+        }
+
+        foreach (var element in array.EnumerateArray())
+        {
+            if (items.Count >= max) break;
+            string? text;
+            string? quote = null;
+            string? action = null;
+            var criterion = "overall";
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                text = element.GetString();
+            }
+            else if (element.ValueKind == JsonValueKind.Object)
+            {
+                text = TryReadString(element, "text");
+                quote = TryReadString(element, "quote");
+                action = TryReadString(element, "action");
+                criterion = ReportCriterion(TryReadString(element, "criterion"));
+            }
+            else
+            {
+                continue;
+            }
+
+            var clippedText = Clip(text, MaxTextLength);
+            if (clippedText is null) continue;
+            items.Add(new SpeakingFeedbackItem(
+                criterion,
+                clippedText,
+                Clip(quote, MaxQuoteLength),
+                withAction ? Clip(action, MaxTextLength) : null));
+        }
+
+        return items;
+    }
+
+    private static List<SpeakingDrillItem> ReadDrills(JsonElement root, string property, int max)
+    {
+        var drills = new List<SpeakingDrillItem>();
+        if (root.ValueKind != JsonValueKind.Object
+            || !root.TryGetProperty(property, out var array)
+            || array.ValueKind != JsonValueKind.Array)
+        {
+            return drills;
+        }
+
+        foreach (var element in array.EnumerateArray())
+        {
+            if (drills.Count >= max) break;
+            if (element.ValueKind != JsonValueKind.Object) continue;
+
+            var weakPoint = Clip(TryReadString(element, "weakPoint"), MaxTextLength);
+            var practise = Clip(TryReadString(element, "practise") ?? TryReadString(element, "practice"), MaxTextLength);
+            if (weakPoint is null || practise is null) continue;
+
+            var title = Clip(TryReadString(element, "title"), 120) ?? Clip(practise, 80)!;
+            drills.Add(new SpeakingDrillItem(
+                title,
+                ReportCriterion(TryReadString(element, "criterion")),
+                weakPoint,
+                practise,
+                Clip(TryReadString(element, "example"), MaxTextLength)));
+        }
+
+        return drills;
+    }
+
+    /// <summary>One of the nine criterion codes (canonical spelling), or <c>overall</c>.</summary>
+    private static string ReportCriterion(string? raw)
+    {
+        var code = CanonicalCriterionCode(raw?.Trim() ?? string.Empty);
+        return RequiredCriteria.FirstOrDefault(c => string.Equals(c, code, StringComparison.OrdinalIgnoreCase)) ?? "overall";
+    }
+
+    private static string? Clip(string? value, int max)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) return null;
+        return trimmed.Length <= max ? trimmed : trimmed[..max];
+    }
+
+    /// <summary>The stored report, read back for a candidate: internal rule IDs scrubbed from every sentence
+    /// (the quotes are the candidate's own words and stay as spoken). Null when the grade has none.</summary>
+    internal static SpeakingFeedbackReport? ReadStoredReport(string? rationalesJson)
+    {
+        if (string.IsNullOrWhiteSpace(rationalesJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(rationalesJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty(ReportKey, out var stored))
+            {
+                return null;
+            }
+
+            var report = ParseReport(stored);
+            if (report.Strengths.Count == 0 && report.PriorityWeaknesses.Count == 0 && report.Drills.Count == 0) return null;
+
+            static string S(string value) => SpeakingLearnerText.ScrubRuleIds(value);
+            static string? SN(string? value) => value is null ? null : SpeakingLearnerText.ScrubRuleIds(value);
+            return new SpeakingFeedbackReport(
+                report.Strengths.Select(i => i with { Text = S(i.Text) }).ToList(),
+                report.PriorityWeaknesses.Select(i => i with { Text = S(i.Text), Action = SN(i.Action) }).ToList(),
+                report.Drills.Select(d => d with
+                {
+                    Title = S(d.Title),
+                    WeakPoint = S(d.WeakPoint),
+                    Practise = S(d.Practise),
+                    Example = SN(d.Example),
+                }).ToList());
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>The nine criteria every reply must score. A missing or non-numeric one makes the
@@ -822,6 +1004,8 @@ Scoring rules:
                 CriterionScores = scores,
                 OverallSummary = TryReadString(root, "overallSummary"),
                 ConfidenceBand = TryReadString(root, "confidenceBand"),
+                // Coaching content is best-effort: a reply without it still grades, it just has no report.
+                Report = ParseReport(root),
             };
         }
         catch

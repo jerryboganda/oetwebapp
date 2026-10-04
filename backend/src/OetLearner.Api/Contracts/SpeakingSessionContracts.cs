@@ -71,6 +71,23 @@ public record CriterionScore(
     string Rationale,
     string[] EvidenceQuotes);
 
+/// <summary>One strength or priority weakness in the candidate's report. <c>Criterion</c> is one of the nine
+/// criterion codes (or <c>overall</c>); <c>Quote</c> is the candidate's own words when the grader found some;
+/// <c>Action</c> is the one concrete thing to do differently next attempt (weaknesses only).</summary>
+public sealed record SpeakingFeedbackItem(string Criterion, string Text, string? Quote, string? Action);
+
+/// <summary>One personalised practice drill built from this attempt: what the candidate did, what to rehearse,
+/// and a short example phrase or question to use.</summary>
+public sealed record SpeakingDrillItem(string Title, string Criterion, string WeakPoint, string Practise, string? Example);
+
+/// <summary>The coaching half of an AI Speaking result (owner spec 4 Oct 2026, sections 4 and 10): 2–4
+/// strengths, 2–5 priority weaknesses that each end in an action, and personalised drills. Plain language —
+/// internal rule IDs are scrubbed before it reaches a candidate.</summary>
+public sealed record SpeakingFeedbackReport(
+    IReadOnlyList<SpeakingFeedbackItem> Strengths,
+    IReadOnlyList<SpeakingFeedbackItem> PriorityWeaknesses,
+    IReadOnlyList<SpeakingDrillItem> Drills);
+
 /// <summary>Response from <c>POST /v1/speaking/sessions/{id}/ai-assess</c>
 /// and <c>GET /v1/speaking/sessions/{id}/ai-assessment</c>. Always
 /// advisory — the headline <c>EstimatedScaledScore</c> is the reported score
@@ -91,7 +108,8 @@ public record SpeakingAiAssessmentProjection(
     DateTimeOffset GeneratedAt,
     bool IsAdvisory,
     string? Grade = null,
-    string? ScoreLabel = null);
+    string? ScoreLabel = null,
+    SpeakingFeedbackReport? Report = null);
 
 /// <summary>POST /v1/speaking/sessions/{id}/consent body. The learner
 /// confirms a specific consent version which the session and any

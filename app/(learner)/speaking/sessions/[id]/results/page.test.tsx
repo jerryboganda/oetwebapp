@@ -46,7 +46,6 @@ vi.mock('@/lib/api/free-samples', () => ({ listFreeSamples: mockListFreeSamples 
 vi.mock('@/lib/api/speaking-result-visibility', () => ({ getSpeakingResultVisibility: vi.fn().mockResolvedValue(null) }));
 vi.mock('@/lib/api/speaking-simulation-v11', () => ({
   getSpeakingSimulationV11Assessment: mockV11Assessment,
-  getSpeakingSimulationV11TutorOverride: vi.fn().mockResolvedValue(null),
 }));
 vi.mock('@/lib/analytics/speaking-events', () => ({ trackSpeaking: vi.fn() }));
 
@@ -113,6 +112,76 @@ describe('Speaking session results: processing → result, never a dead end', ()
     const cta = await screen.findByRole('link', { name: 'Start new attempt' });
     expect(cta).toHaveAttribute('href', '/speaking/roleplay/rpc-1');
     expect(screen.getByText('This free sample is complete. Repeating the card starts a new attempt and uses Speaking credits.')).toBeInTheDocument();
+  });
+
+  describe('recommended drills: AI-generated, personalised, no tutor wording (owner spec 4 Oct 2026)', () => {
+    const AI_WITH_DRILLS = {
+      assessmentId: 'a-1',
+      provider: 'provider',
+      modelId: 'model',
+      criterionScores: {},
+      estimatedScaledScore: 340,
+      readinessBand: 'borderline',
+      overallSummary: 'Clear and kind.',
+      confidenceBand: 'medium',
+      generatedAt: '2026-10-04T10:00:00Z',
+      isAdvisory: true,
+      report: {
+        strengths: [],
+        priorityWeaknesses: [],
+        drills: [{
+          title: 'Explore concerns before advice',
+          criterion: 'patientPerspective',
+          weakPoint: 'You moved to advice before asking what worried the patient.',
+          practise: 'Ask one open concern question before any advice.',
+          example: 'What worries you most about this?',
+        }],
+      },
+    };
+
+    it('lists each drill with what happened, what to practise and an example to say', async () => {
+      const user = userEvent.setup();
+      mockDual.mockResolvedValue({ sessionId: 'sess-1', ai: AI_WITH_DRILLS, tutor: null, tutorHistory: [], divergence: null });
+      mockGetResults.mockResolvedValue({ assessmentState: 'completed', retryable: false, failureReason: null });
+      render(<SpeakingSessionResultsPage />);
+
+      await user.click(await screen.findByRole('tab', { name: /Recommended drills/ }));
+
+      const drills = await screen.findByTestId('speaking-drills');
+      expect(drills).toHaveTextContent('Explore concerns before advice');
+      expect(drills).toHaveTextContent('What happened');
+      expect(drills).toHaveTextContent('You moved to advice before asking what worried the patient.');
+      expect(drills).toHaveTextContent('Ask one open concern question before any advice.');
+      expect(drills).toHaveTextContent('What worries you most about this?');
+      expect(screen.queryByRole('link', { name: /Open drill/ })).not.toBeInTheDocument();
+    });
+
+    it('says drills arrive with the AI assessment while it is still being produced, never "tutor review"', async () => {
+      const user = userEvent.setup();
+      render(<SpeakingSessionResultsPage />);
+
+      await user.click(await screen.findByRole('tab', { name: /Recommended drills/ }));
+
+      expect(await screen.findByTestId('speaking-drills-empty')).toHaveTextContent('appear here as soon as your AI assessment is ready');
+      expect(document.body.textContent).not.toMatch(/tutor review|request tutor|both estimates are advisory|no tutor review yet/i);
+    });
+
+    it('says plainly when an assessment had no drills to suggest', async () => {
+      const user = userEvent.setup();
+      mockDual.mockResolvedValue({
+        sessionId: 'sess-1',
+        ai: { ...AI_WITH_DRILLS, report: { strengths: [], priorityWeaknesses: [], drills: [] } },
+        tutor: null,
+        tutorHistory: [],
+        divergence: null,
+      });
+      mockGetResults.mockResolvedValue({ assessmentState: 'completed', retryable: false, failureReason: null });
+      render(<SpeakingSessionResultsPage />);
+
+      await user.click(await screen.findByRole('tab', { name: /Recommended drills/ }));
+
+      expect(await screen.findByTestId('speaking-drills-empty')).toHaveTextContent('No practice drills were suggested for this attempt.');
+    });
   });
 
   describe('wording follows what the learner handed in', () => {

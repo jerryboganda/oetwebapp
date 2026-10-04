@@ -711,7 +711,10 @@ public sealed class TutorAssessmentService(
             ConfidenceBand: row.ConfidenceBand,
             GeneratedAt: row.GeneratedAt,
             Grade: OetScoring.OetGradeLetterFromScaled(reported),
-            ScoreLabel: OetScoring.SpeakingScoreLabel(row.GraderVersion, row.ModelId));
+            ScoreLabel: OetScoring.SpeakingScoreLabel(row.GraderVersion, row.ModelId),
+            // The per-criterion explanation and the coaching report: the learner result page renders both.
+            CriterionScores: SpeakingAiAssessmentService.RehydrateCriterionScores(row),
+            Report: SpeakingAiAssessmentService.ReadStoredReport(row.PerCriterionRationalesJson));
     }
 
     private static TutorAssessmentProjection ProjectTutor(SpeakingTutorAssessment row, string? tutorName)

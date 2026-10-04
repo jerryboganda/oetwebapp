@@ -42,6 +42,24 @@ describe('RulebookFindingsPanel', () => {
     expect(screen.getAllByText(/Critical/i).length).toBeGreaterThan(0);
   });
 
+  it('hides internal rule ids on candidate-facing surfaces but keeps the finding', () => {
+    render(
+      <RulebookFindingsPanel
+        title="Rulebook Review"
+        subtitle="Live checks"
+        hideRuleIds
+        ruleHref={(id) => `/writing/rulebook/${id}`}
+        findings={[
+          { ruleId: 'RULE_22', severity: 'critical', message: 'Confirm identity first.' },
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText('RULE_22')).not.toBeInTheDocument();
+    expect(document.querySelector('a[href^="/writing/rulebook"]')).toBeNull();
+    expect(screen.getByText(/Confirm identity first/i)).toBeInTheDocument();
+  });
+
   it('normalizes numeric severity payloads from older API responses', () => {
     render(
       <RulebookFindingsPanel

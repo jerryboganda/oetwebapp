@@ -88,10 +88,11 @@ function ReviewBadge({ status }: { status: ReviewStatus }) {
 }
 
 /**
- * Entry-point wrapper: filtering is driven by `?subtest=writing` (see
- * app/writing/page.tsx's "Past submissions" card), and reading that query
- * param via useSearchParams forces a CSR bailout — Suspense is required
- * around it, matching the pattern already used in app/mocks/page.tsx.
+ * Entry-point wrapper: filtering is driven by `?subtest=writing` or
+ * `?subtest=speaking` (see the "Past submissions" card of app/writing/page.tsx
+ * and the Speaking hub), and reading that query param via useSearchParams
+ * forces a CSR bailout — Suspense is required around it, matching the pattern
+ * already used in app/mocks/page.tsx.
  */
 export default function SubmissionHistory() {
   return (
@@ -107,6 +108,10 @@ function SubmissionHistoryInner() {
   // The Writing hub's "Past submissions" card links here with ?subtest=writing
   // so it never opens the global all-subtest history — see brief item 5.
   const writingOnly = searchParams?.get('subtest') === 'writing';
+  // The Speaking hub's "Speaking submissions" card links here with ?subtest=speaking: every Speaking
+  // card and full mock with its score and grade, never the other three sub-tests.
+  const speakingOnly = searchParams?.get('subtest') === 'speaking';
+  const subtestFilter = writingOnly ? 'writing' : speakingOnly ? 'speaking' : undefined;
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [attempts, setAttempts] = useState<LearnerAttemptHistoryItem[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,8 +126,11 @@ function SubmissionHistoryInner() {
     // once a learner has 100+ more-recent Reading/Listening/Speaking
     // attempts (see brief item 5). The visible* filters below are kept as a
     // defensive belt-and-suspenders pass, not the primary filter.
-    const subtestFilter = writingOnly ? 'writing' : undefined;
-    fetchSubmissions(subtestFilter ? { subtest: subtestFilter } : undefined)
+    // Speaking results live under "Attempt activity" below; the evidence list is tutor-review oriented.
+    const evidence = speakingOnly
+      ? Promise.resolve<Submission[]>([])
+      : fetchSubmissions(subtestFilter ? { subtest: subtestFilter } : undefined);
+    evidence
       .then((data) => { setSubmissions(data); setLoading(false); })
       .catch(() => { setError('Failed to load submissions. Please try again.'); setLoading(false); });
     // Unified all-four-subtest attempt history (Master Catalogue §2). Best
@@ -130,7 +138,7 @@ function SubmissionHistoryInner() {
     fetchMyAttemptHistory(100, subtestFilter)
       .then((items) => setAttempts(items))
       .catch(() => setAttempts([]));
-  }, [writingOnly]);
+  }, [speakingOnly, subtestFilter]);
 
   // Defensive only — the server-side subtest filter above is what actually
   // keeps this correct once either list exceeds its page/limit size.
@@ -139,8 +147,8 @@ function SubmissionHistoryInner() {
     [submissions, writingOnly],
   );
   const visibleAttempts = useMemo(
-    () => (writingOnly ? (attempts ?? []).filter((attempt) => attempt.subtest === 'writing') : attempts),
-    [attempts, writingOnly],
+    () => (subtestFilter ? (attempts ?? []).filter((attempt) => attempt.subtest === subtestFilter) : attempts),
+    [attempts, subtestFilter],
   );
 
   const pendingReviewCount = visibleSubmissions.filter((submission) => submission.reviewStatus === 'pending').length;
@@ -149,18 +157,24 @@ function SubmissionHistoryInner() {
   return (
     <>
       <LearnerPageHero
-        eyebrow={writingOnly ? 'Writing Evidence' : 'Evidence History'}
+        eyebrow={speakingOnly ? 'Speaking Submissions' : writingOnly ? 'Writing Evidence' : 'Evidence History'}
         icon={History}
-        accent="slate"
-        title={writingOnly ? 'Reopen Writing letters that need review or comparison' : 'Reopen the attempts that need review or comparison'}
-        description={writingOnly
-          ? 'Every submitted Writing letter and its feedback/review state — Reading, Listening and Speaking attempts are never shown here.'
-          : 'Use submission history to find the attempts that still need feedback, comparison, or a fresh follow-up decision.'}
-        highlights={[
-          { icon: History, label: 'Attempts', value: `${Math.max(visibleSubmissions.length, visibleAttempts?.length ?? 0)} recorded` },
-          { icon: Clock, label: 'Pending reviews', value: `${pendingReviewCount} waiting` },
-          { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
-        ]}
+        accent={speakingOnly ? 'speaking' : 'slate'}
+        title={speakingOnly
+          ? 'Reopen your Speaking role-plays and mock results'
+          : writingOnly ? 'Reopen Writing letters that need review or comparison' : 'Reopen the attempts that need review or comparison'}
+        description={speakingOnly
+          ? 'Every Speaking role-play and full mock with its score, OET grade and where to resume — Reading, Listening and Writing attempts are never shown here.'
+          : writingOnly
+            ? 'Every submitted Writing letter and its feedback/review state — Reading, Listening and Speaking attempts are never shown here.'
+            : 'Use submission history to find the attempts that still need feedback, comparison, or a fresh follow-up decision.'}
+        highlights={speakingOnly
+          ? [{ icon: History, label: 'Attempts', value: `${visibleAttempts?.length ?? 0} recorded` }]
+          : [
+              { icon: History, label: 'Attempts', value: `${Math.max(visibleSubmissions.length, visibleAttempts?.length ?? 0)} recorded` },
+              { icon: Clock, label: 'Pending reviews', value: `${pendingReviewCount} waiting` },
+              { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
+            ]}
       />
 
       {/* Post Submissions: Writing drafts and submitted letters, with Resume / Retry. */}
@@ -173,11 +187,13 @@ function SubmissionHistoryInner() {
       {visibleAttempts && visibleAttempts.length > 0 ? (
         <section aria-label="Attempt activity">
           <LearnerSurfaceSectionHeader
-            eyebrow={writingOnly ? 'Writing' : 'All Subtests'}
+            eyebrow={speakingOnly ? 'Speaking' : writingOnly ? 'Writing' : 'All Subtests'}
             title="Attempt activity"
-            description={writingOnly
-              ? 'Every opened Writing letter, its balance source, credits used and where to resume.'
-              : 'Every opened exam or card, its balance source, credits used and where to resume.'}
+            description={speakingOnly
+              ? 'Every Speaking role-play and full mock: score, OET grade, credits used and where to resume or retry grading.'
+              : writingOnly
+                ? 'Every opened Writing letter, its balance source, credits used and where to resume.'
+                : 'Every opened exam or card, its balance source, credits used and where to resume.'}
             className="mb-4"
           />
           <ul className="space-y-2">
@@ -219,6 +235,12 @@ function SubmissionHistoryInner() {
                               <span className={SCORE_LABEL.test(attempt.resultLabel) ? 'font-bold text-navy' : 'font-bold text-warning-strong'}>
                                 {attempt.resultLabel}
                               </span>
+                              {attempt.grade ? (
+                                <>
+                                  {' · '}
+                                  <span className="font-bold text-navy">Grade {attempt.grade}</span>
+                                </>
+                              ) : null}
                             </>
                           ) : null}
                           {attempt.balanceSource || attempt.creditsUsed > 0 ? (
@@ -269,9 +291,13 @@ function SubmissionHistoryInner() {
       {!loading && !error && visibleSubmissions.length === 0 && (writingOnly ? myWorkCount === 0 : (attempts !== null && visibleAttempts?.length === 0)) ? (
         <EmptyState
           icon={<History className="h-8 w-8" />}
-          title={writingOnly ? 'No Writing submissions yet' : 'No submissions yet'}
-          description={writingOnly ? 'Complete a Writing letter to see your history here.' : 'Complete a writing or speaking task to see your history here.'}
-          action={{ label: 'Start a writing task', onClick: () => router.push('/writing') }}
+          title={speakingOnly ? 'No Speaking attempts yet' : writingOnly ? 'No Writing submissions yet' : 'No submissions yet'}
+          description={speakingOnly
+            ? 'Complete a Speaking role-play or full mock to see your history here.'
+            : writingOnly ? 'Complete a Writing letter to see your history here.' : 'Complete a writing or speaking task to see your history here.'}
+          action={speakingOnly
+            ? { label: 'Start Speaking', onClick: () => router.push('/speaking') }
+            : { label: 'Start a writing task', onClick: () => router.push('/writing') }}
           className="py-16"
         />
       ) : null}
@@ -339,15 +365,18 @@ function SubmissionHistoryInner() {
                       <GitCompare className="w-4 h-4" aria-hidden="true" />
                       Compare Attempts
                     </Button>
-                    <Button
-                      variant="primary"
-                      fullWidth
-                      onClick={() => sub.actions.requestReviewRoute && router.push(sub.actions.requestReviewRoute)}
-                      disabled={!canRequest || !sub.actions.requestReviewRoute}
-                    >
-                      <Send className="w-4 h-4" aria-hidden="true" />
-                      Request Tutor Review
-                    </Button>
+                    {/* Tutor review is a Writing feature; Speaking results are AI-only. */}
+                    {sub.subTest === 'Writing' ? (
+                      <Button
+                        variant="primary"
+                        fullWidth
+                        onClick={() => sub.actions.requestReviewRoute && router.push(sub.actions.requestReviewRoute)}
+                        disabled={!canRequest || !sub.actions.requestReviewRoute}
+                      >
+                        <Send className="w-4 h-4" aria-hidden="true" />
+                        Request Tutor Review
+                      </Button>
+                    ) : null}
                   </div>
                 </MotionItem>
               );

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, ClipboardList, Clock, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
+import { BookOpen, ClipboardList, Clock, History, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { InlineAlert } from '@/components/ui/alert';
@@ -81,6 +81,29 @@ function PracticeLibraryCard() {
           className="group mt-4 inline-flex min-h-11 items-center gap-1.5 self-start rounded-control text-sm font-bold text-primary transition-colors hover:text-primary-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         >
           Open practice library <span aria-hidden="true" className="inline-block transition-transform duration-200 ease-standard group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none">→</span>
+        </Link>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Post Submissions for Speaking: every card and full mock with its score and grade (Writing hub has the same card). */
+function SpeakingSubmissionsCard() {
+  return (
+    <Card padding="md" className="h-full" data-testid="speaking-submissions-card">
+      <CardContent className="flex h-full flex-col">
+        <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-background-light text-muted">
+          <History className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <h3 className="mt-3 text-base font-bold text-navy">Speaking submissions</h3>
+        <p className="mt-1 flex-1 text-sm leading-snug text-muted">
+          Reopen your role-plays and full mocks with their score and OET grade, or retry a grade that did not finish at no cost.
+        </p>
+        <Link
+          href="/submissions?subtest=speaking"
+          className="group mt-4 inline-flex min-h-11 items-center gap-1.5 self-start rounded-control text-sm font-bold text-primary transition-colors hover:text-primary-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          View Speaking submissions <span aria-hidden="true" className="inline-block transition-transform duration-200 ease-standard group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5 motion-reduce:transition-none">→</span>
         </Link>
       </CardContent>
     </Card>
@@ -251,6 +274,9 @@ export default function SpeakingHome() {
             </MotionItem>
             <MotionItem delayIndex={2} className="h-full">
               <LearnerSurfaceCard card={tutorCard} />
+            </MotionItem>
+            <MotionItem delayIndex={3} className="h-full">
+              <SpeakingSubmissionsCard />
             </MotionItem>
           </div>
         </section>

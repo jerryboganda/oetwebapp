@@ -13,7 +13,6 @@ import {
   type SpeakingSimulationV11CardBreakdown,
   type SpeakingSimulationV11Criterion,
   type SpeakingSimulationV11Evidence,
-  type SpeakingSimulationV11LearnerTutorOverride,
 } from '@/lib/api/speaking-simulation-v11';
 import { oetReportedGradeFromScaled, oetReportedScoreFromScaled } from '@/lib/scoring';
 import type { SpeakingInputKind } from '@/lib/speaking/input-kind';
@@ -23,8 +22,6 @@ interface SpeakingSimulationV11ReportViewProps {
   response: SpeakingSimulationV11AssessmentResponse;
   transcript?: SpeakingTranscriptPayload | null;
   transcriptsBySessionId?: Record<string, SpeakingTranscriptPayload | null>;
-  tutorOverride?: SpeakingSimulationV11LearnerTutorOverride | null;
-  tutorOverridesBySessionId?: Record<string, SpeakingSimulationV11LearnerTutorOverride | null>;
   title?: string;
   /**
    * What the learner handed in. Live voice may have short, evidence-linked mic clips; null stays neutral.
@@ -41,6 +38,13 @@ function formatTime(ms: number | null): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
+/** Candidate-readable text for a stored detail value: never raw JSON or snake_case codes. */
+function plainDetail(item: unknown): string {
+  if (item == null || typeof item !== 'object') return String(item ?? '').replace(/_/g, ' ');
+  if (Array.isArray(item)) return item.map(plainDetail).join(', ');
+  return Object.values(item).map(plainDetail).filter(Boolean).join(' · ');
+}
+
 function JsonSummary({ value }: { value: Record<string, unknown> }) {
   const entries = Object.entries(value).filter(([, item]) => item !== null && item !== '');
   if (entries.length === 0) return <p className="text-sm text-muted">No additional detail recorded.</p>;
@@ -52,7 +56,7 @@ function JsonSummary({ value }: { value: Record<string, unknown> }) {
             {key.replace(/([A-Z])/g, ' $1')}
           </dt>
           <dd className="mt-1 text-sm text-navy">
-            {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+            {plainDetail(item)}
           </dd>
         </div>
       ))}
@@ -131,9 +135,7 @@ function CriterionCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-navy">{criterion.label}</h3>
-          <p className="mt-0.5 text-xs text-muted">
-            {criterion.weight}% · {criterion.criterionCode}
-          </p>
+          <p className="mt-0.5 text-xs text-muted">{criterion.weight}% of the score</p>
         </div>
         <span className="text-lg font-bold tabular-nums text-navy">
           {Math.round(criterion.rawScore)}
@@ -181,7 +183,7 @@ function CriterionCard({
               )}
             >
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                <span className="font-semibold">{evidence.evidenceType}</span>
+                <span className="font-semibold capitalize">{evidence.evidenceType.replace(/_/g, ' ')}</span>
                 {evidence.turnNumber ? (
                   <span>
                     {evidence.sourceCardSlot ? `Card ${evidence.sourceCardSlot.toUpperCase()} · ` : ''}
@@ -213,13 +215,7 @@ function CriterionCard({
   );
 }
 
-function CardBreakdownCard({
-  breakdown,
-  tutorOverride,
-}: {
-  breakdown: SpeakingSimulationV11CardBreakdown;
-  tutorOverride?: SpeakingSimulationV11LearnerTutorOverride | null;
-}) {
+function CardBreakdownCard({ breakdown }: { breakdown: SpeakingSimulationV11CardBreakdown }) {
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
@@ -249,16 +245,6 @@ function CardBreakdownCard({
           ) : null}
         </div>
       </div>
-      {tutorOverride ? (
-        <div className="mt-4 rounded-lg border border-success/30 bg-success/10 p-3">
-          <p className="eyebrow text-success-strong">Human tutor revision</p>
-          <p className="mt-1 text-sm font-semibold text-navy">
-            {oetReportedScoreFromScaled(tutorOverride.estimatedPracticeScore)} / 500 · range{' '}
-            {oetReportedScoreFromScaled(tutorOverride.scoreRangeLow)}-{oetReportedScoreFromScaled(tutorOverride.scoreRangeHigh)}
-          </p>
-          <p className="mt-1 text-xs text-navy">{tutorOverride.reason}</p>
-        </div>
-      ) : null}
       <div className="mt-4 grid gap-3 md:grid-cols-2">
         {breakdown.criteria.map((criterion) => (
           <CriterionCard
@@ -346,8 +332,6 @@ export function SpeakingSimulationV11ReportView({
   response,
   transcript,
   transcriptsBySessionId,
-  tutorOverride,
-  tutorOverridesBySessionId,
   title = 'Speaking simulation report',
   inputKind,
 }: SpeakingSimulationV11ReportViewProps) {
@@ -386,11 +370,6 @@ export function SpeakingSimulationV11ReportView({
                 ? 'This attempt has no estimated score because the transcript or the assessment could not be verified. The issue must be reviewed or the controlled retake path used.'
                 : 'This attempt has no estimated score because the authoritative audio, transcript, or assessment pipeline could not be verified. The issue must be reviewed or the controlled retake path used.'}
             </p>
-            {response.technicalReviewCode ? (
-              <p className="mt-2 eyebrow text-warning-strong">
-                Reason: {response.technicalReviewCode}
-              </p>
-            ) : null}
           </div>
         </div>
       </Card>
@@ -473,25 +452,6 @@ export function SpeakingSimulationV11ReportView({
         </nav>
       </Card>
 
-      {tutorOverride ? (
-        <Card className="border-success/30 bg-success/10 p-5">
-          <p className="eyebrow text-success-strong">Human tutor revision</p>
-          <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <p className="text-xl font-bold text-navy">
-              {oetReportedScoreFromScaled(tutorOverride.estimatedPracticeScore)} / 500
-            </p>
-            <p className="text-sm text-navy">
-              Reviewed range: {oetReportedScoreFromScaled(tutorOverride.scoreRangeLow)}-
-              {oetReportedScoreFromScaled(tutorOverride.scoreRangeHigh)}
-            </p>
-          </div>
-          <p className="mt-2 text-sm leading-relaxed text-navy">{tutorOverride.reason}</p>
-          <p className="mt-2 text-xs text-success-strong">
-            The AI report above remains preserved as the original practice estimate; this human revision is shown separately.
-          </p>
-        </Card>
-      ) : null}
-
       {report.cardSlot === 'combined' && cardBreakdowns.length > 0 ? (
         <section className="space-y-3" aria-label="Per-card breakdowns">
           <div>
@@ -505,7 +465,6 @@ export function SpeakingSimulationV11ReportView({
               <CardBreakdownCard
                 key={`${breakdown.cardSlot}-${breakdown.assessmentId}`}
                 breakdown={breakdown}
-                tutorOverride={tutorOverridesBySessionId?.[breakdown.speakingSessionId]}
               />
             ))}
           </div>

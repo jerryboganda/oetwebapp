@@ -263,6 +263,7 @@ export default function SpeakingTranscriptPage() {
                   title="Rulebook Audit"
                   subtitle={`Transcript-level checks grounded in Dr. Hesham's Speaking rulebook. Inferred card type: ${inferredCardType.replace(/_/g, ' ')}.`}
                   findings={auditFindings}
+                  hideRuleIds
                   className="rounded-2xl"
                 />
               </MotionSection>
