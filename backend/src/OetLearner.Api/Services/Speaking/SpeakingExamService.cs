@@ -627,8 +627,10 @@ public sealed class SpeakingExamService(
         if (changed) { exam.UpdatedAt = now; await db.SaveChangesAsync(ct); }
 
         var cards = new List<SpeakingExamCardResult>(2);
-        cards.Add(await ResultForCardAsync(exam, exam.SessionAId, 1, ct));
-        cards.Add(await ResultForCardAsync(exam, exam.SessionBId, 2, ct));
+        var cardA = await ResultForCardAsync(exam, exam.SessionAId, 1, ct);
+        var cardB = await ResultForCardAsync(exam, exam.SessionBId, 2, ct);
+        cards.Add(cardA.Result);
+        cards.Add(cardB.Result);
 
         // Aggregate once both cards are scored.
         string overall;
@@ -649,8 +651,8 @@ public sealed class SpeakingExamService(
 
         if (overall == "scored")
         {
-            var scaledA = cards[0].Assessment?.EstimatedScaledScore;
-            var scaledB = cards[1].Assessment?.EstimatedScaledScore;
+            var scaledA = cardA.RawScaledScore;
+            var scaledB = cardB.RawScaledScore;
             if (scaledA is not null && scaledB is not null)
             {
                 combined = (int)Math.Round((scaledA.Value + scaledB.Value) / 2.0);
@@ -686,12 +688,12 @@ public sealed class SpeakingExamService(
             Cards: cards);
     }
 
-    private async Task<SpeakingExamCardResult> ResultForCardAsync(
+    private async Task<(SpeakingExamCardResult Result, int? RawScaledScore)> ResultForCardAsync(
         SpeakingExamSession exam, string? sessionId, int cardNumber, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            return new SpeakingExamCardResult(cardNumber, string.Empty, "pending", null);
+            return (new SpeakingExamCardResult(cardNumber, string.Empty, "pending", null), null);
         }
 
         // Human-marked only for a live-tutor booking. AI curated mock-set
@@ -702,8 +704,8 @@ public sealed class SpeakingExamService(
                 .Where(t => t.SpeakingSessionId == sessionId && t.IsFinal)
                 .OrderByDescending(t => t.SubmittedAt)
                 .FirstOrDefaultAsync(ct);
-            return new SpeakingExamCardResult(
-                cardNumber, sessionId, tutor is null ? "awaiting_tutor" : "scored", null);
+            return (new SpeakingExamCardResult(
+                cardNumber, sessionId, tutor is null ? "awaiting_tutor" : "scored", null), null);
         }
 
         // A session with a captured v1.1 persona is owned by the released
@@ -724,6 +726,7 @@ public sealed class SpeakingExamService(
                 && !await db.SpeakingRecordings.AsNoTracking().AnyAsync(r => r.Id == recorderFallbackId, ct);
 
         SpeakingAiAssessmentProjection? latest;
+        int? rawScaledScore = null;
         if (usesSimulationV11)
         {
             var v11Report = (await db.SpeakingSimulationV11Assessments.AsNoTracking()
@@ -734,10 +737,18 @@ public sealed class SpeakingExamService(
                 .OrderByDescending(a => a.GeneratedAt)
                 .FirstOrDefault();
             latest = v11Report is null ? null : ProjectV11CardScore(v11Report);
+            rawScaledScore = v11Report is null ? null : v11Report.EstimatedPracticeScore ?? 0;
         }
         else
         {
             latest = await assessor.GetLatestAsync(sessionId, ct);
+            if (latest is not null)
+            {
+                rawScaledScore = await db.SpeakingAiAssessments.AsNoTracking()
+                    .Where(a => a.Id == latest.AssessmentId)
+                    .Select(a => a.EstimatedScaledScore)
+                    .SingleAsync(ct);
+            }
         }
 
         if (latest is null)
@@ -751,8 +762,8 @@ public sealed class SpeakingExamService(
             }
         }
 
-        return new SpeakingExamCardResult(
-            cardNumber, sessionId, latest is null ? "pending" : "scored", latest);
+        return (new SpeakingExamCardResult(
+            cardNumber, sessionId, latest is null ? "pending" : "scored", latest), rawScaledScore);
     }
 
     /// <summary>Summary projection of a complete v1.1 card report into the

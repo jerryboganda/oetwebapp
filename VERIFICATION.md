@@ -6,6 +6,10 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 05:35 | CI triage | CI triage | 37180309411 | Classify the failed run (jev-1.13.0)=success | SUCCESS | 88b2567dd |
+| 2026-10-04 04:42 | CI triage | CI triage | 37177776890 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 88b2567dd |
+| 2026-10-04 04:33 | QA Smoke | QA Smoke | 37177363819 | Placement entry contracts=success Frontend unit (vitest + lint + tsc + build)=success Detect what changed=success Backend tests (.NET) · shard 2/6=success Backend tests (.NET) · shard 1/6=success Backend tests (.NET) · shard 6/6=success Backend tests (.NET) · shard 4/6=failure Backend tests (.NET) · shard 5/6=success Backend tests (.NET) · shard 3/6=success QA gate (all suites green)=failure | FAILURE | 88b2567dd |
+| 2026-10-04 04:32 | QA Smoke | QA Smoke | 37177288682 | Placement entry contracts=success Detect what changed=success Frontend unit (vitest + lint + tsc + build)=success Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}=skipped QA gate (all suites green)=success | SUCCESS | 88b2567dd |
 | 2026-10-04 04:19 | CI triage | CI triage | 37176665371 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 0689edfd0 |
 | 2026-10-04 04:08 | QA Smoke | QA Smoke | 37176154904 | Placement entry contracts=success Detect what changed=success Frontend unit (vitest + lint + tsc + build)=success Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}=skipped QA gate (all suites green)=success | SUCCESS | 0689edfd0 |
 | 2026-10-04 04:17 | CI triage | CI triage | 37176564768 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 0689edfd0 |

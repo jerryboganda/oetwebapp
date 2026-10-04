@@ -11,7 +11,15 @@ Last updated: 2026-10-04
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
-## Active checkpoint - Deployment acceleration, measured free-runner target misses (2026-10-04)
+## Active checkpoint - Preserved Speaking regression, native repair underway (2026-10-04)
+
+- Final deployment evidence/docs commit 88b2567dd shipped with bound NOTHING_TO_DEPLOY proof; production remains the verified 068 release.
+- One forced QA 37177363819 passed frontend, all six default backend builds and shards 1/2/3/5/6; only shard4/dependent gate failed.
+- Existing raw snapshot assertion expected397/actual400 traced rounded learner DTOs entering internal aggregation; live Jev production_regression p.99/confidence.98.
+- Source owner released one-file tuple/raw-score fix preserving public400, readiness/holds and selected assessment identity; no fixture relaxed. Native new-source/pipeline/regression evidence remains.
+- Existing manual filtered CI is Jev-approved; no new workflow, local computation, production browser or provider call. Empty May queue privacy closure remains authorization-blocked.
+
+## Previous checkpoint - Deployment acceleration, measured free-runner target misses (2026-10-04)
 
 - Wrote immutable component reuse, same-publish SQL/Writing references, persisted caches, lean contexts and health/config-aware service reuse; bound paired router recovery/serving identity remain enforced.
 - Added inclusive ship timing, actual-promotion/no-op proof and offline provenance/driver/watcher/registry regressions.

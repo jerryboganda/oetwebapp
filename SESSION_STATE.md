@@ -2,10 +2,10 @@
 
 Session: deployment-latency
 Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
-Mode: verify
-Updated: 2026-10-04T04:20:10Z
+Mode: execute
+Updated: 2026-10-04T05:35:37Z
 Branch: main
-HEAD: 0689edfd042684923c09b4c4ec3c8082b8833763
+HEAD: 88b2567dd9b3cc1414dd6692db4e78405e6b9bbf
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -64,6 +64,10 @@ release provenance, protected storage, readiness or rollback.
 - D-21 QA 37175518536 and 37176154904 passed preserved frontend repairs (tsc/encoding/lint/vitest/build); backend skipped. E96 pending QA was superseded with zero jobs, not evidence. Preserve one backend=always evidence run after the final documentation push, followed by the Speaking owner.
 - D-22 Live validated Jev selected truthful measured free-runner closeout (p/confidence 1): no speculative boot rewrite or weakened gates; report target misses, retain repaired-backend evidence and require specific authorization/native safety for privacy closure.
 - D-23 Final ax:verify matched 78 recorded rows and 14 cited gate run IDs to native GitHub; ax:check and owned diff whitespace check passed. No local build/test workload ran.
+- D-24 Final owned five-file documentation/evidence commit 88b2567dd shipped through the lease; NOTHING_TO_DEPLOY correctly proves production is unchanged at 068. Exactly one backend=always dispatch 37177363819 is natively confirmed on 88b2567dd; it was pending at 04:36Z. An initial timestamp-proximity discovery failed; the exact returned run ID recovered it, without redispatch.
+- D-25 At 05:29Z, 37177363819 frontend/placement and backend shards 2/3/5/6 passed. All six native backend Release builds passed; shard 4 job 111363914610 failed Test (shard 4), while shard 1 was still testing. Speaking owner received the exact failure for scoped triage; no whole-backend PASS claim.
+- D-26 Final 37177363819 failed only shard 4/dependent gate; shard 1 also passed. Source owner traced the preserved raw397/actual400 assertion to aggregation of rounded learner DTOs (live Jev production_regression p .99/confidence .98). Released one-file fix carries selected persisted raw scores alongside card results, preserving public400, raw snapshots/readiness and holds; both private callers wired. No test relaxed.
+- D-27 Live Jev selected existing manual Writing Rev8 CI's arbitrary dotnet_filter lane (p .97/confidence .96) for scoped Speaking regression, not new workflow machinery. All production/browser/AI controls stay false/empty. It regenerates canonical rulebooks; prove selected tests actually execute and keep original production byte/serving evidence separate.
 
 ## Touched files
 
@@ -99,16 +103,17 @@ release provenance, protected storage, readiness or rollback.
 | 38 protocol tests and actual web bytes/owners | build-images.yml / guards + build-web | 37176154885 | PASS |
 | final serving/timing and native API reuse | production-deploy.yml + ship watcher | 37176403559 | PASS |
 | preserved frontend repairs, backend explicitly skipped | qa-smoke.yml / frontend-unit | 37176154904 | PASS |
+| repaired raw-score aggregation regression | writing-rev8-ci.yml / scoped dotnet_filter | .github/workflows/writing-rev8-ci.yml | NOT RUN |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
 - The 300-second target remains unmet. Verified inclusive releases measured 744.784 -> 569.457 -> 582.880 -> 529.552 seconds. The final release was cold web compilation with healthy API reuse, not a full cold/Writing-live release. Cold forced-Writing build-only took 310 seconds. Direct HTTP readiness already polls every three seconds; do not remove gates or claim warm projections as measured acceptance.
-- Preserved backend fixtures still need the final one-time backend=always evidence run because the repaired pending QA was superseded; frontend and actual runtime image/build/deploy evidence are green. Speaking peer owns changed-fixture triage.
+- QA 37177363819 predates the source correction and failed its single raw-score snapshot assertion. All other shards and frontend passed. Released source-only correction still requires a new pipeline release and actual focused regression evidence; no whole-backend PASS claim.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
 - At 04:26Z, it was the only queued/in-progress record, the ship lock/lease were free and the repository was PUBLIC. Specific deletion approval was requested; the owner was unavailable, so no authorization was granted and no history was deleted.
 
 ## Next action
 
-1. Verify the real cited gates with ax:verify, commit/ship only final measurement/doc/state/evidence paths (no runtime input change), dispatch QA backend=always once on the resulting main SHA and give its exact ID to the Speaking owner. Restore privacy only when the native guard permits; otherwise record the exact missing authorization/queue blocker without deleting history or bypassing it.
+1. Commit only the released SpeakingExamService.cs correction plus owned actual evidence/state; ship and follow exact production serving proof. Dispatch the existing Writing Rev8 CI custom filter for SpeakingSessionGradingTests/SpeakingExamServiceTests with production/AI/browser controls off, capture real tests and return SHA/run IDs to the source owner. Restore privacy only with native guard and fresh specific authorization; delete no history or bypass safety.
