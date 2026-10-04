@@ -2,6 +2,33 @@
 
 This file is always loaded by coding agents. Keep it compact. Do not restore large vendored Copilot skill or agent catalogs into startup context unless the user explicitly asks.
 
+## Mandatory accelerated baseline (owner directive 2026-10-04; no deviations)
+
+**Every contributor and agent uses the accelerated architecture verified in release
+`e7485ce2fec757c158e1b381d271f65f4d136478`: 510.240 seconds (8m30.24s) from before
+the first push attempt to verified live.** That is a measured baseline, not a fixed
+deadline. Do not replace it with the former hour-long graph, another rollout path,
+full QA/E2E on the production critical path, redundant compilation or unproven reuse.
+
+Use `pnpm run ship` after an explicit-path commit. It must retain the shared lock,
+public-before-push lease, static gate, immutable ancestor reuse, trusted caches,
+same-publish SQL, actual applicable Writing tests, health-gated paired promotion,
+physical/public serving proof and recorded evidence. Release-bypass options
+(`--no-watch`, `--no-record`, `--no-visibility`, `--force-release`) are rejected;
+unknown native visibility/queue results are blockers, never permission to continue.
+Missing checkers and job-scoped fast-path drift fail the existing pipeline guards.
+Workstation/console holders share `PUBLIC_WINDOW_HOLDERS`; local locks are exclusive
+and unknown state never means absent. Recover only a verified inactive lock, never
+force-release a live owner or drop another holder.
+
+This contract is inherited by Copilot, Codex/OpenCode (`AGENTS.md`), Claude
+(`CLAUDE.md`), Gemini (`GEMINI.md`), all repo roles and their subagents.
+The **owner-console exception below remains mandatory**: its agents use
+`agent/*` + PR and its isolated Ship executor, which merges into the same
+`Build images` → `Deploy production` path. Never give a console engine direct
+main-push or visibility authority. Benchmarks and immutable rollback stay separate
+labelled tools; neither proves a new live release.
+
 ## Stack
 
 - Frontend: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, motion v12.
@@ -15,7 +42,7 @@ Standing owner directive for **every** development/debugging task. Overrides any
 
 **Stopping at "pushed, deploy initiated" is a defect.** The agent owns the push until `Deploy production` for **this SHA** succeeds and live health is green. The owner must not have to ask "did deploy work?".
 
-**One command (multi-agent safe, owner directive 2026-10-03): `pnpm run ship`** — ship lock (shared by every worktree) → rebase on `origin/main` → `ship:gate` → visibility lease + public flip (before the push) → `git push origin HEAD:main` with rebase-retry → supersede-aware watch of `Deploy production` → `ax:record`. Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--sha <sha>`, `--status`, `--release-lease`.
+**One command (multi-agent safe, owner directive 2026-10-03): `pnpm run ship`** — ship lock (shared by every worktree) → rebase on `origin/main` → `ship:gate` → visibility lease + public flip (before the push) → `git push origin HEAD:main` with rebase-retry → supersede-aware watch of `Deploy production` → `ax:record`. Diagnostics: `--dry-run`, `--no-push`, `--status`; verified recovery: `--sha <sha>`. No release-completion bypasses; a live ship lock cannot be overridden.
 
 1. Do the task properly (correctness/root-cause still matter).
 2. Run `pnpm run ship`. `ship:gate` (seconds) is the required pre-push check inside it. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. QA Smoke does not gate production; browser lanes are manual-dispatch only. Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.

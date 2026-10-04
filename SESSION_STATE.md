@@ -1,11 +1,11 @@
 # SESSION STATE
 
 Session: deployment-latency
-Goal: Reduce main-push-to-healthy-serving deployment latency toward 300 seconds on existing free hosted runners, preserving release, migration, health and rollback contracts.
-Mode: blocked
-Updated: 2026-10-04T06:03:05Z
+Goal: Make the verified accelerated production release architecture compulsory for all project agents and contributors, then commit, push main and verify this session live.
+Mode: verify
+Updated: 2026-10-04T09:28:15Z
 Branch: main
-HEAD: 60ad4a75d28f6b671e12a87079eea2546d80c874
+HEAD: 7bc18ffd8b987c05b4bd9e3bf5b87db15a000fed
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -26,18 +26,20 @@ Rules
 
 ## Objective
 
-Shorten the full main-push-to-healthy-public-serving path toward 300 seconds,
-including queues, cold builds, migrations and required Writing checks.
-Use existing free hosted runners only; report measured misses without bypassing
-release provenance, protected storage, readiness or rollback.
+Enforce the already-live accelerated architecture measured at 510.240 seconds
+(8m30.24s), across inherited agent/contributor instructions, the existing static
+guards and both workstation/isolated-console release controls. Commit only owned
+paths, ship main through the lease, verify native Actions and actual live identity,
+and preserve free runners, provenance, Writing, readiness, storage and recovery.
+The measured duration is not a fixed deadline or an authorization to skip gates.
 
 ## Acceptance criteria
 
-- [x] AC-1 Only changed runtime inputs compile; every reused component has verified immutable provenance.
-- [x] AC-2 API SQL comes from the same publish compilation; required Writing tests really execute.
-- [x] AC-3 Unchanged healthy services stay running; router cutover is durable and rolls back as a pair.
-- [x] AC-4 Actions regression/build/deploy evidence and exact serving-image proof are recorded.
-- [x] AC-5 Inclusive elapsed measurements disclose cold/Writing/queue misses and unmeasured categories; no 300-second guarantee claimed.
+- [x] AC-1 Copilot/Codex/OpenCode, native Claude/Gemini and contributor entrypoints inherit one compulsory baseline; console engines retain PR/Ship isolation.
+- [ ] AC-2 Job-scoped guards/mutation regressions protect immutable reuse, consumed caches, same-publish SQL, real Writing tests and lean byte-checked runtimes.
+- [ ] AC-3 Actual releases reject watcher/evidence/visibility/workflow bypasses; unknown native reads and missing checkers fail closed; no live lock theft or forced console-private timeout.
+- [ ] AC-4 Exact Actions regressions, production serving proof and the separately updated console runtime are verified after scoped main shipment.
+- [ ] AC-5 Evidence/handoffs are persistent, timing claims remain measured and privacy restoration never ignores another holder or queued run.
 
 ## Decisions (do not revisit)
 
@@ -73,6 +75,11 @@ release provenance, protected storage, readiness or rollback.
 - D-30 Native 37180640839 TRX executed/passed 67/67 with zero skipped/failed, including original raw397/public400 and all three hold/clean/classic selectors. Whole-solution compile job 111372344831 and frontend 111372344713 passed; scoped Vitest executed only the report-view file's 12 cases, not hook tests inferred from inputs. This lane regenerates canonical rulebooks and is separate from production-byte proof.
 - D-31 Source owner received and independently confirmed exact e748 serving/regression proof; no further Speaking edits needed. New full QA 37180577741 remains active at 05:55Z (frontend/placement and shard5 passed); never claim whole-QA green. Live validated Jev selected verified best effort with blocked privacy (p/confidence 1), not speculative boot rewrites, weakened gates or unmeasured five-minute claims.
 - D-32 Final five-path documentation/evidence commit 60ad4a75d shipped through the normal lease at 06:03Z with bound NOTHING_TO_DEPLOY proof; e748 remains the verified runtime release. Final ax:verify matched 88 ledger rows/19 gate run IDs to native GitHub; ax:check and owned whitespace checks passed. Remaining blocker is guarded privacy, not unshipped runtime work.
+- D-33 New owner request explicitly authorizes universal fast-path enforcement and commit/main push/deploy. Preserve the already-pushed unrelated ledger closeout 7bc18ffd8; no branch/reset/stash or unrelated staging.
+- D-34 Live typed Jev selected existing-contract enforcement, compulsory verified releases, scoped mutation guards and inherited native agent entrypoints (all p/confidence/margin1). No new framework, paid capacity or guaranteed 510.240-second deadline.
+- D-35 Native full e748 QA37180577741 ended CANCELLED: frontend/placement and shards2-6 passed, shard1 cancelled and dependent gate failed. Focused67/67 and production proof remain valid; never claim the full suite passed. Docs QA37181645871 passed.
+- D-36 A tightly coupled console watchdog bypass would force private after a deadline despite active holders/runs. Live Jev approved guarded retries and a pinned production workflow (both p/confidence/margin1), preserving PR/control identity. Unknown holder/count/visibility fields now block; no historical record is excluded/deleted.
+- D-37 Bounded reviewer had read-only tools and could not obtain its required diff/live Jev, so no review PASS claimed. Parent traced exact state/lock/holder boundaries; additional live Jev approved atomic fail-closed state/exclusive locks and reuse of the existing native cross-surface holder channel (both p/confidence/margin1). No new dependency/service; variable writes are explicitly not a distributed commit mutex.
 
 ## Touched files
 
@@ -89,6 +96,11 @@ release provenance, protected storage, readiness or rollback.
 | docs/ops/deploy-gate.md + AGENTS.md + deployment/validation instructions | current pipeline-only operational contract |
 | SESSION_STATE.md + TASKS.json + PROGRESS.md | owned task state and durable handoff |
 | backend/src/OetLearner.Api/Services/Speaking/SpeakingExamService.cs | selected persisted raw scores for internal aggregation, unchanged public rounded results |
+| CLAUDE.md + GEMINI.md + CONTRIBUTING.md + shared agent instructions | native imports and universal mandatory accelerated baseline, no duplicated catalogs |
+| scripts/ship/ship.mjs + pre-push-gate.mjs + watch-deploy.ps1 | no completion bypasses, fail-closed native reads/evidence, live lock ownership and lease-bound recovery |
+| scripts/deploy/verify-pipeline-contract.mjs + release-manifest.test.mjs | scoped accelerated invariants, comment-safe checks and meaningful mutation/native boundary regressions |
+| agent-console/src/config.ts + src/ship.ts + tests/config.test.ts + tests/ship.test.ts | pinned production workflow and fail-closed lease-safe privacy watchdog, preserving isolated PR shipment |
+| agent-console/etc/MANUAL.md + docs/ops/OWNER-AGENT-CONSOLE.md | same pipeline for console engines, correct guarded deadline semantics |
 
 ## Verification gates
 
@@ -114,16 +126,20 @@ release provenance, protected storage, readiness or rollback.
 | latest 38 protocol cases and original API runtime bytes | build-images.yml / guards + build-api | 37180577765 | PASS |
 | new same-publish SQL verification/application | production-deploy.yml / job 111372763414 | 37180764537 | PASS |
 | latest API-change physical/public serving and measured timing | production-deploy.yml / job 111372825658 + ship watcher | 37180764537 | PASS |
+| mandatory fast-path mutation/native boundary regressions | build-images.yml / guards | .github/workflows/build-images.yml | NOT RUN |
+| strict ship helpers on Windows/Linux | ax-check.yml / self-test matrix | .github/workflows/ax-check.yml | NOT RUN |
+| console typecheck/tests and separately updated runtime | agent-console.yml | .github/workflows/agent-console.yml | NOT RUN |
+| enforcement shipment + physical/public serving proof | production-deploy.yml + ship watcher | .github/workflows/production-deploy.yml | NOT RUN |
 
 ## Blockers
 
 - The shared CLI default lacks admin, but the existing repository-owner credential was natively verified with admin=true in an isolated process. Use it only in bounded approved ship/measurement processes; do not change the shared default.
 - The 300-second target remains unmet. Verified inclusive releases measured 744.784 -> 569.457 -> 582.880 -> 529.552 -> 510.240 seconds under different observed conditions. Latest e748 rebuilt the API/reused web; full cold/Writing-live remains unmeasured. Cold forced-Writing build-only took 310 seconds. Direct readiness already polls every three seconds; never remove gates or present projections as acceptance.
-- QA 37177363819 predates the correction and retains its genuine single raw-score assertion failure. E748 source correction is now actually live and 67/67 focused regressions passed. New full QA 37180577741 is still active; no whole-backend PASS claim, duplicate dispatch or pending-run replacement.
+- QA37177363819 predates the already-live scoring correction; 67/67 focused regressions passed. Full e748 QA37180577741 ended cancelled, not a whole-backend PASS. Do not rerun unrelated QA for this deployment-control change.
 - The ship lease kept the repository public while other Actions are queued/in progress. Do not flip it private until the lease safety check permits it.
 - Native GitHub has an additional stale PR SCA queue record, 25907015352 (15 May, no jobs/artifacts, superseded ancestor). Standard cancellation says completed; documented force-cancel says not queued. Neither resolved it. Do not bypass privacy safety or delete the record without fresh specific authorization.
-- At 05:50Z, the ship lock/lease were free and the repository was PUBLIC; native queue guard saw 25907015352 plus 37180577741. Specific May-record deletion approval was previously requested; owner unavailable, no authorization granted and no history deleted.
+- Latest startup: ship lock/lease free, repository PUBLIC and only the empty May25907015352 queue record remains. Its permanent deletion still lacks specific authorization; no history is deleted or native safety bypassed.
 
 ## Next action
 
-1. Privacy remains blocked: obtain specific authorization for empty May record 25907015352 or wait for native resolution, let active QA finish, then require ship.mjs --may-flip-private before restoring PRIVATE. E748 is already verified live and final docs shipped in 60ad4a75d; do not redispatch, push a redundant runtime build, rewrite unrelated code, delete history or bypass the guard. The owner-approved free-runner closeout is measured best effort, not five-minute acceptance.
+1. Final owned implementation/docs reread and local ship:gate/ax:check are green. Commit the explicit 25 owned paths, then pnpm run ship and follow native build/AX/console/production evidence. Verify the separate console applies without interrupting active turns; retain the May-record privacy blocker unless native safety resolves it or specific deletion approval arrives.

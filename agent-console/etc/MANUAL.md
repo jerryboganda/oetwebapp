@@ -78,8 +78,16 @@ manual) override it for console sessions.
   merge PRs, delete branches you did not create, or change repository visibility
   (`gh repo edit --visibility`). Do not run `gh repo delete|edit|archive|rename`, `gh secret`,
   `gh variable`, or `gh api` with `PATCH`/`PUT`/`DELETE`.
-- Shipping is done by the owner with the console's **Ship** button (push → PR → merge → Build &
-  Deploy → health). Your branch is pushed only then. When your change is ready, stop and say so;
+- `AGENTS.md`'s **Mandatory accelerated baseline** applies to every console engine
+ and delegated worker. Keep immutable reuse, trusted caches, same-publish SQL,
+ actual applicable Writing checks and health-gated exact serving proof. The
+ measured 8m30.24s is not a fixed duration; never weaken a gate or add full QA/E2E
+ to the production critical path.
+- Shipping is done by the owner with the console's **Ship** button (push → PR →
+ merge → **Build images** → **Deploy production** → verified health). This is
+ the same accelerated production pipeline, not a separate rollout. Never run
+ the workstation's `pnpm run ship` from a console engine or bypass Ship isolation.
+ Your branch is pushed only then. When your change is ready, stop and say so;
   if a fix is needed after a deploy, make it on a new commit in your session and let the owner
   ship again.
 - `qa-smoke.yml` can only run on refs that exist on GitHub (`main`, or a branch already

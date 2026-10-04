@@ -1,15 +1,11 @@
-# Watch Build & Deploy for a SHA, dump failed logs, verify live health.
+# Watch the accelerated Build images -> Deploy production path and prove live identity.
 # Does not invent code fixes. Non-zero exit means the agent must fix and push again
 # WITHOUT waiting for the owner.
-# Flip public, run on GitHub-hosted Actions, flip back private once verified live
-# (owner directive 2026-09-22, HARD ENFORCED — see AGENTS.md "GitHub Actions on a
-# public-when-working repo"). -SkipPublic/-SkipPrivateFlip exist for a caller that
-# is already managing visibility itself (e.g. coordinating with another agent
-# session sharing the same public window) — do not pass them by default.
+# Internal read-only watcher. ship.mjs owns the visibility lease and evidence;
+# it supplies -SkipPublic/-SkipPrivateFlip. Recovery uses the same wrapper.
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File scripts/ship/watch-deploy.ps1
-#   powershell -ExecutionPolicy Bypass -File scripts/ship/watch-deploy.ps1 -Sha <fullsha>
+#   pnpm run ship -- --sha <fullsha>
 [CmdletBinding()]
 param(
     [string]$Repo = 'jerryboganda/oetwebapp',
@@ -33,6 +29,16 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+if ($Workflow -ne 'Deploy production' -or $WorkflowFile -ne 'production-deploy.yml') {
+    throw 'Only Deploy production can verify a production release.'
+}
+if ($SkipVpsSsh) {
+    throw 'SkipVpsSsh is forbidden: physical serving-image proof is compulsory.'
+}
+if (-not $SkipPublic -or -not $SkipPrivateFlip) {
+    throw 'Use pnpm run ship -- --sha <sha>; the wrapper must own the visibility lease and evidence.'
+}
+
 function Invoke-GhJson {
     param([Parameter(Mandatory = $true)][string[]]$GhArgs)
     $raw = & gh @GhArgs 2>&1 | Out-String
@@ -40,15 +46,6 @@ function Invoke-GhJson {
         throw "gh $($GhArgs -join ' ') failed: $raw"
     }
     return $raw.Trim()
-}
-
-function Set-RepoVisibility {
-    param([ValidateSet('public', 'private')][string]$Visibility)
-    Write-Output "VISIBILITY -> $Visibility"
-    & gh repo edit $Repo --visibility $Visibility --accept-visibility-change-consequences
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to set $Repo visibility to $Visibility"
-    }
 }
 
 # Does $Candidate contain $Ancestor? Asked of GitHub, not of the local clone:
@@ -75,10 +72,6 @@ if (-not $resolved -or $resolved -notmatch '^[0-9a-f]{40}$') {
 $Sha = $resolved
 
 Write-Output "SHIP-WATCH repo=$Repo sha=$Sha workflow=$Workflow"
-
-if (-not $SkipPublic) {
-    Set-RepoVisibility -Visibility public
-}
 
 # Since 2026-10-03 the deploy is a `workflow_run`-triggered workflow: the
 # ROLLOUT run only exists once `Build images` for this SHA has finished
@@ -351,27 +344,8 @@ if ($PushStartedAt) {
     $verified = [DateTimeOffset]::UtcNow
     $elapsedSeconds = [Math]::Round(($verified - $started).TotalSeconds, 3)
     if ($elapsedSeconds -lt 0) { throw 'Invalid push-to-live timing: the start is in the future.' }
-    $targetResult = if ($SkipVpsSsh) { 'UNVERIFIED' } elseif ($elapsedSeconds -le 300) { 'MET' } else { 'MISSED' }
+    $targetResult = if ($elapsedSeconds -le 300) { 'MET' } else { 'MISSED' }
     Write-Output "SHIP-WATCH_PUSH_TO_VERIFIED_LIVE seconds=$elapsedSeconds target_seconds=300 result=$targetResult boundary=before_push_to_verified_live sha=$Sha run=$runId"
-}
-
-if (-not $SkipPrivateFlip) {
-    # Lease-aware (owner directive 2026-10-03): never flip private while
-    # another agent holds a ship lease, or while ANY hosted run is queued or
-    # in progress - those runs would be refused on a private repo. The single
-    # implementation of that decision lives in the ship CLI.
-    $mayFlip = $true
-    $shipCli = Join-Path (Split-Path -Parent $PSCommandPath) 'ship.mjs'
-    if (Test-Path $shipCli) {
-        $verdict = & node $shipCli --may-flip-private 2>&1
-        $verdict | ForEach-Object { Write-Output "SHIP-WATCH_$($_)" }
-        if ($LASTEXITCODE -ne 0) { $mayFlip = $false }
-    }
-    if ($mayFlip) {
-        Set-RepoVisibility -Visibility private
-    } else {
-        Write-Output 'SHIP-WATCH_KEEPING_PUBLIC another lease or in-flight run exists'
-    }
 }
 
 Write-Output 'SHIP-WATCH_DONE'

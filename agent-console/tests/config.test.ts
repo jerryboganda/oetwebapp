@@ -62,7 +62,20 @@ describe('startup token requirements', () => {
     expect(config.snapshot.fullDumpMinIntervalMs).toBe(10 * 60_000);
     expect(config.ship.publicWindowMaxMs).toBe(90 * 60_000);
     expect(config.ship.healthUrls).toHaveLength(3);
+    expect(config.ship.deployWorkflowFile).toBe('production-deploy.yml');
     expect(config.updatePendingFile).toBeNull();
+  });
+});
+
+describe('mandatory production pipeline', () => {
+  it('allows the pinned workflow but rejects alternate production paths', () => {
+    const env = { ...baseEnv, OWNER_AGENT_INTERNAL_TOKEN: good };
+    expect(loadConfig({ env: { ...env, AGENT_CONSOLE_DEPLOY_WORKFLOW: 'production-deploy.yml' },
+      readFile: noFiles }).ship.deployWorkflowFile).toBe('production-deploy.yml');
+    for (const value of ['qa-smoke.yml', 'deploy-production.yml', 'custom-rollout.yml']) {
+      expect(() => loadConfig({ env: { ...env, AGENT_CONSOLE_DEPLOY_WORKFLOW: value },
+        readFile: noFiles })).toThrow(/alternate rollout paths are forbidden/);
+    }
   });
 });
 

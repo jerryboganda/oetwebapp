@@ -10,6 +10,11 @@ This file is always loaded. Keep startup lean and defer detail until it is actua
 4. Nearby code and tests
 
 Repository-specific OET rules win over generic framework, skill, plugin, or agent defaults.
+Every agent, role and delegated worker inherits `AGENTS.md`'s **Mandatory accelerated
+baseline** (owner directive 2026-10-04): use the existing verified fast pipeline and
+`pnpm run ship`, with no completion/visibility bypasses or extra critical-path QA.
+Preserve the owner-console PR-only Ship-executor exception. The 8m30.24s baseline
+is measured evidence, not a duration guarantee.
 Before product catalogue, checkout, entitlement, dashboard, add-on, Tutor Book, or course expiry work, load `docs/OET_2026_Product_Portfolio_Claude_Code_Codex.md` and preserve its product IDs, pricing, flags, entitlement templates, and acceptance criteria.
 
 ## Lean Context Policy

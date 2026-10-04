@@ -810,8 +810,11 @@ changing how an engine authenticates.
   session still competes with co-tenants; raise memory only on evidence.
 - **Public window.** During Ship the repo may be public; the Ship executor
   scans agent refs and PR text with gitleaks and blocks `.sql`, `.dump`,
-  `.csv`, `.jsonl`, `.env*` before pushing, and a watchdog restores private
-  visibility within 90 min.
+  `.csv`, `.jsonl`, `.env*` before pushing. The 90-minute public-window deadline
+  triggers guarded privacy retries, never a forced private flip: another holder,
+  queued/running Actions or unverified native data keeps the window open.
+  `AGENTS.md`'s mandatory accelerated baseline applies; the isolated Ship executor
+  follows **Build images** → **Deploy production**, with no alternate workflow override.
 - **Root on the VPS** can bypass all of this; SSH access remains the
   highest-privilege credential in the system.
 

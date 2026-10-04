@@ -620,14 +620,14 @@ async function reportLedgerAdvisory() {
 // the workstation. Enforced in CI as well (the `guards` job of
 // build-images.yml runs the same checker), so deleting this file does not help:
 // that run fails and no image - and therefore no rollout - is produced.
-async function reportPipelineContract() {
-  const modulePath = resolve(root, 'scripts/deploy/verify-pipeline-contract.mjs');
+export async function reportPipelineContract(repoRoot = root) {
+  const modulePath = resolve(repoRoot, 'scripts/deploy/verify-pipeline-contract.mjs');
   if (!existsSync(modulePath)) {
-    console.log('pipeline-contract: checker missing on this branch - skipped here (the CI guards job still enforces it)');
-    return true;
+    console.error('pipeline-contract: required checker is missing; refusing to ship');
+    return false;
   }
   const { scanRepo } = await import(pathToFileURL(modulePath).href);
-  const failures = scanRepo(root);
+  const failures = scanRepo(repoRoot);
   for (const failure of failures) console.error(`pipeline-contract: ${failure}`);
   return failures.length === 0;
 }

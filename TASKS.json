@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-04",
+  "updated": "2026-10-04T09:28:15Z",
   "statuses": [
     "pending",
     "in_progress",
@@ -8,6 +8,46 @@
     "done"
   ],
   "tasks": [
+    {
+      "id": "FAST-01",
+      "title": "Inspect all existing release entrypoints and validate strict enforcement scope with live Jev",
+      "status": "done",
+      "owner": "mandatory-fast-release",
+      "blockedBy": [],
+      "verify": "native source inspection and validated live typed Jev",
+      "evidence": ["Inspected current guards, ship lifecycle, native agent entrypoints and isolated console executor; exact live baseline510.240s is not a duration guarantee", "Live Jev existing_contract, mandatory_verified_release, scoped_mutations, inherited_contract, lease_safe_retry and pin_and_reject each p/confidence/margin1"],
+      "files": []
+    },
+    {
+      "id": "FAST-02",
+      "title": "Enforce the compulsory accelerated architecture, verified lifecycle and native agent inheritance",
+      "status": "done",
+      "owner": "mandatory-fast-release",
+      "blockedBy": ["FAST-01"],
+      "verify": "build-images.yml / guards and ax-check.yml",
+      "evidence": ["Implementation and focused mutation/native boundary regressions written; final static local:ship:gate and ax:check passed. Executable Actions verification is part of FAST-04, not claimed here."],
+      "files": ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "CONTRIBUTING.md", ".github/copilot-instructions.md", "scripts/deploy/verify-pipeline-contract.mjs", "scripts/deploy/release-manifest.test.mjs", "scripts/ship/ship.mjs", "scripts/ship/pre-push-gate.mjs", "scripts/ship/watch-deploy.ps1"]
+    },
+    {
+      "id": "FAST-03",
+      "title": "Keep console agents on the same production pipeline with isolated PR Ship and lease-safe privacy retries",
+      "status": "done",
+      "owner": "mandatory-fast-release",
+      "blockedBy": ["FAST-01"],
+      "verify": "agent-console.yml / tests and actual runtime update",
+      "evidence": ["Scoped code/manual/regressions written and final source reread/static gate clean; pinned workflow, guarded watchdog and shared native holder reach preserve PR/Ship isolation. Actual console tests/runtime proof belongs to FAST-04."],
+      "files": ["agent-console/src/config.ts", "agent-console/src/ship.ts", "agent-console/tests/config.test.ts", "agent-console/tests/ship.test.ts", "agent-console/etc/MANUAL.md", "docs/ops/OWNER-AGENT-CONSOLE.md"]
+    },
+    {
+      "id": "FAST-04",
+      "title": "Commit only owned paths, ship main and record actual Actions/live deployment and coordinated handoff",
+      "status": "in_progress",
+      "owner": "mandatory-fast-release",
+      "blockedBy": ["FAST-02", "FAST-03"],
+      "verify": "pnpm run ship + native build/AX/console/production runs + ax:record",
+      "evidence": [],
+      "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md", "DEPLOYMENT.md"]
+    },
     {
       "id": "LDB-01",
       "title": "Profile identity: AppShell derives effectiveUserSummary from AuthContext when the caller omits userSummary (learner chip stops showing 'User')",

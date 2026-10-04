@@ -136,6 +136,14 @@ artifact per channel and delete the previous VPS copy automatically.
 The normal path is two workflows (split 2026-10-03 so agents can build in
 parallel while production rollouts serialize):
 
+**Mandatory for every person, agent and subagent:** use this accelerated architecture
+through `pnpm run ship` and inherit `AGENTS.md`. Native Claude/Gemini imports and
+Copilot/Codex instructions point at the same contract. Release-bypass flags,
+alternate production workflows, missing checkers, skipped physical proof and
+unverified visibility/queue decisions are rejected. Owner-console engines remain
+PR-only under their isolated Ship executor into this same graph; its deadline
+watchdog cannot strand another ship's Actions by forcing private.
+
 - `.github/workflows/build-images.yml` (**Build images**) — filtered build/deployment
   inputs on `main`, no cross-SHA lock:
   1. `changes` — compares the full successful-ancestor range and classifies

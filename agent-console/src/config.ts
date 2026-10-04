@@ -33,7 +33,7 @@ export interface ShipConfig {
   consoleWorkflowFile: string;
   holdersVariable: string;
   healthUrls: string[];
-  /** Watchdog forces the repo private this long after the ship opened a public window. */
+  /** Watchdog retries guarded privacy restoration after this public-window deadline. */
   publicWindowMaxMs: number;
   mirrorDir: string;
   workDir: string;
@@ -231,6 +231,10 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo)) {
     throw new ConfigError('AGENT_CONSOLE_REPO must be "owner/repo".');
   }
+  const deployWorkflowFile = str(env, 'AGENT_CONSOLE_DEPLOY_WORKFLOW', 'production-deploy.yml');
+  if (deployWorkflowFile !== 'production-deploy.yml') {
+    throw new ConfigError('AGENT_CONSOLE_DEPLOY_WORKFLOW must be production-deploy.yml; alternate rollout paths are forbidden.');
+  }
   const rawHealthUrls = env.AGENT_CONSOLE_HEALTH_URLS?.trim() ?? '';
   const healthUrls = (rawHealthUrls ? rawHealthUrls.split(',') : DEFAULT_HEALTH_URLS)
     .map((url) => url.trim())
@@ -302,7 +306,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     ship: {
       repo,
       baseBranch: 'main',
-      deployWorkflowFile: str(env, 'AGENT_CONSOLE_DEPLOY_WORKFLOW', 'production-deploy.yml'),
+      deployWorkflowFile,
       deployWorkflowName: 'Deploy production',
       consoleWorkflowFile: str(env, 'AGENT_CONSOLE_UPDATE_WORKFLOW', 'agent-console.yml'),
       holdersVariable: 'PUBLIC_WINDOW_HOLDERS',

@@ -82,19 +82,30 @@ describe('ship: PUBLIC_WINDOW_HOLDERS lease', () => {
 });
 
 describe('ship: visibility watchdog', () => {
-  it('forces the repository private once the public window exceeds its deadline', async () => {
+  it('restores private only after the deadline and verified idle holders/Actions', async () => {
     const root = tempDir();
     const config = testConfig(root, { AGENT_CONSOLE_REPO: 'example-owner/example-repo' });
     const store = new Store({ dbPath: path.join(root, 'index.sqlite'), sessionsDir: path.join(root, 'sessions'), redactor: new Redactor() });
     const calls: { method: string; endpoint: string; body: unknown; env: Record<string, string> | undefined }[] = [];
+    let holders = '["agent-console:ship-1","owner-pc"]';
+    let queued = 0;
+    let running = 0;
+    let invalidCount = false;
+    let queueError = false;
+    let invalidHolders = false;
+    let invalidVisibility = false;
     const run: Runner = async (command: string, args: readonly string[], options?: RunOptions) => {
       if (command !== 'gh') return ok();
       const method = args[2] as string;
       const endpoint = args[3] as string;
       calls.push({ method, endpoint, body: options?.input ? JSON.parse(String(options.input)) : undefined, env: options?.env });
-      if (method === 'GET' && endpoint === 'repos/example-owner/example-repo') return ok(JSON.stringify({ private: false }));
+      if (method === 'GET' && endpoint === 'repos/example-owner/example-repo') return ok(JSON.stringify(invalidVisibility ? {} : { private: false }));
       if (method === 'GET' && endpoint.endsWith('/actions/variables/PUBLIC_WINDOW_HOLDERS')) {
-        return ok(JSON.stringify({ name: 'PUBLIC_WINDOW_HOLDERS', value: '["agent-console:ship-1","owner-pc"]' }));
+        return ok(JSON.stringify(invalidHolders ? {} : { name: 'PUBLIC_WINDOW_HOLDERS', value: holders }));
+      }
+      if (method === 'GET' && endpoint.includes('/actions/runs?')) {
+        if (queueError) return ok('', 1, 'queue read unavailable');
+        return ok(JSON.stringify(invalidCount ? {} : { total_count: endpoint.includes('status=queued') ? queued : running }));
       }
       return ok('');
     };
@@ -124,11 +135,32 @@ describe('ship: visibility watchdog', () => {
     expect(calls).toHaveLength(0);
 
     now = 6_000;
+    await expect(executor.watchdogTick()).resolves.toBe(false);
+    holders = '[]';
+    queued = 1;
+    await expect(executor.watchdogTick()).resolves.toBe(false);
+    queued = 0;
+    running = 1;
+    await expect(executor.watchdogTick()).resolves.toBe(false);
+    running = 0;
+    invalidCount = true;
+    await expect(executor.watchdogTick()).rejects.toThrow(/Cannot verify queued Actions/);
+    invalidCount = false;
+    queueError = true;
+    await expect(executor.watchdogTick()).rejects.toThrow();
+    queueError = false;
+    invalidHolders = true;
+    await expect(executor.watchdogTick()).rejects.toThrow(/Cannot verify lease holders/);
+    invalidHolders = false;
+    invalidVisibility = true;
+    await expect(executor.watchdogTick()).rejects.toThrow(/Cannot verify repository visibility/);
+    invalidVisibility = false;
+    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
+    expect(store.getKv('public_window')).not.toBeNull();
+
     await expect(executor.watchdogTick()).resolves.toBe(true);
     expect(calls).toContainEqual(expect.objectContaining({ method: 'PATCH', endpoint: 'repos/example-owner/example-repo', body: { visibility: 'private' } }));
-    expect(calls).toContainEqual(
-      expect.objectContaining({ method: 'PATCH', endpoint: 'repos/example-owner/example-repo/actions/variables/PUBLIC_WINDOW_HOLDERS', body: { name: 'PUBLIC_WINDOW_HOLDERS', value: '["owner-pc"]' } }),
-    );
+    expect(calls.some((c) => c.endpoint.endsWith('/actions/variables/PUBLIC_WINDOW_HOLDERS') && c.method === 'PATCH')).toBe(false);
     expect(calls.every((c) => c.env?.GH_TOKEN === 'placeholder')).toBe(true);
     expect(store.getKv('public_window')).toBeNull();
     expect(emitted).toEqual([{ sessionId: 'S1', level: 'warn' }]);

@@ -48,10 +48,21 @@ that had already been superseded on live Play Console and had to be reverted.
 
 ## Post-push ownership (do not stop at "deploy initiated")
 
-- One command: `pnpm run ship` — ship lock → rebase on `origin/main` → `ship:gate` → visibility lease + public flip → push with rebase-retry → watch `Deploy production` → `ax:record` → lease release (private only when no other lease holder and no run queued/in-progress). Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--sha <sha>`, `--status`, `--release-lease`.
+- **Mandatory accelerated baseline:** `AGENTS.md`'s owner directive 2026-10-04
+ applies to all contributors/agents; preserve the verified 510.240-second release
+ architecture, not an invented duration guarantee.
+- One command: `pnpm run ship` — ship lock → rebase on `origin/main` → `ship:gate` → visibility lease + public flip → push with rebase-retry → watch `Deploy production` → `ax:record` → lease release (private only when no other lease holder and no run queued/in-progress). Diagnostics: `--dry-run`, `--no-push`, `--status`; verified recovery: `--sha <sha>`.
+- `--no-watch`, `--no-record`, `--no-visibility`, `--force-release` and alternate
+ rollout workflows are rejected before mutation. Unknown visibility/queue data,
+ missing contract checkers and failed evidence recording cannot report success.
+ A live ship lock is never stolen, including when synchronous watching delays its heartbeat.
+ Workstation and console visibility holders use the same native channel; unknown
+ local state blocks, lock creation is exclusive, and inactive locks require exact-file
+ recovery rather than unsafe automatic unlink/recreate.
 - `pnpm run ship:gate` alone stays the seconds-long pre-push check inside that flow (conflict markers, leftover rebase splices, brace imbalance). Not a full `pnpm build` / `dotnet test`.
 - **Parallel agents (owner directive 2026-10-03):** never flip visibility by hand while another session is shipping — the wrapper owns the flips under a cross-session lease. A push may be SUPERSEDED by a successful descendant main build; the watcher follows actual promotion, not a successful stand-down. QA Smoke does not gate production; browser lanes are manual-dispatch only.
-- Once live health is green, `pnpm run ax:record` then `pnpm run ax:verify` (the wrapper already does this on a green watch) so `VERIFICATION.md` carries this SHA's real run ids.
+- Once live health is green, the wrapper records with `ax:record`; `pnpm run ax:verify`
+ (or wrapper `--verify`) re-checks the recorded run ids against GitHub.
 - `build-images.yml` `syntax-gate` job must stay first (`needs` of every image build). Do not remove it to "save a minute".
 - Reuse only successful ancestor release manifests and immutable component digests; never mutable `latest`. Missing provenance rebuilds conservatively. Reused API images retain their original SQL source run/checksum.
 - Generate API SQL using the existing publish compilation with `--no-build`; production downloads/verifies that artifact and never installs the SDK or recompiles. Required Writing tests still restore, compile and execute even when same-build API references are reused.

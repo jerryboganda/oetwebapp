@@ -16,10 +16,7 @@ the local machine or the production VPS.
 pnpm run ship               # ONE command per ship (lock -> rebase -> gate -> visibility lease
                             # -> push -> watch Deploy production -> ax:record); multi-agent safe
 pnpm run ship:gate          # the seconds-long static gate inside that flow
-pnpm run ship:watch         # watch Deploy production for a SHA on its own (supersede-aware)
-pnpm run ship:self-test     # ship wrapper self-test (also runs in ax-check.yml, linux + windows)
-pnpm run pipeline:check     # CI/CD contract: single pull-only rollout, no automated browser lanes,
-                            # path-filtered builds, rollout gates intact (runs in the guards job too)
+pnpm run ship -- --sha <sha> # verified recovery under the same lease/gate/evidence rules
 pnpm run ax:check           # validate the state ledger (static; fails on a gate with no evidence)
 pnpm run ax:status          # read the current run's goal, gates and next action
 pnpm run ax:next            # pick the next ready task from TASKS.json
@@ -47,6 +44,10 @@ like `ship:watch` they are local tooling, not compute. See `scripts/agent/README
 | Tauri desktop (fmt, clippy, cargo test) | `tauri-ci.yml` |
 
 Ship-it default is `pnpm run ship` (which runs `ship:gate` internally). Never treat "pushed" as done.
+A release cannot skip the watcher, physical serving proof, evidence or guarded
+visibility cleanup. The standalone PowerShell watcher is an implementation detail
+of the wrapper, not an alternate production path. Follow `AGENTS.md`'s mandatory
+accelerated baseline; preserve actual applicable Writing checks and independent QA.
 A push touching no build input starts no build and no rollout at all; the watcher reports
 `SHIP-WATCH_NOTHING_TO_DEPLOY` and exits 0 — production is legitimately unchanged.
 

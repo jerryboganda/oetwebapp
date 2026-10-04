@@ -4,13 +4,11 @@
  *
  *   pnpm run ship                       full flow (lock -> rebase -> gate -> lease
  *                                       -> public -> push -> watch -> record)
- *   pnpm run ship -- --no-watch         stop after the push
- *   pnpm run ship -- --no-push          lock + rebase + gate + lease, then stop
- *                                       (two-shell lease testing)
- *   pnpm run ship -- --dry-run          fetch + gate + report, no mutation
+ *   pnpm run ship -- --no-push          lock + rebase + gate, without release
+ *   pnpm run ship -- --dry-run          gate + report, no git/visibility mutation
  *   pnpm run ship -- --sha <sha>        watch an existing SHA (skip rebase/push)
  *   pnpm run ship -- --status           show lock / lease / visibility state
- *   pnpm run ship -- --release-lease    force-release a stuck visibility lease
+ *   pnpm run ship -- --release-lease    release this process's visibility lease
  *
  * Concurrency model (owner directive 2026-10-03):
  * - One ship LOCK per repository (shared by every linked worktree through
@@ -27,7 +25,7 @@
  * seconds-long static ship gate. It never builds, tests, lints or installs.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -37,6 +35,7 @@ const LOCK_TTL_MS = 30 * 60 * 1000;
 const LEASE_TTL_MS = 60 * 60 * 1000;
 const HEARTBEAT_MS = 60 * 1000;
 const BASE_BRANCH = 'main';
+const HOLDERS_VARIABLE = 'PUBLIC_WINDOW_HOLDERS';
 const SESSION = process.env.AX_SHIP_SESSION || `${hostname()}#${process.pid}`;
 
 // ------------------------------------------------------------------ helpers
@@ -89,7 +88,7 @@ function git(args, { allowFail = false, cwd = root } = {}) {
   }
 }
 
-function gh(args, { allowFail = true } = {}) {
+function gh(args, { allowFail = true, allowNotFound = false } = {}) {
   const result = spawnSync('gh', args, {
     cwd: root,
     encoding: 'utf8',
@@ -97,19 +96,20 @@ function gh(args, { allowFail = true } = {}) {
     maxBuffer: 64 * 1024 * 1024,
   });
   if (result.status !== 0) {
+    if (allowNotFound && /\bHTTP 404\b/.test(String(result.stderr))) return null;
     if (allowFail) return null;
     throw new Error(`gh ${args.join(' ')} failed: ${String(result.stderr ?? '').trim()}`);
   }
   return String(result.stdout ?? '').trim();
 }
 
-function ghJson(args) {
-  const raw = gh(args);
-  if (!raw) return null;
+function ghJson(args, { allowNotFound = false } = {}) {
+  const raw = gh(args, { allowFail: false, allowNotFound });
+  if (raw === null && allowNotFound) return undefined;
   try {
     return JSON.parse(raw);
   } catch {
-    return null;
+    throw new Error(`gh ${args.join(' ')} returned invalid JSON; refusing an unverified visibility decision`);
   }
 }
 
@@ -124,17 +124,38 @@ export function statePaths() {
   };
 }
 
-function readJson(file) {
+export function readJson(file) {
   try {
-    return JSON.parse(readFileSync(file, 'utf8'));
-  } catch {
-    return null;
+    const value = JSON.parse(readFileSync(file, 'utf8'));
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+      || !['session', 'host'].every((key) => typeof value[key] === 'string' && value[key].length > 0)
+      || !Number.isInteger(value.pid) || value.pid <= 0
+      || typeof value.expiresAt !== 'string'
+      || !Number.isFinite(Date.parse(value.expiresAt))
+      || (value.remoteHolder !== undefined && (typeof value.remoteHolder !== 'string' || !value.remoteHolder))) {
+      throw new Error('Invalid ship-state fields');
+    }
+    return value;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw new Error(`Cannot verify ship state ${file}; refusing to treat unreadable state as absent.`);
   }
 }
 
-function writeJson(file, value) {
+export function writeJson(file, value, { exclusive = false } = {}) {
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
+  const contents = `${JSON.stringify(value, null, 2)}\n`;
+  if (exclusive) {
+    writeFileSync(file, contents, { flag: 'wx' });
+    return;
+  }
+  const temporary = `${file}.${process.pid}.tmp`;
+  writeFileSync(temporary, contents, { flag: 'wx' });
+  try {
+    renameSync(temporary, file);
+  } finally {
+    if (existsSync(temporary)) rmSync(temporary, { force: true });
+  }
 }
 
 // ------------------------------------------------------------------- lock
@@ -150,19 +171,24 @@ function processIsAlive(pid) {
   }
 }
 
-function acquireLock(paths, { force = false } = {}) {
+export function lockIsActive(lock, { host = hostname(), alive = processIsAlive, now = Date.now() } = {}) {
+  if (!lock || typeof lock !== 'object') return false;
+  return lock.host === host ? alive(Number(lock.pid)) : leaseIsActive(lock, now);
+}
+
+export function acquireLock(paths) {
   const existing = readJson(paths.lock);
-  // A killed session (Ctrl+C, closed shell, hard stop) leaves its lock behind.
-  // Reclaim it when the recorded pid is gone instead of blocking other agents
-  // for the full TTL; only same-host pids can be checked.
-  const stale = Boolean(
-    existing && existing.host === hostname() && !processIsAlive(Number(existing.pid)),
-  );
-  if (existing && leaseIsActive({ expiresAt: existing.expiresAt }) && !force && !stale) {
-    throw new Error(
-      `another ship is running: ${existing.session} (pid ${existing.pid}, expires ${existing.expiresAt}).\n` +
-        'Wait for it, or release with: pnpm run ship -- --force-release',
-    );
+  // Synchronous git/watch commands can delay the heartbeat; a live local owner
+  // retains its lock even after the TTL. Never unlink an earlier snapshot:
+  // another acquirer could have replaced it with a live owner's lock.
+  if (existing) {
+    if (lockIsActive(existing)) {
+      throw new Error(
+        `another ship is running: ${existing.session} (pid ${existing.pid}, expires ${existing.expiresAt}).\n` +
+          'Wait for it; a running ship cannot be force-released.',
+      );
+    }
+    throw new Error(`Inactive ship lock at ${paths.lock}; verify its owner and recover this exact file before retrying.`);
   }
   const now = Date.now();
   const lock = {
@@ -172,7 +198,12 @@ function acquireLock(paths, { force = false } = {}) {
     startedAt: new Date(now).toISOString(),
     expiresAt: new Date(now + LOCK_TTL_MS).toISOString(),
   };
-  writeJson(paths.lock, lock);
+  try {
+    writeJson(paths.lock, lock, { exclusive: true });
+  } catch (error) {
+    if (error?.code === 'EEXIST') throw new Error('Another ship acquired the lock; wait and retry.');
+    throw error;
+  }
   return lock;
 }
 
@@ -192,20 +223,17 @@ function releaseLock(paths) {
 
 function readLease(paths) {
   const lease = readJson(paths.lease);
-  if (!lease || !leaseIsActive(lease)) return null;
-  // A killed session must not strand the lease: it would block the private flip
-  // (and every other agent's flip decision) until the TTL expires while nobody
-  // needs the repo public. Same-host pids only.
-  if (lease.host === hostname() && !processIsAlive(Number(lease.pid))) {
-    rmSync(paths.lease, { force: true });
-    return null;
-  }
-  return lease;
+  return lockIsActive(lease) ? lease : null;
 }
 
 function acquireLease(paths) {
   const held = readLease(paths);
   if (held && held.session !== SESSION) return { ok: false, holder: held };
+  const previous = readJson(paths.lease);
+  if (previous && !held && previous.remoteHolder) {
+    if (previous.host !== hostname()) throw new Error('An expired foreign-host lease needs verified owner recovery.');
+    releaseRemoteHolder(previous.remoteHolder);
+  }
   const now = Date.now();
   writeJson(paths.lease, {
     session: SESSION,
@@ -215,7 +243,11 @@ function acquireLease(paths) {
     heartbeatAt: new Date(now).toISOString(),
     expiresAt: new Date(now + LEASE_TTL_MS).toISOString(),
     purpose: 'ship',
+    remoteHolder: SESSION,
   });
+  const holders = readRemoteHolders();
+  if (!holders.includes(SESSION)) writeRemoteHolders([...holders, SESSION]);
+  console.log('SHIP_REMOTE_HOLDER_REGISTERED');
   return { ok: true, holder: null };
 }
 
@@ -230,12 +262,70 @@ function refreshLease(paths) {
 
 function releaseLease(paths) {
   const lease = readJson(paths.lease);
-  if (lease && lease.session === SESSION) rmSync(paths.lease, { force: true });
+  if (lease && lease.session === SESSION) {
+    if (lease.remoteHolder) releaseRemoteHolder(lease.remoteHolder);
+    rmSync(paths.lease, { force: true });
+  }
+}
+
+export function requireHolderValue(value) {
+  if (typeof value !== 'string') throw new Error('Native visibility holders are unverified.');
+  const text = value.trim();
+  if (!text) return [];
+  let holders;
+  if (/^[\[{"']/.test(text) || /^(?:null|true|false)$/.test(text)) {
+    try { holders = JSON.parse(text); } catch { throw new Error('Native visibility holders have invalid JSON.'); }
+  } else {
+    holders = text.split(',');
+  }
+  if (!Array.isArray(holders) || holders.some((holder) => typeof holder !== 'string' || !holder.trim())) {
+    throw new Error('Native visibility holders must be a verified string list.');
+  }
+  return [...new Set(holders.map((holder) => holder.trim()))];
+}
+
+function readRemoteHolders() {
+  const variable = ghJson(['api', `repos/{owner}/{repo}/actions/variables/${HOLDERS_VARIABLE}`], { allowNotFound: true });
+  if (variable === undefined) {
+    const repo = ghJson(['api', 'repos/{owner}/{repo}']);
+    if (repo?.permissions?.admin !== true) throw new Error('Native holder absence is unverified without repository administration access.');
+    return [];
+  }
+  return requireHolderValue(variable?.value);
+}
+
+function writeRemoteHolders(holders) {
+  // ponytail: GitHub variables have no CAS, so this is holder coordination, not
+  // a distributed commit mutex. Keep local locking/queue checks; use a CAS-backed
+  // lease if multi-host contention grows.
+  gh(['variable', 'set', HOLDERS_VARIABLE, '--body', JSON.stringify(holders)], { allowFail: false });
+  const verified = readRemoteHolders();
+  if (holders.some((holder) => !verified.includes(holder))) throw new Error('Native visibility-holder update is unverified.');
+}
+
+function releaseRemoteHolder(holder) {
+  const holders = readRemoteHolders();
+  if (holders.includes(holder)) writeRemoteHolders(holders.filter((value) => value !== holder));
+  if (readRemoteHolders().includes(holder)) throw new Error('Native visibility holder was not released; retain recovery state.');
 }
 
 function repoVisibility() {
   const raw = gh(['repo', 'view', '--json', 'visibility', '--jq', '.visibility']);
   return raw ? raw.toUpperCase() : null;
+}
+
+export function requireKnownVisibility(value) {
+  if (value !== 'PUBLIC' && value !== 'PRIVATE') {
+    throw new Error('Repository visibility is unverified; refusing to push or change visibility.');
+  }
+  return value;
+}
+
+export function requireActiveRunList(value) {
+  if (!Array.isArray(value) || value.some((run) => !Number.isSafeInteger(run?.databaseId) || run.databaseId <= 0)) {
+    throw new Error('GitHub Actions queue is unverified; refusing a private flip.');
+  }
+  return value;
 }
 
 function setVisibility(visibility) {
@@ -248,8 +338,8 @@ function setVisibility(visibility) {
 }
 
 function activeRuns() {
-  const queued = ghJson(['run', 'list', '--status', 'queued', '--limit', '20', '--json', 'databaseId']) ?? [];
-  const running = ghJson(['run', 'list', '--status', 'in_progress', '--limit', '20', '--json', 'databaseId']) ?? [];
+  const queued = requireActiveRunList(ghJson(['run', 'list', '--status', 'queued', '--limit', '20', '--json', 'databaseId']));
+  const running = requireActiveRunList(ghJson(['run', 'list', '--status', 'in_progress', '--limit', '20', '--json', 'databaseId']));
   return [...queued, ...running];
 }
 
@@ -360,7 +450,7 @@ function runWatcher(sha, { workflow, pushStartedAt, pushBaseSha } = {}) {
     if (result.error && result.error.code === 'ENOENT') continue;
     return result.status ?? 1;
   }
-  console.error('ship: no PowerShell available - run scripts/ship/watch-deploy.ps1 manually');
+  console.error('ship: PowerShell is required; install/restore it before verified wrapper recovery.');
   return 1;
 }
 
@@ -383,6 +473,10 @@ async function maybeFlipPrivate(paths) {
     console.log(`SHIP_VISIBILITY_KEPT_PUBLIC other lease: ${otherLease.session} (expires ${otherLease.expiresAt})`);
     return false;
   }
+  if (readRemoteHolders().length) {
+    console.log('SHIP_VISIBILITY_KEPT_PUBLIC another workstation/console native holder exists');
+    return false;
+  }
   const runs = activeRuns();
   if (runs.length) {
     console.log(`SHIP_VISIBILITY_KEPT_PUBLIC ${runs.length} Actions run(s) queued/in progress`);
@@ -395,6 +489,10 @@ async function maybeFlipPrivate(paths) {
   const late = readLease(paths);
   if (late && late.session !== SESSION) {
     console.log(`SHIP_VISIBILITY_KEPT_PUBLIC lease appeared: ${late.session}`);
+    return false;
+  }
+  if (readRemoteHolders().length) {
+    console.log('SHIP_VISIBILITY_KEPT_PUBLIC a native holder appeared during the settle window');
     return false;
   }
   if (activeRuns().length) {
@@ -424,11 +522,25 @@ export function parseArgs(argv) {
       continue;
     }
     const value = argv[i + 1];
-    if (value === undefined) throw new Error(`missing value for --${name}`);
+    if (!['sha', 'workflow'].includes(name)) throw new Error(`unknown ship option --${name}`);
+    if (value === undefined || value.startsWith('--')) throw new Error(`missing value for --${name}`);
     flags[name] = value;
     i += 1;
   }
   return flags;
+}
+
+export function validateReleaseOptions(flags) {
+  for (const name of ['no-watch', 'no-visibility', 'no-record', 'force-release']) {
+    if (flags[name]) throw new Error(`--${name} is forbidden: the accelerated release contract cannot be bypassed.`);
+  }
+  if (flags._.length) throw new Error(`unexpected ship arguments: ${flags._.join(' ')}`);
+  if (flags.workflow && flags.workflow !== 'Deploy production') {
+    throw new Error('Only Deploy production can verify a production release.');
+  }
+  if (flags.sha && (flags['no-push'] || flags['dry-run'])) {
+    throw new Error('--sha is a verified recovery watch, not a no-push/dry-run diagnostic.');
+  }
 }
 
 function printStatus(paths) {
@@ -445,6 +557,7 @@ function printStatus(paths) {
 
 export async function main(argv) {
   const flags = parseArgs(argv);
+  validateReleaseOptions(flags);
 
   if (flags['self-test']) {
     const result = selfTest();
@@ -471,6 +584,10 @@ export async function main(argv) {
       console.log(`blocked: lease held by ${lease.session}`);
       return 1;
     }
+    if (readRemoteHolders().length) {
+      console.log('blocked: native workstation/console visibility holders exist');
+      return 1;
+    }
     const runs = activeRuns();
     if (runs.length) {
       console.log(`blocked: ${runs.length} run(s) queued/in progress`);
@@ -485,23 +602,11 @@ export async function main(argv) {
     return 1;
   }
 
-  const lock = acquireLock(paths, { force: Boolean(flags['force-release']) });
+  acquireLock(paths);
   const stopHeartbeat = startHeartbeat(paths);
   console.log(`SHIP_START session=${SESSION} branch=${branch} head=${git(['rev-parse', '--short', 'HEAD'])}`);
-  if (lock.pid !== process.pid) console.log(`SHIP_LOCK_TAKEN_OVER from pid=${lock.pid}`);
 
   try {
-    // Watch-only mode: somebody else already pushed; just follow the SHA.
-    if (flags.sha) {
-      const sha = git(['rev-parse', flags.sha], { allowFail: true });
-      if (!sha) {
-        console.error(`ship: cannot resolve ${flags.sha}`);
-        return 1;
-      }
-      console.log(`SHIP_WATCH_ONLY ${sha}`);
-      return flags['no-watch'] ? 0 : runWatcher(sha, { workflow: flags.workflow });
-    }
-
     if (flags['dry-run']) {
       const needsRebase = !(() => {
         const upstream = git(['rev-parse', `origin/${BASE_BRANCH}`], { allowFail: true });
@@ -509,25 +614,38 @@ export async function main(argv) {
         const result = spawnSync('git', ['merge-base', '--is-ancestor', upstream, 'HEAD'], { cwd: root, stdio: 'ignore' });
         return result.status === 0;
       })();
-      console.log(`SHIP_DRY_RUN rebase_needed=${needsRebase} visibility=${repoVisibility() ?? 'unknown'} gate=${runGate() ? 'PASS' : 'FAIL'}`);
-      return 0;
+      const gate = runGate();
+      console.log(`SHIP_DRY_RUN rebase_needed=${needsRebase} visibility=${repoVisibility() ?? 'unknown'} gate=${gate ? 'PASS' : 'FAIL'}`);
+      return gate ? 0 : 1;
     }
 
-    const rebase = rebaseOntoMain();
-    if (!rebase.ok) return 1;
+    let recoverySha;
+    if (flags.sha) {
+      recoverySha = git(['rev-parse', '--verify', `${flags.sha}^{commit}`], { allowFail: true });
+      if (!recoverySha || !/^[0-9a-f]{40}$/.test(recoverySha)) {
+        console.error(`ship: cannot resolve ${flags.sha}`);
+        return 1;
+      }
+    } else {
+      const rebase = rebaseOntoMain();
+      if (!rebase.ok) return 1;
+    }
     if (!runGate()) {
-      console.error('ship: ship:gate failed - fix the findings above, or use --no-push to inspect');
+      console.error('ship: ship:gate failed - fix the findings above before releasing');
       return 1;
+    }
+
+    if (flags['no-push']) {
+      console.log('SHIP_NO_PUSH stopping before visibility, push or deployment');
+      return 0;
     }
 
     const lease = acquireLease(paths);
     if (!lease.ok) {
-      console.log(`SHIP_LEASE_BUSY held by ${lease.holder.session} (expires ${lease.holder.expiresAt}) - keeping visibility as-is`);
+      throw new Error(`Ship visibility lease is held by ${lease.holder.session}; wait for its release.`);
     }
-    const visibility = repoVisibility();
-    if (!visibility) {
-      console.log('SHIP_VISIBILITY unknown - continuing (gh repo view failed)');
-    } else if (visibility === 'PRIVATE' && lease.ok) {
+    const visibility = requireKnownVisibility(repoVisibility());
+    if (visibility === 'PRIVATE') {
       // Public BEFORE the push: a queued run that starts while the repo is
       // private is refused by hosted runners.
       console.log('SHIP_VISIBILITY_PUBLIC');
@@ -535,32 +653,33 @@ export async function main(argv) {
         console.error('ship: could not make the repo public - hosted Actions runs will be refused');
         return 1;
       }
-    }
-
-    if (flags['no-push']) {
-      releaseLease(paths);
-      console.log('SHIP_NO_PUSH stopping before push (lock + lease released)');
-      return 0;
-    }
-
-    const pushed = pushWithRetry();
-    if (!pushed.ok) return 1;
-    const remote = git(['ls-remote', 'origin', `refs/heads/${BASE_BRANCH}`], { allowFail: true });
-    const remoteSha = remote ? remote.split(/\s+/)[0] : null;
-    console.log(`SHIP_PUSHED ${pushed.sha}`);
-    if (remoteSha && remoteSha !== pushed.sha) console.log(`SHIP_SUPERSEDED_IN_FLIGHT origin/main now ${remoteSha}`);
-
-    let watchStatus = 0;
-    if (!flags['no-watch']) {
-      watchStatus = runWatcher(pushed.sha, { workflow: flags.workflow, pushStartedAt: pushed.pushStartedAt, pushBaseSha: pushed.pushBaseSha });
-    }
-
-    if (watchStatus === 0 && !flags['no-watch']) {
-      const recorded = recordEvidence();
-      if (flags.verify) {
-        spawnSync(process.execPath, [join(root, 'scripts', 'agent', 'state.mjs'), 'verify'], { cwd: root, stdio: 'inherit' });
+      if (requireKnownVisibility(repoVisibility()) !== 'PUBLIC') {
+        throw new Error('Public-before-push verification failed; refusing the release.');
       }
-      if (!recorded) console.warn('ship: ax:record reported a problem (evidence not written)');
+    }
+
+    const pushed = recoverySha ? { ok: true, sha: recoverySha } : pushWithRetry();
+    if (!pushed.ok) return 1;
+    if (recoverySha) {
+      console.log(`SHIP_WATCH_ONLY ${recoverySha}`);
+    } else {
+      const remote = git(['ls-remote', 'origin', `refs/heads/${BASE_BRANCH}`], { allowFail: true });
+      const remoteSha = remote ? remote.split(/\s+/)[0] : null;
+      console.log(`SHIP_PUSHED ${pushed.sha}`);
+      if (remoteSha && remoteSha !== pushed.sha) console.log(`SHIP_SUPERSEDED_IN_FLIGHT origin/main now ${remoteSha}`);
+    }
+
+    let watchStatus = runWatcher(pushed.sha, { workflow: flags.workflow, pushStartedAt: pushed.pushStartedAt, pushBaseSha: pushed.pushBaseSha });
+    if (watchStatus === 0) {
+      const recorded = recordEvidence();
+      if (!recorded) {
+        console.error('ship: ax:record failed; this release is not complete.');
+        watchStatus = 1;
+      }
+      if (flags.verify) {
+        const verified = spawnSync(process.execPath, [join(root, 'scripts', 'agent', 'state.mjs'), 'verify'], { cwd: root, stdio: 'inherit' });
+        if (verified.status !== 0) watchStatus = 1;
+      }
     }
 
     // Release the lease, then flip private only if nothing else is in flight.
@@ -568,18 +687,19 @@ export async function main(argv) {
     // several sessions sharing a public window the last ship out must close it,
     // and maybeFlipPrivate() refuses while another lease or any run is live.
     releaseLease(paths);
-    if (lease.ok && !flags['no-visibility']) {
-      await maybeFlipPrivate(paths);
-    }
+    await maybeFlipPrivate(paths);
     releaseLock(paths);
     releaseLease(paths);
     return watchStatus;
   } finally {
     stopHeartbeat();
-    releaseLock(paths);
     // The lease must never outlive this process on a failure path; releasing it
     // early is safe because maybeFlipPrivate() runs before this on success.
-    releaseLease(paths);
+    try {
+      releaseLease(paths);
+    } finally {
+      releaseLock(paths);
+    }
   }
 }
 
@@ -607,17 +727,38 @@ export function selfTest() {
   expect('expired lease', !leaseIsActive({ expiresAt: new Date(now - 60000).toISOString() }, now));
   expect('empty lease', !leaseIsActive(null, now));
 
-  const parsed = parseArgs(['--sha', 'abc', '--no-watch', '--dry-run']);
-  expect('flags parse', parsed.sha === 'abc' && parsed['no-watch'] === true && parsed['dry-run'] === true);
+  const parsed = parseArgs(['--sha', 'abc', '--verify']);
+  expect('flags parse', parsed.sha === 'abc' && parsed.verify === true);
 
   // `pnpm run ship -- --sha <sha>` forwards the separator; it must not swallow
   // the flag that follows it (that once turned a watch-only run into a ship).
-  const withSeparator = parseArgs(['--', '--sha', 'abc', '--force-release']);
+  const withSeparator = parseArgs(['--', '--sha', 'abc', '--verify']);
   expect(
     'a bare -- separator is ignored',
-    withSeparator.sha === 'abc' && withSeparator['force-release'] === true && withSeparator._.length === 0,
+    withSeparator.sha === 'abc' && withSeparator.verify === true && withSeparator._.length === 0,
     JSON.stringify(withSeparator),
   );
+
+  const rejects = (action) => {
+    try { action(); return false; } catch { return true; }
+  };
+  for (const flag of ['no-watch', 'no-visibility', 'no-record', 'force-release']) {
+    expect(`${flag} cannot bypass shipping`, rejects(() => validateReleaseOptions(parseArgs([`--${flag}`]))));
+  }
+  expect('alternate workflow rejected', rejects(() => validateReleaseOptions(parseArgs(['--workflow', 'QA Smoke']))));
+  expect('unknown argument rejected', rejects(() => parseArgs(['--unrecognised', 'true'])));
+  expect('missing value rejected', rejects(() => parseArgs(['--sha', '--status'])));
+  expect('recovery cannot be a dry run', rejects(() => validateReleaseOptions(parseArgs(['--sha', 'abc', '--dry-run']))));
+  expect('unknown visibility refused', rejects(() => requireKnownVisibility(null)));
+  expect('private/public visibility accepted', requireKnownVisibility('PRIVATE') === 'PRIVATE' && requireKnownVisibility('PUBLIC') === 'PUBLIC');
+  expect('unknown queue refused', rejects(() => requireActiveRunList(null)));
+  expect('invalid queue refused', rejects(() => requireActiveRunList([{}])));
+  expect('known queue accepted', requireActiveRunList([{ databaseId: 123 }]).length === 1);
+  expect('known empty queue accepted', requireActiveRunList([]).length === 0);
+  const localLock = { host: 'fixture', pid: 123, expiresAt: new Date(now - 60000).toISOString() };
+  expect('live local lock survives delayed heartbeat', lockIsActive(localLock, { host: 'fixture', alive: () => true, now }));
+  expect('dead local lock reclaimed', !lockIsActive(localLock, { host: 'fixture', alive: () => false, now }));
+  expect('expired remote lock reclaimed', !lockIsActive(localLock, { host: 'another-host', now }));
 
   return { ok: failures.length === 0, failures };
 }

@@ -160,17 +160,22 @@ launcher is silent anywhere there is no ledger.
 `scripts/ship/ship.mjs` is the one command per ship (owner directive 2026-10-03):
 
 1. **Ship lock** — `<git-common-dir>/ax-ship/lock.json`, shared by every linked worktree, TTL 30 min
-   with a 60 s heartbeat. Two local sessions can never rebase/push at once; `--force-release` clears
-   a stuck lock.
+   with a 60 s heartbeat. A live local owner retains its lock even if a synchronous
+   watch delays the heartbeat. Exclusive creation prevents competing first acquirers;
+   unreadable state or an inactive lock blocks for verified exact-file recovery,
+   never automatic unlink/recreate against an old snapshot. No flag can steal a running ship.
 2. **Rebase** — `git fetch origin main` + `git rebase --autostash origin/main`. Ledger conflicts
    auto-resolve by the documented rule (newer `Updated:` block wins wholesale for
    `SESSION_STATE.md` / `TASKS.json`; `VERIFICATION.md` merges by union), anything else aborts.
 3. **Gate** — `scripts/ship/pre-push-gate.mjs` (seconds).
-4. **Visibility lease** — `<git-common-dir>/ax-ship/visibility.json`. The repo is made public
+4. **Visibility lease** — `<git-common-dir>/ax-ship/visibility.json` plus the existing
+   native `PUBLIC_WINDOW_HOLDERS` channel shared with the isolated console.
+   Mutable state is atomically replaced; failed native cleanup keeps its ownership
+   record recoverable rather than pretending it was released. The repo is made public
    *before* the push (a queued run that starts on a private repo is refused by hosted runners), and
-   flipped private again only when this session is the last unexpired lease holder **and** no Actions
-   run is queued or in progress. `--may-flip-private` is the read-only verdict used by
-   `watch-deploy.ps1`.
+   flipped private again only when no local or native holder and no Actions run is
+   queued/in progress. `--may-flip-private` is the read-only guarded verdict.
+   The internal watcher never flips visibility itself.
 5. **Push** — `git push origin HEAD:main` (never `--force`) with fetch/rebase/gate retry.
 6. **Watch** — `watch-deploy.ps1 -SkipPublic -SkipPrivateFlip`, supersede-aware: when a newer push
    replaced this SHA before its deploy ran, it adopts the newer run and prints
@@ -178,11 +183,16 @@ launcher is silent anywhere there is no ledger.
    up carrying a **descendant** of this SHA, it prints `SHIP-WATCH_SUPERSEDED_BY_LIVE <sha>` and
    succeeds; `LIVE_SHA_MISMATCH` (exit 4) is reserved for a slot carrying neither this SHA nor a
    descendant, i.e. traffic genuinely still on an older build.
-7. **Record** — `ax:record` on green (the evidence rule above still applies).
+7. **Record** — `ax:record` on green; a recording failure makes shipment incomplete.
 
-Escape hatches: `--dry-run`, `--no-push`, `--no-watch`, `--no-visibility`, `--sha <sha>`,
-`--status`, `--release-lease`, `--force-release`, `--self-test` (pure helpers; runs in
-`ax-check.yml` on Linux and Windows).
+`AGENTS.md`'s mandatory accelerated baseline applies to every contributor and agent.
+Supported diagnostics: `--dry-run` (static gate/report), `--no-push` (rebase/gate,
+no visibility or release), `--status`. Recovery `--sha <sha>` performs a verified
+watch under the same gate/lease/evidence/cleanup rules. `--release-lease` releases
+only this process's lease. `--self-test` runs on Actions in `ax-check.yml`.
+`--no-watch`, `--no-record`, `--no-visibility`, `--force-release` and alternate
+production-workflow overrides are rejected. Native visibility/queue read failures
+block the action; an unreadable queue is never an empty queue.
 
 ## Compute policy
 

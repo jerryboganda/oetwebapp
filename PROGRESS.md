@@ -11,7 +11,18 @@ Last updated: 2026-10-04
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
-## Active checkpoint - Verified API correction and measured deployment closeout (2026-10-04)
+## Active checkpoint - Compulsory accelerated release enforcement (2026-10-04)
+
+- Owner requires every contributor/agent to retain the live510.240s architecture and explicitly authorizes scoped commit/main push/deploy; no duration guarantee or weakened gates.
+- Live typed Jev approved existing guard/lifecycle/inherited-entrypoint scope and the tightly coupled console privacy/workflow correction (all p/confidence/margin1).
+- Native Claude/Gemini imports and contributor/Copilot guidance inherit one baseline; console engines remain isolated agent-branch/PR-only.
+- Guarded controls reject completion/visibility/workflow bypasses, missing checkers and unknown native data; scoped mutations protect proven reuse/cache/SQL/Writing/runtime contracts.
+- Exclusive local locks/atomic state and the existing native workstation/console holder channel prevent missing-shaped state or one-way lease coverage; variable writes are not claimed as a global mutex. Additional live Jev approved both corrections; runnable boundary checks remain Actions-only.
+- Console expiry now requests guarded retries, never force-private over active holders/Actions; final source/static gates are clean, actual runtime/Actions shipment is pending.
+- Native full e748QA37180577741 finished cancelled, not green; focused67/67 and actual production37180764537 proof are unchanged. Preserve the additional Writing/retired-worktree checkpoints.
+- Privacy remains blocked by native empty May25907015352 without specific deletion approval; no history exclusion or safety bypass.
+
+## Previous checkpoint - Verified API correction and measured deployment closeout (2026-10-04)
 
 - E7485ce2f is actually live in green: build37180577765 passed38 protocol/original-byte checks; production37180764537 verified/applied same-publish SQL and exact physical/public serving.
 - Inclusive push-to-verified-live510.240s; driver460.272s, image pull22.908s, initial readiness68.965s, recheck13.755s and router cutover7.464s. Five-minute target remains unmet under approved free-runner scope.
@@ -19,7 +30,7 @@ Last updated: 2026-10-04
 - Raw397/public400 regression repaired in one source using selected persisted tuple scores; readiness/holds preserved and assertions unchanged. Native37180640839 TRX executed/passed67/67, zero skipped, including exact regression/hold/classic/clean cases.
 - Whole-solution compile111372344831/frontend111372344713 green; scoped Vitest12 cases in report-view file only. Manual lane regenerates canonical rulebooks, not a substitute for actual production-byte proof.
 - Source owner independently confirmed/released correction. Live validated Jev p/confidence1 selected truthful best-effort closeout, not speculative startup rewrites or weakened gates.
-- New fullQA37180577741 remains active, no whole-suite green claim. PUBLIC restoration is blocked by empty May25907015352 lacking specific deletion approval; native guard/lease never bypassed.
+- FullQA37180577741 later ended cancelled (recorded above), not whole-suite green. PUBLIC restoration is blocked by empty May25907015352 lacking specific deletion approval; native guard/lease never bypassed.
 
 ## Previous checkpoint - Deployment acceleration, measured free-runner target misses (2026-10-04)
 

@@ -36,6 +36,12 @@ manual-dispatch only. Do not describe an unrun check as passed.
 
 ## Deploy Command (current)
 
+Every person, coding agent and delegated worker must use the **Mandatory
+accelerated baseline** in `AGENTS.md`. The workstation entrypoint is
+`pnpm run ship`; owner-console agents use their isolated PR/Ship executor into
+the same pipeline. No watcher/evidence/visibility bypass, missing checker,
+unverified native queue result or added full-QA prerequisite is acceptable.
+
 Production deploys come from `.github/workflows/build-images.yml` (filtered
 build/deployment-input pushes to `main`: components built or immutably reused on
 Actions, API SQL generated from the same publish) followed automatically by

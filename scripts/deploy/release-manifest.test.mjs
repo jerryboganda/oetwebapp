@@ -8,7 +8,10 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { COMPONENTS, apiNeedsMigrations, buildInputsChanged, changedPaths, classifyInputs, comparisonContainsSha,
   eligibleBuild, validateManifest, verifySqlArtifact } from './release-manifest.mjs';
-import { checkContract, scanRepo } from './verify-pipeline-contract.mjs';
+import { activeLines, checkContract, scanRepo } from './verify-pipeline-contract.mjs';
+import { reportPipelineContract } from '../ship/pre-push-gate.mjs';
+import { acquireLock, main as shipMain, parseArgs, readJson as readShipState, requireHolderValue,
+  selfTest as shipSelfTest, validateReleaseOptions, writeJson as writeShipState } from '../ship/ship.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const sha = 'a'.repeat(40);
@@ -118,6 +121,186 @@ test('the complete checkout preserves its mechanical pipeline contract', () => {
     readFile: (file) => readFileSync(join(root, file), 'utf8'),
   });
   assert.ok(failures.some((failure) => failure.includes('production rollout must live in exactly')));
+});
+
+test('pipeline comments cannot satisfy a contract; quoted hashes remain literal', () => {
+  assert.equal(activeLines('run: echo disabled # release-manifest.mjs detect\n# ignored\nvalue: "keep # literal"'),
+    'run: echo disabled\nvalue: "keep # literal"');
+});
+
+function mutatedContract(relative, mutate) {
+  const read = (file) => {
+    const source = readFileSync(join(root, file), 'utf8');
+    if (file !== relative) return source;
+    const changed = mutate(source);
+    assert.notEqual(changed, source, `${relative}: regression mutation did not apply`);
+    return changed;
+  };
+  return checkContract({
+    listWorkflows: () => ['build-images.yml', 'production-deploy.yml', 'qa-smoke.yml'],
+    readWorkflow: (file) => read(`.github/workflows/${file}`),
+    readFile: read,
+  });
+}
+
+const buildPath = '.github/workflows/build-images.yml';
+for (const [name, file, mutate, message] of [
+  ['unconditional guards', buildPath, (s) => s.replace('  guards:\n', '  guards:\n    if: false\n'), /guards must remain unconditional/],
+  ['no extra build prerequisites', buildPath,
+    (s) => s.replace('  build-web:\n    needs: [syntax-gate, guards, changes]',
+      '  build-web:\n    needs: [syntax-gate, guards, changes, writing-model-answer-gate]'), /build-web must keep exactly needs/],
+  ['job-scoped changed-input gating', buildPath,
+    (s) => s.replace("    if: needs.changes.outputs.web == 'true'", "    if: true\n    # if: needs.changes.outputs.web == 'true'"),
+    /build-web must keep if:/],
+  ['real ancestor detection', buildPath,
+    (s) => s.replace('run: node scripts/deploy/release-manifest.mjs detect',
+      'run: echo disabled # release-manifest.mjs detect'), /changes must execute/],
+  ['registry-only reuse', buildPath,
+    (s) => s.replace('test "$actual" = "$EXPECTED_DIGEST"', 'docker pull "$SOURCE"\n          test "$actual" = "$EXPECTED_DIGEST"'),
+    /retag must remain registry-only/],
+  ['immutable reused digest verification', buildPath,
+    (s) => s.replace('test "$actual" = "$EXPECTED_DIGEST"', 'echo "digest unchecked"'), /retag must keep test/],
+  ['consumed Next cache', buildPath,
+    (s) => s.replace('cache-target: /app/.next/cache', 'cache-target: /app/.next/unused'), /build-web must keep cache-target/],
+  ['native Next cache export', buildPath,
+    (s) => s.replace('--output type=local,dest=.build-cache/next,platform-split=false', '--load'),
+    /build-web must keep --output/],
+  ['same-publish SQL', buildPath,
+    (s) => s.replace('migrations script --idempotent --no-build --configuration Release',
+      'migrations script --idempotent --configuration Release'), /build-api must keep migrations/],
+  ['executable-consistent Writing references', buildPath,
+    (s) => s.replace('reference_args=(-p:BuildProjectReferences=false -p:UseAppHost=false)',
+      'reference_args=(-p:BuildProjectReferences=false)'), /writing-model-answer-gate must keep reference_args/],
+  ['actual scoped Writing test compilation', buildPath,
+    (s) => s.replace('dotnet test "$test_project" -c Release --no-restore --nologo -p:RunAnalyzers=false -p:DeploymentWritingGateOnly=true',
+      'dotnet test "$test_project" -c Release --no-restore --nologo -p:RunAnalyzers=false'),
+    /writing-model-answer-gate must actually execute/],
+  ['nonzero actual Writing execution', buildPath,
+    (s) => s.replace('int(c.attrib["executed"]) > 0', 'int(c.attrib["executed"]) >= 0'),
+    /writing-model-answer-gate must keep int/],
+  ['required Writing release gates', buildPath,
+    (s) => s.replace('build-agent-gateway, writing-model-answer-gate, writing-regression-gate]',
+      'build-agent-gateway]'), /release-manifest must keep exactly needs/],
+  ['parallel per-SHA builds', buildPath,
+    (s) => s.replace('group: build-${{ github.sha }}', 'group: build-main'), /build-images.yml must keep group/],
+  ['standalone web byte verification', 'Dockerfile',
+    (s) => s.replace('sha256sum -cs /tmp/standalone.sha256', 'echo "unchecked bytes"'),
+    /Dockerfile must keep sha256sum/],
+  ['stable API dependency partition', 'backend/Dockerfile.runtime',
+    (s) => s.replace('COPY --exclude=OetLearner.Api.* backend/publish ./', 'COPY backend/publish ./'),
+    /backend\/Dockerfile.runtime must keep COPY --exclude/],
+  ['configuration-aware service reuse', 'scripts/deploy/auto-deploy-ghcr.sh',
+    (s) => s.replace('[ "$desired_hash" = "$actual_hash" ]', '[ "unchecked" = "unchecked" ]'),
+    /auto-deploy-ghcr.sh must keep \[ "\$desired_hash"/],
+  ['physical-image watcher obligation', 'scripts/ship/watch-deploy.ps1',
+    (s) => s.replace("throw 'SkipVpsSsh is forbidden:", "Write-Output 'SkipVpsSsh is forbidden:"),
+    /watch-deploy.ps1 must keep throw/],
+  ['native Claude authority import', 'CLAUDE.md', (s) => s.replace('@AGENTS.md', 'AGENTS.md'),
+    /CLAUDE.md must import/],
+  ['native Gemini authority import', 'GEMINI.md', (s) => s.replace('@AGENTS.md', 'AGENTS.md'),
+    /GEMINI.md must import/],
+  ['console workflow pinning', 'agent-console/src/config.ts',
+    (s) => s.replace("deployWorkflowFile !== 'production-deploy.yml'", "deployWorkflowFile !== deployWorkflowFile"),
+    /agent-console\/src\/config.ts must keep/],
+  ['console lease-safe watchdog', 'agent-console/src/ship.ts',
+    (s) => s.replace('if (holders.length > 0 || await this.activeRunCount(env) > 0)', 'if (false)'),
+    /agent-console\/src\/ship.ts must keep if/],
+  ['exclusive lock acquisition', 'scripts/ship/ship.mjs',
+    (s) => s.replace('writeJson(paths.lock, lock, { exclusive: true })', 'writeJson(paths.lock, lock)'),
+    /ship.mjs must keep writeJson/],
+  ['atomic mutable state', 'scripts/ship/ship.mjs',
+    (s) => s.replace('renameSync(temporary, file)', 'writeFileSync(file, contents)'),
+    /ship.mjs must keep renameSync/],
+  ['native console/workstation holder coverage', 'scripts/ship/ship.mjs',
+    (s) => s.replaceAll('if (readRemoteHolders().length)', 'if (false)'),
+    /ship.mjs must keep if \(readRemoteHolders/],
+]) {
+  test(`mandatory accelerated baseline rejects loss of ${name}`, () => {
+    assert.ok(mutatedContract(file, mutate).some((failure) => message.test(failure)));
+  });
+}
+
+test('missing pipeline checker fails the real local gate closed', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oet-missing-contract-'));
+  try {
+    assert.equal(await reportPipelineContract(dir), false);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ship controls fail before git, lease, visibility or watcher side effects', async () => {
+  assert.deepEqual(shipSelfTest(), { ok: true, failures: [] });
+  for (const flag of ['no-watch', 'no-record', 'no-visibility', 'force-release']) {
+    await assert.rejects(shipMain([`--${flag}`]), new RegExp(`--${flag} is forbidden`));
+  }
+  await assert.rejects(shipMain(['--workflow', 'QA Smoke']), /Only Deploy production/);
+  for (const args of [[], ['--dry-run'], ['--no-push'], ['--status'], ['--sha', sha, '--verify']]) {
+    assert.doesNotThrow(() => validateReleaseOptions(parseArgs(args)));
+  }
+});
+
+test('ship state is atomically replaced; missing alone is absent and unreadable never frees a lock', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oet-ship-state-'));
+  const file = join(dir, 'lock.json');
+  const state = { session: 'test', host: 'test-host', pid: process.pid, expiresAt: new Date().toISOString() };
+  try {
+    assert.equal(readShipState(file), null);
+    writeShipState(file, state, { exclusive: true });
+    assert.throws(() => writeShipState(file, { ...state, session: 'other' }, { exclusive: true }), { code: 'EEXIST' });
+    assert.deepEqual(readShipState(file), state);
+    writeShipState(file, { ...state, session: 'updated' });
+    assert.equal(readShipState(file).session, 'updated');
+    assert.equal(existsSync(`${file}.${process.pid}.tmp`), false);
+    for (const contents of ['{broken', '{}', 'null', '[]', JSON.stringify({ ...state, pid: 0 })]) {
+      writeFileSync(file, contents);
+      assert.throws(() => readShipState(file), /Cannot verify ship state/);
+      assert.equal(readFileSync(file, 'utf8'), contents);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('real lock acquisition refuses live owners and never unlinks an inactive snapshot', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oet-ship-lock-'));
+  const paths = { lock: join(dir, 'lock.json') };
+  try {
+    const lock = acquireLock(paths);
+    assert.throws(() => acquireLock(paths), /another ship is running/);
+    assert.deepEqual(readShipState(paths.lock), lock);
+    const stale = { ...lock, pid: 2_147_483_647, expiresAt: '2000-01-01T00:00:00Z' };
+    writeShipState(paths.lock, stale);
+    assert.throws(() => acquireLock(paths), /Inactive ship lock/);
+    assert.deepEqual(readShipState(paths.lock), stale);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('shared visibility holders accept native formats and reject missing/malformed values', () => {
+  assert.deepEqual(requireHolderValue('["owner-pc","agent-console:1","owner-pc"]'), ['owner-pc', 'agent-console:1']);
+  assert.deepEqual(requireHolderValue('owner-pc, agent-console:1'), ['owner-pc', 'agent-console:1']);
+  for (const value of ['', '[]']) assert.deepEqual(requireHolderValue(value), []);
+  for (const value of [undefined, null, 0, '{}', 'null', '[broken', '[1]', '[""]']) {
+    assert.throws(() => requireHolderValue(value), /visibility holders/);
+  }
+});
+
+test('native PowerShell watcher rejects completion bypasses before any GitHub or VPS call', () => {
+  const bin = process.platform === 'win32' ? 'powershell' : 'pwsh';
+  for (const [args, message] of [
+    [['-SkipVpsSsh'], /SkipVpsSsh is forbidden/],
+    [['-Workflow', 'QA Smoke'], /Only Deploy production/],
+    [['-WorkflowFile', 'qa-smoke.yml'], /Only Deploy production/],
+    [[], /wrapper must own the visibility lease/],
+  ]) {
+    const result = spawnSync(bin, ['-NoProfile', '-File', join(root, 'scripts', 'ship', 'watch-deploy.ps1'), ...args],
+      { encoding: 'utf8', timeout: 10_000 });
+    assert.ifError(result.error);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, message);
+  }
 });
 
 test('Writing reference reuse preserves the executable settings of the API publish', () => {

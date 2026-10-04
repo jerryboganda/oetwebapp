@@ -23,7 +23,7 @@ import { asObject, optString } from './validate.js';
 //              the run name, which carries the SHA; head_sha is the fallback)
 //   health     the three live health URLs
 //   restoring_visibility  drop the lease; private again when no holders and
-//              no queued/in-progress runs (a watchdog forces private after 90 min)
+//              no queued/in-progress runs (watchdog retries the same guarded cleanup)
 // The control identity never runs git inside the agent-writable repository.
 
 export const BLOCKED_SHIP_EXTENSIONS: readonly string[] = ['.sql', '.dump', '.csv', '.jsonl'];
@@ -249,7 +249,7 @@ export class ShipExecutor {
     this.watchdog = null;
   }
 
-  /** Forces the repository private once a public window opened by a ship exceeds its deadline. */
+  /** Expiry requests restoration; it never overrides another ship or active Actions. */
   async watchdogTick(): Promise<boolean> {
     const window = this.deps.store.getKv<PublicWindow>(WINDOW_KEY);
     if (!window || this.now() < window.deadline) return false;
@@ -258,20 +258,21 @@ export class ShipExecutor {
       this.deps.logger.error('visibility watchdog: ship token missing; cannot restore private');
       return false;
     }
-    const repo = await this.gh<{ private: boolean }>(env, 'GET', `repos/${this.repo}`);
-    if (!repo.private) await this.gh(env, 'PATCH', `repos/${this.repo}`, { visibility: 'private' });
-    const holders = await this.readHolders(env).catch(() => [] as string[]);
-    const others = holders.filter((h) => !h.startsWith(HOLDER_PREFIX));
-    await this.writeHolders(env, others).catch(() => undefined);
+    const holders = await this.readHolders(env);
+    if (holders.length > 0 || await this.activeRunCount(env) > 0) {
+      this.deps.logger.warn({ holders }, 'visibility deadline reached; retaining public while a ship or Actions run is active');
+      return false;
+    }
+    if (!(await this.repoIsPrivate(env))) await this.gh(env, 'PATCH', `repos/${this.repo}`, { visibility: 'private' });
     this.deps.store.deleteKv(WINDOW_KEY);
     for (const sessionId of window.sessionIds) {
       this.deps.emit(sessionId, {
         phase: 'restoring_visibility',
-        message: `Visibility watchdog forced the repository private after the public window exceeded ${Math.round(this.deps.config.ship.publicWindowMaxMs / 60_000)} min${others.length ? ` (other holders: ${others.join(', ')})` : ''}.`,
+        message: 'Visibility watchdog restored private after verifying no holders or queued/in-progress Actions.',
         level: 'warn',
       });
     }
-    this.deps.logger.warn({ others }, 'visibility watchdog forced the repository private');
+    this.deps.logger.warn('visibility watchdog restored private after the idle check');
     return true;
   }
 
@@ -527,9 +528,9 @@ export class ShipExecutor {
     this.phase(state, 'visibility', 'Taking the public-window lease.');
     const holders = await this.readHolders(env);
     await this.writeHolders(env, withHolder(holders, holder));
-    const repo = await this.gh<{ private: boolean }>(env, 'GET', `repos/${this.repo}`);
+    const privateRepo = await this.repoIsPrivate(env);
     const window = this.deps.store.getKv<PublicWindow>(WINDOW_KEY);
-    if (repo.private) {
+    if (privateRepo) {
       await this.gh(env, 'PATCH', `repos/${this.repo}`, { visibility: 'public' });
       const openedAt = this.now();
       this.deps.store.setKv(WINDOW_KEY, {
@@ -635,15 +636,14 @@ export class ShipExecutor {
     }
     const busy = await this.activeRunCount(env);
     if (busy > 0) {
-      this.note(state, `Repository stays public: ${busy} workflow run(s) still queued or in progress; the watchdog restores private at the latest ${Math.round(this.deps.config.ship.publicWindowMaxMs / 60_000)} min after the window opened.`, 'warn');
+      this.note(state, `Repository stays public: ${busy} workflow run(s) still queued or in progress; the watchdog retries guarded restoration after the public-window deadline.`, 'warn');
       if (!window) {
         const openedAt = this.now();
         this.deps.store.setKv(WINDOW_KEY, { openedAt, deadline: openedAt + this.deps.config.ship.publicWindowMaxMs, holders: [], sessionIds: [state.sessionId] } satisfies PublicWindow);
       }
       return;
     }
-    const repo = await this.gh<{ private: boolean }>(env, 'GET', `repos/${this.repo}`);
-    if (!repo.private) await this.gh(env, 'PATCH', `repos/${this.repo}`, { visibility: 'private' });
+    if (!(await this.repoIsPrivate(env))) await this.gh(env, 'PATCH', `repos/${this.repo}`, { visibility: 'private' });
     this.deps.store.deleteKv(WINDOW_KEY);
     this.note(state, 'Repository is private again.');
   }
@@ -651,15 +651,25 @@ export class ShipExecutor {
   private async activeRunCount(env: Record<string, string>): Promise<number> {
     let total = 0;
     for (const status of ['queued', 'in_progress']) {
-      const res = await this.gh<{ total_count: number }>(env, 'GET', `repos/${this.repo}/actions/runs?status=${status}&per_page=1`);
-      total += res.total_count ?? 0;
+      const res = await this.gh<{ total_count?: unknown }>(env, 'GET', `repos/${this.repo}/actions/runs?status=${status}&per_page=1`);
+      if (typeof res.total_count !== 'number' || !Number.isSafeInteger(res.total_count) || res.total_count < 0) {
+        throw new ShipFailure(`Cannot verify ${status} Actions; refusing a private flip.`);
+      }
+      total += res.total_count;
     }
     return total;
+  }
+
+  private async repoIsPrivate(env: Record<string, string>): Promise<boolean> {
+    const repo = await this.gh<{ private?: unknown }>(env, 'GET', `repos/${this.repo}`);
+    if (typeof repo.private !== 'boolean') throw new ShipFailure('Cannot verify repository visibility.');
+    return repo.private;
   }
 
   private async readHolders(env: Record<string, string>): Promise<string[]> {
     try {
       const variable = await this.gh<{ value: string }>(env, 'GET', `repos/${this.repo}/actions/variables/${this.deps.config.ship.holdersVariable}`);
+      if (typeof variable.value !== 'string') throw new ShipFailure('Cannot verify lease holders; refusing a visibility decision.');
       return parseHolders(variable.value);
     } catch (error) {
       if (error instanceof GhApiError && error.status === 404) return [];

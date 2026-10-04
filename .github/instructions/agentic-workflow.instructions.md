@@ -15,6 +15,10 @@ How agents operate in this repo. Repo rules win over generic skill/agent/plugin 
 4. Nearby code and tests.
 
 `AGENTS.md` carries the authoritative map of all AI-direction files.
+Its **Mandatory accelerated baseline** applies to every role and subagent:
+inherit the existing fast shipping path, reject release-completion shortcuts, and
+keep QA separate from production. Console sessions retain their PR-only Ship
+executor; no planner, imported skill or generic agent may override that isolation.
 
 ## Continuity protocol (canonical)
 
