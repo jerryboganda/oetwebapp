@@ -20,6 +20,7 @@ namespace OetLearner.Api.Services.AiTools.Tools;
 public sealed class LookupRulebookRuleTool : IAiToolExecutor
 {
     public string Code => "lookup_rulebook_rule";
+    public string Description => "Look up an official OET scoring or assessment rule by its kind and rule id.";
     public AiToolCategory Category => AiToolCategory.Read;
     public string JsonSchemaArgs => """
     {
@@ -78,6 +79,7 @@ public sealed class LookupRulebookRuleTool : IAiToolExecutor
 public sealed class LookupVocabularyTermTool : IAiToolExecutor
 {
     public string Code => "lookup_vocabulary_term";
+    public string Description => "Look up an OET vocabulary term, its definition, pronunciation, and example usage.";
     public AiToolCategory Category => AiToolCategory.Read;
     public string JsonSchemaArgs => """
     {
@@ -124,6 +126,7 @@ public sealed class LookupVocabularyTermTool : IAiToolExecutor
 public sealed class GetUserRecentAttemptsTool : IAiToolExecutor
 {
     public string Code => "get_user_recent_attempts";
+    public string Description => "Get the learner's most recent practice attempts with subtest, score, and date.";
     public AiToolCategory Category => AiToolCategory.Read;
     public string JsonSchemaArgs => """
     {
@@ -174,6 +177,7 @@ public sealed class GetUserRecentAttemptsTool : IAiToolExecutor
 public sealed class SearchRecallSetTool : IAiToolExecutor
 {
     public string Code => "search_recall_set";
+    public string Description => "Search the learner's saved recall set for matching vocabulary or phrases.";
     public AiToolCategory Category => AiToolCategory.Read;
     public string JsonSchemaArgs => """
     {
@@ -229,6 +233,7 @@ public sealed class SearchRecallSetTool : IAiToolExecutor
 public sealed class SaveUserNoteTool : IAiToolExecutor
 {
     public string Code => "save_user_note";
+    public string Description => "Save a private note on the learner's account so it can be reviewed later.";
     public AiToolCategory Category => AiToolCategory.Write;
     public string JsonSchemaArgs => """
     {
@@ -293,6 +298,7 @@ public sealed class SaveUserNoteTool : IAiToolExecutor
 public sealed class BookmarkRecallTermTool : IAiToolExecutor
 {
     public string Code => "bookmark_recall_term";
+    public string Description => "Bookmark a vocabulary term into the learner's recall set for later revision.";
     public AiToolCategory Category => AiToolCategory.Write;
     public string JsonSchemaArgs => """
     {
@@ -347,6 +353,7 @@ public sealed class BookmarkRecallTermTool : IAiToolExecutor
 public sealed class FetchDictionaryDefinitionTool : IAiToolExecutor
 {
     public string Code => "fetch_dictionary_definition";
+    public string Description => "Fetch an English dictionary definition, pronunciation, and part of speech for a word.";
     public AiToolCategory Category => AiToolCategory.ExternalNetwork;
     public string JsonSchemaArgs => """
     {

@@ -101,6 +101,11 @@ public sealed class AiAssistantOrchestrator(
             // DB-over-env orchestration tunables (admin-configurable, 30s cache).
             var aiAssistant = (await settingsProvider.GetAsync(turnCts.Token)).AiAssistant;
             var maxReActIterations = aiAssistant.MaxIterations;
+            if (!string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(role, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase))
+            {
+                maxReActIterations = Math.Min(maxReActIterations, 6);
+            }
             var maxMessagesInContext = aiAssistant.MaxContextMessages;
 
             await using var scope = scopeFactory.CreateAsyncScope();
@@ -208,7 +213,8 @@ public sealed class AiAssistantOrchestrator(
 
                 await foreach (var chunk in gateway.StreamCompleteWithToolsAsync(
                     featureCode, userId, messages, tools, thread.ModelOverride, turnCts.Token,
-                    imageAttachments, documentAttachment))
+                    imageAttachments, documentAttachment,
+                    conversationKey: threadId, isContinuation: iteration > 0))
                 {
                     switch (chunk)
                     {
@@ -271,10 +277,16 @@ public sealed class AiAssistantOrchestrator(
                     yield return new AssistantToolCallStart(toolCall.Id, toolCall.Name, toolCall.Arguments);
 
                     var toolCtx = new AiToolContext(featureCode, userId, null, toolCallMsg.Id, iteration,
-                        IsAdmin: string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase));
-                    var argsElement = JsonSerializer.Deserialize<JsonElement>(toolCall.Arguments);
-
-                    var result = await toolInvoker.InvokeAsync(toolCall.Name, argsElement, toolCtx, turnCts.Token);
+                        IsAdmin: string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase),
+                        ThreadId: threadId, TurnId: userMsg.Id);
+                    var result = await toolInvoker.InvokeAsync(
+                        new OetLearner.Api.Services.Rulebook.AiToolCall
+                        {
+                            Id = toolCall.Id,
+                            ToolCode = toolCall.Name,
+                            ArgsJson = string.IsNullOrWhiteSpace(toolCall.Arguments) ? "{}" : toolCall.Arguments,
+                        },
+                        toolCtx, turnCts.Token);
                     var resultJson = result.ResultJson.HasValue
                         ? result.ResultJson.Value.GetRawText()
                         : JsonSerializer.Serialize(new { error = result.ErrorMessage ?? "Tool execution failed" });
@@ -527,30 +539,45 @@ public sealed class AiAssistantOrchestrator(
         _ => AiFeatureCodes.AiAssistantLearner,
     };
 
-    private static List<LlmMessage> BuildLlmMessages(string systemPrompt, List<AiAssistantMessage> history)
+    internal static List<LlmMessage> BuildLlmMessages(string systemPrompt, List<AiAssistantMessage> history)
     {
         var messages = new List<LlmMessage> { new("system", systemPrompt) };
+
+        var expectingToolResult = false;
 
         foreach (var msg in history)
         {
             if (msg.Role == "tool")
             {
+                // Drop orphaned tool results: at the history-window boundary a
+                // tool row can appear without the assistant tool-call turn that
+                // produced it (orphans crash strict providers with a 400).
+                if (!expectingToolResult)
+                {
+                    continue;
+                }
+
                 messages.Add(new LlmMessage("tool", msg.Content ?? "")
                 {
                     ToolCallId = msg.ToolCallId,
                     Name = msg.ToolName,
                 });
             }
-            else if (msg.ToolCallsJson != null)
-            {
-                messages.Add(new LlmMessage("assistant", msg.Content ?? "")
-                {
-                    ToolCallsJson = msg.ToolCallsJson,
-                });
-            }
             else
             {
-                messages.Add(new LlmMessage(msg.Role, msg.Content ?? ""));
+                expectingToolResult = msg.ToolCallsJson is { Length: > 2 };
+
+                if (msg.ToolCallsJson != null)
+                {
+                    messages.Add(new LlmMessage("assistant", msg.Content ?? "")
+                    {
+                        ToolCallsJson = msg.ToolCallsJson,
+                    });
+                }
+                else
+                {
+                    messages.Add(new LlmMessage(msg.Role, msg.Content ?? ""));
+                }
             }
         }
 

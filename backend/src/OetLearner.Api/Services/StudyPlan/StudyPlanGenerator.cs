@@ -498,4 +498,68 @@ public class StudyPlanGenerator(
 
     private static string TrimMax(string s, int max) => s.Length <= max ? s : s[..max];
     private static string Capitalise(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
+    public async Task<StudyPlanPreviewResult> PreviewAsync(
+        string userId,
+        StudyPlanGoalOverrides? overrides,
+        CancellationToken cancellationToken)
+    {
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
+            ?? throw new InvalidOperationException($"Learner {userId} not found.");
+
+        var goal = await db.Goals.AsNoTracking().FirstOrDefaultAsync(g => g.UserId == userId, cancellationToken);
+        var tier = await entitlementResolver.ResolveTierAsync(userId, cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var targetDate = overrides?.ExamDate ?? goal?.TargetExamDate ?? today.AddDays(56);
+        var daysToExam = Math.Max(7, targetDate.DayNumber - today.DayNumber);
+        var totalWeeks = Math.Max(1, (int)Math.Ceiling(daysToExam / 7.0));
+        var minutesPerDay = ComputeMinutesPerDay(goal);
+
+        var weakSubtests = overrides?.WeakSubtests ?? ParseWeakSubtests(goal?.WeakSubtestsJson);
+        var weights = ComputeWeights(goal, weakSubtests);
+
+        var selection = await templateSelector.SelectAsync(
+            totalWeeks, tier, weakSubtests, BandLabel(goal), user.ActiveProfessionId, cancellationToken);
+
+        var activePlan = await db.StudyPlans.AsNoTracking()
+            .Where(p => p.UserId == userId && p.IsActive)
+            .OrderByDescending(p => p.Version)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var pending = 0;
+        var completed = 0;
+        var learnerAdded = 0;
+
+        if (activePlan is not null)
+        {
+            var items = await db.StudyPlanItems.AsNoTracking()
+                .Where(i => i.StudyPlanId == activePlan.Id)
+                .ToListAsync(cancellationToken);
+
+            pending = items.Count(i => i.Status == StudyPlanItemStatus.Pending);
+            completed = items.Count(i => i.Status == StudyPlanItemStatus.Completed);
+            learnerAdded = items.Count(i => i.SourceContentId == null);
+        }
+
+        var approxTasks = selection is not null
+            ? Math.Max(1, totalWeeks * 3)
+            : 0;
+
+        return new StudyPlanPreviewResult(
+            TotalWeeks: totalWeeks,
+            MinutesPerDay: minutesPerDay,
+            Tier: tier,
+            TemplateFound: selection is not null,
+            TemplateSlug: selection?.Template.Slug,
+            TemplateWeekFrom: selection?.Template.MinWeeks,
+            TemplateWeekTo: selection?.Template.MaxWeeks,
+            PendingItemCount: pending,
+            CompletedItemCount: completed,
+            LearnerAddedItemCount: learnerAdded,
+            ApproxTaskCount: approxTasks,
+            NoTemplateReason: selection is null
+                ? $"No template covers {totalWeeks} weeks (supported range 2–16)."
+                : null);
+    }
 }

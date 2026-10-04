@@ -20,6 +20,10 @@ public interface IAiToolExecutor
     /// <summary>JSON Schema 2020-12 string. Loaded once; static per process.</summary>
     string JsonSchemaArgs { get; }
 
+    /// <summary>Tool-call seed string shown to the model. Code-owned; kept in
+    /// sync by <see cref="AiToolRegistry.SeedCatalogAsync"/>.</summary>
+    string Description => string.Empty;
+
     Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct);
 }
 
@@ -37,7 +41,9 @@ public sealed record AiToolContext(
     string? AuthAccountId,
     string AiUsageRecordId,
     int TurnIndex,
-    bool IsAdmin = false);
+    bool IsAdmin = false,
+    string? ThreadId = null,
+    string? TurnId = null);
 
 public sealed record AiToolExecutionResult(
     OetLearner.Api.Domain.AiToolOutcome Outcome,

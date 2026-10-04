@@ -6,6 +6,18 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-04 19:25 | speaking-audio-probe | speaking-audio-probe | 37228245195 | probe=success | SUCCESS | 91fa880ef |
+| 2026-10-04 19:24 | CI triage | CI triage | 37228184364 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 91fa880ef |
+| 2026-10-04 19:21 | Deploy production | Deploy production | 37227959759 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 91fa880ef |
+| 2026-10-04 19:21 | CI triage | CI triage | 37227959741 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 91fa880ef |
+| 2026-10-04 19:15 | CI triage | CI triage | 37227589302 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 91fa880ef |
+| 2026-10-04 19:15 | Deploy production | Deploy production | 37227585544 | Resolve the build to deploy=skipped Apply migration SQL (if the API changed)=skipped Roll out to the VPS=skipped | SKIPPED | 91fa880ef |
+| 2026-10-04 19:15 | CI triage | CI triage | 37227585535 | Classify the failed run (jev-1.13.0)=success | SUCCESS | 91fa880ef |
+| 2026-10-04 19:14 | CI triage | CI triage | 37227528917 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 91fa880ef |
+| 2026-10-04 19:09 | Writing grader regression gate | Writing grader regression gate | 37227205010 | Verify regression manifest matches current prompt=success | SUCCESS | 91fa880ef |
+| 2026-10-04 19:09 | Jev integration | Jev integration | 37227205004 | Jev typed judgment contracts=success | SUCCESS | 91fa880ef |
+| 2026-10-04 19:09 | QA Smoke | QA Smoke | 37227204979 | (none) | CANCELLED | 91fa880ef |
+| 2026-10-04 19:09 | Build images | Build images | 37227204995 | build-web=success Syntax gate (seconds)=success Deployment contract guards=success Retag unchanged agent-gateway=success Detect what changed=success build-agent-gateway=skipped build-backup=skipped build-api=success Retag unchanged db-backup=success Writing model-answer gate (on change)=success Writing grader regression (on change)=success Publish verified release provenance=success | SUCCESS | 91fa880ef |
 | 2026-10-04 11:47 | Owner Agent Console (build + deploy) | Owner Agent Console (build + deploy) | 37199930253 | Unit tests (agent-console/dockerproxy)=success Unit tests (agent-console)=success Unit tests (agent-console/egress)=success Static rollout guards=success Build & push agent-console=success Build & push agent-console-egress=success Build & push agent-console-dockerproxy=success Roll out on the VPS (pull-only)=success | SUCCESS | fde751378 |
 | 2026-10-04 11:36 | CI triage | CI triage | 37199344841 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | fde751378 |
 | 2026-10-04 11:25 | QA Smoke | QA Smoke | 37198713880 | Detect what changed=success Frontend unit (vitest + lint + tsc + build)=success Placement entry contracts=success Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}=skipped QA gate (all suites green)=success | SUCCESS | fde751378 |

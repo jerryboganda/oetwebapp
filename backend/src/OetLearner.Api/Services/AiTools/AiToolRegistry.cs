@@ -94,6 +94,11 @@ public sealed class AiToolRegistry : IAiToolRegistry
         "companion_continue_last_activity",
         "companion_show_allowance",
         "companion_add_plan_item",
+
+        // Study-plan tools (WU10): read, preview, and create from chat.
+        "companion_get_study_plan",
+        "companion_preview_study_plan",
+        "companion_create_study_plan",
     };
 
     /// <summary>
@@ -209,7 +214,7 @@ public sealed class AiToolRegistry : IAiToolRegistry
                     Id = Guid.NewGuid().ToString("N"),
                     Code = exec.Code,
                     Name = HumanizeCode(exec.Code),
-                    Description = "",
+                    Description = TruncateDescription(exec.Description),
                     Category = exec.Category,
                     JsonSchemaArgs = exec.JsonSchemaArgs,
                     IsActive = true,
@@ -232,6 +237,12 @@ public sealed class AiToolRegistry : IAiToolRegistry
                     tracked.Category = exec.Category;
                     dirty = true;
                 }
+                var expectedDescription = TruncateDescription(exec.Description);
+                if (!string.Equals(tracked.Description, expectedDescription, StringComparison.Ordinal))
+                {
+                    tracked.Description = expectedDescription;
+                    dirty = true;
+                }
                 if (dirty)
                 {
                     tracked.UpdatedAt = now;
@@ -244,6 +255,9 @@ public sealed class AiToolRegistry : IAiToolRegistry
             _logger.LogInformation("AiToolRegistry seeded {Count} tool catalog rows.", _executors.Count);
         }
     }
+
+    private static string TruncateDescription(string s) =>
+        string.IsNullOrEmpty(s) ? s : s.Length <= 512 ? s : s[..512];
 
     private static string GrantCacheKey(string featureCode) =>
         $"AiTool.GrantsForFeature::{featureCode}";

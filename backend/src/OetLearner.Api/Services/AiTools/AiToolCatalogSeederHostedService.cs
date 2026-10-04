@@ -67,6 +67,9 @@ public sealed class AiToolCatalogSeederHostedService(
         "get_user_recent_attempts",
         "save_user_note",
         "bookmark_recall_term",
+        "companion_get_study_plan",
+        "companion_preview_study_plan",
+        "companion_create_study_plan",
     ];
 
     /// <summary>

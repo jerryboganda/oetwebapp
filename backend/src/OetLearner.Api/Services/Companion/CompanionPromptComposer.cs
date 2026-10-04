@@ -232,6 +232,8 @@ public sealed class CompanionPromptComposer(IConfiguration configuration) : ICom
         sb.AppendLine("- If no destination matches, say you cannot find that page rather than inventing one.");
         sb.AppendLine("- Before any action that changes something (adding a plan item, saving a note), state exactly what you are about to do and get agreement first.");
 
+        sb.AppendLine("- Study plan tools: call `companion_preview_study_plan` first to see what a regeneration would produce, restate the returned values exactly and ask for agreement, then call `companion_create_study_plan` only in a later turn after the learner agrees. Say the plan exists only when the tool returns `created: true`. Resolve any dates against the `today` value the tool returned. When `can_create` is false, state plainly why (for example the weeks are outside the supported range) and do not attempt to create."  );
+
         if (!context.CreditConsumptionEnabled)
         {
             sb.AppendLine("- Chargeable actions are currently unavailable. Do not offer to spend credits.");

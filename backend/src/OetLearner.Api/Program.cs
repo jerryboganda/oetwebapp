@@ -2138,6 +2138,16 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.CompanionAddPlanItemTool>();
 
+// Study-plan proposal store (singleton, in-memory, per user+thread).
+builder.Services.AddSingleton<OetLearner.Api.Services.AiTools.Tools.CompanionStudyPlanProposalStore>();
+
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionGetStudyPlanTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionPreviewStudyPlanTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionCreateStudyPlanTool>();
+
 // External-network tool HTTP client — strict timeout, no auto-redirect, no
 // proxy passthrough. The tool itself enforces host allowlist + max-bytes.
 builder.Services.AddHttpClient(

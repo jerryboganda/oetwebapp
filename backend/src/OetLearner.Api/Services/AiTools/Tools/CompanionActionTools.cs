@@ -60,6 +60,7 @@ public sealed class CompanionFindDestinationTool(
     ICompanionDestinationRegistry destinations) : IAiToolExecutor
 {
     public string Code => "companion_find_destination";
+    public string Description => "Find pages and activities on the platform that match the learner's request.";
     public AiToolCategory Category => AiToolCategory.Read;
     public string JsonSchemaArgs => """
     {
@@ -121,6 +122,7 @@ public sealed class CompanionOpenDestinationTool(
     ICompanionDestinationRegistry destinations) : IAiToolExecutor
 {
     public string Code => "companion_open_destination";
+    public string Description => "Turn a found destination id into a real link the learner can open.";
     public AiToolCategory Category => AiToolCategory.Read;
     public string JsonSchemaArgs => """
     {
@@ -181,6 +183,7 @@ public sealed class CompanionContinueLastActivityTool(
     ICompanionDestinationRegistry destinations) : IAiToolExecutor
 {
     public string Code => "companion_continue_last_activity";
+    public string Description => "Resume the learner's most recent unfinished activity and return its link.";
     public AiToolCategory Category => AiToolCategory.Read;
     public string JsonSchemaArgs => """
     {
@@ -258,6 +261,7 @@ public sealed class CompanionShowAllowanceTool(
     ICompanionDestinationRegistry destinations) : IAiToolExecutor
 {
     public string Code => "companion_show_allowance";
+    public string Description => "Show the learner's remaining credit allowance for their current plan.";
     public AiToolCategory Category => AiToolCategory.Read;
     public string JsonSchemaArgs => """
     {
@@ -303,6 +307,7 @@ public sealed class CompanionAddPlanItemTool(
     ICompanionContextResolver contexts) : IAiToolExecutor
 {
     public string Code => "companion_add_plan_item";
+    public string Description => "Add one item to the learner's active study plan.";
     public AiToolCategory Category => AiToolCategory.Write;
     public string JsonSchemaArgs => """
     {

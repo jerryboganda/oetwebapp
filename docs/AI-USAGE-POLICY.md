@@ -651,3 +651,29 @@ rows. On 2026-09-30 the owner extended the same route to Speaking grading:
 - **Provider row key marker:** the registry only hands the seeded marker back as a key while the
   row's `BaseUrl` host is on `OET_INTERNAL_AI_HOSTS`, so an admin re-pointing a sidecar row at a
   vendor URL cannot leave it looking credentialed.
+
+## 21. OpenCode provider (learner chatbot)
+
+**Owner directive 2026-10-04.** Add OpenCode as an AI provider for the learner chatbot (AI Learning
+Companion, feature `ai_assistant.learner`) via the existing `OpenAiCompatible` dialect. No CLI,
+no sidecar, no new container or egress path.
+
+- **Credential:** paid OpenCode gateway API key (`oc_sk_…`), stored Data-Protection-encrypted in the
+  `opencode` provider row. Never written to code, docs, tests, env files or agent prompts.
+- **Transport:** Zen (`https://opencode.ai/zen/v1`) or Go (`https://opencode.ai/zen/go/v1`),
+  `POST {base}/chat/completions`, `stream:false`. The admin Test button discriminates Zen vs Go.
+- **Ships inactive and keyless** (priority 900). Reachable only via the per-thread model picker;
+  learner-only. Default models: `glm-5.3-flash` (default), `glm-5.3`.
+- **Tool calls stay enabled.** A learner must be able to create a study plan from chat.
+- **No fallback provider.** Any OpenCode failure shows the learner exactly
+  `OpenCodeProviderDefaults.LearnerBusyMessage` ("The AI provider service is busy at the moment.
+  Please try again later after a few minutes.").
+- **Failure classification** still goes to `AiUsageRecord` (quota, auth, rate, invalid, etc.).
+- **Data position (TV-029):** learner profile, entitlement/credit state and retrieved paid-content
+  excerpts go to a third party (OpenCode gateway). Record DPA, region, retention, training use.
+- **Quota note (R3):** the companion prompt is est. ~8k tokens/call (unmeasured). Free plan 5k/day
+  cannot finish a study-plan flow. Owner should raise companion-plan caps.
+- **ToS gate:** OpenCode ToS (effective 2026-08-15) says "own internal use only". Owner must get
+  written OK or accept the risk before ticking Active.
+- **Default route stays Claude.** A non-Claude default route needs a recorded benchmark run
+  (`AiProviderRouteApprovalService`). No endpoint records one.
