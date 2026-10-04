@@ -48,6 +48,15 @@ public sealed class AiLeasedOperationHandler(
             return;
         }
 
+        if (string.Equals(row.ResourceType, SpeakingGraderCalibrationService.GradeResourceType, StringComparison.Ordinal)
+            && row.State is AiOperationState.Queued or AiOperationState.Leased or AiOperationState.RetryScheduled)
+        {
+            // The calibration harness's grade of one expert-marked performance (numbers only, never a learner's result).
+            var calibration = scope.ServiceProvider.GetRequiredService<SpeakingGraderCalibrationService>();
+            await calibration.ExecuteGradeAsync(row.ResourceId!, ct);
+            return;
+        }
+
         if (string.Equals(row.FeatureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
             && row.State is AiOperationState.Queued or AiOperationState.Leased or AiOperationState.RetryScheduled)
         {

@@ -99,3 +99,27 @@ public sealed record SpeakingGraderCalibrationLabelRequest(
     string? Notes);
 
 public sealed record SpeakingGraderCalibrationExcludeRequest(string? Reason);
+
+// ── The harness ──────────────────────────────────────────────────────────
+
+/// <summary>Start a calibration run: how many times each marked performance is graded (at least two) and whether the audio
+/// judge runs on every grade (default true).</summary>
+public sealed record SpeakingGraderCalibrationRunCreateRequest(int? Repeats, bool? UseAudio);
+
+public sealed record SpeakingGraderCalibrationRunProgress(int Total, int Pending, int Queued, int Done, int Failed);
+
+/// <summary>A run with its progress and, when any grade has finished, the report so far (numbers only).</summary>
+public sealed record SpeakingGraderCalibrationRunView(
+    string Id,
+    /// <summary>running | complete | cancelled</summary>
+    string Status,
+    string GraderVersion,
+    int Repeats,
+    bool UseAudio,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? FinalizedAt,
+    SpeakingGraderCalibrationRunProgress Progress,
+    OetLearner.Api.Services.Speaking.SpeakingCalibrationReport? Report);
+
+/// <summary>What <c>next</c> did: <c>queued</c> | <c>busy</c> | <c>yield</c> | <c>done</c> | <c>complete</c>.</summary>
+public sealed record SpeakingGraderCalibrationNext(string State, string? GradeId, SpeakingGraderCalibrationRunProgress Progress);

@@ -51,13 +51,43 @@ flag, and the expert's marks. The learner's words and audio stay in `SpeakingTra
 
 The page shows progress against each line and says in plain words what is still missing.
 
-## What comes next
+## The harness (calibration run)
 
-The calibration run (not built yet) grades each marked sample with the production grader (Claude Max first,
-unchanged) and compares it with the expert: per-criterion error and bias, overall error, grade agreement,
-pass/fail at 350, and repeatability. When a grader version passes, the raw-to-reported table is refitted on
-the expert's own pairs, the grader version is added to the calibrated set, and new scores switch from
-"Provisional" to "AI practice estimate". Stored scores are never rewritten.
+`speaking-grader-calibration.yml` (manual, resumable) drives a run over the expert-marked performances:
+
+1. `POST /runs` freezes the set (every labelled, non-excluded performance) and creates `Repeats` (at least two) grades for each.
+2. `POST /runs/{id}/next` queues **one** grade at a time as a durable operation (`speaking_calibration_grade`) that the existing
+   worker runs: the same grader core and prompt a learner's grade uses, on the transcript pinned at promotion, the audio stage
+   on every grade when the run asks for it (whatever the learner-facing flag says), and `UserId = null` (no plan gate). **Nothing
+   is persisted except numbers**: no assessment row, no credit, no Jev call, no learner text. It answers `queued`, `busy`
+   (one is running), `yield` (a learner's `speaking.grade` / `writing.grade` is queued or running: nothing starts), `done`
+   or `complete`. A failed grade is retried up to three attempts.
+3. `POST /runs/{id}/finalize` freezes the report (and the grader version that actually graded) and writes an audit event.
+   `GET /runs/{id}` shows the report so far at any time.
+
+**The report** (`SpeakingGraderCalibrationMetrics`): per-criterion mean error, bias, exact and within-one-band agreement (Wilson 95 %
+intervals), Intelligibility split by judged-from-audio vs transcript-only, raw-total error, then the end-to-end score through
+a map fitted **without** each performance (leave-one-out): mean error, bias, within 40 points, grade exact / adjacent with the
+6×6 confusion matrix, pass/fail at 350 (agreement, false passes, false fails), and repeatability (criterion scores that repeat,
+score within 20 points, grade and pass flips). It also shows the platform heuristic against the expert (`V0OnExpert`: the current
+map on the expert's own criteria; `V0EndToEnd`: what the platform shows today) and the monotone fitted map
+(`Mapping.Fitted`, isotonic regression on the expert's own raw-total to overall pairs, anchored 0→0 and 39→500, rounded to 10).
+
+**Proposed pass thresholds** (`SpeakingGraderCalibrationMetrics.Thresholds`; the owner confirms them): each linguistic criterion
+mean error ≤ 0.75, |bias| ≤ 0.5, within one band ≥ 90 %; each clinical criterion mean error ≤ 0.5, |bias| ≤ 0.35, exact ≥ 60 %;
+audio-judged Intelligibility mean error ≤ 0.75; end-to-end score mean error ≤ 30, |bias| ≤ 15, within 40 points ≥ 80 %; grade exact
+≥ 70 % and within one ≥ 95 %; pass/fail agreement ≥ 85 % with false passes ≤ 10 %; repeatability: criterion scores repeat ≥ 80 %,
+score within 20 points ≥ 90 %, pass flips ≤ 5 %; plus the coverage above and every performance graded at least twice.
+
+**Scope.** A marked performance is one card, so the harness calibrates the card grader. The combined Full Mock judgement uses the
+same grader core, rubric and score map but a different prompt (`speaking.score.v3-combined`), so it stays provisional until
+it is calibrated on its own (a later step: expert marks for whole two-card tests).
+
+## What passing does
+
+When a run passes and the owner agrees: a code change replaces the `SpeakingRawToReported` literal (C# and TypeScript) with
+`Mapping.Fitted`, bumps `SpeakingMappingVersion`, adds the grader version (with its model) to the calibrated set, and commits the
+report. New scores then switch from "Provisional" to "AI practice estimate". Stored scores are never rewritten.
 
 ## Endpoints (`AdminOnly`; reads `AdminContentRead`, writes `AdminContentWrite`)
 
@@ -70,3 +100,8 @@ the expert's own pairs, the grader version is added to the calibrated set, and n
 | GET | `/samples/{id}/audio/{recordingId}` | Stream a clip |
 | PUT | `/samples/{id}/label` | Nine criterion scores + overall (steps of 10) + notes |
 | POST | `/samples/{id}/exclude` `{ reason }` | Mark unusable |
+| GET | `/runs` | Recent runs with progress |
+| POST | `/runs` `{ repeats?, useAudio? }` | Start a run over the marked performances |
+| GET | `/runs/{id}` | Progress + the report so far |
+| POST | `/runs/{id}/next` | Queue the next grade unless a learner's is waiting |
+| POST | `/runs/{id}/finalize` | Freeze the report |
