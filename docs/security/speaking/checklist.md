@@ -63,7 +63,7 @@ Sign off every box before the `Features__SpeakingV2` flag is enabled for product
 
 ## Monitoring + alerting
 
-- [ ] Grafana dashboards imported (`ops/dashboards/speaking-*.json`).
+- [ ] Speaking operational views exist (Sentry errors, `/v1/admin/ai/live-voice/health`, the admin AI usage pages; there are no Speaking Grafana dashboards because the API emits no Prometheus metrics yet, see `ops/README.md`).
 - [ ] Alert routes configured (PagerDuty / Slack) for: AI provider 5xx, LiveKit webhook failure, recording loss, drift spike, S3 access denied.
 
 ## Known open gaps (must be either closed or risk-accepted before launch)

@@ -32,9 +32,13 @@ Typed catalog: `lib/analytics/speaking-events.ts`. Use `trackSpeaking('name', { 
 
 ## Downstream consumers
 
-- **Funnel dashboard** (`ops/dashboards/speaking-funnel.json`) — entry → warmup_finished → roleplay_ended → assessment_viewed.
-- **Quality dashboard** — AI vs tutor delta histograms by criterion.
+- **Funnel** — entry → warmup_finished → roleplay_ended → assessment_viewed.
+- **Quality** — AI vs tutor delta histograms by criterion.
 - **LiveKit health** — connect rate, disconnect reasons, cue volume.
+
+These views are built in the analytics destination (PostHog assumed), from the events above. The three
+Grafana dashboards that used to live in `ops/dashboards/` queried Prometheus metrics (`speaking_*`)
+that no code ever emitted, so they showed nothing and were deleted (2026-10-06). See `ops/README.md`.
 
 ## TODOs
 
