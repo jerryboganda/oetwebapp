@@ -60,6 +60,37 @@ public class PdfPigPdfTextExtractorTests
     }
 
     [Fact]
+    public async Task Reports_page_and_character_counts_for_the_extraction_log_without_changing_the_text()
+    {
+        var builder = new PdfDocumentBuilder();
+        var font = builder.AddStandard14Font(UglyToad.PdfPig.Fonts.Standard14Fonts.Standard14Font.Helvetica);
+        builder.AddPage(595, 842).AddText("First page text", 12, new UglyToad.PdfPig.Core.PdfPoint(25, 700), font);
+        builder.AddPage(595, 842).AddText("Second page text", 12, new UglyToad.PdfPig.Core.PdfPoint(25, 700), font);
+        var bytes = builder.Build();
+        var extractor = new PdfPigPdfTextExtractor(NullLogger<PdfPigPdfTextExtractor>.Instance);
+
+        string withFacts;
+        var facts = PdfExtractionFacts.Begin();
+        try
+        {
+            using var stream = new MemoryStream(bytes);
+            withFacts = await extractor.ExtractAsync(stream, CancellationToken.None);
+        }
+        finally
+        {
+            PdfExtractionFacts.End();
+        }
+
+        using var plain = new MemoryStream(bytes);
+        var withoutFacts = await extractor.ExtractAsync(plain, CancellationToken.None);
+
+        Assert.Equal(withoutFacts, withFacts);
+        Assert.Equal(2, facts.Pages);
+        Assert.Equal(withFacts.Length, facts.EmbeddedChars);
+        Assert.Equal("embedded", PdfExtractionFacts.DescribeTier(withFacts.Length, facts.EmbeddedChars));
+    }
+
+    [Fact]
     public async Task Returns_empty_on_corrupted_pdf()
     {
         var bytes = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };

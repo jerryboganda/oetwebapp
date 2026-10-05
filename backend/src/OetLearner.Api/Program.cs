@@ -1904,7 +1904,9 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Content.IPdfTextExtractor,
     OetLearner.Api.Services.Content.AutoPdfTextExtractor>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentTextExtractionService,
     OetLearner.Api.Services.Content.ContentTextExtractionService>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Content.ContentTextExtractionWorker>();
+// ContentTextExtractionWorker registers through AiCostBearingHostedServiceRegistration
+// (so only the ai-worker runs it in production); the extractor and service above stay
+// registered everywhere because import, recovery and companion indexing call them inline.
 
 // NOTE: The Writing sample seeder (WritingSampleSeeder) and the Writing V2
 // content seeder (WritingV2ContentSeeder) were removed permanently — the

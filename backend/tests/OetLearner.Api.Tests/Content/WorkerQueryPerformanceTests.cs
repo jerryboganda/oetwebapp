@@ -35,40 +35,9 @@ public sealed class WorkerQueryPerformanceTests : IAsyncLifetime
 
     public async Task DisposeAsync() => await _connection.DisposeAsync();
 
-    [Fact]
-    public async Task TextExtractionWorker_SelectsAtMostTwentyOldestPapersInSql()
-    {
-        await using (var db = new LearnerDbContext(_options))
-        {
-            var now = DateTimeOffset.UtcNow;
-            db.ContentPapers.AddRange(Enumerable.Range(0, 25).Select(index =>
-                CreatePaper($"paper-{index:D2}", now.AddMinutes(index))));
-            db.ContentPapers.Add(CreatePaper(
-                "paper-archived",
-                now.AddYears(-1),
-                ContentStatus.Archived));
-            await db.SaveChangesAsync();
-        }
-
-        var extraction = new RecordingExtractionService();
-        using var provider = BuildWorkerProvider(services =>
-            services.AddSingleton<IContentTextExtractionService>(extraction));
-        _sql.Clear();
-
-        var processed = await new ContentTextExtractionWorker(
-                provider.GetRequiredService<IServiceScopeFactory>(),
-                NullLogger<ContentTextExtractionWorker>.Instance)
-            .RunOnceAsync(CancellationToken.None);
-
-        Assert.Equal(20, processed);
-        Assert.Equal(
-            Enumerable.Range(0, 20).Select(index => $"paper-{index:D2}"),
-            extraction.PaperIds);
-        var command = Assert.Single(_sql.ReaderCommands.Where(command =>
-            command.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)));
-        Assert.Contains("ORDER BY", command, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("LIMIT", command, StringComparison.OrdinalIgnoreCase);
-    }
+    // The text-extraction worker's selection (predicate + id cursor, 20 per tick) is
+    // covered by ContentTextExtractionWorkerSelectionTests. It no longer fits this class:
+    // its id-cursor comparison is checked against the Npgsql translation, not SQLite.
 
     [Fact]
     public async Task UploadCleanup_FiltersExpirationInSql()
@@ -400,8 +369,9 @@ public sealed class WorkerQueryPerformanceTests : IAsyncLifetime
             Assert.Equal(now, row.LastTransitionAt);
         }
 
+        // 52 eligible jobs were seeded: whatever the claim batch is, the rest stay queued.
         Assert.Equal(
-            2,
+            52 - batchSize,
             await verificationDb.BackgroundJobs.CountAsync(job =>
                 job.State == AsyncState.Queued && job.AvailableAt <= now));
 
@@ -581,17 +551,6 @@ public sealed class WorkerQueryPerformanceTests : IAsyncLifetime
                 job.Retryable,
                 job.RetryCount,
                 job.RetryAfterMs);
-    }
-
-    private sealed class RecordingExtractionService : IContentTextExtractionService
-    {
-        public List<string> PaperIds { get; } = [];
-
-        public Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct, bool force = false)
-        {
-            PaperIds.Add(paperId);
-            return Task.FromResult(1);
-        }
     }
 
     private sealed class RecordingFileStorage : IFileStorage
