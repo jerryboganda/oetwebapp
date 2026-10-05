@@ -59,7 +59,9 @@ public static class PdfParity
 /// <item><b>Verify sampling</b> (<c>RemoteJobs:VerifySampleRate</c>, default 0) re-extracts a deterministic fraction of Applied jobs;
 /// a mismatch audits, strikes the node, and replaces the helper's cached text with the in-process result, which is authoritative.</item>
 /// </list>
-/// A comparison is recorded in the job's summary (<c>comparison</c>) so each job is checked once.
+/// A comparison is recorded in the job's summary (<c>comparison</c>) so each job is checked once. A verify candidate that the
+/// deterministic sampler does not select is recorded as <c>not_sampled</c> in the same pass, so the scan window always advances to
+/// newer jobs instead of re-reading the same unselected rows forever (at a 5% rate 95% of jobs are never selected).
 /// </summary>
 public sealed class RemoteJobShadowComparer(
     IServiceScopeFactory scopeFactory,
@@ -68,7 +70,12 @@ public sealed class RemoteJobShadowComparer(
     ILogger<RemoteJobShadowComparer> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromSeconds(60);
-    private const int BatchSize = 3;
+
+    /// <summary>Most in-process re-extractions per purpose per pass: the ai-worker also grades and synthesises speech.</summary>
+    internal const int BatchSize = 3;
+
+    /// <summary>Verify candidates scanned (and, when not sampled, marked) per pass.</summary>
+    internal const int ScanWindow = 50;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -86,7 +93,7 @@ public sealed class RemoteJobShadowComparer(
         }
     }
 
-    /// <summary>One pass: returns how many jobs were compared.</summary>
+    /// <summary>One pass: returns how many jobs received a verdict (match, mismatch, stale or unreadable).</summary>
     public async Task<int> RunOnceAsync(CancellationToken ct)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
@@ -100,42 +107,59 @@ public sealed class RemoteJobShadowComparer(
 
         if (snapshot.KindEnabled(RemoteJobKinds.PdfExtract, RemoteJobPurpose.Shadow))
         {
-            foreach (var job in await PendingAsync(db, RemoteJobPurpose.Shadow, "Shadow", ct))
+            foreach (var job in await PendingAsync(db, RemoteJobPurpose.Shadow, "Shadow", BatchSize, ct))
             {
-                await CompareAsync(scope.ServiceProvider, db, job, authoritative: false, options, ct);
-                compared++;
+                if (await CompareAsync(scope.ServiceProvider, db, job, authoritative: false, options, ct)) compared++;
             }
         }
 
         if (options.VerifySampleRate > 0 && snapshot.KindEnabled(RemoteJobKinds.PdfExtract, RemoteJobPurpose.Apply))
         {
-            foreach (var job in (await PendingAsync(db, RemoteJobPurpose.Apply, "Applied", ct)).Where(j => PdfParity.IsSampled(j.Id, options.VerifySampleRate)))
+            var window = await PendingAsync(db, RemoteJobPurpose.Apply, "Applied", ScanWindow, ct);
+            var sampled = new List<RemoteJobRow>();
+            var notSampled = new List<string>();
+            foreach (var job in window)
             {
-                await CompareAsync(scope.ServiceProvider, db, job, authoritative: true, options, ct);
-                compared++;
+                if (PdfParity.IsSampled(job.Id, options.VerifySampleRate)) sampled.Add(job);
+                else notSampled.Add(job.Id);
+            }
+
+            // Record the unselected rows so the next pass sees newer jobs (see the class comment).
+            if (notSampled.Count > 0) await MarkManyAsync(db, notSampled, "not_sampled", ct);
+
+            foreach (var job in sampled.Take(BatchSize))
+            {
+                if (await CompareAsync(scope.ServiceProvider, db, job, authoritative: true, options, ct)) compared++;
             }
         }
 
         return compared;
     }
 
-    private static Task<List<RemoteJobRow>> PendingAsync(LearnerDbContext db, string purpose, string outcome, CancellationToken ct)
+    /// <summary>
+    /// Uncompared jobs of the last two days, least recently touched first. A job the pass could not read is touched
+    /// (<see cref="TouchAsync"/>) so it rotates to the back instead of blocking the head of the line.
+    /// </summary>
+    private static Task<List<RemoteJobRow>> PendingAsync(LearnerDbContext db, string purpose, string outcome, int limit, CancellationToken ct)
         => RemoteDb.QueryAsync(
             db,
             "SELECT " + RemoteJobRow.Columns("j") + " FROM \"RemoteJobs\" j"
             + " WHERE j.\"Kind\" = 'pdf.extract' AND j.\"Purpose\" = @purpose AND j.\"State\" = 'Succeeded' AND j.\"ApplyOutcome\" = @outcome"
             + " AND (j.\"ResultSummaryJson\"->>'comparison') IS NULL AND j.\"ResourceType\" = 'MediaAsset'"
             + " AND j.\"CompletedAt\" > clock_timestamp() - interval '2 days'"
-            + " ORDER BY j.\"CompletedAt\" LIMIT 50;",
+            + " AND j.\"UpdatedAt\" > clock_timestamp() - interval '2 days'"
+            + " ORDER BY j.\"UpdatedAt\", j.\"Id\" LIMIT @limit;",
             parameters =>
             {
                 parameters.AddWithValue("purpose", purpose);
                 parameters.AddWithValue("outcome", outcome);
+                parameters.AddWithValue("limit", limit);
             },
             RemoteJobRow.Read,
             ct);
 
-    private async Task CompareAsync(
+    /// <summary>True when a verdict was recorded for the job; false when it was left for a later pass.</summary>
+    private async Task<bool> CompareAsync(
         IServiceProvider services,
         LearnerDbContext db,
         RemoteJobRow job,
@@ -154,14 +178,14 @@ public sealed class RemoteJobShadowComparer(
         if (media is null || !string.Equals(media.Sha256, job.InputSha256, StringComparison.Ordinal))
         {
             await MarkAsync(db, job.Id, "stale", ct);
-            return;
+            return true;
         }
 
         var summary = ReadSummary(job.ResultSummaryJson);
         if (summary is null)
         {
             await MarkAsync(db, job.Id, "unreadable", ct);
-            return;
+            return true;
         }
 
         IReadOnlyList<string> pages;
@@ -170,10 +194,19 @@ public sealed class RemoteJobShadowComparer(
             await using var stream = await storage.OpenReadAsync(media.StoragePath, ct);
             pages = await oracle.ExtractPagesAsync(stream, ct);
         }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // The object is gone: the input the helper saw no longer exists, so there is nothing to compare against.
+            logger.LogWarning(ex, "Asset {AssetId} has no stored object; remote job {JobId} is not compared.", assetId, job.Id);
+            await MarkAsync(db, job.Id, "stale", ct);
+            return true;
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // Possibly transient: retry later, but rotate to the back so one unreadable asset cannot starve newer jobs.
             logger.LogWarning(ex, "Could not read asset {AssetId} to compare remote job {JobId}.", assetId, job.Id);
-            return;
+            await TouchAsync(db, job.Id, ct);
+            return false;
         }
 
         var minTextLength = RemoteJobParams.MinTextLength(job.ParamsJson);
@@ -183,7 +216,7 @@ public sealed class RemoteJobShadowComparer(
         if (differences.Count == 0)
         {
             await MarkAsync(db, job.Id, "match", ct);
-            return;
+            return true;
         }
 
         var action = authoritative ? "RemoteJob.VerifyMismatch" : "RemoteJob.ShadowMismatch";
@@ -192,11 +225,11 @@ public sealed class RemoteJobShadowComparer(
             new { kind = job.Kind, differences, inputSha256 = job.InputSha256, node = job.SettledBy }, now, ct);
         await MarkAsync(db, job.Id, "mismatch", ct);
 
-        if (!authoritative || job.SettledBy is null) return;
+        if (!authoritative || job.SettledBy is null) return true;
 
         // The in-process result is authoritative: strike the node and replace the cached text (same merge rules as the applier).
         await RemoteNodeOps.AddStrikeAsync(db, job.SettledBy, "verify_sample_mismatch", options, now, ct);
-        if (pages.Count == 0) return;
+        if (pages.Count == 0) return true;
 
         var flat = string.Join("\n\n", pages).Trim();
         var links = await db.ContentPaperAssets.AsNoTracking()
@@ -207,6 +240,8 @@ public sealed class RemoteJobShadowComparer(
         {
             await PaperExtractedTextCommit.CommitAsync(db, link.PaperId, link.Id, flat, replaceExisting: true, now, ct);
         }
+
+        return true;
     }
 
     private static PdfSummaryView? ReadSummary(string? json)
@@ -233,18 +268,28 @@ public sealed class RemoteJobShadowComparer(
     }
 
     private static Task<int> MarkAsync(LearnerDbContext db, string jobId, string comparison, CancellationToken ct)
+        => MarkManyAsync(db, [jobId], comparison, ct);
+
+    private static Task<int> MarkManyAsync(LearnerDbContext db, IReadOnlyCollection<string> jobIds, string comparison, CancellationToken ct)
         => RemoteDb.ExecuteAsync(
             db,
             """
             UPDATE "RemoteJobs" SET
                 "ResultSummaryJson" = jsonb_set(COALESCE("ResultSummaryJson", '{}'::jsonb), '{comparison}', to_jsonb(@comparison::text)),
                 "UpdatedAt" = clock_timestamp()
-            WHERE "Id" = @id;
+            WHERE "Id" = ANY(@ids);
             """,
             parameters =>
             {
                 parameters.AddWithValue("comparison", comparison);
-                parameters.AddWithValue("id", jobId);
+                parameters.AddWithValue("ids", jobIds.ToArray());
             },
+            ct);
+
+    private static Task<int> TouchAsync(LearnerDbContext db, string jobId, CancellationToken ct)
+        => RemoteDb.ExecuteAsync(
+            db,
+            """UPDATE "RemoteJobs" SET "UpdatedAt" = clock_timestamp() WHERE "Id" = @id;""",
+            parameters => parameters.AddWithValue("id", jobId),
             ct);
 }
