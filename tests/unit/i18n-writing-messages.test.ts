@@ -62,6 +62,67 @@ describe('writing i18n messages', () => {
     expect(i18nSource).toContain("import arWritingMessages from './messages/ar/writing.json'");
   });
 
+  it('memoizes the merged bundle per locale instead of rebuilding it on every call', async () => {
+    const { loadAllMessages, loadWritingMessages } = await import('@/i18n');
+
+    for (const locale of ['en', 'ar'] as const) {
+      expect(await loadAllMessages(locale)).toBe(await loadAllMessages(locale));
+      expect(await loadAllMessages(locale, { includeWriting: false })).toBe(await loadAllMessages(locale, { includeWriting: false }));
+      expect(await loadWritingMessages(locale)).toBe(await loadWritingMessages(locale));
+    }
+    expect(await loadAllMessages('en')).not.toBe(await loadAllMessages('ar'));
+  });
+
+  it('leaves the Writing bundle out of the root messages and serves it on its own', async () => {
+    const { loadAllMessages, loadWritingMessages } = await import('@/i18n');
+
+    for (const locale of ['en', 'ar'] as const) {
+      const root = await loadAllMessages(locale, { includeWriting: false }) as Record<string, unknown>;
+      const writing = await loadWritingMessages(locale) as Record<string, unknown>;
+      const everything = await loadAllMessages(locale) as Record<string, unknown>;
+
+      // The default keeps loading everything, so existing callers are unchanged.
+      expect(Object.keys(everything).sort()).toEqual([...Object.keys(root), 'writing'].sort());
+      expect(root).not.toHaveProperty('writing');
+      expect(root).toHaveProperty('companion');
+      expect(root).toHaveProperty('freeSample');
+      expect(Object.keys(writing)).toEqual(['writing']);
+      expect(writing.writing).toEqual(everything.writing);
+    }
+  });
+
+  it('resolves the Writing copy once the learner layout merges its bundle into the root messages', async () => {
+    const { loadAllMessages, loadWritingMessages } = await import('@/i18n');
+    const { mergeMessageTrees } = await import('@/components/providers/extra-messages-provider');
+
+    for (const locale of ['en', 'ar'] as const) {
+      const root = await loadAllMessages(locale, { includeWriting: false });
+      const writing = await loadWritingMessages(locale);
+      const merged = mergeMessageTrees(root as Record<string, unknown>, writing as Record<string, unknown>);
+      const t = createTranslator({
+        locale,
+        messages: merged as Parameters<typeof createTranslator>[0]['messages'],
+        getMessageFallback: ({ key }) => `__MISSING__${key}`,
+        onError: () => {},
+      });
+
+      expect(t('writing.hub.pageTitle')).not.toContain('__MISSING__');
+      expect(t('companion.page.title', { persona: 'Jana' })).not.toContain('__MISSING__');
+      // The merge changed neither input.
+      expect(root).not.toHaveProperty('writing');
+    }
+  });
+
+  it('keeps the root layout light and the learner layout responsible for the Writing bundle', () => {
+    const rootLayout = fs.readFileSync(path.join(repoRoot, 'app', 'layout.tsx'), 'utf8');
+    const learnerLayout = fs.readFileSync(path.join(repoRoot, 'app', '(learner)', 'layout.tsx'), 'utf8');
+
+    expect(rootLayout).toContain('loadAllMessages(locale, { includeWriting: false })');
+    expect(learnerLayout).toContain('loadWritingMessages');
+    expect(learnerLayout).toContain('ExtraMessagesProvider');
+    expect(learnerLayout).toContain('LearnerShellLayout');
+  });
+
   it('loads the writing hub copy for every supported locale', async () => {
     const { loadAllMessages } = await import('@/i18n');
     const requiredHubKeys = [

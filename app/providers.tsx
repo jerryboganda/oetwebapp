@@ -15,19 +15,9 @@ import { RuntimeShellBridges } from '@/components/shell/runtime-shell-bridges';
 import { AiAssistantProvider } from '@/contexts/ai-assistant-context';
 import { CompanionMount } from '@/components/providers/companion-mount';
 import { getAppRuntimeKind } from '@/lib/runtime-signals';
+import { getMessageFallback, ignoreIntlError } from '@/lib/i18n/message-fallback';
 import { RuntimeConfigProvider } from './providers/RuntimeConfigProvider';
 import { AppVersionGateProvider } from './providers/AppVersionGateProvider';
-
-function isWritingMessageKey(key: string) {
-  return key === 'writing' || key.startsWith('writing.');
-}
-
-function getMessageFallback({ key }: { key: string }) {
-  if (!isWritingMessageKey(key)) return key;
-
-  console.error(new Error(`Missing required writing translation: ${key}`));
-  return 'Writing copy unavailable';
-}
 
 function useServiceWorkerRegistration() {
   useEffect(() => {
@@ -85,10 +75,9 @@ export function AppProviders({
       // Pages that don't have a translation for a requested key (or that
       // don't use next-intl at all) keep their existing English strings —
       // we don't want missing keys to throw a runtime error inside legacy
-      // pages while the rollout is partial.
-      onError={() => {
-        /* Non-writing pages still use key fallbacks during the partial rollout. */
-      }}
+      // pages while the rollout is partial. (Shared with the nested providers
+      // that add a bundle, e.g. the learner layout's Writing messages.)
+      onError={ignoreIntlError}
       getMessageFallback={getMessageFallback}
     >
       {/*
@@ -123,8 +112,9 @@ export function AppProviders({
                 AI Learning Companion (docs/ai-learning-companion/). Sits inside
                 AuthProvider because it needs session.accessToken for the SignalR
                 hub and the role for its permission check. The provider only
-                opens a connection when the user actually has access, and
-                CompanionMount additionally gates on the server-owned
+                opens a connection when the user actually has access AND a
+                surface that shows the assistant (the panel, the companion page)
+                has asked for it, and CompanionMount additionally gates on the server-owned
                 `ai_learning_companion` flag — which ships disabled — so this
                 renders nothing until an operator enables it in /admin/flags.
               */}

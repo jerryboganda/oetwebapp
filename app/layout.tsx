@@ -139,7 +139,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // every client component beneath. Pages that don't call `useTranslations`
   // are unaffected — existing English-inline pages keep rendering as-is.
   const locale = await resolveLocale();
-  const messages = await loadAllMessages(locale);
+  // Everything except the Writing bundle: that is ~50-65 KB, and inlining it here put it in every
+  // HTML response (sign-in, admin, expert, public pages). The learner layout adds it for the
+  // learner routes, the only place Writing copy is shown (see app/(learner)/layout.tsx).
+  const messages = await loadAllMessages(locale, { includeWriting: false });
   const direction = locale === 'ar' ? 'rtl' : 'ltr';
   return (
     <html lang={locale} dir={direction} className={`${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
