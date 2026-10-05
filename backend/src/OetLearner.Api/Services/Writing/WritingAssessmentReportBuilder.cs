@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -150,13 +151,15 @@ public static class WritingAssessmentReportBuilder
             });
         }
 
-        var topPriorities = input.RuleFindings
-            .OrderBy(x => SeverityRank(x.Severity))
-            .ThenBy(x => x.StartOffset ?? int.MaxValue)
-            .Select(x => $"{x.RuleId}: {x.Message}")
-            .Distinct(StringComparer.Ordinal)
-            .Take(5)
-            .ToArray();
+        var topPriorities = WritingReportDigest.ComposePriorities(input.RuleFindings.Select(x => new WritingDigestFinding(
+            x.RuleId,
+            x.Severity,
+            x.Message,
+            x.Quote,
+            x.FixSuggestion,
+            x.PrimaryCriterionCode,
+            x.StartOffset,
+            x.CandidateBehavior == WritingCandidateBehaviors.ScoreBearing)));
         report.TopPrioritiesJson = JsonSerializer.Serialize(topPriorities);
         report.StrengthsJson = JsonSerializer.Serialize(criteria.Select(x => x.StrengthObservation).Take(3));
         report.StudyPlanJson = JsonSerializer.Serialize(criteria
@@ -192,13 +195,4 @@ public static class WritingAssessmentReportBuilder
 
         return new WritingAssessmentReportBuildResult(report, modelAnswer);
     }
-
-    private static int SeverityRank(string severity) => severity.ToLowerInvariant() switch
-    {
-        "critical" => 0,
-        "major" => 1,
-        "moderate" => 2,
-        "minor" => 3,
-        _ => 4,
-    };
 }

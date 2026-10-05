@@ -253,7 +253,7 @@ public static class WritingV2ResponseMapper
                 if (el.ValueKind == JsonValueKind.Object)
                 {
                     if (el.TryGetProperty("score", out var sEl) && sEl.TryGetInt32(out var s)) score = s;
-                    if (el.TryGetProperty("feedback", out var fEl) && fEl.ValueKind == JsonValueKind.String) feedback = fEl.GetString() ?? string.Empty;
+                    if (el.TryGetProperty("feedback", out var fEl) && fEl.ValueKind == JsonValueKind.String) feedback = WritingReportDigest.Clip(fEl.GetString(), WritingReportDigest.SummaryMaxChars);
                     if (el.TryGetProperty("exemplarFix", out var eEl) && eEl.ValueKind == JsonValueKind.String) exemplar = eEl.GetString();
                     // Addendum Rev8 §19.4: the candidate's own wording the grader flagged.
                     if (el.TryGetProperty("quote", out var qEl) && qEl.ValueKind == JsonValueKind.String) quote = qEl.GetString();

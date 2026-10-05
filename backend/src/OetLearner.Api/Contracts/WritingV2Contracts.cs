@@ -212,7 +212,10 @@ public sealed record WritingAssessmentV11CriterionResponse(
     string StrengthObservation,
     string LimitationObservation,
     IReadOnlyList<string> Evidence,
-    string ImprovementAction);
+    string ImprovementAction,
+    // One or two short sentences from this criterion's most important findings
+    // (WritingReportDigest.CriterionSummary); null when it has none.
+    string? Summary = null);
 
 public sealed record WritingAssessmentV11ErrorResponse(
     string Id,

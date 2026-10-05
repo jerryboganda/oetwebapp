@@ -536,6 +536,111 @@ describe('Writing results page — simplified report order (launch handoff UI-3)
   });
 });
 
+// Owner review (5 Oct 2026): a realistic letter has many mixed major/minor findings, yet
+// each criterion card stays short, the priorities are distinct and no "Exemplar" shows.
+describe('Writing results page — concise cards for a letter with many mixed findings', () => {
+  const finding = (n: number, criterion: string, severity: string) => ({
+    id: `real-${n}`,
+    location: null,
+    candidateWording: `wording ${n}`,
+    correction: `correction ${n}`,
+    category: criterion,
+    ruleSource: `AI.${criterion}`,
+    whyItMatters: `why ${n}`,
+    severity,
+    confidence: 'high',
+    primaryCriterionCode: criterion,
+    secondaryCriterionCodes: [],
+    startOffset: n,
+    endOffset: n + 4,
+  });
+  const CRITERIA = ['purpose', 'content', 'conciseness_clarity', 'genre_style', 'organisation_layout', 'language'];
+  // 14 findings, severity-first like the server: 3 critical, 5 major, 6 minor, several per criterion.
+  const ERRORS = [
+    finding(1, 'content', 'critical'), finding(2, 'content', 'critical'), finding(3, 'purpose', 'critical'),
+    finding(4, 'language', 'major'), finding(5, 'language', 'major'), finding(6, 'genre_style', 'major'),
+    finding(7, 'conciseness_clarity', 'major'), finding(8, 'organisation_layout', 'major'),
+    finding(9, 'language', 'minor'), finding(10, 'language', 'minor'), finding(11, 'content', 'minor'),
+    finding(12, 'genre_style', 'minor'), finding(13, 'organisation_layout', 'minor'), finding(14, 'conciseness_clarity', 'minor'),
+  ];
+  const REPORT = {
+    ...ASSESSMENT_V11,
+    errors: ERRORS,
+    // The server already de-duplicates; the page must also never print one problem twice.
+    topPriorities: [
+      'AI.purpose: State the purpose in the opening sentence.',
+      'OW-005: State the purpose in the opening sentence.',
+      'AI.content: Include the discharge plan.',
+      'R12.4: Use passive voice for medications.',
+    ],
+    criteria: ASSESSMENT_V11.criteria.map((c) => ({ ...c, summary: `Summary for ${c.criterionCode}.` })),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listFreeSamples.mockResolvedValue([]);
+    getWritingSubmission.mockResolvedValue(SUBMISSION);
+    getWritingSubmissionGrade.mockResolvedValue(GRADE);
+    getWritingAssessmentV11.mockResolvedValue(REPORT);
+    getTutorReview.mockResolvedValue(null);
+    getWritingAnswerSheet.mockResolvedValue({ answerSheetPdfDownloadPath: null });
+    getWritingSubmissionCaseNotes.mockResolvedValue(null);
+  });
+
+  it('never prints the same priority twice and stays at three', async () => {
+    renderPage();
+    const heading = await screen.findByRole('heading', { name: 'writing.submissions.results.priorities.heading' });
+    const items = within(heading.closest('section')!).getAllByRole('listitem').map((li) => li.textContent);
+
+    expect(items).toEqual([
+      '#1State the purpose in the opening sentence.',
+      '#2Include the discharge plan.',
+      '#3Use passive voice for medications.',
+    ]);
+  });
+
+  it('keeps every criterion card to a summary, one suggested fix and the next step', async () => {
+    renderPage();
+    const cards = within(await screen.findByTestId('criteria-list')).getAllByRole('listitem');
+
+    expect(cards).toHaveLength(6);
+    cards.forEach((card, index) => {
+      expect(within(card).getByText(`Summary for ${CRITERIA[index]}.`)).toBeInTheDocument();
+      expect(within(card).getAllByText('writing.submissions.results.criteria.suggestedFix')).toHaveLength(1);
+      expect(within(card).getAllByText(/^“wording \d+”$/)).toHaveLength(1);
+      expect(card.textContent!.length).toBeLessThan(600);
+    });
+    // Content has 3 findings: only the critical one is on the card, the rest sit behind "more".
+    expect(within(cards[1]).getByText('“wording 1”')).toBeInTheDocument();
+    expect(within(cards[1]).queryByText('“wording 2”')).not.toBeInTheDocument();
+    expect(within(cards[1]).getByTestId('criterion-more')).toHaveTextContent('writing.submissions.results.criteria.moreCorrections');
+  });
+
+  it('"+N more" opens the complete corrections list', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const cards = within(await screen.findByTestId('criteria-list')).getAllByRole('listitem');
+
+    expect(screen.getByTestId('corrections-preview')).toBeInTheDocument();
+    await user.click(within(cards[5]).getByTestId('criterion-more'));
+
+    expect(within(screen.getByTestId('corrections-full-list')).getAllByRole('listitem')).toHaveLength(ERRORS.length);
+  });
+
+  it('shows no "Exemplar" wording anywhere on the page or in the copy bundles', async () => {
+    const { container } = renderPage();
+    await screen.findByTestId('criteria-list');
+
+    expect(container.textContent).not.toMatch(/exemplar/i);
+    expect(container.innerHTML).not.toMatch(/exemplarFix/);
+    for (const bundle of [enWriting, arWriting] as Array<Record<string, string>>) {
+      for (const [key, value] of Object.entries(bundle)) {
+        expect(value, key).not.toMatch(/exemplar/i);
+      }
+    }
+  });
+});
+
 // Spec review (2 Oct 2026): "What's next?" offers a paid Revise & Resubmit
 // whenever the grade invites a revision of this graded, non-mock letter.
 describe('Writing results page — paid Revise & Resubmit', () => {

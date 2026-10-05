@@ -249,8 +249,8 @@ function gradeExpansionTarget(
       itemId: target.id,
       correct,
       feedback: correct
-        ? `Strong expansion. Exemplar: ${target.exemplar}`
-        : `${reasons.join(' ')} Exemplar: ${target.exemplar}`,
+        ? `Strong expansion. Example: ${target.exemplar}`
+        : `${reasons.join(' ')} Example: ${target.exemplar}`,
     },
     tags,
   };
@@ -304,10 +304,10 @@ export function gradeTone(
       itemId: item.id,
       correct,
       feedback: correct
-        ? `Good — professional register. Exemplar: ${item.exemplar}`
+        ? `Good — professional register. Example: ${item.exemplar}`
         : containsForbidden
-          ? `Still informal. Avoid words like "${item.forbidden.find((f) => containsToken(ans, f))}". Exemplar: ${item.exemplar}`
-          : `Acceptable formal phrasing not detected. Exemplar: ${item.exemplar}`,
+          ? `Still informal. Avoid words like "${item.forbidden.find((f) => containsToken(ans, f))}". Example: ${item.exemplar}`
+          : `Acceptable formal phrasing not detected. Example: ${item.exemplar}`,
     });
   }
 

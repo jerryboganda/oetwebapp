@@ -231,10 +231,11 @@ export default function WritingSubmissionResultsPage() {
   // ② The v1.1 report's priorities, else the grade's — never on a mock (zero AI).
   const priorities = isMock
     ? []
-    : (visibleReport?.topPriorities.length ? visibleReport.topPriorities : grade?.topThreePriorities ?? [])
-        .map(priorityText)
-        .filter(Boolean)
-        .slice(0, 3);
+    : [...new Set(
+        (visibleReport?.topPriorities.length ? visibleReport.topPriorities : grade?.topThreePriorities ?? [])
+          .map(priorityText)
+          .filter(Boolean),
+      )].slice(0, 3);
   const modelAnswer = visibleReport?.modelAnswer ?? null;
   // ⑤ The server sends corrections severity-first (WritingAssessmentV11ResultService),
   // so the preview is the five most severe and every item stays one tap away.
@@ -382,7 +383,12 @@ export default function WritingSubmissionResultsPage() {
                 const ai = isMock ? undefined : grade?.perCriterion?.[code];
                 const findings = findingsByCriterion[code] ?? [];
                 const top = findings[0];
-                const nextStep = visibleReport?.criteria.find((c) => V11_CRITERION_KEY[c.criterionCode] === code)?.improvementAction;
+                const v11 = visibleReport?.criteria.find((c) => V11_CRITERION_KEY[c.criterionCode] === code);
+                const nextStep = v11?.improvementAction;
+                // The card stays short: a two-sentence summary, ONE suggested fix
+                // (the criterion's most severe finding) and the next step. Every
+                // other correction lives under "View all corrections".
+                const fix = top?.correction ?? (visibleReport ? null : ai?.exemplarFix) ?? null;
                 return (
                   <li key={code}>
                     <MotionItem delayIndex={Math.min(index, 5)}>
@@ -391,29 +397,36 @@ export default function WritingSubmissionResultsPage() {
                         score={scores[code]}
                         max={CRITERION_MAX[code]}
                         target={CRITERION_TARGET[code]}
-                        feedback={isMock ? tutorReview?.perCriterionComments?.[code] ?? null : ai?.quote ? (
+                        feedback={isMock ? tutorReview?.perCriterionComments?.[code] ?? null : v11?.summary ? v11.summary : ai?.quote ? (
                           <>
                             <mark className="rounded bg-warning/10 px-0.5 text-warning-strong">“{ai.quote}”</mark>{' '}
                             {ai.feedback}
                           </>
                         ) : ai?.feedback}
-                        exemplar={ai?.exemplarFix ? (
+                        suggestedFix={!isMock && fix ? (
                           <>
-                            <span className="font-bold">{t('writing.submissions.results.criteria.exemplarFix')}</span>{' '}
-                            <span dir="ltr">{ai.exemplarFix}</span>
+                            {top?.candidateWording ? <span className="block text-navy">“{top.candidateWording}”</span> : null}
+                            <span className="font-bold">{t('writing.submissions.results.criteria.suggestedFix')}</span>{' '}
+                            <span dir="ltr">{fix}</span>
                           </>
                         ) : null}
                         meta={visibleReport && !isMock ? (
                           <div className="space-y-1 break-words" data-testid="criterion-evidence">
                             <p className="font-bold">{t('writing.submissions.results.criteria.findings', { count: findings.length })}</p>
-                            {top && (top.candidateWording || top.correction) ? (
-                              <p dir="ltr">
-                                {top.candidateWording ? <span className="text-navy">“{top.candidateWording}”</span> : null}
-                                {top.candidateWording && top.correction ? ' → ' : null}
-                                {top.correction ? <span className="text-primary">{top.correction}</span> : null}
-                              </p>
-                            ) : null}
                             {nextStep ? <p className="text-navy" dir="ltr">{nextStep}</p> : null}
+                            {findings.length > 1 ? (
+                              <button
+                                type="button"
+                                className="font-semibold text-primary underline-offset-2 hover:underline"
+                                data-testid="criterion-more"
+                                onClick={() => {
+                                  setShowAllCorrections(true);
+                                  document.getElementById('corrections-heading')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+                                }}
+                              >
+                                {t('writing.submissions.results.criteria.moreCorrections', { count: findings.length - 1 })}
+                              </button>
+                            ) : null}
                           </div>
                         ) : null}
                       />

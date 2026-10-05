@@ -301,7 +301,7 @@ public sealed class WritingPathwayServiceV2(
         "drill" => "Drill",
         "letter" => $"Letter — {item.ContentRefId ?? "LT-RR"}",
         "mock" => "Mock exam",
-        "exemplar-review" => "Exemplar review",
+        "exemplar-review" => "Model answer review",
         "canon-refresher" => "Canon refresher",
         _ => "Pathway item",
     };

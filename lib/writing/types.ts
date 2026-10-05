@@ -1071,6 +1071,8 @@ export interface WritingAssessmentV11CriterionDto {
   limitationObservation: string;
   evidence: string[];
   improvementAction: string;
+  /** One or two short sentences from this criterion's most important findings; null when it has none. */
+  summary?: string | null;
 }
 
 export interface WritingAssessmentV11ErrorDto {

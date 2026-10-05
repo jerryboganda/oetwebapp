@@ -9,7 +9,8 @@ export interface CriterionScoreRowProps {
   /** Target score for this criterion; drives the performance tint. */
   target?: number;
   feedback?: ReactNode;
-  exemplar?: ReactNode;
+  /** A suggested correction, shown in a highlighted box under the feedback. */
+  suggestedFix?: ReactNode;
   /** Small trailing meta line (e.g. "Linked rules: …"). */
   meta?: ReactNode;
   className?: string;
@@ -40,7 +41,7 @@ export function CriterionScoreRow({
   max,
   target,
   feedback,
-  exemplar,
+  suggestedFix,
   meta,
   className,
 }: CriterionScoreRowProps) {
@@ -60,9 +61,9 @@ export function CriterionScoreRow({
         <ProgressBar value={score} max={max} color={tone} ariaLabel={`${label}: ${score} of ${max}`} />
       </div>
       {feedback ? <p className="mt-2 text-xs leading-5 text-muted" dir="ltr">{feedback}</p> : null}
-      {exemplar ? (
+      {suggestedFix ? (
         <div className="mt-2 rounded-lg bg-success/10 p-2 text-xs leading-5 text-success-strong" dir="ltr">
-          {exemplar}
+          {suggestedFix}
         </div>
       ) : null}
       {meta ? <div className="mt-2 text-2xs text-muted">{meta}</div> : null}

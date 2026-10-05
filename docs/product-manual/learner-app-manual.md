@@ -639,10 +639,10 @@ The detailed sections below still describe the original core preparation loop. T
 
 - Status: `implemented`
 - Purpose: Explain what a strong model response looks like and why.
-- Business logic served: Gives the learner a high-quality exemplar tied to evaluation criteria.
+- Business logic served: Gives the learner a high-quality model answer tied to evaluation criteria.
 - Location: `/writing/model`
 - Who uses it: Learners
-- When it is used: After feedback, or when the learner wants an exemplar
+- When it is used: After feedback, or when the learner wants a model answer
 - Inputs:
   - model answer data
   - paragraph-by-paragraph rationale

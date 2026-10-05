@@ -82,6 +82,26 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
         if (!candidateVisible && blockingCodes.Count == 0)
             blockingCodes = [report.Status.ToString().ToLowerInvariant()];
 
+        var orderedErrors = candidateVisible
+            ? report.Errors
+                .OrderBy(x => SeverityRank(x.Severity))
+                .ThenBy(x => x.StartOffset ?? int.MaxValue)
+                .ToArray()
+            : [];
+        // Impact-ordered digest input: priorities and criterion summaries are
+        // recomputed here on every read, so reports stored before the digest
+        // (duplicate priorities, long per-criterion text) are repaired too.
+        var digestFindings = orderedErrors
+            .Select(x => new WritingDigestFinding(
+                x.RuleSource,
+                x.Severity,
+                x.WhyItMatters,
+                x.CandidateWording,
+                x.Correction,
+                x.PrimaryCriterionCode,
+                x.StartOffset,
+                WritingReportDigest.IsScoreBearing(x.RuleSource)))
+            .ToArray();
         var criteria = candidateVisible
             ? report.Criteria
                 .OrderBy(x => CriterionOrder(x.CriterionCode))
@@ -92,13 +112,13 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
                     x.StrengthObservation,
                     x.LimitationObservation,
                     ParseStringList(x.EvidenceJson),
-                    x.ImprovementAction))
+                    x.ImprovementAction,
+                    WritingReportDigest.CriterionSummary(
+                        digestFindings.Where(f => f.Criterion == x.CriterionCode))))
                 .ToArray()
             : [];
         var errors = candidateVisible
-            ? report.Errors
-                .OrderBy(x => SeverityRank(x.Severity))
-                .ThenBy(x => x.StartOffset ?? int.MaxValue)
+            ? orderedErrors
                 .Select(x =>
                 {
                     // Ultimate Final §15.1: the finding's authority layer and
@@ -165,7 +185,11 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
             report.CandidateNumericScoreEnabled && candidateVisible,
             candidateVisible,
             blockingCodes,
-            candidateVisible ? ParseStringList(report.TopPrioritiesJson) : [],
+            !candidateVisible
+                ? []
+                : digestFindings.Length > 0
+                    ? WritingReportDigest.ComposePriorities(digestFindings)
+                    : ParseStringList(report.TopPrioritiesJson),
             candidateVisible ? ParseStringList(report.StrengthsJson) : [],
             candidateVisible ? ParseStringList(report.StudyPlanJson) : [],
             criteria,

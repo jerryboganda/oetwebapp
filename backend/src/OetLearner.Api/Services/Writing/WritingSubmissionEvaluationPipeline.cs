@@ -2129,12 +2129,13 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 .Select(id => id!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var feedback = string.Join(" ", linked
-                .Select(f => f.Message)
-                .Where(m => !string.IsNullOrWhiteSpace(m)));
-            var exemplar = linked
-                .Select(f => f.FixSuggestion)
-                .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+            // A short summary of the most important findings, and the fix of
+            // that same top finding (the full list lives in the corrections).
+            var ordered = WritingReportDigest.Ordered(linked.Select(f => new WritingDigestFinding(
+                f.RuleId, f.Severity ?? string.Empty, f.Message, f.Quote, f.FixSuggestion, criterion, null, true))).ToList();
+            var feedback = WritingReportDigest.CriterionSummary(ordered) ?? string.Empty;
+            var top = ordered.Count > 0 ? ordered[0] : (WritingDigestFinding?)null;
+            var exemplar = string.IsNullOrWhiteSpace(top?.Fix) ? null : top!.Value.Fix;
             // The candidate's own wording for each AI-detected mistake (was
             // parsed but dropped), so the result can show where it occurred.
             var quotes = linked
@@ -2153,7 +2154,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 feedback,
                 exemplarFix = exemplar,
                 citedRuleIds = cited,
-                quote = quotes.FirstOrDefault(),
+                quote = string.IsNullOrWhiteSpace(top?.Quote) ? null : top!.Value.Quote,
                 quotes,
             };
         }
@@ -2163,24 +2164,17 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
     private static string BuildTopThreePrioritiesJson(IReadOnlyList<RubricAiFinding> findings)
     {
-        var top = findings
-            .OrderBy(f => SeverityRank(f.Severity))
-            .Select(f => string.IsNullOrWhiteSpace(f.RuleId)
-                ? (f.Message ?? string.Empty)
-                : $"{f.RuleId}: {f.Message}")
-            .Where(s => !string.IsNullOrWhiteSpace(s))
-            .Take(3)
-            .ToList();
+        var top = WritingReportDigest.ComposePriorities(findings.Select(f => new WritingDigestFinding(
+            f.RuleId,
+            f.Severity ?? string.Empty,
+            f.Message,
+            f.Quote,
+            f.FixSuggestion,
+            CriterionForFinding(f),
+            null,
+            true)));
         return JsonSerializer.Serialize(top);
     }
-
-    private static int SeverityRank(string? severity) => severity?.Trim().ToLowerInvariant() switch
-    {
-        "critical" => 0,
-        "major" => 1,
-        "minor" => 2,
-        _ => 3,
-    };
 
     private static string CriterionForFinding(RubricAiFinding f)
         => !string.IsNullOrWhiteSpace(f.CriterionCode) ? f.CriterionCode! : CriterionFor(f.RuleId, f.Message);

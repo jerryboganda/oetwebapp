@@ -63,7 +63,7 @@ export default function ProfileSetupProfessionPage() {
         icon={ClipboardList}
         accent="writing"
         title="Tell us who you are"
-        description="Your profession decides letter types we drill, scenarios we surface, and exemplar libraries we compare against."
+        description="Your profession decides letter types we drill, scenarios we surface, and model-answer libraries we compare against."
       />
 
       <StepperNav currentStep="profession" />

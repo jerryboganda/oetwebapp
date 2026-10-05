@@ -197,7 +197,7 @@ public sealed class WritingPathwayGenerator : IWritingPathwayGenerator
                     focusSkill, CriterionLabel.GetValueOrDefault(focusCriterion, focusCriterion),
                     ItemKind: "exemplar-review", ContentRefId: letterType,
                     EstimatedMinutes: 12,
-                    Title: "Exemplar review",
+                    Title: "Model answer review",
                     Description: "Study a gold-standard letter for this letter type."));
             }
 
