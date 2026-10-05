@@ -363,12 +363,17 @@ public sealed class PlacementEngine
     }
 }
 
+/// <summary>
+/// What one <see cref="PressureGovernor.Observe"/> call did. A flags value because one sample can do two things at once: the same
+/// sample can both lower the effective concurrency and ask to shed the youngest job, and the caller must learn about both.
+/// </summary>
+[Flags]
 public enum PressureAction
 {
-    None,
-    Reduced,
-    Restored,
-    Shed,
+    None = 0,
+    Reduced = 1,
+    Restored = 2,
+    Shed = 4,
 }
 
 /// <summary>
@@ -426,7 +431,7 @@ public sealed class PressureGovernor
             if (memFreePct < _shedMemFreePct && (_lastShedAt is null || at - _lastShedAt.Value >= _reduceSustain))
             {
                 _lastShedAt = at;
-                action = PressureAction.Shed;
+                action |= PressureAction.Shed;
             }
 
             return action;

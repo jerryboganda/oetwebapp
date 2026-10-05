@@ -152,6 +152,10 @@ public static class ServiceRegistration
             options.Cookie.HttpOnly = true;
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
             options.Cookie.SameSite = SameSiteMode.Strict;
+
+            // Antiforgery stamps "X-Frame-Options: SAMEORIGIN" on every response that emits a token and so overwrites the DENY the security-header
+            // middleware set (OET-RWP/1 section 8.8). The middleware owns that header; framing is refused outright, same origin included.
+            options.SuppressXFrameOptionsHeader = true;
         });
 
         services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();

@@ -181,6 +181,12 @@ public sealed class PolicyAndPressureTests
         var governor = new PressureGovernor(PolicyDefaults.DefaultPressure, 2);
         Assert.Equal(PressureAction.Shed, governor.Observe(At(0), 50, 8));
         Assert.Equal(PressureAction.None, governor.Observe(At(5), 50, 8));
-        Assert.Equal(PressureAction.Shed, governor.Observe(At(15), 50, 8));
+
+        // The breach has now lasted fifteen seconds, so the SAME sample also lowers the effective concurrency: both are reported.
+        var combined = governor.Observe(At(15), 50, 8);
+        Assert.Equal(PressureAction.Reduced | PressureAction.Shed, combined);
+        Assert.True(combined.HasFlag(PressureAction.Shed));
+        Assert.True(combined.HasFlag(PressureAction.Reduced));
+        Assert.Equal(1, governor.EffectiveConcurrency);
     }
 }

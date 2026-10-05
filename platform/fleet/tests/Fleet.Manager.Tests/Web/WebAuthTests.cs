@@ -114,6 +114,20 @@ public sealed class WebAuthTests : IAsyncLifetime
         Assert.Contains("no-store", response.Headers.GetValues("Cache-Control").Single());
     }
 
+    [Fact]
+    public async Task A_page_that_emits_an_antiforgery_token_is_still_never_frameable()
+    {
+        using var client = _factory.CreateHttps();
+
+        var login = await client.GetAsync("/Login");
+
+        // ASP.NET Core antiforgery would have replaced the middleware's DENY with SAMEORIGIN on exactly this kind of response.
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        Assert.Contains("__RequestVerificationToken", await login.Content.ReadAsStringAsync());
+        Assert.Equal("DENY", login.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Contains("frame-ancestors 'none'", login.Headers.GetValues("Content-Security-Policy").Single());
+    }
+
     // ---- sign-in ---------------------------------------------------------------------------
 
     [Fact]
