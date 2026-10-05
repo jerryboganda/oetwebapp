@@ -23,6 +23,11 @@ vi.mock('@/components/domain/admin-route-surface', () => ({
   AdminRouteSectionHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
 }));
 
+// The live-patient-voices panel has its own test; here it is only a placeholder.
+vi.mock('@/components/admin/speaking/live-voice-previews-panel', () => ({
+  LiveVoicePreviewsPanel: () => <div data-testid="live-voice-previews-placeholder" />,
+}));
+
 vi.mock('@/components/admin/layout/admin-page-shell', () => ({
   AdminPageShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));

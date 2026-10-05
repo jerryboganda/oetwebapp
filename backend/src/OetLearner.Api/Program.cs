@@ -1130,6 +1130,8 @@ OetLearner.Api.Services.Speaking.LiveVoiceProviderProbe.Register(builder.Service
 builder.Services.AddSingleton<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryQueue>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoiceContentReadinessService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoiceService>();
+// Admin-only preview of the four live-patient voices (owner listening check before approving them).
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.LiveVoicePreviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ILiveVoiceProviderSessionCloser>(
     sp => sp.GetRequiredService<OetLearner.Api.Services.Speaking.LiveVoiceService>());
 // $0 full-corpus Speaking compatibility harness (admin, rolled back, canned grader).

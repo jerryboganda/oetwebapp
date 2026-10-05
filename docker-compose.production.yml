@@ -138,6 +138,16 @@ x-learner-api-slot: &learner-api-slot
     LiveVoice__OpenAiBaseUrl: ${LIVEVOICE__OPENAIBASEURL:-https://api.openai.com/v1/live/sessions}
     LiveVoice__OpenAiModelsBaseUrl: ${LIVEVOICE__OPENAIMODELSBASEURL:-https://api.openai.com/v1/models}
     LiveVoice__OpenAiModel: ${LIVEVOICE__OPENAIMODEL:-gpt-live-1}
+    # The patient's voice: a 2x2 table per provider (gender x age band), defaults = the code defaults. An EMPTY value here
+    # would mean "the provider's own voice", so the defaults are spelled out and must match LiveVoiceOptions.
+    LiveVoice__OpenAiVoiceFemaleYounger: ${LIVEVOICE__OPENAIVOICEFEMALEYOUNGER:-quartz}
+    LiveVoice__OpenAiVoiceFemaleOlder: ${LIVEVOICE__OPENAIVOICEFEMALEOLDER:-willow}
+    LiveVoice__OpenAiVoiceMaleYounger: ${LIVEVOICE__OPENAIVOICEMALEYOUNGER:-ripple}
+    LiveVoice__OpenAiVoiceMaleOlder: ${LIVEVOICE__OPENAIVOICEMALEOLDER:-vesper}
+    LiveVoice__GeminiVoiceFemaleYounger: ${LIVEVOICE__GEMINIVOICEFEMALEYOUNGER:-Leda}
+    LiveVoice__GeminiVoiceFemaleOlder: ${LIVEVOICE__GEMINIVOICEFEMALEOLDER:-Kore}
+    LiveVoice__GeminiVoiceMaleYounger: ${LIVEVOICE__GEMINIVOICEMALEYOUNGER:-Orus}
+    LiveVoice__GeminiVoiceMaleOlder: ${LIVEVOICE__GEMINIVOICEMALEOLDER:-Charon}
     LiveVoice__GeminiApiKey: ${LIVEVOICE__GEMINIAPIKEY:-}
     LiveVoice__GeminiBaseUrl: ${LIVEVOICE__GEMINIBASEURL:-https://generativelanguage.googleapis.com/v1beta/auth_tokens}
     LiveVoice__GeminiModelsBaseUrl: ${LIVEVOICE__GEMINIMODELSBASEURL:-https://generativelanguage.googleapis.com/v1beta/models}

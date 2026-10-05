@@ -40,6 +40,9 @@ public static class AiOperationsAdminEndpoints
         group.MapPost("/circuits/{key}/reset", ResetCircuitAsync);
         group.MapGet("/live-voice/health", GetLiveVoiceHealth);
         group.MapPost("/live-voice/{provider}/reset", ResetLiveVoiceProviderAsync);
+        group.MapGet("/live-voice/voices", (LiveVoicePreviewService service) => Results.Ok(service.List()));
+        group.MapPost("/live-voice/voices/preview-offer", CreateLiveVoicePreviewOfferAsync)
+            .RequireRateLimiting("PerUserWrite");
 
         return app;
     }
@@ -52,6 +55,19 @@ public static class AiOperationsAdminEndpoints
         LiveVoiceProviderProbeState state,
         IOptions<LiveVoiceOptions> options)
         => Results.Ok(state.Snapshot(options.Value));
+
+    /// <summary>Relays an admin browser's WebRTC offer to a short GPT-Live preview session for one of the four voices.
+    /// The provider key never leaves the server; the session is audited, not billed against any learner.</summary>
+    private static async Task<IResult> CreateLiveVoicePreviewOfferAsync(
+        LiveVoicePreviewOfferRequest request,
+        LiveVoicePreviewService service,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+        var actorName = http.User.FindFirstValue(ClaimTypes.Name) ?? actorId;
+        return Results.Ok(await service.CreateOfferAsync(actorId, actorName, request, ct));
+    }
 
     private static async Task<IResult> ResetLiveVoiceProviderAsync(
         string provider,

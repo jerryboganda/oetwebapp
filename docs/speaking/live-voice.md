@@ -76,27 +76,23 @@ Default history: `openai` has been the code/compose default since 22 Sep 2026 (`
 switched from Gemini to OpenAI by hand (backup `.env.production.bak-2026-09-26-primary-openai`); both API slots ran
 `openai` on 30 Sep 04:08 UTC.
 
-### Operational note: temporary Gemini default (needs an owner-approved VPS env edit)
+### Owner decision 2026-10-05: OpenAI primary, Gemini fallback
 
-The owner wants Gemini tried first for now. That is a change to the production env, not a code change, and it needs the
-owner's approval (AGENTS.md: agents do not edit `.env*`; the 26 Sep switch is the precedent):
+The owner decided that **OpenAI GPT-Live stays the primary** live-patient provider and Gemini the fallback (this replaces the
+earlier request to try Gemini first). That is already the code, compose and `appsettings.json` default
+(`LIVEVOICE__PRIMARYPROVIDER=openai`). If the production env still carries the temporary `LIVEVOICE__PRIMARYPROVIDER=gemini`
+from that earlier request, it must be removed (or set to `openai`) **in place** in `/opt/oetwebapp/.env.production` by the
+owner or ops after a `cp -p` backup (agents do not edit `.env*`; never append a second line, never use an alias), then the
+inactive API slot recreated and `ACTIVE_SLOT` read back. Admin > Voice design > Live patient voices shows the server's live
+order and warns when Gemini is first; `GET /v1/admin/ai/live-voice/health` lists `candidateOrder`.
 
-- Edit `LIVEVOICE__PRIMARYPROVIDER=gemini` **in place** in `/opt/oetwebapp/.env.production` after a `cp -p` backup. Never
-  append a second line and never use an alias (`gemini-live`): `validate-production-env.sh` rejects both and would fail
-  every later deploy, hotfixes included. The compose default (`docker-compose.production.yml`) and the code default can
-  stay `openai`.
-- Only containers created afterwards see the new value. Recreate the **inactive** API slot from the live slot's images,
-  gate on `/health/ready` and the `Live voice provider probe verified` log lines, flip the router, then read the
-  router's `ACTIVE_SLOT` (`docker exec oet-api printenv ACTIVE_SLOT`): the flip has silently not taken effect three times
-  (10, 26, 27 Sep). An in-place recreate of the active slot costs 30-60 s of 502s and kills in-flight `POST /ai-assess`
-  grades. The ai-worker does not need a restart for this key.
-- It is **not needed to restore service**: with failover, an OpenAI 429 is already routed around and the learner lands
-  on Gemini after about 2-3 s. The flip only makes Gemini the first attempt.
-- Check the billing project of the key in `LIVEVOICE__GEMINIAPIKEY` first. A free-tier key would answer real learners
-  with 429s, and failover would then run the other way (Gemini fails, OpenAI serves).
-- Prove it with the production E2E (`voice_provider` blank, `expected_primary=gemini`): `metrics.json` must show
-  `providerCalls[0] == "gemini/token"` and the `primaryProviderIsExpected` check green. `GET /v1/admin/ai/live-voice/health`
-  on the serving slot should list `gemini` first in `candidateOrder` and mark it `primary`.
+**Voice pool.** The OpenAI voices are quartz, willow, ripple and vesper (female younger / female older / male younger / male
+older). Gemini's Leda, Kore, Orus and Charon stay configured as the fallback voices. The main voice-quality decision is on the
+OpenAI voices. **Listening check:** Admin > Voice design > Live patient voices has one Play button per voice (a ~20 s GPT-Live
+session in the admin's browser saying a short patient sentence; nothing is recorded). A preview is an admin-audited
+(`LiveVoicePreviewStarted`) live-voice provider session: like learners' live sessions it writes no `AiUsageRecord` and sits
+outside the AI budget caps, and it never feeds the provider circuit breaker. Owner approval of the voices: _pending the
+owner's listening check_ (record the date here once given).
 
 ## Behaviour and limits
 

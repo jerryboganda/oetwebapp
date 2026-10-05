@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
 import { AdminPageShell } from '@/components/admin/layout/admin-page-shell';
+import { LiveVoicePreviewsPanel } from '@/components/admin/speaking/live-voice-previews-panel';
 import { PageHeader } from '@/components/admin/ui/page-header';
 import {
   getElevenLabsVoices,
@@ -425,6 +426,13 @@ export default function AdminVoiceDesignPage() {
         <Lock className="h-4 w-4 text-[var(--admin-primary)]" />
         <span className="text-xs font-bold text-admin-fg-muted">ElevenLabs Voice:</span>
         <Badge variant="info" size="sm">{elevenSettings.voiceId || 'Not configured'}</Badge>
+      </div>
+
+      {/* ─── Live AI-patient voices (Speaking): the owner's listening check ─── */}
+      <div id="live-patient-voices">
+        <AdminRoutePanel title="Live patient voices" className="overflow-visible">
+          <LiveVoicePreviewsPanel />
+        </AdminRoutePanel>
       </div>
 
       {/* ─── Section 1: Voice Browser ─── */}

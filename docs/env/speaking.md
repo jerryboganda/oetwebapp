@@ -54,6 +54,8 @@ hard duration cap, hang-up): [../speaking/live-voice.md](../speaking/live-voice.
 | `LIVEVOICE__OPENAIBASEURL` | yes for OpenAI | `https://api.openai.com/v1/live/sessions` | OpenAI Realtime session broker endpoint. |
 | `LIVEVOICE__OPENAIMODELSBASEURL` | yes for OpenAI | `https://api.openai.com/v1/models` | Model catalog endpoint used by the live account probe. |
 | `LIVEVOICE__OPENAIMODEL` | yes for OpenAI | `gpt-live-1` | Lowest-latency production model enabled on the account, verified by the probe. |
+| `LIVEVOICE__OPENAIVOICEFEMALEYOUNGER` / `…FEMALEOLDER` / `…MALEYOUNGER` / `…MALEOLDER` | optional | `quartz` / `willow` / `ripple` / `vesper` | The OpenAI live-patient voice pool (owner decision 2026-10-05): a 2x2 table, gender by age band (under 45 / 45 and over), picked from the card. Forwarded by `docker-compose.production.yml` with these defaults; an **empty** value means the provider's own default voice. Hear them in Admin > Voice design > Live patient voices. |
+| `LIVEVOICE__GEMINIVOICEFEMALEYOUNGER` / `…FEMALEOLDER` / `…MALEYOUNGER` / `…MALEOLDER` | optional | `Leda` / `Kore` / `Orus` / `Charon` | The same table for the Gemini fallback. Configured, not previewed. |
 | `LIVEVOICE__GEMINIAPIKEY` | yes for Gemini | — | Server-only Gemini Live credential. |
 | `LIVEVOICE__GEMINIBASEURL` | yes for Gemini | `https://generativelanguage.googleapis.com/v1beta/auth_tokens` | Constrained ephemeral-token endpoint. |
 | `LIVEVOICE__GEMINIMODELSBASEURL` | yes for Gemini | `https://generativelanguage.googleapis.com/v1beta/models` | Model catalog endpoint used by the live account probe. |
