@@ -273,13 +273,14 @@ Ansible itself is never "automatic" in the sense of a schedule: it runs only as 
     `environment: production`, its own `guards` job running `node scripts/deploy/verify-pipeline-contract.mjs` and
     `bash scripts/deploy/verify-compute-offload.sh`, no `schedule` or `pull_request_target` trigger, no `:latest`, no reference to
     `auto-deploy-ghcr.sh`, and an SSH rollout between `# BEGIN REMOTE FLEET ROLLOUT` and `# END REMOTE FLEET ROLLOUT` that only pulls and starts with
-    `--no-build` (no build, install or source sync, no volume removal);
+    `--no-build` (no build, install or source sync, no volume removal; each `compose up` is written on one line with `--no-build`, as in
+    `agent-console.yml`);
   - `platform/**`: no private keys and no node or fleet token literals (a deliberate test fixture carries a `secret-scan:allow` marker on its line), and
     fleet code never uses `StrictHostKeyChecking=accept-new`/`no`, a `/dev/null` known_hosts or Ansible `host_key_checking = False`;
   - every Playwright (including the .NET flavours) and k6 workflow is `workflow_dispatch` only;
   - the release stays exactly four components (no fifth fleet component).
 - `scripts/deploy/verify-compute-offload.sh` applies the same pull-only block check to `fleet.yml` and rejects `build:` sections in
-  `platform/fleet/docker-compose*.yml` (existence-conditional: it passes before they exist).
+  `platform/fleet/docker-compose*.yml` and `docker-compose.fleet*.yml` (existence-conditional: it passes before they exist).
 - `scripts/deploy/protect-production-data.sh` blocks `docker volume rm`, `volume prune` and `compose down -v` for `oet-fleet_fleet_data`;
   `scripts/deploy/prune-stale-images.sh` never removes the fleet images.
 - The fleet UI is tested with `WebApplicationFactory` integration tests (no browser). Load and parity workflows are `workflow_dispatch` only and fail on a
