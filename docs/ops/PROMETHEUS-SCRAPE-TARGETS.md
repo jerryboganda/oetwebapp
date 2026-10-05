@@ -49,7 +49,7 @@ below are the contract; verify them against that deliverable at integration.
 | Series | Type | Source field | Labels (allowed) |
 | --- | --- | --- | --- |
 | `oetfleet_node_up` | gauge 0/1 | health is `Online` (heartbeat inside 45 s) | `node` (the `nodeRef`), `region`, `provider` |
-| `oetfleet_node_status` | gauge, one-hot | node `status` (Pending, Probation, Active, Draining, Disabled, Quarantined) | `node`, `status` |
+| `oetfleet_node_status` | gauge, one-hot | node `status` (Pending, Probation, Active, Draining, Disabled, Quarantined, Revoked: the seven statuses of OET-RWP/1 section 3.9, one-hot so a revoked node stays visible; check the list against the protocol at integration) | `node`, `status` |
 | `oetfleet_node_last_heartbeat_age_seconds` | gauge | now minus `lastHeartbeatAt` | `node` |
 | `oetfleet_node_cpu_percent` | gauge | `load.cpuPct` (host-wide) | `node` |
 | `oetfleet_node_mem_free_percent` | gauge | `load.memFreePct` | `node` |

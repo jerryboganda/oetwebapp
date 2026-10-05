@@ -105,10 +105,6 @@ Complete the remaining work across mocks strict UX/business workflow, Speaking V
 - untracked: `docs/desktop/speaking-recording.md`
 - untracked: `docs/env/speaking.md`
 - untracked: `docs/mobile/speaking-recording.md`
-- untracked: `ops/dashboards/README.md`
-- untracked: `ops/dashboards/speaking-funnel.json`
-- untracked: `ops/dashboards/speaking-livekit.json`
-- untracked: `ops/dashboards/speaking-quality.json`
 
 ### Mocks
 - tracked-modified: `app/admin/analytics/mocks/page.tsx`

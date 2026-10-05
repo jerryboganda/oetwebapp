@@ -60,9 +60,13 @@ Persona flows:
 
 Transport fidelity: learner traffic goes through the **web origin's `/api/backend` proxy** (the Next.js BFF) with
 the `Origin` and CSRF headers a browser sends; hubs use **long-polling**, because that is what production
-browsers do (the BFF cannot upgrade WebSockets; `lib/env.ts` forces LongPolling for `/api/backend`). Hub
-requests carry no CSRF header, exactly as in `lib/backend-proxy.ts`. Native clients that use WebSockets directly
-against the API are not modelled.
+browsers do (the BFF cannot upgrade WebSockets; `lib/env.ts` forces LongPolling for `/api/backend`). The BFF
+exempts only the auth bootstrap calls and the hubs in `SIGNALR_HUB_PATH_PATTERN` (notifications, conversations,
+ai-assistant, owner-agent) from its double-submit CSRF check, so those requests carry no CSRF header. The
+tutor-room hub (`/v1/speaking/live-rooms/hub`) is **not** exempt: its requests carry the header here, and a browser
+would be refused (section 11, known product finding). `tests/load/fleet/contract.test.mjs` reads the pattern from
+`lib/backend-proxy.ts` and fails the preflight when the harness's list drifts from it. Native clients that use
+WebSockets directly against the API are not modelled.
 
 Security posture is **not** relaxed. `SingleActiveSessionEnabled` and `TrustedDeviceRequired` stay on; each
 account's deterministic device id is auto-trusted on its first sign-in. Sign-ins are paced to 60 per minute per
@@ -73,7 +77,7 @@ generator leg to stay under the `AuthBruteforce` limit of 100 per minute per IP.
 | Path | Role |
 | --- | --- |
 | `tests/load/fleet-1000.k6.js` | the scenario: setup (content discovery), `learners` and `experts` scenarios, thresholds, `handleSummary` |
-| `tests/load/fleet/*.mjs` | pure, node-tested modules: `profiles` (timeline and leg maths), `thresholds`, `classify`, `signalr-frames`, `accounts` (incl. the production-host guard), `extract`, `summary-model` |
+| `tests/load/fleet/*.mjs` | pure, node-tested modules: `profiles` (timeline and leg maths), `thresholds`, `classify`, `signalr-frames`, `accounts` (incl. the production-host guard), `extract`, `summary-model`, `cadence` (effective think time under hub polling) |
 | `tests/load/fleet/*.js` | k6-side modules: `config` (env), `contract` (every endpoint in one place), `http` (sessions, auth, headers, metrics), `signalr` (long-poll client), `flows`, `metrics` |
 | `tests/load/seed/` | `seed-accounts.mjs` (create, `--purge`), `audit-ledger.mjs` (duplicate-charge audit) |
 | `tests/load/simulators/` | `provider-sim.mjs` (OpenAI GPT-Live, Gemini Live, LiveKit Twirp and signed webhooks), `cli-stubs/` (stub `claude` and `codex` CLIs so the **real** writing sidecars run) |
@@ -187,6 +191,13 @@ bottleneck is what the run exercises. The stub's reply is **not** a faithful Wri
 are deterministic (`loadtest-learner-0000@load.oet.test`, `dev-loadtest-learner-0000` as the device id), which is
 why no accounts file exists: every k6 leg derives its own slice.
 
+The seeded accounts hold credits but **no subscription**, so `GET /v1/subscriptions/me` answers 404 for every one
+of them; the harness treats that as the documented answer (`contract.js`), not as a failure. The k6 legs never log
+in as the probe: every leg runs `setup()` at about the same time, and a fresh sign-in revokes the account's other
+sessions (`SingleActiveSessionEnabled` / `TrustedDeviceRequired` stay on), so a shared login would 401 the other
+legs mid-discovery. Each leg discovers content as its **own first learner** (global learner `g` = its leg index).
+`setup()` throws, naming the last status, when not one discovery request succeeded.
+
 ```bash
 OET_LOAD_ADMIN_EMAIL=... OET_LOAD_ADMIN_PASSWORD=... OET_LOAD_PASSWORD=... \
   node tests/load/seed/seed-accounts.mjs --api https://api.staging.example --learners 1500 --experts 75
@@ -194,7 +205,8 @@ OET_LOAD_ADMIN_EMAIL=... OET_LOAD_ADMIN_PASSWORD=... OET_LOAD_PASSWORD=... \
 
 Seed 1,500 learners to support both the 1,000-learner and the 1,500-learner profiles. `--purge` deletes them;
 `audit-ledger.mjs` reads every learner's credit snapshot after a run and fails on any `(reason, referenceId)`
-charged twice or any negative balance. Admin user listing loads the whole user table server-side, so purge pages
+charged twice, any negative balance, and any account it cannot read **or cannot find** (an account that was not
+audited is not a clean one). Admin user listing loads the whole user table server-side, so purge pages
 once by prefix rather than looking users up one by one.
 
 ## 6. Running
@@ -219,8 +231,8 @@ by its author: expect the first smoke to find at least a path or body-shape mism
 
 Thresholds apply to the **steady** phase (and **overload** / **recovery** for the overload profile); ramps and
 warm-up are not judged. Inputs: `profile`, `legs`, `api_url`, `web_url`, `confirm_non_production`,
-`seed_accounts`, `audit_ledger`, `purge_accounts`, optional `learners`, `steady_minutes`, `hub_mode`,
-`think_scale`, `rooms_json`, `simulators_note`.
+`seed_accounts`, `audit_ledger`, `purge_accounts`, optional `allow_oversubscribe` (more than 300 learners per
+leg), `learners`, `steady_minutes`, `hub_mode`, `think_scale`, `rooms_json`, `simulators_note`.
 
 ### 6.3 Why legs, and the self-provisioned generator
 
@@ -339,5 +351,29 @@ No prices are asserted here; fill them from the actual quotes.
   discovered at run time.
 - Native-client WebSocket hubs are not modelled.
 - Grading content is not faithful (see 4.5); the Writing lane's real concurrency is.
-- Hub polls hold a request for up to the 15 s keep-alive, so an action cadence below one per 15 s per learner is
-  not representable on a single connection; the mix is sized for that.
+- **Hub polling slows the action cadence.** While a hub connection is open, think time is spent long-polling it,
+  and a poll returns only when the server has a frame, normally its 15 s keep-alive. A pause of `T` seconds
+  therefore lasts `15 * ceil(T / 15)` seconds: nothing shorter than one poll is reachable on a single
+  connection, and the request rate the run drives is **below** the nominal think-time mix. Mean pauses for the
+  default mix (the report prints the same table, computed for the run's `think_scale`, in its method section):
+
+  | activity | nominal mean pause | effective mean pause |
+  | --- | --- | --- |
+  | browse tick (8 to 25 s) | 16.5 s | about 23.8 s |
+  | Reading answer save (12 to 30 s) | 21 s | 27.5 s |
+  | Writing draft save (15 to 35 s) | 25 s | about 33.8 s |
+  | speaking turn (4 to 9 s) | 6.5 s | 15 s |
+  | speaking warm-up and role-play pauses (2 to 6 s, 1 to 3 s) | 4 s, 2 s | 15 s |
+
+  A smoke run (`think_scale` 0.15) is dominated by the 15 s floor. Read the achieved rates from the report's class
+  counts, not from the nominal mix. The harness does not run the actions on a second, poll-free path (that would
+  change what one browser tab does); sizing a run from the achieved rates, or adding learners to reach a target
+  request rate, is the operator's call.
+- **Known product finding (not fixed by this change).** The web proxy exempts the notification, conversation,
+  AI-assistant and owner-agent hubs from its CSRF check (`SIGNALR_HUB_PATH_PATTERN` in `lib/backend-proxy.ts`) but
+  not the tutor-room hub `/v1/speaking/live-rooms/hub`. A signed-in browser holds the `oet_rt` cookie and its SignalR
+  client sends no `x-csrf-token`, so by reading the code its room-hub negotiate would be refused with 403
+  (`components/domain/speaking/LiveRoomRealtime.tsx` connects without the header). This has **not** been confirmed
+  against a live stack. The harness sends the header for non-exempt hubs so the 50-room target can be measured, and
+  prints this finding in every leg log. If the product is wrong, the fix is one alternative in that pattern, as a
+  separate change (it is a build input); `contract.test.mjs` then fails until `CSRF_EXEMPT_HUBS` follows it.
