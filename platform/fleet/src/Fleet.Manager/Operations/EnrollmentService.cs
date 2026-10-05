@@ -25,6 +25,19 @@ public sealed record AddHostRequest(
 /// <summary><see cref="AlreadyExisted"/> is true when the call was a duplicate: nothing was created and the existing operation is returned.</summary>
 public sealed record AddHostResult(HostView Host, OperationView Operation, bool AlreadyExisted);
 
+/// <summary>What an operation can do with an owner credential at this moment (see <see cref="EnrollmentService.AcceptanceFor"/>).</summary>
+public enum OwnerKeyAcceptance
+{
+    /// <summary>The operation neither needs nor accepts one.</summary>
+    No,
+
+    /// <summary>The operation has not pinned the host key yet: the key can be saved now and is used once the key is confirmed.</summary>
+    Stage,
+
+    /// <summary>The operation is waiting for the key: submitting it starts (or resumes) the bootstrap.</summary>
+    Submit,
+}
+
 /// <summary>
 /// The owner-facing application service of enrollment (OET-RWP/1 section 8). Every method is a typed
 /// action the JSON API and the future dashboard call; none of them accepts or returns a secret in a
@@ -222,6 +235,20 @@ public sealed class EnrollmentService
             host.NodeRef,
             new Dictionary<string, object?> { ["algorithm"] = candidate.Algorithm, ["fingerprint"] = candidate.Fingerprint },
             cancellationToken);
+
+        // A key the owner saved in advance (see StageOwnerCredentialAsync) is used now that the host key is pinned: nothing more to type.
+        if (await _credentials.ExistsActiveAsync(host.Id, CredentialPurposes.OwnerBootstrap, cancellationToken))
+        {
+            try
+            {
+                return await ContinueWithSavedCredentialAsync(op.Id, actor, cancellationToken);
+            }
+            catch (FleetOperationException)
+            {
+                // The operation stays at HostKeyConfirmed; the owner can continue (or submit the key again) from there.
+            }
+        }
+
         return await ViewAsync(await _operations.GetAsync(op.Id, cancellationToken) ?? op, cancellationToken);
     }
 
@@ -230,52 +257,40 @@ public sealed class EnrollmentService
     /// encrypted into the vault with a 60-minute TTL, used only by steps S1..S7 and destroyed by S8. The
     /// key text is converted into a zeroable buffer immediately and is never logged, echoed or audited.
     /// </summary>
+    public Task<OperationView> SubmitOwnerCredentialAsync(
+        string operationId,
+        string? sshUser,
+        string? privateKeyText,
+        string actor,
+        CancellationToken cancellationToken) =>
+        SubmitOwnerCredentialAsync(operationId, sshUser, privateKeyText, null, actor, cancellationToken);
+
+    /// <summary>
+    /// As above, for a key that is protected by a passphrase: the passphrase is used once to open a copy of the key, never stored,
+    /// never audited, never logged; only the unprotected key continues (encrypted, 60 minutes at most).
+    /// </summary>
     public async Task<OperationView> SubmitOwnerCredentialAsync(
         string operationId,
         string? sshUser,
         string? privateKeyText,
+        string? passphrase,
         string actor,
         CancellationToken cancellationToken)
     {
         var op = await _operations.GetAsync(operationId, cancellationToken) ?? throw new FleetNotFoundException("The operation");
         var isEnroll = op.Kind == "enroll";
-        var isRepair = op.Kind == OperationKinds.ToWire(OperationKind.Repair);
-        var acceptable =
-            (isEnroll && (op.State == nameof(EnrollmentState.HostKeyConfirmed)
-                || (op.State == nameof(EnrollmentState.Failed) && op.ResumeState == nameof(EnrollmentState.Bootstrapping))))
-            || (isRepair && (op.State == nameof(GenericOperationState.AwaitingOwner)
-                || (op.State == nameof(GenericOperationState.Failed))));
-        if (!acceptable || op.HostId is null)
+        if (AcceptanceFor(op) != OwnerKeyAcceptance.Submit || op.HostId is null)
         {
             throw new FleetOperationException("invalid_state", "The operation is not waiting for an owner credential.");
         }
 
-        var userIssue = InputValidator.ValidateSshUser(sshUser);
-        if (userIssue is not null)
-        {
-            throw new FleetValidationException(userIssue);
-        }
-
-        if (!OwnerKeyText.TryNormalize(privateKeyText, out var normalized))
-        {
-            throw new FleetValidationException(new ValidationIssue("privateKey", "owner_key_invalid", "Paste an unencrypted OpenSSH or PEM private key."));
-        }
-
         var host = await _hosts.GetAsync(op.HostId, cancellationToken) ?? throw new FleetNotFoundException("The host");
-        using var key = SecretBuffer.FromUtf8(normalized);
-        var publicLine = await _keys.DerivePublicKeyAsync(key, cancellationToken);
-        var parsed = publicLine is null ? null : PublicKeyLines.TryParse(publicLine);
-        if (parsed is null)
-        {
-            throw new FleetValidationException(new ValidationIssue("privateKey", "owner_key_unusable", "The key could not be read. Passphrase-protected keys are not supported; use a temporary key without a passphrase."));
-        }
-
-        using var packed = OwnerCredentialPayload.Pack(sshUser!, key);
+        using var prepared = await PrepareOwnerKeyAsync(sshUser, privateKeyText, passphrase, cancellationToken);
         var info = await _credentials.StoreAsync(
             host.Id,
             CredentialPurposes.OwnerBootstrap,
-            packed,
-            PublicKeyLines.Hint(parsed.Value.Base64),
+            prepared.Packed,
+            prepared.Hint,
             TimeSpan.FromMinutes(_options.Value.Timing.OwnerCredentialMinutes),
             cancellationToken);
 
@@ -300,6 +315,136 @@ public sealed class EnrollmentService
             "enroll.owner_credential_submitted",
             host.NodeRef,
             new Dictionary<string, object?> { ["fingerprint"] = info.FingerprintHint, ["expiresAt"] = info.ExpiresAt },
+            cancellationToken);
+        _signal.Kick();
+        return await ViewAsync(await _operations.GetAsync(op.Id, cancellationToken) ?? op, cancellationToken);
+    }
+
+    /// <summary>What an operation can do with an owner credential right now: nothing, save it for later (before the host key is confirmed), or use it.</summary>
+    public static OwnerKeyAcceptance AcceptanceFor(OperationEntity op)
+    {
+        if (op.Kind == "enroll")
+        {
+            if (op.State is nameof(EnrollmentState.Created) or nameof(EnrollmentState.HostKeyPending))
+            {
+                return OwnerKeyAcceptance.Stage;
+            }
+
+            return op.State == nameof(EnrollmentState.HostKeyConfirmed)
+                || (op.State == nameof(EnrollmentState.Failed) && op.ResumeState == nameof(EnrollmentState.Bootstrapping))
+                    ? OwnerKeyAcceptance.Submit
+                    : OwnerKeyAcceptance.No;
+        }
+
+        return op.Kind == OperationKinds.ToWire(OperationKind.Repair)
+            && (op.State == nameof(GenericOperationState.AwaitingOwner) || op.State == nameof(GenericOperationState.Failed))
+                ? OwnerKeyAcceptance.Submit
+                : OwnerKeyAcceptance.No;
+    }
+
+    /// <summary>Stores the key now when the operation is still before the host-key check, uses it when the operation is waiting for it; anything else is refused.</summary>
+    public async Task<OperationView> SetOwnerCredentialAsync(
+        string operationId,
+        string? sshUser,
+        string? privateKeyText,
+        string? passphrase,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        var op = await _operations.GetAsync(operationId, cancellationToken) ?? throw new FleetNotFoundException("The operation");
+        return AcceptanceFor(op) switch
+        {
+            OwnerKeyAcceptance.Stage => await StageOwnerCredentialAsync(operationId, sshUser, privateKeyText, passphrase, actor, cancellationToken),
+            OwnerKeyAcceptance.Submit => await SubmitOwnerCredentialAsync(operationId, sshUser, privateKeyText, passphrase, actor, cancellationToken),
+            _ => throw new FleetOperationException("invalid_state", "The operation is not waiting for an owner credential."),
+        };
+    }
+
+    /// <summary>
+    /// Saves the temporary owner credential BEFORE the host key is confirmed, so the owner can add a helper with one form. It is the same
+    /// credential SubmitOwnerCredentialAsync stores (encrypted in the vault, 60 minutes at most, destroyed at S8, on cancel and on expiry), but it
+    /// is only USED once the owner has pinned the host key: confirming the key continues the enrollment with it (or
+    /// <see cref="ContinueWithSavedCredentialAsync"/> does, when that was missed).
+    /// </summary>
+    public async Task<OperationView> StageOwnerCredentialAsync(
+        string operationId,
+        string? sshUser,
+        string? privateKeyText,
+        string? passphrase,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        var op = await RequireEnrollAsync(operationId, cancellationToken);
+        if (AcceptanceFor(op) != OwnerKeyAcceptance.Stage)
+        {
+            throw new FleetOperationException("invalid_state", "A key can only be saved in advance while the host key is still to be confirmed.");
+        }
+
+        var host = await _hosts.GetAsync(op.HostId!, cancellationToken) ?? throw new FleetNotFoundException("The host");
+        using var prepared = await PrepareOwnerKeyAsync(sshUser, privateKeyText, passphrase, cancellationToken);
+        var info = await _credentials.StoreAsync(
+            host.Id,
+            CredentialPurposes.OwnerBootstrap,
+            prepared.Packed,
+            prepared.Hint,
+            TimeSpan.FromMinutes(_options.Value.Timing.OwnerCredentialMinutes),
+            cancellationToken);
+
+        // The operation may have been cancelled or confirmed while the key was being stored: never leave a root-capable secret behind for an
+        // operation that will not use it.
+        var current = await _operations.GetAsync(op.Id, cancellationToken);
+        var stillWaiting = current is not null
+            && (AcceptanceFor(current) == OwnerKeyAcceptance.Stage || current.State == nameof(EnrollmentState.HostKeyConfirmed));
+        if (!stillWaiting)
+        {
+            if (!OwnerCredentialInUse(current))
+            {
+                await _credentials.DestroyAsync(host.Id, CredentialPurposes.OwnerBootstrap, cancellationToken);
+            }
+
+            throw new FleetOperationException("conflict", "The operation changed while the credential was stored; refresh and retry.");
+        }
+
+        await _audit.AppendAsync(
+            actor,
+            "enroll.owner_credential_staged",
+            host.NodeRef,
+            new Dictionary<string, object?> { ["fingerprint"] = info.FingerprintHint, ["expiresAt"] = info.ExpiresAt },
+            cancellationToken);
+        if (current!.State == nameof(EnrollmentState.HostKeyConfirmed))
+        {
+            return await ContinueWithSavedCredentialAsync(op.Id, actor, cancellationToken);
+        }
+
+        return await ViewAsync(current!, cancellationToken);
+    }
+
+    /// <summary>Starts bootstrapping with the key saved in advance (the host key is pinned and the key has not expired).</summary>
+    public async Task<OperationView> ContinueWithSavedCredentialAsync(string operationId, string actor, CancellationToken cancellationToken)
+    {
+        var op = await RequireEnrollAsync(operationId, cancellationToken);
+        if (op.State != nameof(EnrollmentState.HostKeyConfirmed))
+        {
+            throw new FleetOperationException("invalid_state", "The operation is not waiting for an owner credential.");
+        }
+
+        var host = await _hosts.GetAsync(op.HostId!, cancellationToken) ?? throw new FleetNotFoundException("The host");
+        if (!await _credentials.ExistsActiveAsync(host.Id, CredentialPurposes.OwnerBootstrap, cancellationToken))
+        {
+            throw new FleetOperationException("owner_credential_required", "No saved key is available (it may have expired). Submit the key again.");
+        }
+
+        var info = await _credentials.GetInfoAsync(host.Id, CredentialPurposes.OwnerBootstrap, cancellationToken);
+        if (!await ResumeEnrollAsync(op, EnrollmentState.Bootstrapping, cancellationToken))
+        {
+            throw new FleetOperationException("conflict", "The operation changed; refresh and retry.");
+        }
+
+        await _audit.AppendAsync(
+            actor,
+            "enroll.saved_credential_used",
+            host.NodeRef,
+            new Dictionary<string, object?> { ["fingerprint"] = info?.FingerprintHint },
             cancellationToken);
         _signal.Kick();
         return await ViewAsync(await _operations.GetAsync(op.Id, cancellationToken) ?? op, cancellationToken);
@@ -366,6 +511,86 @@ public sealed class EnrollmentService
     }
 
     // ---- helpers ---------------------------------------------------------------------------
+
+    /// <summary>An owner key, validated and packed as the vault stores it. Disposing zeroes the packed bytes.</summary>
+    private sealed class PreparedOwnerKey : IDisposable
+    {
+        public PreparedOwnerKey(SecretBuffer packed, string hint)
+        {
+            Packed = packed;
+            Hint = hint;
+        }
+
+        public SecretBuffer Packed { get; }
+
+        /// <summary>First 8 hex characters of SHA-256 over the PUBLIC key blob: the only thing the UI and the audit ever show.</summary>
+        public string Hint { get; }
+
+        public void Dispose() => Packed.Dispose();
+    }
+
+    /// <summary>
+    /// Validates the SSH user and the key text, opens a passphrase-protected key with the passphrase the owner typed (the passphrase is used
+    /// for that one call and never kept), proves the key can be read non-interactively and packs it for the vault.
+    /// </summary>
+    private async Task<PreparedOwnerKey> PrepareOwnerKeyAsync(string? sshUser, string? privateKeyText, string? passphrase, CancellationToken cancellationToken)
+    {
+        var userIssue = InputValidator.ValidateSshUser(sshUser);
+        if (userIssue is not null)
+        {
+            throw new FleetValidationException(userIssue);
+        }
+
+        var protectedKey = !string.IsNullOrEmpty(passphrase);
+        if (protectedKey && !OwnerKeyText.IsAcceptablePassphrase(passphrase))
+        {
+            throw new FleetValidationException(new ValidationIssue("passphrase", "passphrase_invalid", "The passphrase must be a single line of at most 256 characters."));
+        }
+
+        if (!OwnerKeyText.TryNormalize(privateKeyText, out var normalized, allowEncrypted: protectedKey))
+        {
+            throw new FleetValidationException(new ValidationIssue(
+                "privateKey",
+                "owner_key_invalid",
+                protectedKey ? "Paste an OpenSSH or PEM private key." : "Paste an unencrypted OpenSSH or PEM private key."));
+        }
+
+        SecretBuffer? key = SecretBuffer.FromUtf8(normalized);
+        try
+        {
+            if (protectedKey)
+            {
+                var unlocked = await _keys.RemovePassphraseAsync(key, passphrase!, cancellationToken);
+                key.Dispose();
+                key = unlocked;
+                if (key is null)
+                {
+                    throw new FleetValidationException(new ValidationIssue(
+                        "privateKey",
+                        "owner_key_unusable",
+                        "The key could not be opened. Check the passphrase and that the text is a complete OpenSSH or PEM private key."));
+                }
+            }
+
+            var publicLine = await _keys.DerivePublicKeyAsync(key, cancellationToken);
+            var parsed = publicLine is null ? null : PublicKeyLines.TryParse(publicLine);
+            if (parsed is null)
+            {
+                throw new FleetValidationException(new ValidationIssue(
+                    "privateKey",
+                    "owner_key_unusable",
+                    protectedKey
+                        ? "The key could not be read after removing its passphrase."
+                        : "The key could not be read. If it is protected by a passphrase, enter the passphrase too."));
+            }
+
+            return new PreparedOwnerKey(OwnerCredentialPayload.Pack(sshUser!, key), PublicKeyLines.Hint(parsed.Value.Base64));
+        }
+        finally
+        {
+            key?.Dispose();
+        }
+    }
 
     /// <summary>True when the operation is in a state that is (or is about to be) running with the temporary owner credential.</summary>
     private static bool OwnerCredentialInUse(OperationEntity? op) =>
@@ -490,7 +715,19 @@ public static class OwnerKeyText
 {
     public const int MaxLength = 16 * 1024;
 
-    public static bool TryNormalize(string? text, out string normalized)
+    public const int MaxPassphraseLength = 256;
+
+    /// <summary>A passphrase is one line of at most 256 characters (it becomes one argument of one child process, never a shell string).</summary>
+    public static bool IsAcceptablePassphrase(string? passphrase) =>
+        !string.IsNullOrEmpty(passphrase)
+        && passphrase.Length <= MaxPassphraseLength
+        && passphrase.IndexOfAny(new[] { '\0', '\r', '\n' }) < 0;
+
+    /// <summary>
+    /// <paramref name="allowEncrypted"/> admits a key that announces itself as encrypted (a legacy PEM block with a Proc-Type header): only
+    /// when the owner supplied the passphrase to open it with.
+    /// </summary>
+    public static bool TryNormalize(string? text, out string normalized, bool allowEncrypted = false)
     {
         normalized = string.Empty;
         if (string.IsNullOrWhiteSpace(text) || text.Length > MaxLength || text.Contains('\0'))
@@ -507,7 +744,7 @@ public static class OwnerKeyText
             return false;
         }
 
-        if (unified.Contains("ENCRYPTED", StringComparison.Ordinal))
+        if (!allowEncrypted && unified.Contains("ENCRYPTED", StringComparison.Ordinal))
         {
             return false;
         }

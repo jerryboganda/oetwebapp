@@ -21,7 +21,7 @@ public sealed record AddHostBody(string? NodeRef, string? DisplayName, string? A
 
 public sealed record FingerprintBody(string? Fingerprint);
 
-public sealed record OwnerCredentialBody(string? User, string? PrivateKey);
+public sealed record OwnerCredentialBody(string? User, string? PrivateKey, string? Passphrase = null);
 
 public sealed record RemoveBody(bool Force);
 
@@ -218,7 +218,7 @@ public static class FleetEndpoints
             enrollment.ConfirmHostKeyAsync(id, body.Fingerprint, Actor(http), ct)).AddEndpointFilter<StepUpFilter>();
 
         api.MapPost("/operations/{id}/owner-credential", (string id, OwnerCredentialBody body, EnrollmentService enrollment, HttpContext http, CancellationToken ct) =>
-            enrollment.SubmitOwnerCredentialAsync(id, body.User, body.PrivateKey, Actor(http), ct)).AddEndpointFilter<StepUpFilter>();
+            enrollment.SetOwnerCredentialAsync(id, body.User, body.PrivateKey, body.Passphrase, Actor(http), ct)).AddEndpointFilter<StepUpFilter>();
 
         api.MapPost("/operations/{id}/retry", (string id, EnrollmentService enrollment, HttpContext http, CancellationToken ct) =>
             enrollment.RetryAsync(id, Actor(http), ct));

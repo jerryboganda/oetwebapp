@@ -68,4 +68,22 @@ public sealed class FakeSshKeyTool : ISshKeyTool
 
         return FakeKeys.PublicLine(privateKey.AsSpan().ToArray());
     }
+
+    /// <summary>The passphrase the fake accepts for a key whose text carries <c>PASSPHRASE-PROTECTED</c>.</summary>
+    public const string CorrectPassphrase = "correct passphrase 1";
+
+    /// <summary>Every passphrase this fake was asked to try (so a test can prove it was never kept anywhere else).</summary>
+    public List<string> TriedPassphrases { get; } = new();
+
+    public Task<SecretBuffer?> RemovePassphraseAsync(SecretBuffer privateKey, string passphrase, CancellationToken cancellationToken)
+    {
+        TriedPassphrases.Add(passphrase);
+        if (!string.Equals(passphrase, CorrectPassphrase, StringComparison.Ordinal))
+        {
+            return Task.FromResult<SecretBuffer?>(null);
+        }
+
+        var text = Encoding.UTF8.GetString(privateKey.AsSpan());
+        return Task.FromResult<SecretBuffer?>(SecretBuffer.FromUtf8(text.Replace("PASSPHRASE-PROTECTED", "UNPROTECTED", StringComparison.Ordinal)));
+    }
 }

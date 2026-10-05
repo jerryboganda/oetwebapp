@@ -20,6 +20,13 @@ public interface ISshKeyTool
     /// (for example a passphrase-protected key, which the manager does not support).
     /// </summary>
     Task<string?> DerivePublicKeyAsync(SecretBuffer privateKey, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes the passphrase of a protected private key the owner supplied together with its passphrase, so that the temporary
+    /// owner credential can be used non-interactively (every SSH call runs in batch mode and cannot ask). Null when the key cannot be
+    /// opened with that passphrase (wrong passphrase, unreadable key). The caller disposes the returned buffer.
+    /// </summary>
+    Task<SecretBuffer?> RemovePassphraseAsync(SecretBuffer privateKey, string passphrase, CancellationToken cancellationToken);
 }
 
 public static class PublicKeyLines
@@ -115,5 +122,44 @@ public sealed class SshKeygenTool : ISshKeyTool
 
         var line = result.Stdout.Trim();
         return PublicKeyLines.TryParse(line) is null ? null : line;
+    }
+
+    /// <summary>
+    /// <c>ssh-keygen -p</c> rewrites a copy of the key (a 0600 file in the 0700 tmpfs run directory) without its passphrase. OpenSSH
+    /// offers no stdin or environment route for the old passphrase, so it is one argv element of this single, 15-second call that runs
+    /// inside the manager's own container (no other principal, no shell, nothing logs arguments). The copy is zeroed and deleted
+    /// afterwards, and the unprotected key only continues as the owner credential: encrypted in the vault, 60 minutes at most.
+    /// </summary>
+    public async Task<SecretBuffer?> RemovePassphraseAsync(SecretBuffer privateKey, string passphrase, CancellationToken cancellationToken)
+    {
+        var provisioning = _options.Value.Provisioning;
+        using var scratch = RunScratch.Create(provisioning.ScratchDirectory);
+        using var keyFile = TempSecretFile.Create(scratch.Path, "owner-key", privateKey);
+        var result = await _runner.RunAsync(
+            new ProcessSpec(
+                provisioning.SshKeygenExecutable,
+                new[] { "-p", "-P", passphrase, "-N", string.Empty, "-f", keyFile.Path },
+                null,
+                null,
+                TimeSpan.FromSeconds(15)),
+            cancellationToken);
+        if (!result.Success)
+        {
+            return null;
+        }
+
+        byte[]? unlocked = null;
+        try
+        {
+            unlocked = await File.ReadAllBytesAsync(keyFile.Path, cancellationToken);
+            return SecretBuffer.FromBytes(unlocked);
+        }
+        finally
+        {
+            if (unlocked is not null)
+            {
+                System.Security.Cryptography.CryptographicOperations.ZeroMemory(unlocked);
+            }
+        }
     }
 }

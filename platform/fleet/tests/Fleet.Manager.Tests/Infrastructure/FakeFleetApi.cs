@@ -105,6 +105,9 @@ public sealed class FakeFleetApi : IFleetApi
     /// <summary>Policy writes for these node references are refused by the API (<c>policy_rejected</c>).</summary>
     public HashSet<string> RejectPolicyForNodeRefs { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>The body the fake serves for the API's stats call (a test sets it to exercise the workloads page).</summary>
+    public string StatsJson { get; set; } = "{\"queued\":0}";
+
     public int RegisterCalls { get; private set; }
 
     public int RotateCalls { get; private set; }
@@ -437,7 +440,7 @@ public sealed class FakeFleetApi : IFleetApi
         lock (_gate)
         {
             Begin("stats");
-            using var document = JsonDocument.Parse("{\"queued\":0}");
+            using var document = JsonDocument.Parse(StatsJson);
             return Task.FromResult(document.RootElement.Clone());
         }
     }

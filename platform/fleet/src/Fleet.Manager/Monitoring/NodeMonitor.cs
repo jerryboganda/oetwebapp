@@ -28,6 +28,7 @@ public sealed class NodeMonitor : BackgroundService
     private readonly ConcurrentDictionary<string, string> _lastKey = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, PressureGovernor> _governors = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, (DateTimeOffset At, JsonNode Json)> _ctlStatus = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, int> _ctlLatencyMs = new(StringComparer.Ordinal);
 
     private readonly IFleetApi _api;
     private readonly HostStore _hosts;
@@ -165,7 +166,11 @@ public sealed class NodeMonitor : BackgroundService
 
     private async Task PollCtlAsync(HostEntity host, DateTimeOffset now, CancellationToken cancellationToken)
     {
+        var started = _time.GetTimestamp();
         var result = await _access.CtlAsync(host, "status", Array.Empty<string>(), null, cancellationToken);
+
+        // The management-plane round trip (SSH to the restricted ctl and back), shown on the dashboard as the helper's latency.
+        _ctlLatencyMs[host.Id] = (int)Math.Min(int.MaxValue, Math.Max(0, _time.GetElapsedTime(started).TotalMilliseconds));
         if (result.Success)
         {
             try
@@ -209,7 +214,13 @@ public sealed class NodeMonitor : BackgroundService
         };
         if (_ctlStatus.TryGetValue(host.Id, out var ctl))
         {
-            summary["host"] = new JsonObject { ["polledAt"] = ctl.At.ToString("O"), ["status"] = ctl.Json.DeepClone() };
+            var hostSummary = new JsonObject { ["polledAt"] = ctl.At.ToString("O"), ["status"] = ctl.Json.DeepClone() };
+            if (_ctlLatencyMs.TryGetValue(host.Id, out var latencyMs))
+            {
+                hostSummary["latencyMs"] = latencyMs;
+            }
+
+            summary["host"] = hostSummary;
         }
 
         var json = LogScrubber.Scrub(summary.ToJsonString(), 4000);
