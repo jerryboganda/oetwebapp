@@ -184,6 +184,8 @@ jobs:
           provenance: false
           tags: fleet-agent:ci
           cache-from: type=gha,scope=fleet-agent
+          # Exported here so the push step below is a pure cache hit of the image the smoke test just proved.
+          cache-to: type=gha,mode=max,scope=fleet-agent
       - name: Image facts (parity with the API image, protocol 6.1.4 item 4)
         id: facts
         run: |
@@ -192,12 +194,13 @@ jobs:
           test "$(docker image inspect fleet-agent:ci --format '{{.Config.User}}')" = "10001:10001"
           env_dump="$(docker run --rm --entrypoint /bin/sh fleet-agent:ci -c env)"
           for forbidden in DOTNET_SYSTEM_GLOBALIZATION_INVARIANT LANG LC_ALL; do
-            if printf '%s\n' "$env_dump" | grep -q "^${forbidden}="; then
+            if grep -q "^${forbidden}=" <<< "$env_dump"; then
               echo "::error::${forbidden} must not be set in the agent image (the API image does not set it)"
               exit 1
             fi
           done
-          ffmpeg_line="$(docker run --rm --entrypoint ffmpeg fleet-agent:ci -version | head -n 1)"
+          # sed -n 1p (not head -n 1): reading the whole stream avoids a SIGPIPE that pipefail would turn into a failure.
+          ffmpeg_line="$(docker run --rm --entrypoint ffmpeg fleet-agent:ci -version | sed -n 1p)"
           version="$(docker run --rm --entrypoint dotnet fleet-agent:ci Fleet.Agent.dll --version | sed -n 1p)"
           engine="$(docker run --rm --entrypoint dotnet fleet-agent:ci Fleet.Agent.dll --version | sed -n 2p)"
           echo "ffmpeg=$ffmpeg_line" >> "$GITHUB_OUTPUT"
@@ -225,14 +228,18 @@ jobs:
             --env "OET_NODE_TOKEN=orw1_${part_a}_${part_b}" \
             --env "OET_AGENT_IMAGE_DIGEST=sha256:${zeros}" \
             fleet-agent:ci >/dev/null
+          # Logs are captured into a variable and matched with case: no early-exiting reader sits behind a pipe under pipefail.
           ok=false
+          logs=""
           for _ in $(seq 1 60); do
-            if docker logs agent-smoke 2>&1 | grep -q 'self-check pdf=True'; then ok=true; break; fi
+            logs="$(docker logs agent-smoke 2>&1 || true)"
+            case "$logs" in *'self-check pdf=True'*) ok=true; break ;; esac
             sleep 2
           done
-          docker logs agent-smoke 2>&1 | tail -n 40
+          printf '%s\n' "$logs" | tail -n 40
           if [ "$ok" != true ]; then echo "::error::the agent self-check did not pass inside the hardened container"; exit 1; fi
-          if docker logs agent-smoke 2>&1 | grep -q "orw1_${part_a}"; then echo "::error::the node token leaked into the agent log"; exit 1; fi
+          logs="$(docker logs agent-smoke 2>&1 || true)"
+          case "$logs" in *"orw1_${part_a}"*) echo "::error::the node token leaked into the agent log"; exit 1 ;; esac
           docker stop -t 60 agent-smoke >/dev/null
           test "$(docker inspect -f '{{.State.ExitCode}}' agent-smoke)" = "0"
           docker rm -f agent-smoke >/dev/null
@@ -531,7 +538,8 @@ jobs:
           # --- the manager must stay loopback-only (no public ingress) ---
           [ "$(docker inspect -f '{{.State.Running}}' "$MANAGER" 2>/dev/null || echo missing)" = "true" ] || fail "$MANAGER is not running"
           published="$(docker port "$MANAGER" 2>/dev/null || true)"
-          if [ -n "$published" ] && printf '%s\n' "$published" | grep -v -e '-> 127\.0\.0\.1:' | grep -q .; then
+          beyond_loopback="$(printf '%s\n' "$published" | grep -v -e '^$' -e '-> 127\.0\.0\.1:' | wc -l || true)"
+          if [ "${beyond_loopback:-0}" -gt 0 ]; then
             fail "$MANAGER publishes a port beyond loopback; the manager must not be reachable from the network"
           fi
           running_image="$(docker inspect -f '{{.Config.Image}}' "$MANAGER")"
