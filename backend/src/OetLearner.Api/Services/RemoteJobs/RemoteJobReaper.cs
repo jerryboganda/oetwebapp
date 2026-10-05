@@ -7,7 +7,14 @@ using OetLearner.Api.Services.Content;
 namespace OetLearner.Api.Services.RemoteJobs;
 
 /// <summary>Counts of what one reaper pass did (diagnostics and tests).</summary>
-public sealed record RemoteSweepResult(int Requeued, int Quarantined, int FellBackLocal, int OrphanOutputSets, int Purged, int ResultsCleared);
+public sealed record RemoteSweepResult(
+    int Requeued,
+    int Quarantined,
+    int FellBackLocal,
+    int OrphanOutputSets,
+    int Purged,
+    int ResultsCleared,
+    int CanariesCancelled = 0);
 
 /// <summary>
 /// The statements of the reaper (OET-RWP/1 section 3.5). R1 is the ONE code path that turns an expired lease back into work: the
@@ -75,9 +82,10 @@ public sealed class RemoteJobSweeper(
 
         var (requeued, quarantined) = await ReapExpiredAsync(options, ct);
         var fellBack = await SweepFallbackAsync(ct);
+        var canaries = await SweepStaleCanariesAsync(options, ct);
         var orphans = await SweepOrphanOutputsAsync(ct);
         var (purged, cleared) = await PurgeAsync(options, ct);
-        return new RemoteSweepResult(requeued, quarantined, fellBack, orphans, purged, cleared);
+        return new RemoteSweepResult(requeued, quarantined, fellBack, orphans, purged, cleared, canaries);
     }
 
     /// <summary>R1: expired leases become <c>Queued</c> (with backoff) or <c>Quarantined</c> (attempts exhausted).</summary>
@@ -126,6 +134,53 @@ public sealed class RemoteJobSweeper(
             FallbackSql,
             parameters => parameters.AddWithValue("masterOff", masterOff),
             ct);
+    }
+
+    /// <summary>
+    /// R2b: a canary has no local path, so R2 never touches it. One that stays <c>Queued</c> for <c>FallbackAfterMinutes</c> (its
+    /// target never claimed it, or its lease expired and the retry was never claimed) is cancelled <c>canary_timeout</c>: otherwise
+    /// every later request would answer <c>409 canary_in_progress</c> and the node could never reach <c>Active</c>. The manager
+    /// simply requests a new canary.
+    /// </summary>
+    public async Task<int> SweepStaleCanariesAsync(RemoteJobsOptions options, CancellationToken ct)
+    {
+        var cancelled = await RemoteDb.QueryAsync(
+            db,
+            """
+            WITH stale AS (
+                SELECT "Id" FROM "RemoteJobs"
+                WHERE "State" = 'Queued' AND "Purpose" = 'canary'
+                  AND "UpdatedAt" < clock_timestamp() - make_interval(mins => @minutes)
+                ORDER BY "UpdatedAt"
+                LIMIT 100
+                FOR UPDATE SKIP LOCKED)
+            UPDATE "RemoteJobs" r SET
+                "State" = 'Cancelled',
+                "FailureCode" = 'canary_timeout',
+                "CompletedAt" = clock_timestamp(),
+                "UpdatedAt" = clock_timestamp()
+            FROM stale
+            WHERE r."Id" = stale."Id"
+            RETURNING r."Id", r."TargetNodeId";
+            """,
+            parameters => parameters.AddWithValue("minutes", options.FallbackAfterMinutes),
+            reader => (Id: RemoteDb.Str(reader, "Id"), Node: RemoteDb.StrN(reader, "TargetNodeId")),
+            ct);
+
+        if (cancelled.Count > 0)
+        {
+            var now = timeProvider.GetUtcNow();
+            foreach (var row in cancelled)
+            {
+                RemoteAudit.Add(db, RemoteAudit.ReaperActor, "remote-job-reaper", "RemoteJob.CanaryTimeout", RemoteAudit.ResourceJob, row.Id,
+                    new { code = "canary_timeout", node = row.Node }, now);
+            }
+
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation("Cancelled {Count} canary job(s) that no node claimed in time.", cancelled.Count);
+        }
+
+        return cancelled.Count;
     }
 
     /// <summary>R3: outputs of a fence that never settled, more than an hour after its lease ended, are deleted.</summary>

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -87,28 +88,37 @@ public sealed class RemoteFleetJobsService(
     public async Task<(string? State, RemoteProblemResult? Error)> RequeueAsync(string jobId, string actorId, string actorName, CancellationToken ct)
     {
         var options = settings.Current;
-        var state = await RemoteDb.QueryFirstAsync(
-            db,
-            """
-            UPDATE "RemoteJobs" SET
-                "State" = 'Queued', "Attempt" = 0, "ReleaseCount" = 0,
-                "NextAttemptAt" = clock_timestamp(),
-                "FallbackAfter" = CASE WHEN "Purpose" = 'apply' THEN clock_timestamp() + make_interval(mins => @fallbackMinutes) ELSE NULL END,
-                "ResultSha256" = NULL, "ResultSummaryJson" = NULL, "ResultJson" = NULL, "ApplyOutcome" = NULL, "CompletedAt" = NULL,
-                "SettledFence" = NULL, "SettledBy" = NULL, "SettledCode" = NULL,
-                "FailureCode" = NULL, "FailureMessage" = NULL,
-                "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL, "DeadlineAt" = NULL, "ClaimNonce" = NULL,
-                "UpdatedAt" = clock_timestamp()
-            WHERE "Id" = @id AND "State" IN ('Failed', 'Quarantined', 'FallbackLocal', 'Cancelled')
-            RETURNING "State";
-            """,
-            parameters =>
-            {
-                parameters.AddWithValue("fallbackMinutes", options.FallbackAfterMinutes);
-                parameters.AddWithValue("id", jobId);
-            },
-            reader => RemoteDb.Str(reader, "State"),
-            ct);
+        string? state;
+        try
+        {
+            state = await RemoteDb.QueryFirstAsync(
+                db,
+                """
+                UPDATE "RemoteJobs" SET
+                    "State" = 'Queued', "Attempt" = 0, "ReleaseCount" = 0,
+                    "NextAttemptAt" = clock_timestamp(),
+                    "FallbackAfter" = CASE WHEN "Purpose" = 'apply' THEN clock_timestamp() + make_interval(mins => @fallbackMinutes) ELSE NULL END,
+                    "ResultSha256" = NULL, "ResultSummaryJson" = NULL, "ResultJson" = NULL, "ApplyOutcome" = NULL, "CompletedAt" = NULL,
+                    "SettledFence" = NULL, "SettledBy" = NULL, "SettledCode" = NULL,
+                    "FailureCode" = NULL, "FailureMessage" = NULL,
+                    "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL, "DeadlineAt" = NULL, "ClaimNonce" = NULL,
+                    "UpdatedAt" = clock_timestamp()
+                WHERE "Id" = @id AND "State" IN ('Failed', 'Quarantined', 'FallbackLocal', 'Cancelled')
+                RETURNING "State";
+                """,
+                parameters =>
+                {
+                    parameters.AddWithValue("fallbackMinutes", options.FallbackAfterMinutes);
+                    parameters.AddWithValue("id", jobId);
+                },
+                reader => RemoteDb.Str(reader, "State"),
+                ct);
+        }
+        catch (PostgresException ex) when (RemoteWorkerService.IsOpenCanaryViolation(ex))
+        {
+            // Reopening an old canary while a newer one is open would be a second open canary for the node.
+            return (null, RemoteProblems.Conflict("canary_in_progress", "A canary is already open for this node."));
+        }
 
         return await FinishAsync(state, jobId, "RemoteJob.Requeue", actorId, actorName, ct);
     }

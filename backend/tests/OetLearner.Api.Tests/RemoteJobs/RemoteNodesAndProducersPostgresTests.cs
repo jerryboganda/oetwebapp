@@ -355,6 +355,139 @@ public sealed class RemoteNodesAndProducersPostgresTests
         Assert.Null(outcome.Leased);
     }
 
+    private const string OpenCanariesSql =
+        """SELECT COUNT(*)::int FROM "RemoteJobs" WHERE "Purpose" = 'canary' AND "TargetNodeId" = @node AND "State" IN ('Queued', 'Leased');""";
+
+    [PostgreSqlFact]
+    public async Task Canary_ConcurrentRequests_ConvergeOnExactlyOneOpenCanary()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var node = await h.AddNodeAsync(RemoteNodeStatus.Probation);
+
+        // The count-then-insert pre-check is only a fast path: the partial unique index must hold under a real race.
+        var results = await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ =>
+        {
+            await using var db = h.NewContext();
+            return await h.Nodes(db).EnqueueCanaryAsync(node, Actor, ActorName, CancellationToken.None);
+        }));
+
+        Assert.Equal(1, results.Count(result => result.JobId is not null && result.Error is null));
+        Assert.All(
+            results.Where(result => result.JobId is null),
+            result => Assert.Equal("canary_in_progress", result.Error!.Code));
+        Assert.Equal(1, await h.CountAsync(OpenCanariesSql, ("node", node)));
+    }
+
+    [PostgreSqlFact]
+    public async Task Canary_AnotherNodeMayHaveItsOwnOpenCanary()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var first = await h.AddNodeAsync(RemoteNodeStatus.Probation);
+        var second = await h.AddNodeAsync(RemoteNodeStatus.Probation);
+
+        await using var db1 = h.NewContext();
+        await using var db2 = h.NewContext();
+        var a = await h.Nodes(db1).EnqueueCanaryAsync(first, Actor, ActorName, CancellationToken.None);
+        var b = await h.Nodes(db2).EnqueueCanaryAsync(second, Actor, ActorName, CancellationToken.None);
+
+        Assert.Null(a.Error);
+        Assert.Null(b.Error);
+        Assert.NotEqual(a.JobId, b.JobId);
+    }
+
+    [PostgreSqlFact]
+    public async Task Canary_RequeueingAnOldCanaryWhileANewerOneIsOpen_IsRefusedAs409_NotA500()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var node = await h.AddNodeAsync(RemoteNodeStatus.Probation);
+        string oldJob;
+        await using (var db = h.NewContext())
+        {
+            oldJob = (await h.Nodes(db).EnqueueCanaryAsync(node, Actor, ActorName, CancellationToken.None)).JobId!;
+        }
+
+        await h.SqlAsync("""UPDATE "RemoteJobs" SET "State" = 'Cancelled', "UpdatedAt" = clock_timestamp() WHERE "Id" = @id;""", ("id", oldJob));
+        await using (var db = h.NewContext())
+        {
+            Assert.Null((await h.Nodes(db).EnqueueCanaryAsync(node, Actor, ActorName, CancellationToken.None)).Error);
+        }
+
+        await using var requeueDb = h.NewContext();
+        var requeue = await h.FleetJobs(requeueDb).RequeueAsync(oldJob, Actor, ActorName, CancellationToken.None);
+
+        Assert.Null(requeue.State);
+        Assert.Equal(409, requeue.Error!.StatusCode);
+        Assert.Equal("canary_in_progress", requeue.Error.Code);
+        Assert.Equal("Cancelled", await h.StateOfAsync(oldJob));
+        Assert.Equal(1, await h.CountAsync(OpenCanariesSql, ("node", node)));
+    }
+
+    [PostgreSqlFact]
+    public async Task Canary_AQueuedCanaryNobodyClaims_IsCancelledByTheReaper_SoANewOneCanBeRequested()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var idle = await h.AddNodeAsync(RemoteNodeStatus.Probation);
+        var busy = await h.AddNodeAsync(RemoteNodeStatus.Probation);
+        string staleJob;
+        string leasedJob;
+        await using (var db = h.NewContext())
+        {
+            staleJob = (await h.Nodes(db).EnqueueCanaryAsync(idle, Actor, ActorName, CancellationToken.None)).JobId!;
+            leasedJob = (await h.Nodes(db).EnqueueCanaryAsync(busy, Actor, ActorName, CancellationToken.None)).JobId!;
+        }
+
+        var claimed = await h.ClaimOneAsync(busy);
+        Assert.Equal(leasedJob, claimed.Id);
+
+        // Fresh: nothing is stale yet.
+        await using (var db = h.NewContext())
+        {
+            Assert.Equal(0, await h.Sweeper(db).SweepStaleCanariesAsync(h.Settings.Current, CancellationToken.None));
+        }
+
+        // Both canaries are now older than FallbackAfterMinutes; only the one still waiting in the queue is swept.
+        await h.SqlAsync(
+            """UPDATE "RemoteJobs" SET "UpdatedAt" = clock_timestamp() - interval '11 minutes' WHERE "Id" = ANY(@ids);""",
+            ("ids", new[] { staleJob, leasedJob }));
+        await using (var db = h.NewContext())
+        {
+            Assert.Equal(1, await h.Sweeper(db).SweepStaleCanariesAsync(h.Settings.Current, CancellationToken.None));
+        }
+
+        Assert.Equal("Cancelled", await h.StateOfAsync(staleJob));
+        Assert.Equal("canary_timeout", await h.ScalarAsync<string>("""SELECT "FailureCode" FROM "RemoteJobs" WHERE "Id" = @id;""", ("id", staleJob)));
+        Assert.Equal("Leased", await h.StateOfAsync(leasedJob));
+        Assert.Equal(1, await h.AuditCountAsync("RemoteJob.CanaryTimeout"));
+
+        // The node is no longer stuck behind a canary that can never run.
+        await using (var db = h.NewContext())
+        {
+            var again = await h.Nodes(db).EnqueueCanaryAsync(idle, Actor, ActorName, CancellationToken.None);
+            Assert.Null(again.Error);
+            Assert.NotNull(again.JobId);
+        }
+    }
+
+    [PostgreSqlFact]
+    public async Task Canary_TheFullSweep_ReportsTheCanariesItCancelled()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var node = await h.AddNodeAsync(RemoteNodeStatus.Probation);
+        string job;
+        await using (var db = h.NewContext())
+        {
+            job = (await h.Nodes(db).EnqueueCanaryAsync(node, Actor, ActorName, CancellationToken.None)).JobId!;
+        }
+
+        await h.SqlAsync("""UPDATE "RemoteJobs" SET "UpdatedAt" = clock_timestamp() - interval '11 minutes' WHERE "Id" = @id;""", ("id", job));
+        await using var sweepDb = h.NewContext();
+
+        var result = await h.Sweeper(sweepDb).SweepAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.CanariesCancelled);
+        Assert.Equal("Cancelled", await h.StateOfAsync(job));
+    }
+
     // ── node heartbeat ───────────────────────────────────────────────────────
 
     [PostgreSqlFact]

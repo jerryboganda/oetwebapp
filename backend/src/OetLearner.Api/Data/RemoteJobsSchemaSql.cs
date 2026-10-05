@@ -14,6 +14,9 @@ namespace OetLearner.Api.Data;
 /// </summary>
 internal static class RemoteJobsSchemaSql
 {
+    /// <summary>Partial unique index allowing one open (Queued/Leased) canary per target node.</summary>
+    public const string OpenCanaryIndex = "UX_RemoteJobs_OpenCanary";
+
     public const string Up = """
         CREATE TABLE IF NOT EXISTS "RemoteWorkers" (
             "Id"                       character varying(64)    NOT NULL,
@@ -151,6 +154,8 @@ internal static class RemoteJobsSchemaSql
         CREATE INDEX IF NOT EXISTS "IX_RemoteJobs_Fallback"    ON "RemoteJobs" ("FallbackAfter") WHERE "State" = 'Queued' AND "FallbackAfter" IS NOT NULL;
         CREATE INDEX IF NOT EXISTS "IX_RemoteJobs_Resource"    ON "RemoteJobs" ("ResourceType", "ResourceId");
         CREATE INDEX IF NOT EXISTS "IX_RemoteJobs_State_Updated" ON "RemoteJobs" ("State", "UpdatedAt");
+        CREATE UNIQUE INDEX IF NOT EXISTS "UX_RemoteJobs_OpenCanary" ON "RemoteJobs" ("TargetNodeId")
+            WHERE "Purpose" = 'canary' AND "State" IN ('Queued', 'Leased');
 
         CREATE TABLE IF NOT EXISTS "RemoteJobOutputs" (
             "JobId"      character varying(64)    NOT NULL,

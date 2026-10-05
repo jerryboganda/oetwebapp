@@ -628,14 +628,23 @@ public sealed partial class RemoteWorkerService(
             },
         });
 
-        var result = await queue.EnqueueAsync(
-            new RemoteEnqueueRequest(
-                RemoteJobKinds.PdfExtract, spec.SchemaVersion, RemoteJobPurpose.Canary, RemoteCanary.ResourceType, RemoteCanary.ResourceId,
-                RemoteCanary.PdfSha256, engine, settingsHash, paramsJson, inputsJson,
-                RemoteJobKinds.LimitsFor(spec, RemoteJobPurpose.Canary), RemoteAudit.FleetActor("manager"),
-                Priority: CanaryPriority, TargetNodeId: nodeId, WithFallback: false),
-            force: false,
-            ct);
+        RemoteEnqueueResult result;
+        try
+        {
+            result = await queue.EnqueueAsync(
+                new RemoteEnqueueRequest(
+                    RemoteJobKinds.PdfExtract, spec.SchemaVersion, RemoteJobPurpose.Canary, RemoteCanary.ResourceType, RemoteCanary.ResourceId,
+                    RemoteCanary.PdfSha256, engine, settingsHash, paramsJson, inputsJson,
+                    RemoteJobKinds.LimitsFor(spec, RemoteJobPurpose.Canary), RemoteAudit.FleetActor("manager"),
+                    Priority: CanaryPriority, TargetNodeId: nodeId, WithFallback: false),
+                force: false,
+                ct);
+        }
+        catch (PostgresException ex) when (IsOpenCanaryViolation(ex))
+        {
+            // The count above is only a fast path: the partial unique index is what makes two concurrent requests converge.
+            return (null, RemoteProblems.Conflict("canary_in_progress", "A canary is already open for this node."));
+        }
 
         RemoteAudit.Add(db, actorId, actorName, "RemoteWorker.Canary", RemoteAudit.ResourceNode, nodeId, new { jobId = result.JobId }, now);
         await db.SaveChangesAsync(ct);
@@ -856,4 +865,8 @@ public sealed partial class RemoteWorkerService(
 
     private static bool IsUniqueViolation(DbUpdateException exception)
         => exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
+
+    /// <summary>True when <paramref name="exception"/> is a second open canary for one node (<see cref="RemoteJobsSchemaSql.OpenCanaryIndex"/>).</summary>
+    internal static bool IsOpenCanaryViolation(PostgresException exception)
+        => exception is { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: RemoteJobsSchemaSql.OpenCanaryIndex };
 }
