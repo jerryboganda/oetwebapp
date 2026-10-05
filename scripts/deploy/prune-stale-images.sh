@@ -8,6 +8,9 @@
 # -agent-console-egress, -agent-console-dockerproxy): a pending console update
 # can sit pulled-but-unused for days while agent turns run, and
 # .github/workflows/agent-console.yml keeps its own three-tag rollback window.
+# Likewise NEVER prunes the Owner Fleet images (oetwebapp-fleet-manager,
+# oetwebapp-fleet-agent): .github/workflows/fleet.yml owns their rollback window
+# and a pulled-but-unstarted manager update must survive until the owner applies it.
 set -euo pipefail
 
 RETENTION_HOURS="${1:-24}"
@@ -29,6 +32,7 @@ while read -r tag image_id; do
 done < <(docker images --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' \
   | grep '^ghcr\.io/jerryboganda/oetwebapp-' \
   | grep -v '^ghcr\.io/jerryboganda/oetwebapp-agent-console' \
+  | grep -v '^ghcr\.io/jerryboganda/oetwebapp-fleet-' \
   | grep -v ':latest ' || true)
 
 echo "[prune-stale-images] removed $removed stale oetwebapp tag(s) older than ${RETENTION_HOURS}h"
