@@ -326,6 +326,9 @@ if (corsOrigins.Length > 0)
                 .WithOrigins(corsOrigins)
                 .AllowAnyHeader()
                 .WithMethods("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS")
+                // GET /v1/papers returns a bare array and carries its continuation here; a
+                // cross-origin browser can only read these if they are exposed.
+                .WithExposedHeaders("X-Has-More", "X-Next-Cursor")
                 .AllowCredentials();
         });
     });

@@ -110,6 +110,23 @@ public sealed class ContentPapersPagingEndpointTests(TestWebApplicationFactory f
     }
 
     [Fact]
+    public async Task Papers_list_exposes_the_paging_headers_to_a_cross_origin_browser()
+    {
+        var subtest = await SeedPapersAsync();
+        using var client = CreateLearnerClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, Url(subtest, pageSize: 3));
+        // One of the Development CORS origins (Program.cs corsOrigins).
+        request.Headers.TryAddWithoutValidation("Origin", "http://localhost:3000");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var exposed = string.Join(",", response.Headers.GetValues("Access-Control-Expose-Headers"));
+        Assert.Contains("X-Has-More", exposed, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("X-Next-Cursor", exposed, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Papers_list_without_a_cursor_still_serves_the_first_page_and_the_legacy_page_parameter()
     {
         var subtest = await SeedPapersAsync();
