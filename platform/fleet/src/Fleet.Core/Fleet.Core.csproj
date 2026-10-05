@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Fleet.Core</RootNamespace>
+    <AssemblyName>Fleet.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Fleet.Manager" />
+    <InternalsVisibleTo Include="Fleet.Manager.Tests" />
+  </ItemGroup>
+
+</Project>

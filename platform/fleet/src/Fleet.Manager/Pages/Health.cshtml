@@ -1,0 +1,42 @@
+@page
+@model HealthModel
+@{
+    Layout = null;
+    var report = Model.Report;
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Fleet health</title>
+    <link rel="stylesheet" href="/css/site.css" />
+</head>
+<body>
+<main class="card wide">
+    <h1>OET Fleet Manager</h1>
+    <p class="@(report.Ok ? "ok" : "error")" role="status">@(report.Ok ? "All startup and integrity checks passed." : "Attention needed: see the details below.")</p>
+    <table>
+        <tbody>
+        <tr><th scope="row">Version</th><td>@report.Version</td></tr>
+        <tr><th scope="row">Database</th><td>@(report.Database ? "reachable" : "unreachable")</td></tr>
+        <tr><th scope="row">Vault master key</th><td>@(report.MasterKeyId ?? "not loaded")</td></tr>
+        <tr><th scope="row">Audit hash chain</th><td>@(report.AuditChainIntact ? "intact" : "BROKEN")</td></tr>
+        <tr><th scope="row">Operations hash chain</th><td>@(report.OperationsChainIntact ? "intact" : "BROKEN")</td></tr>
+        @if (report.IntegrityProblem is not null)
+        {
+            <tr><th scope="row">Integrity problem</th><td>@report.IntegrityProblem</td></tr>
+        }
+        <tr><th scope="row">OET API</th><td>@(report.ApiReachable ? "reachable" : "not reachable (yet)")</td></tr>
+        <tr><th scope="row">Last API poll</th><td>@(report.LastPollAt?.ToString("u") ?? "never")</td></tr>
+        <tr><th scope="row">Nodes</th><td>@report.Nodes</td></tr>
+        <tr><th scope="row">Open operations</th><td>@report.OpenOperations</td></tr>
+        </tbody>
+    </table>
+    <form method="post" asp-page="/Logout" asp-antiforgery="true">
+        <button type="submit" class="secondary">Sign out</button>
+    </form>
+</main>
+</body>
+</html>
