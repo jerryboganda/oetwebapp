@@ -24,6 +24,7 @@ import type {
   ResistanceLevelCode,
 } from '@/lib/api/speaking-role-play-cards';
 import type { SpeakingInputKind } from '@/lib/speaking/input-kind';
+import type { SpeakingLiveAdmission } from '@/lib/api/speaking-admission';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enums
@@ -90,6 +91,11 @@ export interface SpeakingSessionDetail extends SpeakingSessionTimingDetail {
   bookingId: string | null;
   /** Wallet copy after a real debit at finish-warmup. */
   feedbackMessage?: string | null;
+  /**
+   * Present only while the live AI session cap is full and this practice card is waiting in the line: the
+   * session stays in warm-up, nothing is held or timed, and the page repeats `finish-warmup` until a place is free.
+   */
+  admission?: SpeakingLiveAdmission | null;
 }
 
 export interface CriterionScore {

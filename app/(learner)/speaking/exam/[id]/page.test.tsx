@@ -59,6 +59,7 @@ vi.mock('@/components/domain/speaking/ExamConversationPanel', async () => {
 });
 
 import { ApiError } from '@/lib/api';
+import { finishSpeakingExamIntro } from '@/lib/api/speaking-exams';
 import SpeakingExamPage from './page';
 
 const NOW = '2026-09-30T12:00:00.000Z';
@@ -381,6 +382,80 @@ describe('Speaking exam page', () => {
 
       expect(screen.getByText('Something went wrong on our side. Please try again in a moment.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+  });
+
+  describe('the live AI session queue (owner decision 5 Oct 2026)', () => {
+    const waitingIntro = (position = 2) => exam({
+      state: 'intro',
+      currentCardNumber: 0,
+      currentSessionId: null,
+      currentCard: null,
+      consentAccepted: true,
+      admission: { status: 'waiting', position, queueLength: 5, estimatedWaitSeconds: 130, pollAfterSeconds: 4 },
+    });
+
+    beforeEach(() => {
+      vi.mocked(finishSpeakingExamIntro).mockReset();
+    });
+
+    it('shows the place in the line instead of the Begin button, and repeats finish-intro while waiting', async () => {
+      mockGetExam.mockResolvedValue(waitingIntro());
+      vi.mocked(finishSpeakingExamIntro).mockResolvedValue(waitingIntro(1));
+      await renderPage();
+
+      expect(screen.getByTestId('speaking-admission-wait')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /begin part 2/i })).not.toBeInTheDocument();
+      expect(screen.getByTestId('speaking-admission-position')).toHaveTextContent('Position 2 of 5');
+      expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+
+      await flush(4_000);
+
+      expect(finishSpeakingExamIntro).toHaveBeenCalledWith('exam-1');
+      // The retry's answer moves the learner up the line.
+      expect(screen.getByTestId('speaking-admission-position')).toHaveTextContent('Position 1 of 5');
+    });
+
+    it('moves on to Card A the moment a retry is admitted', async () => {
+      mockGetExam.mockResolvedValue(waitingIntro());
+      vi.mocked(finishSpeakingExamIntro).mockResolvedValue(exam({ state: 'prep_a', currentSessionId: 'sess-a' }));
+      await renderPage();
+
+      await flush(4_000);
+
+      expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
+      expect(screen.getByText('Part 2 — Card A')).toBeInTheDocument();
+    });
+
+    it('ends the wait when the refusal cannot be cured by waiting, and shows the message and the Begin button', async () => {
+      mockGetExam.mockResolvedValue(waitingIntro());
+      const noCredits = Object.assign(new (ApiError as unknown as new (message: string) => Error)('Payment required'), {
+        status: 402,
+        userMessage: 'You do not have enough credits to start this activity.',
+      });
+      vi.mocked(finishSpeakingExamIntro).mockRejectedValue(noCredits);
+      await renderPage();
+
+      await flush(4_000);
+
+      expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('You do not have enough credits to start this activity.');
+      expect(screen.getByRole('button', { name: /begin part 2/i })).toBeInTheDocument();
+    });
+
+    it('shows the Begin button, not the queue, for an exam that is not waiting', async () => {
+      mockGetExam.mockResolvedValue(exam({
+        state: 'intro',
+        currentCardNumber: 0,
+        currentSessionId: null,
+        currentCard: null,
+        consentAccepted: true,
+        admission: null,
+      }));
+      await renderPage();
+
+      expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /begin part 2/i })).toBeInTheDocument();
     });
   });
 });

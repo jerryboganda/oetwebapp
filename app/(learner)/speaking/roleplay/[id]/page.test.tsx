@@ -159,4 +159,61 @@ describe('Speaking role-play entry: Rules + consent before any timer', () => {
     expect(await screen.findByText('Free sample completed')).toBeInTheDocument();
     expect(screen.queryByTestId('speaking-rules-consent')).not.toBeInTheDocument();
   });
+
+  describe('the live AI session queue (owner decision 5 Oct 2026)', () => {
+    const waitingDetail = (position: number) => ({
+      feedbackMessage: null,
+      state: 'warmup',
+      admission: { status: 'waiting', position, queueLength: 4, estimatedWaitSeconds: 95, pollAfterSeconds: 2 },
+    });
+
+    it('waits in the line when the cap is full, keeps the same session, and opens prep once admitted', async () => {
+      const user = userEvent.setup();
+      mockFinishWarmup
+        .mockResolvedValueOnce(waitingDetail(3))
+        .mockResolvedValueOnce(waitingDetail(1))
+        .mockResolvedValueOnce({ feedbackMessage: null, state: 'prep' });
+      render(<RoleCardPreview />);
+
+      await user.click(await screen.findByRole('checkbox'));
+      await user.click(screen.getByRole('button', { name: /start preparation/i }));
+
+      // Cap full: the learner is shown the line, not the prep timer, and nothing navigates.
+      expect(await screen.findByTestId('speaking-admission-wait')).toBeInTheDocument();
+      expect(screen.getByTestId('speaking-admission-position')).toHaveTextContent('Position 3 of 4');
+      expect(screen.queryByTestId('speaking-rules-consent')).not.toBeInTheDocument();
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // The page repeats finish-warmup on its own; the first retry moves the learner up the line.
+      await waitFor(
+        () => expect(screen.getByTestId('speaking-admission-position')).toHaveTextContent('Position 1 of 4'),
+        { timeout: 5_000 },
+      );
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // The retry that finds a free place opens prep.
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/speaking/sessions/sess-1/prep'), { timeout: 5_000 });
+      expect(mockCreateSession).toHaveBeenCalledTimes(1);
+      expect(mockRecordConsent).toHaveBeenCalledTimes(1);
+      expect(mockFinishWarmup).toHaveBeenCalledTimes(3);
+    });
+
+    it('ends the wait with the server message when a retry is refused for a reason waiting cannot cure', async () => {
+      const user = userEvent.setup();
+      mockFinishWarmup
+        .mockResolvedValueOnce(waitingDetail(1))
+        .mockRejectedValueOnce(new MockApiError(402, 'You do not have enough credits to start this activity.'));
+      render(<RoleCardPreview />);
+
+      await user.click(await screen.findByRole('checkbox'));
+      await user.click(screen.getByRole('button', { name: /start preparation/i }));
+      expect(await screen.findByTestId('speaking-admission-wait')).toBeInTheDocument();
+
+      expect(await screen.findByRole('alert', {}, { timeout: 5_000 }))
+        .toHaveTextContent('You do not have enough credits to start this activity.');
+      expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
+      expect(screen.getByTestId('speaking-rules-consent')).toBeInTheDocument();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
+import { SpeakingAdmissionWait } from '@/components/domain/speaking/SpeakingAdmissionWait';
 import { SpeakingRulesConsent } from '@/components/domain/speaking/SpeakingRulesConsent';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -23,10 +24,16 @@ import { analytics } from '@/lib/analytics';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import { listFreeSamples, type FreeSampleOption } from '@/lib/api/free-samples';
 import {
+  isTransientAdmissionFailure,
+  isWaitingForAdmission,
+  type SpeakingLiveAdmission,
+} from '@/lib/api/speaking-admission';
+import {
   createSpeakingSession,
   finishSpeakingWarmup,
   recordConsent,
   startSpeakingWarmup,
+  type SpeakingSessionDetail,
 } from '@/lib/api/speaking-sessions';
 import type { RoleCard } from '@/lib/mock-data';
 
@@ -52,6 +59,10 @@ export default function RoleCardPreview() {
   const [freeKnown, setFreeKnown] = useState(!requestedFreeCard);
   // Reused if a later step fails, so a retry never creates a second session.
   const sessionIdRef = useRef<string | null>(null);
+  // Set while the live AI session cap is full: the card waits in the line (no timer, no credit held) and the
+  // wait panel repeats finish-warmup until a place is free.
+  const [waiting, setWaiting] = useState<{ sessionId: string; admission: SpeakingLiveAdmission } | null>(null);
+  const [waitError, setWaitError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchRoleCard(id, { freeSample: requestedFreeCard })
@@ -81,7 +92,42 @@ export default function RoleCardPreview() {
   const isFreeCard = requestedFreeCard && freeRow !== null;
   const freeCompleted = freeRow?.state === 'completed';
 
+  // The card is in (or never needed) the line: show the wallet copy, track the start and open the prep timer.
+  const enterPrep = (sessionId: string, prep: SpeakingSessionDetail | null) => {
+    showCreditFeedback(prep?.feedbackMessage);
+    analytics.track('task_started', { taskId: id, subtest: 'speaking', mode: 'self' });
+    router.push(`/speaking/sessions/${encodeURIComponent(sessionId)}/prep`);
+  };
+
+  // One admission retry from the wait panel: the same finish-warmup call (it doubles as the heartbeat that keeps
+  // the place). The call that finds a free place holds the credit, opens prep and moves on.
+  const retryAdmission = async () => {
+    if (!waiting) return;
+    const { sessionId } = waiting;
+    try {
+      const prep = await finishSpeakingWarmup(sessionId);
+      const next = prep.admission;
+      if (isWaitingForAdmission(next)) {
+        setWaiting({ sessionId, admission: next });
+        return;
+      }
+      setWaiting(null);
+      enterPrep(sessionId, prep);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        // Already past warm-up (another tab was admitted): prep is open.
+        setWaiting(null);
+        enterPrep(sessionId, null);
+        return;
+      }
+      setWaitError(err instanceof ApiError ? err.userMessage : 'Could not start the Speaking session.');
+      // A refusal that waiting cannot fix (credits, plan) ends the wait: the consent step is shown again.
+      if (!isTransientAdmissionFailure(err instanceof ApiError ? err.status : undefined)) setWaiting(null);
+    }
+  };
+
   const handleStart = async () => {
+    setWaitError(null);
     try {
       let sessionId = sessionIdRef.current;
       if (!sessionId) {
@@ -99,9 +145,13 @@ export default function RoleCardPreview() {
       // Warm-up is skipped for practice/free: finish-warmup starts prep.
       await startSpeakingWarmup(sessionId).catch(ignoreConflict);
       const prep = await finishSpeakingWarmup(sessionId).catch(ignoreConflict);
-      showCreditFeedback(prep?.feedbackMessage);
-      analytics.track('task_started', { taskId: id, subtest: 'speaking', mode: 'self' });
-      router.push(`/speaking/sessions/${encodeURIComponent(sessionId)}/prep`);
+      const admission = prep?.admission;
+      if (isWaitingForAdmission(admission)) {
+        // The live AI session cap is full: nothing is held or timed. Wait in the line, same session.
+        setWaiting({ sessionId, admission });
+        return;
+      }
+      enterPrep(sessionId, prep);
     } catch (err) {
       throw new Error(err instanceof ApiError ? err.userMessage : err instanceof Error ? err.message : 'Could not start the Speaking session.');
     }
@@ -156,8 +206,19 @@ export default function RoleCardPreview() {
               <InlineAlert variant="info" title="Free sample completed">
                 You have used both free graded attempts. Open the Practice Library to keep practising.
               </InlineAlert>
+            ) : waiting ? (
+              <>
+                {waitError ? <InlineAlert variant="error">{waitError}</InlineAlert> : null}
+                <SpeakingAdmissionWait
+                  subject="practice"
+                  admission={waiting.admission}
+                  onAttempt={retryAdmission}
+                  onLeave={() => router.push('/speaking')}
+                />
+              </>
             ) : (
               <>
+                {waitError ? <InlineAlert variant="error">{waitError}</InlineAlert> : null}
                 <SpeakingRulesConsent freeSample={isFreeCard} onStart={handleStart} />
                 <p className="text-center text-xs font-semibold text-muted" data-testid="speaking-card-credit-cost">
                   {isFreeCard ? 'No AI credit required for the free sample' : '1 card = 2 AI credits · charged only when graded'}

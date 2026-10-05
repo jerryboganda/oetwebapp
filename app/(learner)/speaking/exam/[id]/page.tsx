@@ -23,15 +23,16 @@
  * recorded and uploaded to its child session before the next card opens.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2, FileText, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { SpeakingRoleCard, roleCardPropsFrom } from '@/components/domain/speaking-role-card';
 import { ExamConversationPanel } from '@/components/domain/speaking/ExamConversationPanel';
+import { SpeakingAdmissionWait } from '@/components/domain/speaking/SpeakingAdmissionWait';
 import { SpeakingConsentBanner } from '@/components/domain/speaking/SpeakingConsentBanner';
 import { SpeakingRulesConsent } from '@/components/domain/speaking/SpeakingRulesConsent';
-import { LearnerLiveRoomShell } from '@/components/domain/speaking/LearnerLiveRoomShell';
 import { RECORDING_UPLOAD_FAILED } from '@/hooks/useSpeakingSessionRecorder';
 import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking/intro-questions';
 import {
@@ -51,6 +52,14 @@ import {
   type LiveRoomTokenResponse,
 } from '@/lib/api/speaking-live-rooms';
 import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
+import { isTransientAdmissionFailure, isWaitingForAdmission } from '@/lib/api/speaking-admission';
+
+// The LiveKit client (and its stylesheet, imported by the shell itself) is only needed by a human live-tutor
+// exam. Loading it on demand keeps ~100 kB of WebRTC code out of every AI exam, which never mounts it.
+const LearnerLiveRoomShell = dynamic(
+  () => import('@/components/domain/speaking/LearnerLiveRoomShell').then((module) => module.LearnerLiveRoomShell),
+  { ssr: false, loading: () => null },
+);
 
 const POLL_INTERVAL_MS = 3_000;
 // A live transcript that still will not save after this many tries stops holding the exam back.
@@ -87,6 +96,9 @@ export default function SpeakingExamPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  // A refusal that waiting cannot fix (credits, state) ends the admission wait: the learner sees the message and
+  // the Begin button again.
+  const [waitHalted, setWaitHalted] = useState(false);
   const [introConsentAccepted, setIntroConsentAccepted] = useState(false);
   const [requestedVoiceProvider, setRequestedVoiceProvider] = useState<LiveVoiceProvider | undefined>();
   const [liveTutorConsentAccepted, setLiveTutorConsentAccepted] = useState(false);
@@ -310,7 +322,10 @@ export default function SpeakingExamPage() {
   const handleFinishIntro = useCallback(async () => {
     if (busy) return;
     setBusy(true);
+    setWaitHalted(false);
     try {
+      // While the live AI session cap is full this answers 200 with the exam still in `intro` and `admission`
+      // set (nothing held, nothing timed): the wait panel below takes over and repeats this call.
       const detail = await finishSpeakingExamIntro(examId);
       setExam(detail);
       setFetchedAt(Date.now());
@@ -320,6 +335,21 @@ export default function SpeakingExamPage() {
       setBusy(false);
     }
   }, [busy, examId]);
+
+  // One admission retry from the wait panel (the same call, which doubles as the heartbeat that keeps the place).
+  // The call that finds a free place returns the exam in prep_a and the panel unmounts.
+  const retryAdmission = useCallback(async () => {
+    try {
+      const detail = await finishSpeakingExamIntro(examId);
+      setExam(detail);
+      setFetchedAt(Date.now());
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.userMessage : 'Could not start Part 2.');
+      const status = err instanceof ApiError ? err.status : undefined;
+      if (!isTransientAdmissionFailure(status)) setWaitHalted(true);
+    }
+  }, [examId]);
 
   // Rules + consent at the intro, then straight into Card A prep.
   const handleConsentAndBegin = useCallback(async () => {
@@ -443,10 +473,20 @@ export default function SpeakingExamPage() {
             </ul>
           </div>
           {exam.consentAccepted || introConsentAccepted ? (
-            <Button className="mt-5 w-full" onClick={handleFinishIntro} disabled={busy}>
-              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Begin Part 2 (Card A)
-            </Button>
+            !waitHalted && isWaitingForAdmission(exam.admission) ? (
+              <SpeakingAdmissionWait
+                className="mt-5"
+                subject="exam"
+                admission={exam.admission}
+                onAttempt={retryAdmission}
+                onLeave={() => router.push('/speaking')}
+              />
+            ) : (
+              <Button className="mt-5 w-full" onClick={handleFinishIntro} disabled={busy}>
+                {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Begin Part 2 (Card A)
+              </Button>
+            )
           ) : (
             <SpeakingRulesConsent
               exam
