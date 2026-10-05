@@ -90,14 +90,23 @@ public sealed class UserStateInvalidationInterceptor(UserStateCache cache) : Sav
         found.Subjects.Clear();
         found.All = false;
 
-        foreach (var entry in context.ChangeTracker.Entries())
+        try
         {
-            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            foreach (var entry in context.ChangeTracker.Entries())
             {
-                continue;
-            }
+                if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                {
+                    continue;
+                }
 
-            Collect(entry, found);
+                Collect(entry, found);
+            }
+        }
+        catch (Exception)
+        {
+            // Cache bookkeeping must never fail a save. If a property lookup ever throws (a model
+            // change that renamed a watched column), fail safe: evict everything after the commit.
+            found.All = true;
         }
     }
 

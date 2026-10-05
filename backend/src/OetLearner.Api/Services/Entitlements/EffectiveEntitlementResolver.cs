@@ -247,7 +247,8 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
 
         // Detect pending tracked changes before consulting the cache. This also
         // raises StateChanged for snapshot-tracked entities and clears entries.
-        if (db.ChangeTracker.HasChanges())
+        var hasPendingChanges = db.ChangeTracker.HasChanges();
+        if (hasPendingChanges)
         {
             Invalidate();
         }
@@ -262,7 +263,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         var subject = UserStateCacheSubjects.Learner(userId);
         var useSharedCache = sharedCache is not null
             && sharedCache.IsEnabled
-            && !db.ChangeTracker.HasChanges();
+            && !hasPendingChanges;
         if (useSharedCache
             && sharedCache!.TryGet(UserStateCacheKinds.Entitlement, subject, string.Empty, out EffectiveEntitlementSnapshot? shared)
             && shared is not null)
