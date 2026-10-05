@@ -593,7 +593,7 @@ export function reportTextProblems(text, hrefs = []) {
 export const SUMMARY_MAX_CHARS = 240;
 export const PRIORITY_MAX_CHARS = 220;
 export const CARD_MAX_CHARS = 900;
-const LABEL_LEAK = /^R\d{1,2}[:.]|\([A-Z]{1,4}(?:-[A-Z]{1,3})?-\d|This affects|[Ee]xemplar/;
+const LEAK_KINDS = { ruleLabel: /^R\d{1,2}[:.]/, ruleId: /\([A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d/, affects: /This affects/, exemplar: /[Ee]xemplar/ };
 const PRIORITY_LABEL = /^(?:AI(?:[.:][\w.-]*)?|[\w-]*[\d._-][\w.-]*):\s+/;
 const CRITERION_CODES = ['purpose', 'content', 'conciseness_clarity', 'genre_style', 'organisation_layout', 'language'];
 const C_KEYS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
@@ -620,7 +620,8 @@ export function reportShapeFacts(grade, report) {
     criteriaWithFindings: CRITERION_CODES.filter((code) => errors.some((e) => e.primaryCriterionCode === code)).length,
     criteriaMissingSummary: CRITERION_CODES.filter((code) => errors.some((e) => e.primaryCriterionCode === code) && !summaryOf(code)).length,
     purposePriorities: (report?.topPriorities ?? []).filter((p) => errors.some((e) => e.primaryCriterionCode === 'purpose' && String(p).startsWith(`${e.ruleSource}: `))).length,
-    labelLeaks: leakTexts.filter((t) => LABEL_LEAK.test(t)).length,
+    leakKinds: Object.fromEntries(Object.entries(LEAK_KINDS).map(([kind, re]) => [kind, leakTexts.filter((t) => re.test(t)).length])),
+    labelLeaks: leakTexts.filter((t) => Object.values(LEAK_KINDS).some((re) => re.test(t))).length,
   };
 }
 

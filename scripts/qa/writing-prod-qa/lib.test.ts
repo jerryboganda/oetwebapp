@@ -386,6 +386,7 @@ describe('report shape (priorities, criterion cards, labels, Exemplar)', () => {
     const facts = reportShapeFacts(good.grade, good.report);
     expect(reportShapeProblems(facts)).toEqual([]);
     expect(facts).toMatchObject({ errorsCount: 3, critical: 1, major: 1, minor: 1, priorityCount: 3, distinctPriorities: 3, purposePriorities: 1, labelLeaks: 0 });
+    expect(facts.leakKinds).toEqual({ ruleLabel: 0, ruleId: 0, affects: 0, exemplar: 0 });
     expect(severityMixPartials(facts)).toEqual([]);
     expect(severityMixPartials({ ...facts, minor: 0 })[0]).toMatch(/did not mix/);
   });

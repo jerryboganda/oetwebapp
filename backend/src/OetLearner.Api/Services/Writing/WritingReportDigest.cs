@@ -33,7 +33,7 @@ public static class WritingReportDigest
     private const string RuleId = @"(?:[A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d{1,3}|R\d{1,2}(?:\.\d+)?)";
     private static readonly Regex LeadingRuleLabel = new(@"^\s*R\d{1,2}(?:\.\d+)?(?:\s*[:.\-–]\s*|\s+(?=[a-z]))", RegexOptions.Compiled);
     private static readonly Regex RuleIdParenthetical = new(
-        $@"\s*\({RuleId}(?:\s*[,;/&]\s*{RuleId})*\)", RegexOptions.Compiled);
+        $@"\s*\({RuleId}(?:\s*(?:[,;/&]|\band\b)\s*{RuleId})*\)", RegexOptions.Compiled);
     // A whole sentence naming the criteria a finding touches ("This affects Purpose and
     // Content." / "Content criterion."), wherever it sits in the message.
     private static readonly Regex AffectsSentence = new(
