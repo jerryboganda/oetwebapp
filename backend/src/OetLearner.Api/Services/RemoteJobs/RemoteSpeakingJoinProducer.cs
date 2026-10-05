@@ -80,6 +80,12 @@ public sealed class RemoteSpeakingJoinProducer(
             .OrderByDescending(t => t.GeneratedAt)
             .Select(t => t.SegmentsJson)
             .FirstOrDefaultAsync(ct);
+
+        // No transcript yet: the grade picks a live-voice session's clips by TURN (minus chatter) from the transcript it is graded with,
+        // so the "every clip, oldest first" fallback used below could differ from it, and a job keyed by the wrong list would block the
+        // correct enqueue for ever (one job per session). Try again on a later pass, once the real clip order exists.
+        if (segments is null) return SpeakingJoinEnqueue.NotEligible;
+
         var turns = SpeakingAudioEvidenceService.ReadCandidateTurns(SpeakingTranscriptEvidence.StripConnectivityChatter(segments));
         var clips = await SpeakingAudioClips.LoadAsync(db, sessionId, turns, ct);
         if (clips.Count is 0 or > SpeakingJoinSettings.MaxClips) return SpeakingJoinEnqueue.NotEligible;
@@ -162,21 +168,28 @@ public sealed class RemoteSpeakingJoinProducer(
 
     /// <summary>
     /// The clip's SHA-256 when no creation site recorded one (several Speaking paths leave it empty): streamed once and recorded on the
-    /// stored asset so the audio stage derives the very same key. Null when it cannot be determined (the session then stays local).
+    /// recording that owns the clip (<c>SpeakingRecording.Sha256</c>, the hash the audio stage reads back through
+    /// <see cref="SpeakingClipRow.Sha256"/>, so it derives the very same key). It is deliberately NOT written to
+    /// <c>MediaAssets.Sha256</c>: that column is the cross-asset dedupe key other upload paths look up WITHOUT regard to owner, so a
+    /// learner's private clip would become a candidate for reuse by a later byte-identical upload. A recording that already carries a
+    /// (non-standard) value is left untouched, never overwritten, and its session stays local. Null when the hash cannot be determined
+    /// or recorded (the session then stays local).
     /// </summary>
     private async Task<string?> HashAndRecordAsync(SpeakingClipRow clip, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(clip.StoragePath) || string.IsNullOrWhiteSpace(clip.MediaAssetId)) return null;
+        if (string.IsNullOrWhiteSpace(clip.StoragePath) || !string.IsNullOrEmpty(clip.RecordingSha256)) return null;
 
         try
         {
             await using var stream = await storage.OpenReadAsync(clip.StoragePath, ct);
             var (_, sha) = await StreamingSha256.ComputeAsync([stream], null, ct);
-            var assetId = clip.MediaAssetId;
-            await db.MediaAssets
-                .Where(m => m.Id == assetId && m.Sha256 == null)
-                .ExecuteUpdateAsync(s => s.SetProperty(m => m.Sha256, _ => sha), ct);
-            return sha;
+            var recordingId = clip.Id;
+            var recorded = await db.SpeakingRecordings
+                .Where(r => r.Id == recordingId && r.Sha256 == string.Empty)
+                .ExecuteUpdateAsync(s => s.SetProperty(r => r.Sha256, _ => sha), ct);
+
+            // Not recorded (another process got there first, or the row is gone): the audio stage could not derive this key.
+            return recorded == 1 ? sha : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or KeyNotFoundException)
         {
@@ -389,8 +402,9 @@ public sealed class RemoteSpeakingJoinProducer(
 }
 
 /// <summary>
-/// Hands the sessions whose grade is waiting to <see cref="IRemoteSpeakingJoin"/> so a helper can prepare their joined audio while the
-/// grade queues. Runs only on the <c>ai-worker</c> (the process that executes grades), never changes a grade, and does nothing at all
+/// Hands the sessions whose grade is waiting (queued or scheduled for retry, never one already running) to
+/// <see cref="IRemoteSpeakingJoin"/> so a helper can prepare their joined audio while the grade queues. Newest first, skipping
+/// sessions that already have a join job. Runs only on the <c>ai-worker</c> (the process that executes grades), never changes a grade, and does nothing at all
 /// until the remote-job master flag, the <c>media.speaking-join</c> flag and the Speaking audio-stage flag are all on and an engine is pinned.
 /// </summary>
 public sealed class RemoteSpeakingJoinSweeper(
@@ -404,6 +418,9 @@ public sealed class RemoteSpeakingJoinSweeper(
     internal static readonly TimeSpan MaxOperationAge = TimeSpan.FromHours(2);
 
     private const int PerPass = 25;
+
+    /// <summary>How many waiting grades one pass looks at before sessions that were already handled are filtered out.</summary>
+    private const int CandidateWindow = 100;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -432,17 +449,38 @@ public sealed class RemoteSpeakingJoinSweeper(
         var flags = scope.ServiceProvider.GetRequiredService<IRemoteJobFlags>();
         if (!(await flags.GetAsync(ct)).KindEnabled(RemoteJobKinds.MediaSpeakingJoin, RemoteJobPurpose.Apply)) return 0;
 
+        // Only grades that have NOT started: a leased one is already inside the audio stage, which joins locally within seconds, so a
+        // remote job started then is almost never consumed (the helper would still download the learner's audio for nothing).
+        // Newest first, and sessions that already have a join job are skipped, so grades that were handled (or are stuck in a
+        // retry loop) never use up the budget of a pass while newer sessions wait.
         var since = timeProvider.GetUtcNow() - MaxOperationAge;
-        var sessions = await db.AiOperations.AsNoTracking()
-            .Where(o => o.FeatureCode == AiFeatureCodes.SpeakingGrade
-                && o.ResourceType == "speaking_session"
-                && o.ResourceId != null
-                && o.CreatedAt > since
-                && (o.State == AiOperationState.Queued || o.State == AiOperationState.Leased || o.State == AiOperationState.RetryScheduled))
-            .OrderBy(o => o.CreatedAt)
-            .Select(o => o.ResourceId!)
-            .Take(PerPass)
-            .ToListAsync(ct);
+        var candidates = (await db.AiOperations.AsNoTracking()
+                .Where(o => o.FeatureCode == AiFeatureCodes.SpeakingGrade
+                    && o.ResourceType == "speaking_session"
+                    && o.ResourceId != null
+                    && o.CreatedAt > since
+                    && (o.State == AiOperationState.Queued || o.State == AiOperationState.RetryScheduled))
+                .OrderByDescending(o => o.CreatedAt)
+                .Select(o => o.ResourceId!)
+                .Take(CandidateWindow)
+                .ToListAsync(ct))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (candidates.Length == 0) return 0;
+
+        var handled = (await RemoteDb.QueryAsync(
+                db,
+                """SELECT DISTINCT "ResourceId" FROM "RemoteJobs" WHERE "Kind" = @kind AND "ResourceType" = @resourceType AND "ResourceId" = ANY(@ids);""",
+                parameters =>
+                {
+                    parameters.AddWithValue("kind", RemoteJobKinds.MediaSpeakingJoin);
+                    parameters.AddWithValue("resourceType", SpeakingJoinSettings.ResourceType);
+                    parameters.AddWithValue("ids", candidates);
+                },
+                reader => RemoteDb.Str(reader, "ResourceId"),
+                ct))
+            .ToHashSet(StringComparer.Ordinal);
+        var sessions = candidates.Where(id => !handled.Contains(id)).Take(PerPass).ToList();
 
         var producer = scope.ServiceProvider.GetRequiredService<IRemoteSpeakingJoin>();
         var enqueued = 0;

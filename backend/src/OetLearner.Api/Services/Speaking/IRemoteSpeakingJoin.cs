@@ -9,7 +9,10 @@ public enum SpeakingJoinEnqueue
     /// <summary>No healthy node can take the work: nothing was enqueued (the grade joins locally, as always).</summary>
     NoEligibleNode,
 
-    /// <summary>The session's clips cannot be joined remotely (none, too many or too large, an unsupported type, no readable bytes).</summary>
+    /// <summary>
+    /// The session's clips cannot be joined remotely (none, too many or too large, an unsupported type, no readable bytes) or not yet:
+    /// the session has no transcript, so the order the grade will use for its clips is not known (asked again on a later pass).
+    /// </summary>
     NotEligible,
 
     /// <summary>A join job already exists for this session.</summary>

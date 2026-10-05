@@ -12,8 +12,17 @@ namespace OetLearner.Api.Services.RemoteJobs;
 /// recording that is too large to transcribe in one call and has no usable chunk manifest; it never touches a recording the existing path
 /// can handle. It enqueues one idempotent job per (recording, content) when a healthy node offers the kind, and reports where that job
 /// stands. Transcription is never done here or on the helper: the helper only decodes and chunks, and every AI call stays on the API.
-/// With the flag off, no pinned engine, no healthy node, a size or type the kind does not accept, or any doubt, the answer is
-/// <see cref="AudioExtractAction.Local"/> and the oversize recording behaves exactly as it always did.
+/// With the flag off, no pinned engine, no node whose policy could ever run the job, a size or type the kind does not accept, or any
+/// doubt, the answer is <see cref="AudioExtractAction.Local"/> and the oversize recording behaves exactly as it always did.
+///
+/// <para>
+/// "Nobody can take it" is judged by a node's CAPACITY CEILING (<see cref="RemotePlacement.HasNodeThatCouldRunAsync"/>), never by what is
+/// free this second: a node that exists but is busy with another job (the kind weighs 2, so any other leased job on a default node blocks
+/// it) only delays the extraction, and reading that as "no remote path" would fail the recording for good after the transcribe job's
+/// three quick retries. A job that stays unclaimed for <c>RemoteJobs:FallbackHardAfterMinutes</c> across the reaper's re-queues ends the
+/// wait with a clear failure instead of polling for ever. That failure is sticky for the transcribe job's own quick retries, and the
+/// wait window restarts once nobody has asked for a while (an administrator's retry).
+/// </para>
 /// </summary>
 public sealed class RemoteAudioExtractionProducer(
     LearnerDbContext db,
@@ -22,6 +31,7 @@ public sealed class RemoteAudioExtractionProducer(
     RemotePlacement placement,
     IFileStorage storage,
     RemoteJobsSettings settings,
+    RemoteLocalWaitTracker waits,
     TimeProvider timeProvider,
     ILogger<RemoteAudioExtractionProducer> logger) : IRemoteAudioExtraction
 {
@@ -30,15 +40,28 @@ public sealed class RemoteAudioExtractionProducer(
     /// <summary>A job that finished this recently with no manifest on the recording is a read race, not a vanished manifest.</summary>
     private static readonly TimeSpan JustFinished = TimeSpan.FromMinutes(2);
 
+    /// <summary>
+    /// The transcribe stage asks again every 45 s (and its own failure retries come within half a minute), so a wait nobody asked about
+    /// for this long ended somewhere else (another process finished it, an administrator retried the recording much later): its clock
+    /// restarts, instead of failing the new wait on the old one.
+    /// </summary>
+    private static readonly TimeSpan WaitIdleReset = TimeSpan.FromMinutes(15);
+
     public async Task<AudioExtractPlan> PlanAsync(string recordingId, string storageKey, long sizeBytes, CancellationToken ct)
     {
         try
         {
-            return await PlanCoreAsync(recordingId, storageKey, sizeBytes, ct);
+            var plan = await PlanCoreAsync(recordingId, storageKey, sizeBytes, ct);
+
+            // No remote path at all ends the wait. A failure (including the wait limit itself) deliberately does NOT clear it: the
+            // transcribe job retries within seconds and must meet the same answer, not a fresh window.
+            if (plan.Action == AudioExtractAction.Local) waits.Clear(WaitKey(recordingId));
+            return plan;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // The remote path may never make a recording worse: any failure means "no remote path" (today's behaviour).
+            waits.Clear(WaitKey(recordingId));
             logger.LogWarning(ex, "Remote audio extraction planning failed for recording {RecordingId}; using the local path.", recordingId);
             return AudioExtractPlan.UseLocal;
         }
@@ -73,7 +96,14 @@ public sealed class RemoteAudioExtractionProducer(
         switch (job.State)
         {
             case RemoteJobState.Queued:
+                // Nobody has started it yet (a busy node, a node restarting, the retry backoff after a lost lease): keep waiting, but
+                // not for ever.
+                return GiveUpIfWaitedTooLong(recordingId, job.Id)
+                    ?? new AudioExtractPlan(AudioExtractAction.Pending, "remote audio extraction queued", job.Id);
+
             case RemoteJobState.Leased:
+                // A helper is on it: the wait for a node is over.
+                waits.Clear(WaitKey(recordingId));
                 return new AudioExtractPlan(AudioExtractAction.Pending, "remote audio extraction in progress", job.Id);
 
             case RemoteJobState.Succeeded:
@@ -81,6 +111,7 @@ public sealed class RemoteAudioExtractionProducer(
                 // means the manifest was dropped (its chunks vanished) or the caller read the row a moment too early.
                 if (job.CompletedAt is { } completed && timeProvider.GetUtcNow() - completed < JustFinished)
                 {
+                    waits.Clear(WaitKey(recordingId));
                     return new AudioExtractPlan(AudioExtractAction.Pending, "remote audio extraction just finished", job.Id);
                 }
 
@@ -88,7 +119,8 @@ public sealed class RemoteAudioExtractionProducer(
 
             case RemoteJobState.FallbackLocal:
             case RemoteJobState.Cancelled:
-                // Withdrawn (no node claimed it, the master flag was off, the recording changed): ask again if a node can take it now.
+                // Withdrawn (no node claimed it in time, the master flag was off, the recording changed): ask again while a node
+                // could take it.
                 return await RequeueAsync(job, recordingId, storageKey, sizeBytes, contentType, engine, spec, ct);
 
             case RemoteJobState.Failed:
@@ -108,7 +140,26 @@ public sealed class RemoteAudioExtractionProducer(
         }
     }
 
-    /// <summary>Resets a withdrawn or consumed job when a node can take it now; otherwise there is no remote path.</summary>
+    private static string WaitKey(string recordingId) => "audio-extract:" + recordingId;
+
+    /// <summary>
+    /// Null while the extraction may keep waiting for a node. Once it has waited <c>FallbackHardAfterMinutes</c> without a helper starting
+    /// it, a failure with a clear reason. The clock is per process and best effort, like every wait of the remote path, and it restarts
+    /// after <see cref="WaitIdleReset"/> without a question, so a retry of the recording much later gets a fresh window.
+    /// </summary>
+    private AudioExtractPlan? GiveUpIfWaitedTooLong(string recordingId, string? jobId)
+    {
+        var minutes = settings.Current.FallbackHardAfterMinutes;
+        if (!waits.HardDeadlinePassed(WaitKey(recordingId), TimeSpan.FromMinutes(minutes), WaitIdleReset)) return null;
+
+        logger.LogWarning("Remote audio extraction of recording {RecordingId} was not started by any helper within {Minutes} minutes.", recordingId, minutes);
+        return new AudioExtractPlan(
+            AudioExtractAction.Failed,
+            $"no helper started the audio extraction within {minutes} minutes; retry the recording once a helper is online",
+            jobId);
+    }
+
+    /// <summary>Resets a withdrawn or consumed job while a node could take it; otherwise there is no remote path.</summary>
     private async Task<AudioExtractPlan> RequeueAsync(
         RemoteJobRow job,
         string recordingId,
@@ -126,10 +177,12 @@ public sealed class RemoteAudioExtractionProducer(
             return await EnqueueNewAsync(recordingId, storageKey, sizeBytes, contentType, engine, spec, ct);
         }
 
-        if (await placement.DecideAsync(RemoteJobKinds.MediaAudioExtract, spec.Limits.Weight, ct) != RemotePlacementDecision.Remote)
+        if (!await placement.HasNodeThatCouldRunAsync(RemoteJobKinds.MediaAudioExtract, spec.Limits.Weight, ct))
         {
             return AudioExtractPlan.UseLocal;
         }
+
+        if (GiveUpIfWaitedTooLong(recordingId, job.Id) is { } giveUp) return giveUp;
 
         var result = await queue.EnqueueAsync(BuildRequest(recordingId, storageKey, sizeBytes, contentType, job.InputSha256, engine, spec), force: true, ct);
         return new AudioExtractPlan(AudioExtractAction.Pending, "remote audio extraction queued", result.JobId);
@@ -144,14 +197,17 @@ public sealed class RemoteAudioExtractionProducer(
         RemoteKindSpec spec,
         CancellationToken ct)
     {
-        // Never create a job nobody can take: there is no local extraction to wait for, so no node means no remote path.
-        if (await placement.DecideAsync(RemoteJobKinds.MediaAudioExtract, spec.Limits.Weight, ct) != RemotePlacementDecision.Remote)
+        // Never create a job no node could ever take: there is no local extraction to wait for, so without such a node there is no
+        // remote path. A node that exists but is busy right now is NOT that case: the job simply waits its turn.
+        if (!await placement.HasNodeThatCouldRunAsync(RemoteJobKinds.MediaAudioExtract, spec.Limits.Weight, ct))
         {
             return AudioExtractPlan.UseLocal;
         }
 
         var sha = await HashAsync(storageKey, ct);
         if (sha is null) return AudioExtractPlan.UseLocal;
+
+        if (GiveUpIfWaitedTooLong(recordingId, null) is { } giveUp) return giveUp;
 
         // force: a finished job with the very same key but a different stored location (the recording was re-stored) is reset with the
         // new manifest; a Queued or Leased one is returned unchanged either way.

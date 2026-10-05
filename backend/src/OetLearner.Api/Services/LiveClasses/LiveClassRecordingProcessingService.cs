@@ -46,16 +46,27 @@ public sealed class LiveClassRecordingProcessingService(
     TimeProvider timeProvider,
     ILogger<LiveClassRecordingProcessingService> logger,
     OetLearner.Api.Services.AiAssistant.Indexing.IEmbeddingService? embeddingService = null,
-    IRemoteAudioExtraction? remoteAudio = null)
+    IRemoteAudioExtraction? remoteAudio = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.RemoteJobsOptions>? remoteJobsOptions = null)
 {
     private const long MaxTranscriptionAttachmentBytes = 24L * 1024L * 1024L;
     private const int TranscriptionReadBufferBytes = 81920;
 
+    private readonly TimeSpan? _chunkRunBudget;
+
     /// <summary>
-    /// Wall-clock budget of one transcribe run over chunks. A job that ran this long queues a continuation and finishes instead of
-    /// running into the background processor's 20-minute execution ceiling, so a long recording never fails just for being long.
+    /// Wall-clock budget of one transcribe run over chunks (<c>RemoteJobs:LiveClassChunkRunBudgetMinutes</c>, a few minutes by default).
+    /// A job that ran this long queues a continuation and finishes. The background processor runs its jobs one after another, so one
+    /// run holds that process's whole pipeline (and every job it already claimed) for as long as it lasts: a long budget would stall
+    /// the other jobs, and running into the processor's 20-minute execution ceiling would fail the recording for being long. The
+    /// continuation is free, because every chunk transcript is saved as soon as it exists.
     /// </summary>
-    internal TimeSpan ChunkRunBudget { get; init; } = TimeSpan.FromMinutes(12);
+    internal TimeSpan ChunkRunBudget
+    {
+        get => _chunkRunBudget
+            ?? TimeSpan.FromMinutes((remoteJobsOptions?.Value ?? new OetLearner.Api.Configuration.RemoteJobsOptions()).Normalized().LiveClassChunkRunBudgetMinutes);
+        init => _chunkRunBudget = value;
+    }
 
     /// <summary>How long a recording waits between looks at its (remote) audio extraction.</summary>
     internal TimeSpan RemoteExtractionPollDelay { get; init; } = TimeSpan.FromSeconds(45);
@@ -358,6 +369,7 @@ public sealed class LiveClassRecordingProcessingService(
     {
         var recordingId = recording.Id;
         var started = timeProvider.GetUtcNow();
+        var budget = ChunkRunBudget;
         var ordered = manifest.Chunks.OrderBy(chunk => chunk.Index).ToList();
 
         foreach (var chunk in ordered)
@@ -370,8 +382,9 @@ public sealed class LiveClassRecordingProcessingService(
                 throw new AudioChunksUnavailableException("The chunk audio was deleted before every chunk had a transcript.");
             }
 
-            // A long recording must not run into the background processor's execution ceiling: finish this run, continue in the next.
-            if (timeProvider.GetUtcNow() - started >= ChunkRunBudget)
+            // A long recording must neither stall the single-threaded background processor nor run into its execution ceiling:
+            // finish this run, continue in the next (the transcripts so far are already saved).
+            if (timeProvider.GetUtcNow() - started >= budget)
             {
                 logger.LogInformation(
                     "ProcessTranscribeAsync: recording {RecordingId} chunk run budget reached at chunk {Index}/{Count}; continuing in a new job.",

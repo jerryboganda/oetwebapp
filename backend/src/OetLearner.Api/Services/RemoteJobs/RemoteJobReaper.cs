@@ -234,11 +234,14 @@ public sealed class RemoteJobSweeper(
     }
 
     /// <summary>
-    /// R5: the outputs (binary artefacts of the media kinds) of a finished job are deleted once they are no longer needed. A Speaking join
-    /// is learner audio and is only useful to the grade that is waiting for it: it expires after <c>SpeakingJoinOutputTtlHours</c>. Every
-    /// other output (the chunks of a Live Class recording, which the transcription stage normally deletes itself) expires with the job
-    /// row, after <c>JobRetentionDays</c>. The storage objects are deleted FIRST and the rows only after, so a failed delete is retried
-    /// on the next pass and no object is ever left without a row that names it.
+    /// R5: the outputs (binary artefacts of the media kinds) of a finished job are deleted once they are no longer needed. Both media kinds
+    /// carry learner audio, so each has a short expiry of its own: a Speaking join is only useful to the grade that is waiting for it
+    /// (<c>SpeakingJoinOutputTtlHours</c>), and the chunks of a Live Class recording are deleted by the transcription stage the moment it is
+    /// done, so a leftover is a failed delete (<c>AudioExtractOutputTtlHours</c>). The outputs of a job whose result was DISCARDED (the
+    /// clips were erased or archived, or the recording moved on, while the helper worked) are useless the moment the job is withdrawn,
+    /// so they go on the very next pass. Anything else expires with the job row, after <c>JobRetentionDays</c>. The storage objects are
+    /// deleted FIRST and the rows only after, so a failed delete is retried on the next pass and no object is ever left without a row
+    /// that names it.
     /// </summary>
     public async Task<int> SweepExpiredOutputsAsync(RemoteJobsOptions options, CancellationToken ct)
     {
@@ -250,8 +253,11 @@ public sealed class RemoteJobSweeper(
             JOIN "RemoteJobs" j ON j."Id" = o."JobId"
             WHERE j."State" IN ('Succeeded', 'Failed', 'Quarantined', 'FallbackLocal', 'Cancelled')
               AND (
-                    (j."Kind" = 'media.speaking-join'
+                    (j."State" = 'Cancelled' AND j."ApplyOutcome" = 'Discarded')
+                 OR (j."Kind" = 'media.speaking-join'
                         AND COALESCE(j."CompletedAt", j."UpdatedAt") < clock_timestamp() - make_interval(hours => @ttlHours))
+                 OR (j."Kind" = 'media.audio-extract'
+                        AND COALESCE(j."CompletedAt", j."UpdatedAt") < clock_timestamp() - make_interval(hours => @audioTtlHours))
                  OR j."UpdatedAt" < clock_timestamp() - make_interval(days => @days))
             GROUP BY o."JobId", o."Fence"
             ORDER BY o."JobId", o."Fence"
@@ -260,6 +266,7 @@ public sealed class RemoteJobSweeper(
             parameters =>
             {
                 parameters.AddWithValue("ttlHours", options.SpeakingJoinOutputTtlHours);
+                parameters.AddWithValue("audioTtlHours", options.AudioExtractOutputTtlHours);
                 parameters.AddWithValue("days", options.JobRetentionDays);
             },
             reader => (JobId: RemoteDb.Str(reader, "JobId"), Fence: RemoteDb.Long(reader, "Fence")),

@@ -39,6 +39,22 @@ public sealed class RemoteJobsOptions
     /// </summary>
     public int SpeakingJoinOutputTtlHours { get; set; } = 24;
 
+    /// <summary>
+    /// Hours the mp3 chunks of an extracted Live Class recording (<c>media.audio-extract</c>, learner voices) may outlive their job before
+    /// the reaper deletes them. The transcription stage deletes them itself the moment the recording is transcribed; this is the
+    /// backstop for a delete that failed (the transcript is already saved by then). A chunk that is gone before it was transcribed is
+    /// simply extracted again.
+    /// </summary>
+    public int AudioExtractOutputTtlHours { get; set; } = 48;
+
+    /// <summary>
+    /// Minutes one Live Class transcribe run may spend transcribing extracted chunks before it queues a continuation and finishes. The
+    /// background processor runs its jobs one after another, so a long run delays every job queued behind it: keep this to a few minutes
+    /// (the continuation costs nothing, every chunk transcript is saved as it exists). Must stay well under the processor's 20-minute
+    /// execution ceiling.
+    /// </summary>
+    public int LiveClassChunkRunBudgetMinutes { get; set; } = 4;
+
     public int IntegrityStrikeLimit { get; set; } = 3;
     public int StrikeWindowMinutes { get; set; } = 60;
 
@@ -93,6 +109,8 @@ public sealed class RemoteJobsOptions
             JobRetentionDays = Math.Clamp(JobRetentionDays, 1, 3650),
             DeferredResultRetentionDays = Math.Clamp(DeferredResultRetentionDays, 1, 365),
             SpeakingJoinOutputTtlHours = Math.Clamp(SpeakingJoinOutputTtlHours, 1, 168),
+            AudioExtractOutputTtlHours = Math.Clamp(AudioExtractOutputTtlHours, 1, 720),
+            LiveClassChunkRunBudgetMinutes = Math.Clamp(LiveClassChunkRunBudgetMinutes, 1, 15),
             IntegrityStrikeLimit = Math.Clamp(IntegrityStrikeLimit, 1, 100),
             StrikeWindowMinutes = Math.Clamp(StrikeWindowMinutes, 1, 1440),
             FairShareGate = FairShareGate,
