@@ -170,7 +170,7 @@ internal sealed class NodeHeartbeatService
             State = AgentStateMachine.WireState(decision.State),
             DegradedReason = (decision.State == AgentState.Degraded) ? decision.Reason : null,
             Agent = _identity.ToWire(_api.CurrentProtocol, detailed: true, clockSkewMs: _clockSkewMs),
-            Kinds = _executors.Runnable(),
+            Kinds = _executors.Advertised(),
             Capacity = new NodeCapacity
             {
                 CpuCoresTotal = sample?.CpuCores ?? Environment.ProcessorCount,

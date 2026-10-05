@@ -135,7 +135,9 @@ internal sealed class ApiJobIo : IJobIo
                     if (have > input.SizeBytes) throw new JobFailureException(FailCodes.InputHashMismatch, true, "input longer than the manifest");
                 }
 
-                if (!interrupted && have == input.SizeBytes) break;
+                // Every byte is here even if the connection dropped right after the last one: asking for "bytes=size-" would only
+                // draw a 416 and a restart from byte 0 (up to 100 MiB); the digest check below judges the completed file.
+                if (have == input.SizeBytes) break;
                 if (attempt == MaxFetchAttempts - 1) throw new JobFailureException(FailCodes.InputUnavailable, true, "download did not complete");
                 await _delay(Backoff.Compute(attempt), ct).ConfigureAwait(false);
             }

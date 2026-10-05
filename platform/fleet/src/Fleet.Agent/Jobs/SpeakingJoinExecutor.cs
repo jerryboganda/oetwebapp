@@ -62,6 +62,16 @@ internal sealed class SpeakingJoinExecutor : IJobExecutor
     public int SchemaVersion => 1;
     public string EngineVersion { get; }
 
+    /// <summary>
+    /// The media type without its parameters. Browser recorders label a clip "audio/webm;codecs=opus", and the allow-list names
+    /// bare types: an exact match would refuse every such clip permanently (a non-retryable internal_error).
+    /// </summary>
+    internal static string MediaType(string contentType)
+    {
+        var semicolon = contentType.IndexOf(';');
+        return (semicolon >= 0 ? contentType[..semicolon] : contentType).Trim();
+    }
+
     public async Task<ExecutionResult> ExecuteAsync(JobContext context, CancellationToken ct)
     {
         var job = context.Job;
@@ -82,7 +92,7 @@ internal sealed class SpeakingJoinExecutor : IJobExecutor
         foreach (var clip in job.Inputs)
         {
             totalBytes += clip.SizeBytes;
-            if (clip.SizeBytes > 16L * 1024 * 1024 || (clip.ContentType is not null && !AllowedContentTypes.Contains(clip.ContentType)))
+            if (clip.SizeBytes > 16L * 1024 * 1024 || (clip.ContentType is not null && !AllowedContentTypes.Contains(MediaType(clip.ContentType))))
             {
                 throw new JobFailureException(FailCodes.InternalError, false, "unexpected clip");
             }

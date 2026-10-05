@@ -64,9 +64,37 @@ internal sealed class ExecutorRegistry
     public IJobExecutor? Find(string kind, int schemaVersion) =>
         All.FirstOrDefault(e => e.Kind == kind && e.SchemaVersion == schemaVersion);
 
-    /// <summary>Every kind this build can run, for the node heartbeat (the offer only NARROWS what policy allows, A8).</summary>
+    /// <summary>Every kind this process can run right now (the offer only NARROWS what policy allows, A8).</summary>
     public List<KindOffer> Runnable() =>
         All.Select(e => new KindOffer { Kind = e.Kind, SchemaVersions = [e.SchemaVersion], EngineVersion = e.EngineVersion }).ToList();
+
+    /// <summary>
+    /// What the NODE heartbeat advertises: everything runnable now plus the kinds this build always carries. The API rejects a
+    /// heartbeat whose kinds[] is empty (protocol 4.7.1: 1..8 entries), and the runnable list is empty until the first
+    /// self-check completed and stays empty when it fails; the first heartbeats would be refused and a broken host could
+    /// never report itself. Brokenness travels in state=degraded / degradedReason instead. The claim keeps using
+    /// <see cref="Offers"/> only, so a kind that cannot run is never offered work.
+    /// </summary>
+    public List<KindOffer> Advertised()
+    {
+        var offers = Runnable();
+        foreach (var baseline in BuildBaseline())
+        {
+            if (!offers.Any(o => string.Equals(o.Kind, baseline.Kind, StringComparison.Ordinal))) offers.Add(baseline);
+        }
+
+        return offers;
+    }
+
+    /// <summary>Kinds whose engine string is known without running anything: the PdfPig kinds (media needs ffmpeg's version).</summary>
+    private static IEnumerable<KindOffer> BuildBaseline()
+    {
+        yield return new KindOffer { Kind = JobKinds.PdfExtract, SchemaVersions = [1], EngineVersion = EngineVersions.Pdf };
+        if (CompanionChunkAdapter.Available)
+        {
+            yield return new KindOffer { Kind = JobKinds.CompanionIndexPrep, SchemaVersions = [1], EngineVersion = EngineVersions.CompanionIndexPrep };
+        }
+    }
 
     /// <summary>
     /// The kinds to offer on this claim: allowed by policy, under their per-kind cap, and admissible right now by the

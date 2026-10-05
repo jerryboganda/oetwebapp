@@ -133,6 +133,78 @@ public sealed class ProcessTests
         else Assert.Empty(selfPrefix);
     }
 
+    [Fact]
+    public void scrubbing_removes_every_oet_variable_whatever_its_case_and_keeps_the_rest()
+    {
+        var environment = new Dictionary<string, string?>
+        {
+            ["OET_NODE_TOKEN"] = "x",
+            ["OET_API_BASE"] = "https://api.invalid",
+            ["oet_budget_mem_mib"] = "1",
+            ["DOTNET_gcServer"] = "0",
+            ["HOME"] = "/tmp",
+            ["PATH"] = "/usr/bin",
+            ["NOT_OET_X"] = "kept",
+        };
+
+        ChildEnvironment.Scrub(environment);
+
+        Assert.Equal(new[] { "DOTNET_gcServer", "HOME", "NOT_OET_X", "PATH" }, environment.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public void the_pdf_child_never_inherits_the_node_token_or_any_other_oet_variable()
+    {
+        var secret = "OET_TEST_SECRET_" + Guid.NewGuid().ToString("N");
+        var keep = "FLEET_TEST_KEEP_" + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(secret, "not-a-real-credential");
+        Environment.SetEnvironmentVariable(keep, "kept");
+        try
+        {
+            var run = new ChildRun(JobKinds.PdfExtract, "/scratch/in.pdf", "/scratch/out.json", new ChildParams(), 1024, TimeSpan.FromSeconds(60));
+
+            var start = ProcessChildRunner.BuildStartInfo(run, "/scratch/out.json.params.json", "/app/Fleet.Agent.dll");
+
+            Assert.DoesNotContain(start.Environment.Keys, key => key.StartsWith("OET_", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("kept", start.Environment[keep]);
+            // The runner's own settings survive the scrub.
+            Assert.Equal("0", start.Environment["DOTNET_gcServer"]);
+            Assert.Equal("0", start.Environment["DOTNET_EnableDiagnostics"]);
+            Assert.True(start.Environment.ContainsKey("DOTNET_GCHeapHardLimit"));
+            Assert.Contains("--child", start.ArgumentList);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(secret, null);
+            Environment.SetEnvironmentVariable(keep, null);
+        }
+    }
+
+    [LinuxFact]
+    public async Task a_tool_started_by_the_process_runner_never_sees_oet_variables()
+    {
+        var secret = "OET_TEST_SECRET_" + Guid.NewGuid().ToString("N");
+        var keep = "FLEET_TEST_KEEP_" + Guid.NewGuid().ToString("N");
+        Environment.SetEnvironmentVariable(secret, "not-a-real-credential");
+        Environment.SetEnvironmentVariable(keep, "kept");
+        try
+        {
+            var output = new MemoryStream();
+
+            var result = await new SystemProcessRunner().RunAsync(Sh("env", consume: (s, t) => s.CopyToAsync(output, t)), CancellationToken.None);
+
+            var text = Encoding.UTF8.GetString(output.ToArray());
+            Assert.Equal(0, result.ExitCode);
+            Assert.DoesNotContain(secret, text);
+            Assert.Contains(keep + "=kept", text);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(secret, null);
+            Environment.SetEnvironmentVariable(keep, null);
+        }
+    }
+
     [AgentDllFact]
     public async Task the_real_child_process_extracts_the_canary_and_honours_its_arguments()
     {

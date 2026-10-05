@@ -35,8 +35,15 @@ public sealed class JobIoTests
         public void Dispose() => Dir.Dispose();
     }
 
-    private static InputResponse Body(byte[] data, string? sha = null, Stream? stream = null, bool partial = false, long? start = null) =>
-        new(new ApiResponse { Kind = ApiKind.Ok, Status = partial ? 206 : 200 }, stream ?? new MemoryStream(data), data.Length, sha ?? TestIds.Sha(data), TestIds.Sha(data), partial, start, null);
+    /// <summary>
+    /// An input answer. X-Content-SHA256 is always the WHOLE object's digest (protocol 4.3), so a ranged (206) answer must say which:
+    /// defaulting to the digest of the slice would make a correct agent reject the answer.
+    /// </summary>
+    private static InputResponse Body(byte[] data, string? sha = null, Stream? stream = null, bool partial = false, long? start = null)
+    {
+        if (partial && sha is null) throw new ArgumentException("a ranged answer must carry the whole-object digest", nameof(sha));
+        return new InputResponse(new ApiResponse { Kind = ApiKind.Ok, Status = partial ? 206 : 200 }, stream ?? new MemoryStream(data), data.Length, sha ?? TestIds.Sha(data), TestIds.Sha(data), partial, start, null);
+    }
 
     private static byte[] Bytes(int length)
     {
@@ -163,7 +170,7 @@ public sealed class JobIoTests
             offsets.Add(offset);
             return offset == 0
                 ? Body(data, stream: new FlakyStream(data, failAfter: 60_000))
-                : Body(data[(int)offset..], partial: true, start: offset);
+                : Body(data[(int)offset..], sha: TestIds.Sha(data), partial: true, start: offset);
         };
         var job = rig.Job(data);
 
@@ -173,6 +180,27 @@ public sealed class JobIoTests
         Assert.Equal(2, offsets.Count);
         Assert.Equal(0, offsets[0]);
         Assert.InRange(offsets[1], 1, 199_999);
+    }
+
+    [Fact]
+    public async Task a_connection_that_drops_right_after_the_last_byte_does_not_restart_the_download()
+    {
+        using var rig = new Rig();
+        var data = Bytes(50_000);
+        var calls = 0;
+        // The stream hands over every byte and then fails instead of reporting the end: the file is complete, so a
+        // "bytes=size-" request (a 416 and a restart from byte 0) would be pure waste.
+        rig.Api.OnOpenInput = (_, _, _, _, _) =>
+        {
+            calls++;
+            return Body(data, stream: new FlakyStream(data, failAfter: data.Length));
+        };
+        var job = rig.Job(data);
+
+        using var file = await rig.Io.FetchInputAsync(job, TestJobs.Lease(job, rig.Clock), job.Inputs[0], rig.Dir.File("scratch/in.pdf"), false, CancellationToken.None);
+
+        Assert.Equal(data, File.ReadAllBytes(file.Path));
+        Assert.Equal(1, calls);
     }
 
     [Fact]

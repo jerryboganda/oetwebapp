@@ -120,6 +120,25 @@ internal static class ChildEntry
     }
 }
 
+/// <summary>
+/// The environment of every process the agent starts for untrusted input: the PDF worker parses hostile PDFs and ffmpeg parses
+/// hostile media. Only the agent's own OET_* configuration carries credentials (OET_NODE_TOKEN), so every OET_* variable is
+/// removed before such a process starts; a parser exploit then finds no node token to read or send.
+/// </summary>
+internal static class ChildEnvironment
+{
+    public const string AgentPrefix = "OET_";
+
+    /// <summary>Removes every OET_* entry (case-insensitive) from the environment of a process about to be started.</summary>
+    public static void Scrub(IDictionary<string, string?> environment)
+    {
+        foreach (var key in environment.Keys.Where(key => key.StartsWith(AgentPrefix, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            environment.Remove(key);
+        }
+    }
+}
+
 internal sealed record ChildRun(string Kind, string InputPath, string OutputPath, ChildParams Params, long MemLimitMiB, TimeSpan Timeout);
 
 internal sealed record ChildOutcome(int ExitCode, bool TimedOut, bool Canceled, long PeakRssMiB);
@@ -166,24 +185,7 @@ internal sealed class ProcessChildRunner : IChildRunner
         var paramsPath = run.OutputPath + ".params.json";
         await File.WriteAllBytesAsync(paramsPath, JsonSerializer.SerializeToUtf8Bytes(run.Params, ProtocolJson.Options), ct).ConfigureAwait(false);
 
-        var (file, prefix) = ResolveSelf(_agentDll);
-        var start = new ProcessStartInfo(file)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        foreach (var part in prefix) start.ArgumentList.Add(part);
-        foreach (var part in new[] { "--child", run.Kind, "--in", run.InputPath, "--params", paramsPath, "--out", run.OutputPath }) start.ArgumentList.Add(part);
-
-        // The GC heap limit turns "memory exhaustion" into an OutOfMemoryException inside the child (exit 12) instead of an
-        // OOM kill of the whole container. The variable is hexadecimal.
-        var heapBytes = (long)(Math.Max(64, run.MemLimitMiB) * 0.85) * 1024 * 1024;
-        start.Environment["DOTNET_GCHeapHardLimit"] = heapBytes.ToString("X", CultureInfo.InvariantCulture);
-        start.Environment["DOTNET_gcServer"] = "0";
-        start.Environment["DOTNET_TieredPGO"] = "0";
-        start.Environment["DOTNET_EnableDiagnostics"] = "0";
+        var start = BuildStartInfo(run, paramsPath, _agentDll);
 
         using var process = new Process { StartInfo = start };
         process.OutputDataReceived += (_, _) => { };
@@ -267,6 +269,35 @@ internal sealed class ProcessChildRunner : IChildRunner
 
         var exit = HasExited(process) ? process.ExitCode : -1;
         return new ChildOutcome(exit, timedOut, canceled, peakBytes / (1024 * 1024));
+    }
+
+    /// <summary>
+    /// The start info of the isolated worker. It parses an untrusted PDF, so it runs WITHOUT the agent's credentials: every OET_*
+    /// variable (OET_NODE_TOKEN above all) is removed from its environment (<see cref="ChildEnvironment"/>); it needs only the
+    /// DOTNET_* settings set here, HOME and PATH.
+    /// </summary>
+    internal static ProcessStartInfo BuildStartInfo(ChildRun run, string paramsPath, string? agentDll)
+    {
+        var (file, prefix) = ResolveSelf(agentDll);
+        var start = new ProcessStartInfo(file)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var part in prefix) start.ArgumentList.Add(part);
+        foreach (var part in new[] { "--child", run.Kind, "--in", run.InputPath, "--params", paramsPath, "--out", run.OutputPath }) start.ArgumentList.Add(part);
+
+        // The GC heap limit turns "memory exhaustion" into an OutOfMemoryException inside the child (exit 12) instead of an
+        // OOM kill of the whole container. The variable is hexadecimal.
+        var heapBytes = (long)(Math.Max(64, run.MemLimitMiB) * 0.85) * 1024 * 1024;
+        start.Environment["DOTNET_GCHeapHardLimit"] = heapBytes.ToString("X", CultureInfo.InvariantCulture);
+        start.Environment["DOTNET_gcServer"] = "0";
+        start.Environment["DOTNET_TieredPGO"] = "0";
+        start.Environment["DOTNET_EnableDiagnostics"] = "0";
+        ChildEnvironment.Scrub(start.Environment);
+        return start;
     }
 
     /// <summary>

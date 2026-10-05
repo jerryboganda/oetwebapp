@@ -317,6 +317,51 @@ public sealed class MediaTests
         Assert.Equal(FailCodes.InternalError, failure.Code);
     }
 
+    [Theory]
+    [InlineData("audio/webm;codecs=opus")]
+    [InlineData("audio/webm; codecs=opus")]
+    [InlineData(" Audio/WebM ; codecs=\"opus\" ")]
+    [InlineData("audio/mp4;codecs=mp4a.40.2")]
+    public async Task a_clip_content_type_with_parameters_is_matched_on_its_bare_media_type(string contentType)
+    {
+        var clip = new byte[] { 1, 1 };
+        var job = JoinJob(clip);
+        job.Inputs[0].ContentType = contentType;
+        var io = new FakeIo();
+        io.Inputs["clip-0000"] = clip;
+        var runner = new FakeProcessRunner();
+        runner.Handler = async (spec, ct) =>
+        {
+            await spec.Stdin!.CopyToAsync(Stream.Null, ct);
+            var produced = spec.Arguments.Contains("libmp3lame") ? new byte[] { 0x49, 0x44, 0x33 } : new byte[200];
+            await spec.ConsumeStdout!(new MemoryStream(produced), ct);
+            return new ProcessRunResult(0, false, "");
+        };
+        using var dir = new TempDir();
+        var executor = new SpeakingJoinExecutor("ffmpeg:7.1.1/ffmpeg-pcm-join:1", runner, "ffmpeg", TestLog.Instance, (p, g, m) => new PcmJoinResult([1], 1234, false));
+
+        var result = await executor.ExecuteAsync(new JobContext { Job = job, Lease = TestJobs.Lease(job, new FakeClock()), ScratchDirectory = dir.Path, Io = io }, CancellationToken.None);
+
+        Assert.True(result.Success);
+    }
+
+    [Fact]
+    public async Task a_parameterised_type_that_is_not_on_the_allow_list_is_still_refused()
+    {
+        var clip = new byte[] { 1 };
+        var job = JoinJob(clip);
+        job.Inputs[0].ContentType = "application/x-msdownload;codecs=opus";
+        using var dir = new TempDir();
+        var executor = new SpeakingJoinExecutor("ffmpeg:7.1.1/ffmpeg-pcm-join:1", new FakeProcessRunner(), "ffmpeg", TestLog.Instance, (p, g, m) => new PcmJoinResult([1], 1, false));
+
+        var failure = await Assert.ThrowsAsync<JobFailureException>(() => executor.ExecuteAsync(
+            new JobContext { Job = job, Lease = TestJobs.Lease(job, new FakeClock()), ScratchDirectory = dir.Path, Io = new FakeIo() }, CancellationToken.None));
+
+        Assert.Equal(FailCodes.InternalError, failure.Code);
+        Assert.Equal("audio/webm", SpeakingJoinExecutor.MediaType("audio/webm;codecs=opus"));
+        Assert.Equal("audio/webm", SpeakingJoinExecutor.MediaType(" audio/webm "));
+    }
+
     // ---- companion index prep ------------------------------------------------------------------------------
 
     private static IReadOnlyList<ChunkRow> OneChunkPerPage(IReadOnlyList<string> pages) =>

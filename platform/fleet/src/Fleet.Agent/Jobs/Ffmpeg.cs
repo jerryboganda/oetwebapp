@@ -79,6 +79,7 @@ internal sealed class SystemProcessRunner : IProcessRunner
             CreateNoWindow = true,
         };
         foreach (var argument in spec.Arguments) start.ArgumentList.Add(argument);
+        ChildEnvironment.Scrub(start.Environment); // ffmpeg parses hostile media: it never sees OET_NODE_TOKEN
 
         Process process;
         try

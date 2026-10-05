@@ -63,8 +63,8 @@ public sealed class NodeAndClaimTests
         Assert.Equal(1, request.Agent.Protocol);
         Assert.Equal(new[] { 1 }, request.Agent.ProtocolsSupported);
         Assert.NotNull(request.Agent.StartedAt);
-        var kind = Assert.Single(request.Kinds);
-        Assert.Equal((JobKinds.PdfExtract, EngineVersions.Pdf), (kind.Kind, kind.EngineVersion));
+        var kind = Assert.Single(request.Kinds, k => k.Kind == JobKinds.PdfExtract);
+        Assert.Equal(EngineVersions.Pdf, kind.EngineVersion);
         Assert.Equal(3000, request.Capacity.CpuBudgetMilli);
         Assert.Equal(2000, request.Capacity.CpuBudgetFreeMilli);
         Assert.Equal(5120 - 2304, request.Capacity.MemBudgetFreeMiB);
@@ -74,6 +74,50 @@ public sealed class NodeAndClaimTests
         Assert.Equal("normal", request.Load.Pressure);
         var held = Assert.Single(request.Leases);
         Assert.Equal((job.Id, job.Fence, "extracting"), (held.JobId, held.Fence, held.Stage));
+    }
+
+    [Fact]
+    public void a_node_heartbeat_never_carries_an_empty_kinds_list_so_a_broken_host_can_still_report_itself()
+    {
+        using var h = new Harness();
+        h.Executors.Replace([]); // nothing runnable: the first self-check has not completed (or has failed)
+
+        // The API answers 400 to kinds[] outside 1..8 (protocol 4.7.1), which would reject every early heartbeat.
+        var starting = h.Node.BuildRequest();
+        Assert.Equal("starting", starting.State);
+        var advertised = Assert.Single(starting.Kinds, k => k.Kind == JobKinds.PdfExtract);
+        Assert.Equal(new[] { 1 }, advertised.SchemaVersions);
+        Assert.Equal(EngineVersions.Pdf, advertised.EngineVersion);
+        Assert.Matches(Wire.EngineVersionPattern, advertised.EngineVersion);
+
+        // A failed self-check is carried by the state, not by an empty list.
+        h.Node.Tick();
+        h.Status.SetSelfCheck(false);
+        var degraded = h.Node.BuildRequest();
+        Assert.Equal("degraded", degraded.State);
+        Assert.Equal("self_check_failed", degraded.DegradedReason);
+        Assert.InRange(degraded.Kinds.Count, 1, 8);
+        Assert.Contains(degraded.Kinds, k => k.Kind == JobKinds.PdfExtract);
+
+        // The claim path is unchanged: only runnable kinds are ever offered work.
+        Assert.Empty(h.Executors.Offers(Api.Desired(), h.Capacity));
+    }
+
+    [Fact]
+    public void a_runnable_kind_is_advertised_once_with_its_own_engine_version()
+    {
+        using var h = new Harness();
+        h.MakeReady();
+
+        var request = h.Node.BuildRequest();
+
+        Assert.Equal(request.Kinds.Select(k => k.Kind).Distinct().Count(), request.Kinds.Count);
+        Assert.Equal(h.Executors.All.Count, h.Executors.Runnable().Count);
+        foreach (var runnable in h.Executors.Runnable())
+        {
+            var matching = Assert.Single(request.Kinds, k => k.Kind == runnable.Kind);
+            Assert.Equal(runnable.EngineVersion, matching.EngineVersion);
+        }
     }
 
     [Fact]
