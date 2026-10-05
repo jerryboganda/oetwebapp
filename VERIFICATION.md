@@ -6,6 +6,11 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-05 22:18 | CI triage | CI triage | 37381631295 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | d89b70629 |
+| 2026-10-05 22:14 | CI triage | CI triage | 37381187870 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | d89b70629 |
+| 2026-10-05 22:14 | Deploy production | Deploy production | 37381187999 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | d89b70629 |
+| 2026-10-05 22:08 | AX Ledger Tools | AX Ledger Tools | 37380570220 | self-test (windows, node 24)=success self-test (linux, node 22)=success self-test (windows, node 22)=success | SUCCESS | d89b70629 |
+| 2026-10-05 22:08 | Build images | Build images | 37380570386 | Detect what changed=success Syntax gate (seconds)=success Deployment contract guards=success Writing grader regression (on change)=skipped build-web=success build-api=success build-agent-gateway=success build-backup=success Retag unchanged ${{ matrix.image }}=skipped Publish verified release provenance=success Writing model-answer gate (on change)=skipped | SUCCESS | d89b70629 |
 | 2026-10-05 17:11 | CI triage | CI triage | 37346618066 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 9f7672e49 |
 | 2026-10-05 17:03 | CI triage | CI triage | 37345604604 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 9f7672e49 |
 | 2026-10-05 17:03 | Deploy production | Deploy production | 37345604605 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 9f7672e49 |
