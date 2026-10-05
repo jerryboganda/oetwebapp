@@ -31,7 +31,7 @@ describe('writing-prod-qa.yml', () => {
     expect(Object.keys(inputs)).toEqual(INPUTS);
     expect(Object.keys(inputs).length).toBeLessThanOrEqual(25);
     expect(inputs.suite).toMatchObject({ type: 'choice', default: 'discover' });
-    expect(inputs.suite.options).toEqual(['discover', 'matrix', 'acceptance', 'ui', 'all']);
+    expect(inputs.suite.options).toEqual(['discover', 'matrix', 'acceptance', 'ui', 'letters', 'all']);
     expect(inputs.fault_mode.options).toEqual(['flag', 'client', 'none']);
     expect(inputs.cleanup).toMatchObject({ default: 'on_success' });
     expect(inputs.preflight_repair.default).toBe(false);
@@ -70,7 +70,7 @@ describe('writing-prod-qa.yml', () => {
     const imported = [...run.matchAll(/(?:from|import\()\s*'\.\/([a-z0-9-]+\.mjs)'/g)].map((m) => m[1]);
     expect(imported).toEqual(expect.arrayContaining(['api.mjs', 'contract.mjs', 'lib.mjs', 'browser.mjs']));
     for (const file of imported) expect(existsSync(resolve('scripts/qa/writing-prod-qa', file)), file).toBe(true);
-    expect(step('live', /Stage the harness/).run).toContain('cp scripts/qa/writing-prod-qa/*.mjs scripts/qa/writing-prod-qa/scripts.json');
+    expect(step('live', /Stage the harness/).run).toContain('cp scripts/qa/writing-prod-qa/*.mjs scripts/qa/writing-prod-qa/scripts.json scripts/qa/writing-prod-qa/realistic-letters.json');
     expect(step('live', /Install isolated Playwright/).if).toContain("inputs.suite != 'discover'");
     expect(step('live', /Install isolated Playwright/).run).toContain('playwright@1.58.2');
     const net = step('live', /Safety net/);

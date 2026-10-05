@@ -1,8 +1,10 @@
 import doc from './scripts.json';
+import lettersDoc from './realistic-letters.json';
 import { WRITING_PROFESSIONS } from '@/lib/writing/types';
 import { CATEGORIES, HANDOFF_PROFESSIONS, PROVIDERS, TEST_IDS } from './contract.mjs';
 import {
-  buildTable, categoryForLetterType, contractGaps, correctionsProblems, createLane, creditPreflight, creditVerdict,
+  buildTable, cardProblems, categoryForLetterType, contractGaps, correctionsProblems, createLane, creditPreflight, creditVerdict,
+  matchLetters, reportShapeFacts, reportShapeProblems, severityMixPartials, validateLetters,
   deriveDeviceId, faultSideEffects, freeSampleProblems, gradingStepsProblems, guardDecision, letterTypeCode,
   myWorkProblems, normalizeProfessionId, overallVerdict, pacingDelayMs, paidSpendProblems, parseInputs,
   planDiscovery, planRows, preflightDecision, splitText, providerEvidence, reportTextProblems, scoreLabelProblems, sectionOrderProblems,
@@ -327,6 +329,92 @@ describe('report and post-submission checks', () => {
     expect(myWorkProblems({ items: [{ submissionId: 'a1', state: 'failed' }], submissionId: 'a1', state: 'graded' })[0]).toMatch(/failed/);
     expect(freeSampleProblems({ afterFailure: [{ state: 'grading_failed', successfulCount: 0 }], afterRetry: [{ state: 'available', successfulCount: 1 }] })).toEqual([]);
     expect(freeSampleProblems({ afterFailure: [{ state: 'completed', successfulCount: 1 }], afterRetry: [] })).toHaveLength(2);
+  });
+});
+
+describe('realistic letters (suite=letters)', () => {
+  const letters: any[] = lettersDoc.letters;
+
+  it('holds six valid letters, each typeable, on its own scenario, mixing major and minor defects', () => {
+    expect(validateLetters(lettersDoc)).toEqual({ ok: true, problems: [] });
+    expect(letters).toHaveLength(6);
+    expect(new Set(letters.map((l) => l.scenarioId)).size).toBe(6);
+  });
+
+  it('rejects a letter that cannot be typed, repeats a scenario or mixes no severities', () => {
+    const bad = (patch: object) => validateLetters({ letters: [{ ...letters[0], ...patch }] });
+    expect(bad({ text: `${letters[0].text}\n\n\nextra` }).ok).toBe(false);
+    expect(bad({ text: `${letters[0].text}\n- bullet` }).ok).toBe(false);
+    expect(bad({ text: letters[0].text.slice(0, 200) }).ok).toBe(false);
+    expect(bad({ scenarioId: 'not-a-guid' }).ok).toBe(false);
+    expect(bad({ plantedDefects: { critical: 0, major: 0, minor: 3 } }).ok).toBe(false);
+    expect(validateLetters({ letters: [letters[0], letters[0]] }).problems.join(' ')).toMatch(/duplicate id/);
+  });
+
+  it('sends each letter to its own scenario and blocks one that is not open, never substituting a task', () => {
+    const task = (scenarioId: string) => ({ scenarioId, title: scenarioId, profession: 'nursing', letterType: 'LT-TR', eligible: true });
+    const nursing = letters.find((l) => l.profession === 'nursing');
+    const plan: any[] = [
+      { profession: 'nursing', enabled: true, eligibleTasks: [task('x'), ...letters.filter((l) => l.profession === nursing.profession).map((l) => task(l.scenarioId.toUpperCase()))] },
+      { profession: 'pharmacy', enabled: true, eligibleTasks: [task('y')] },
+      { profession: 'dentistry', enabled: false, eligibleTasks: [] },
+    ];
+    const { runs, blocked } = matchLetters(plan, letters);
+    expect(runs.map((r: any) => r.profession.profession)).toEqual(['nursing']);
+    expect(runs[0].letters.map((m: any) => m.task.scenarioId.toLowerCase())).toEqual(letters.filter((l) => l.profession === 'nursing').map((l) => l.scenarioId));
+    expect(blocked.map((b: any) => b.letter.profession).sort()).toEqual(['dentistry', 'pharmacy', 'physiotherapy', 'radiography']);
+    expect(blocked.find((b: any) => b.letter.profession === 'pharmacy').reason).toMatch(/not an eligible task/);
+    expect(blocked.find((b: any) => b.letter.profession === 'dentistry').reason).toMatch(/not enabled/);
+  });
+});
+
+describe('report shape (priorities, criterion cards, labels, Exemplar)', () => {
+  const error = (code: string, severity: string, rule: string, extra = {}) => ({ primaryCriterionCode: code, severity, ruleSource: rule, whyItMatters: 'A short reason.', correction: 'A fix.', ...extra });
+  const good = {
+    grade: { perCriterion: { c1: { feedback: 'Short.' }, c2: { feedback: 'Short.' }, c3: { feedback: '' }, c4: { feedback: '' }, c5: { feedback: '' }, c6: { feedback: '' } } },
+    report: {
+      topPriorities: ['AI.purpose: State the purpose first.', 'R12.4: Use passive voice.', 'OW-005: Cut the repeated detail.'],
+      criteria: [
+        { criterionCode: 'purpose', summary: 'Purpose is vague.' }, { criterionCode: 'content', summary: 'A fact is missing.' },
+        { criterionCode: 'conciseness_clarity', summary: null }, { criterionCode: 'genre_style' }, { criterionCode: 'organisation_layout' }, { criterionCode: 'language', summary: 'Tense errors.' },
+      ],
+      errors: [error('purpose', 'critical', 'AI.purpose'), error('content', 'major', 'R12.4'), error('language', 'minor', 'OW-005')],
+    },
+  };
+
+  it('accepts a short, distinct, label-free report and records the severity mix', () => {
+    const facts = reportShapeFacts(good.grade, good.report);
+    expect(reportShapeProblems(facts)).toEqual([]);
+    expect(facts).toMatchObject({ errorsCount: 3, critical: 1, major: 1, minor: 1, priorityCount: 3, distinctPriorities: 3, purposePriorities: 1, labelLeaks: 0 });
+    expect(severityMixPartials(facts)).toEqual([]);
+    expect(severityMixPartials({ ...facts, minor: 0 })[0]).toMatch(/did not mix/);
+  });
+
+  it.each([
+    ['a fourth priority', { topPriorities: [...good.report.topPriorities, 'R1.1: One more.'] }, /expected at most 3/],
+    ['a repeated priority', { topPriorities: ['R1.1: Same.', 'R1.2: Same.', 'R1.3: Other.'] }, /repeat/],
+    ['two Purpose priorities', { topPriorities: ['AI.purpose: One.', 'AI.purpose: Two.'], errors: [error('purpose', 'major', 'AI.purpose')] }, /about Purpose/],
+    ['a long criterion summary', { criteria: [{ criterionCode: 'purpose', summary: 'x'.repeat(241) }] }, /summary is 241/],
+    ['a criterion with findings but no summary', { criteria: [{ criterionCode: 'purpose' }] }, /no summary/],
+    ['an internal label', { errors: [error('purpose', 'critical', 'AI.purpose', { whyItMatters: 'R1: leaked' })] }, /internal rule label/],
+    ['the word Exemplar', { topPriorities: ['AI.purpose: Compare with the Exemplar.'] }, /Exemplar/],
+  ])('flags %s', (_name, patch: any, expected) => {
+    const facts = reportShapeFacts(good.grade, { ...good.report, ...patch });
+    expect(reportShapeProblems(facts).join(' | ')).toMatch(expected);
+  });
+
+  it('flags a long per-criterion feedback in the grade', () => {
+    const grade = { perCriterion: { ...good.grade.perCriterion, c2: { feedback: 'y'.repeat(300) } } };
+    expect(reportShapeProblems(reportShapeFacts(grade, good.report)).join(' ')).toMatch(/feedback is 300/);
+  });
+
+  it('judges what the learner sees: short cards with one suggested fix and three distinct priorities', () => {
+    expect(cardProblems({ cards: [{ chars: 400, fixBoxes: 1 }, { chars: 300, fixBoxes: 0 }], priorities: ['a', 'b', 'c'] })).toEqual([]);
+    expect(cardProblems({ cards: [{ chars: 901, fixBoxes: 1 }], priorities: [] })[0]).toMatch(/901/);
+    expect(cardProblems({ cards: [{ chars: 100, fixBoxes: 2 }], priorities: [] })[0]).toMatch(/2 suggested fixes/);
+    expect(cardProblems({ cards: [], priorities: ['a', 'b', 'c', 'd'] })[0]).toMatch(/4 priorities/);
+    expect(cardProblems({ cards: [], priorities: ['Same.', 'same.'] })[0]).toMatch(/repeats/);
+    expect(reportTextProblems('Exemplar fix: add the allergy')[0]).toMatch(/Exemplar/);
   });
 });
 

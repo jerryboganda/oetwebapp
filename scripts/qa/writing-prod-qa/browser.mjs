@@ -10,7 +10,10 @@ import {
   clearanceProblems, collectContainment, collectOverlap, containmentProblems, mobileVerdict, overlapProblems,
   positiveControl, probeTarget, targetProblems,
 } from './geometry.mjs';
-import { contractGaps, correctionsProblems, reportTextProblems, scoreLabelProblems, sectionOrderProblems } from './lib.mjs';
+import {
+  cardProblems, contractGaps, correctionsProblems, reportShapeFacts, reportShapeProblems, reportTextProblems, scoreLabelProblems,
+  sectionOrderProblems, severityMixPartials,
+} from './lib.mjs';
 
 export class ContractMissing extends Error {
   constructor(group, ids) {
@@ -223,13 +226,28 @@ export async function waitForWritingPhase(session, readingWindow) {
   await page.locator(`${tid(TEST_IDS.timer)}[data-phase="writing"]`).first().waitFor({ state: 'attached', timeout: 9 * 60_000 });
 }
 
-/** Types like a candidate: pressSequentially word by word, 45-95 ms per key, caret at the end. Never fill/paste. */
+/**
+ * Types like a candidate: pressSequentially word by word, 45-95 ms per key, caret at the end. Never fill/paste.
+ * A blank line is a new paragraph (Enter), a single newline a hard line break (Shift+Enter): the editor's own
+ * saved form (lib/writing/letter-text.ts), so the server draft equals the fixture text.
+ */
 export async function typeText(page, text) {
   const editor = page.locator(SELECTORS.editorInput);
   await editor.click();
   await page.keyboard.press('Control+End');
-  for (const chunk of text.match(/\S+\s*/g) ?? []) {
-    await editor.pressSequentially(chunk, { delay: 45 + Math.floor(Math.random() * 51) });
+  const type = async (words) => {
+    for (const chunk of words.match(/\S+\s*/g) ?? []) {
+      await editor.pressSequentially(chunk, { delay: 45 + Math.floor(Math.random() * 51) });
+    }
+  };
+  const paragraphs = text.split('\n\n');
+  for (const [p, paragraph] of paragraphs.entries()) {
+    if (p > 0) await page.keyboard.press('Enter');
+    const lines = paragraph.split('\n');
+    for (const [l, line] of lines.entries()) {
+      if (l > 0) await page.keyboard.press('Shift+Enter');
+      await type(line.replace(/\s+$/, ''));
+    }
   }
 }
 
@@ -312,11 +330,15 @@ export async function gradeFacts(session, submissionId, typedText) {
   if (Object.keys(g?.perCriterion ?? {}).length !== 6) problems.push(`${Object.keys(g?.perCriterion ?? {}).length} scored criteria, expected 6`);
   if (r?.status !== 'CandidateReady' || r?.candidateReportVisible !== true) problems.push(`the report is ${r?.status} (candidate visible: ${r?.candidateReportVisible})`);
   if ((r?.criteria ?? []).length !== 6) problems.push(`the report has ${(r?.criteria ?? []).length} criteria, expected 6`);
+  // Owner review 5 Oct 2026: distinct priorities, short criterion summaries, no internal labels or "Exemplar".
+  const shape = reportShapeFacts(g, r);
+  problems.push(...reportShapeProblems(shape));
   return {
     problems,
     facts: {
       submissionStatus: s?.status, gradeId: g?.id ?? null, reportId: r?.id ?? null, modelUsed: g?.modelUsed ?? null,
-      estimatedPracticeScore: r?.estimatedPracticeScore ?? null, errorsCount: (r?.errors ?? []).length,
+      estimatedPracticeScore: r?.estimatedPracticeScore ?? null, errorsCount: (r?.errors ?? []).length, shape,
+      severityMix: severityMixPartials(shape),
     },
   };
 }
@@ -365,6 +387,14 @@ export async function resultsUiChecks(session, submissionId, facts, { shotPrefix
   problems.push(...reportTextProblems(await main.innerText(), await main.locator('a[href]').evaluateAll((els) => els.map((e) => e.getAttribute('href')))));
   const criteria = await page.locator(`${tid(TEST_IDS.criteriaList)} > li`).count();
   if (criteria !== 6) problems.push(`the criteria list shows ${criteria} criteria, expected 6`);
+  // What the learner sees: short criterion cards (at most one suggested-fix box each) and at most 3 distinct priorities.
+  const cards = await page.locator(`${tid(TEST_IDS.criteriaList)} > li`).evaluateAll((els) => els.map((e) => ({
+    chars: (e.innerText ?? '').length, fixBoxes: ((e.innerText ?? '').match(/Suggested fix:/g) ?? []).length,
+  })));
+  const priorities = await page.locator(`${tid(TEST_IDS.resultSection)}[data-section="priorities"] li`).evaluateAll((els) => els.map((e) => (e.innerText ?? '').replace(/^#\d+\s*/, '').trim()));
+  problems.push(...cardProblems({ cards, priorities }));
+  facts.cardChars = cards.map((c) => c.chars);
+  facts.priorityCount = priorities.length;
   // > 5 errors: 5-item preview + View all (then the full list replaces the preview); <= 5: full list only.
   const viewAll = page.locator(tid(TEST_IDS.correctionsViewAll)).first();
   const expandable = await viewAll.isVisible().catch(() => false);

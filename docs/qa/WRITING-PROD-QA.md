@@ -29,6 +29,7 @@ gh workflow run writing-prod-qa.yml --ref main -f suite=acceptance              
 gh workflow run writing-prod-qa.yml --ref main -f suite=ui -f browsers=chromium,webkit
 gh workflow run writing-prod-qa.yml --ref main -f suite=matrix -f concurrency=3
 gh workflow run writing-prod-qa.yml --ref main -f suite=all
+gh workflow run writing-prod-qa.yml --ref main -f suite=letters -f cleanup=always   # 6 realistic mixed major/minor letters (not part of all)
 gh workflow run writing-prod-qa.yml --ref main -f suite=matrix -f professions=nursing -f categories=urgent   # one cell
 ```
 
@@ -36,7 +37,7 @@ gh workflow run writing-prod-qa.yml --ref main -f suite=matrix -f professions=nu
 
 | Input | Default | Meaning |
 | --- | --- | --- |
-| `suite` | `discover` | `discover` (read-only plan) · `matrix` · `acceptance` · `ui` · `all` |
+| `suite` | `discover` | `discover` (read-only plan) · `matrix` · `acceptance` · `ui` · `letters` · `all` (`letters` is not part of `all`) |
 | `professions` | all | Comma-separated handoff ids; disabled ones are still listed as `NOT_ENABLED` |
 | `categories` | all | `routine,urgent,discharge` |
 | `reading_window` | `real` | `real` = live 5-minute window; `seed` = page clock fast-forward (noted on every row). Acceptance is always real |
@@ -136,6 +137,14 @@ nav mid-page), section headings / View all / next actions fully clear and top-mo
 mobile menu shows both `mobile-menu-reload-app` and `mobile-menu-check-updates` (at >= lg: the handle).
 Unproven = `NOT PROVEN` (row `PARTIAL`), never PASS. The `ui` suite also checks the practice **Submit** on
 Pixel 7 / iPhone 14.
+
+**Realistic letters (`letters` suite, 5 Oct 2026).** `realistic-letters.json` holds six 200-300 word candidate letters with
+planted critical/major/minor defects (from the Writing regression corpora), each pinned to ONE production scenario and typed
+on a disposable learner of its profession (blank line = Enter, single newline = Shift+Enter). A letter whose scenario is not
+an eligible task is `BLOCKED`, never given another task. Every report must keep: at most 3 distinct top priorities (at most
+one about Purpose), criterion summaries and per-criterion feedback <= 240 chars, no internal rule label / rule id /
+"Exemplar" in any report text, criterion cards <= 900 visible chars with at most one "Suggested fix:" box. The
+evidence keeps numbers only (`facts/*.json` -> `shape`, `cardChars`); a report without mixed severities is `PARTIAL`.
 
 ## Test-id contract (single source: `contract.mjs`)
 

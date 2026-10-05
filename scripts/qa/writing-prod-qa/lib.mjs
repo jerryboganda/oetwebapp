@@ -68,6 +68,66 @@ export function validateScripts(doc) {
 
 export const scriptFor = (scripts, profession, category) => scripts.find((s) => s.profession === profession && s.category === category) ?? null;
 
+// ---- Realistic letters (suite=letters) -----------------------------------------------------------------------------
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRINTABLE_ASCII_TEXT = /^[\x20-\x7E\n]+$/;
+export const LETTER_WORDS = { min: 200, max: 300 };
+
+/** Words as the editor counts them (whitespace-separated). */
+export const wordCount = (text) => String(text ?? '').trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * The fixture letters are typed like a candidate: printable ASCII, no editor input-rule trigger, paragraphs split by
+ * a blank line, hard line breaks by one newline, each pinned to ONE production scenario (a letter graded against
+ * another task's case notes would make every fact look invented) and mixing major and minor defects.
+ */
+export function validateLetters(doc) {
+  const problems = [];
+  const letters = Array.isArray(doc?.letters) ? doc.letters : [];
+  if (!letters.length) problems.push('no letters');
+  const ids = new Set();
+  const scenarios = new Set();
+  letters.forEach((l, i) => {
+    const at = `letter ${i + 1} (${l?.id})`;
+    if (!String(l?.id ?? '').trim()) problems.push(`${at}: no id`);
+    if (ids.has(l?.id)) problems.push(`${at}: duplicate id`);
+    ids.add(l?.id);
+    if (!HANDOFF_PROFESSIONS.includes(l?.profession)) problems.push(`${at}: unknown profession id`);
+    if (!GUID.test(String(l?.scenarioId ?? ''))) problems.push(`${at}: scenarioId is not a GUID`);
+    if (scenarios.has(String(l?.scenarioId).toLowerCase())) problems.push(`${at}: scenario used by another letter (needs its own learner)`);
+    scenarios.add(String(l?.scenarioId).toLowerCase());
+    const d = l?.plantedDefects ?? {};
+    if (!((d.critical ?? 0) + (d.major ?? 0) > 0 && (d.minor ?? 0) > 0)) problems.push(`${at}: must mix major/critical and minor defects`);
+    const text = String(l?.text ?? '');
+    const words = wordCount(text);
+    if (words < LETTER_WORDS.min || words > LETTER_WORDS.max) problems.push(`${at}: ${words} words, expected ${LETTER_WORDS.min}-${LETTER_WORDS.max}`);
+    if (!PRINTABLE_ASCII_TEXT.test(text)) problems.push(`${at}: not printable ASCII`);
+    if (/\n\n\n|^\s|\s$|[ \t]\n|\n[ \t]/.test(text)) problems.push(`${at}: stray whitespace`);
+    if (INPUT_RULE_CHARS.test(text) || text.split('\n').some((line) => LEADING_RULE.test(line))) problems.push(`${at}: contains an editor input-rule trigger`);
+  });
+  return { ok: problems.length === 0, problems };
+}
+
+/**
+ * Each letter goes to the task of its own scenario, on a learner of its own profession. A letter whose profession
+ * is not enabled, or whose scenario a learner cannot open, is BLOCKED with the reason: never given another task.
+ */
+export function matchLetters(plan, letters) {
+  const runs = [];
+  const blocked = [];
+  for (const letter of letters) {
+    const prof = plan.find((p) => p.profession === letter.profession);
+    if (!prof?.enabled) { blocked.push({ letter, reason: `${letter.profession} is not enabled for learners` }); continue; }
+    const task = (prof.eligibleTasks ?? []).find((t) => t.scenarioId.toLowerCase() === letter.scenarioId.toLowerCase());
+    if (!task) { blocked.push({ letter, reason: `scenario ${letter.scenarioId} is not an eligible task for a ${letter.profession} learner` }); continue; }
+    let run = runs.find((r) => r.profession.profession === prof.profession);
+    if (!run) runs.push((run = { profession: prof, letters: [] }));
+    run.letters.push({ letter, task });
+  }
+  return { runs, blocked };
+}
+
 // The script whose category best matches a task's letter type (free-sample task, closest-category rule).
 export function categoryForLetterType(letterType) {
   const code = letterTypeCode(letterType);
@@ -78,7 +138,7 @@ export function categoryForLetterType(letterType) {
 
 // ---- Workflow inputs --------------------------------------------------------------------------------------------
 
-export const SUITES = ['discover', 'matrix', 'acceptance', 'ui', 'all'];
+export const SUITES = ['discover', 'matrix', 'acceptance', 'ui', 'letters', 'all'];
 const list = (raw) => String(raw ?? '').split(',').map((v) => v.trim()).filter(Boolean);
 const bool = (raw, name, problems) => {
   const v = String(raw ?? '').trim().toLowerCase();
@@ -169,7 +229,7 @@ export function planDiscovery(input) {
         : !entry.isActive ? 'inactive in /v1/professions/catalog'
           : `only ${eligible.length} eligible task(s) visible to a ${entry.id} learner (3 needed)`);
     }
-    return { profession, catalogId: entry?.id ?? null, enabled, evidence, picks, notes };
+    return { profession, catalogId: entry?.id ?? null, enabled, evidence, picks, notes, eligibleTasks: eligible };
   });
 }
 
@@ -524,7 +584,75 @@ export function reportTextProblems(text, hrefs = []) {
   const broken = String(text ?? '').match(BROKEN_TEXT);
   if (broken) problems.push(`the report shows "${broken[0]}"`);
   if (/appeal/i.test(String(text ?? ''))) problems.push('the report mentions an appeal');
+  if (/exemplar/i.test(String(text ?? ''))) problems.push('the report shows the word "Exemplar"');
   if (hrefs.some((h) => /\/appeal(\b|$)/i.test(String(h)))) problems.push('the report links to /appeal');
+  return problems;
+}
+
+// Owner review 5 Oct 2026: three different priorities, short criterion cards, no internal labels, no "Exemplar".
+export const SUMMARY_MAX_CHARS = 240;
+export const PRIORITY_MAX_CHARS = 220;
+export const CARD_MAX_CHARS = 900;
+const LABEL_LEAK = /^R\d{1,2}[:.]|\([A-Z]{1,4}(?:-[A-Z]{1,3})?-\d|This affects|[Ee]xemplar/;
+const PRIORITY_LABEL = /^(?:AI(?:[.:][\w.-]*)?|[\w-]*[\d._-][\w.-]*):\s+/;
+const CRITERION_CODES = ['purpose', 'content', 'conciseness_clarity', 'genre_style', 'organisation_layout', 'language'];
+const C_KEYS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
+
+/**
+ * What the learner API says about the report's shape: numbers only (no letter, model answer or case-note text).
+ * @param {any} grade GET /grade body
+ * @param {any} report GET /assessment-v11 body
+ */
+export function reportShapeFacts(grade, report) {
+  const errors = report?.errors ?? [];
+  const severities = (name) => errors.filter((e) => String(e.severity).toLowerCase() === name).length;
+  const priorities = (report?.topPriorities ?? []).map((p) => String(p).replace(PRIORITY_LABEL, '').trim());
+  const summaries = (report?.criteria ?? []).map((c) => String(c.summary ?? ''));
+  const feedback = C_KEYS.map((k) => String(grade?.perCriterion?.[k]?.feedback ?? ''));
+  const leakTexts = [...priorities, ...summaries, ...feedback, ...errors.flatMap((e) => [e.whyItMatters, e.correction])].map((t) => String(t ?? ''));
+  const summaryOf = (code) => String((report?.criteria ?? []).find((c) => c.criterionCode === code)?.summary ?? '').trim();
+  return {
+    errorsCount: errors.length, critical: severities('critical'), major: severities('major'), minor: severities('minor'),
+    priorityCount: priorities.length, distinctPriorities: new Set(priorities.map((p) => p.toLowerCase())).size,
+    maxPriorityChars: Math.max(0, ...priorities.map((p) => p.length)),
+    maxSummaryChars: Math.max(0, ...summaries.map((t) => t.length)),
+    maxFeedbackChars: Math.max(0, ...feedback.map((t) => t.length)),
+    criteriaWithFindings: CRITERION_CODES.filter((code) => errors.some((e) => e.primaryCriterionCode === code)).length,
+    criteriaMissingSummary: CRITERION_CODES.filter((code) => errors.some((e) => e.primaryCriterionCode === code) && !summaryOf(code)).length,
+    purposePriorities: (report?.topPriorities ?? []).filter((p) => errors.some((e) => e.primaryCriterionCode === 'purpose' && String(p).startsWith(`${e.ruleSource}: `))).length,
+    labelLeaks: leakTexts.filter((t) => LABEL_LEAK.test(t)).length,
+  };
+}
+
+export function reportShapeProblems(f) {
+  const problems = [];
+  if (f.priorityCount > 3) problems.push(`${f.priorityCount} top priorities, expected at most 3`);
+  if (f.errorsCount > 0 && f.priorityCount === 0) problems.push('the report has corrections but no top priorities');
+  if (f.distinctPriorities !== f.priorityCount) problems.push(`the top priorities repeat (${f.distinctPriorities} distinct of ${f.priorityCount})`);
+  if (f.purposePriorities > 1) problems.push(`${f.purposePriorities} top priorities are about Purpose, expected at most 1`);
+  if (f.maxPriorityChars > PRIORITY_MAX_CHARS) problems.push(`a top priority is ${f.maxPriorityChars} chars, expected at most ${PRIORITY_MAX_CHARS}`);
+  if (f.maxSummaryChars > SUMMARY_MAX_CHARS) problems.push(`a criterion summary is ${f.maxSummaryChars} chars, expected at most ${SUMMARY_MAX_CHARS}`);
+  if (f.maxFeedbackChars > SUMMARY_MAX_CHARS) problems.push(`a per-criterion feedback is ${f.maxFeedbackChars} chars, expected at most ${SUMMARY_MAX_CHARS}`);
+  if (f.criteriaMissingSummary) problems.push(`${f.criteriaMissingSummary} criterion/criteria have findings but no summary`);
+  if (f.labelLeaks) problems.push(`${f.labelLeaks} report text(s) show an internal rule label, rule id or "Exemplar"`);
+  return problems;
+}
+
+/** A realistic letter must really mix severities, or the conciseness check proved nothing. */
+export const severityMixPartials = (f) => (f.minor > 0 && f.critical + f.major > 0 ? [] : [`the report did not mix severities (critical ${f.critical}, major ${f.major}, minor ${f.minor})`]);
+
+/**
+ * What the learner SEES: each criterion card is short with at most one suggested-fix box; at most three distinct priorities.
+ * @param {{ cards: {chars: number, fixBoxes: number}[], priorities: string[] }} dom
+ */
+export function cardProblems(dom) {
+  const problems = [];
+  dom.cards.forEach((card, i) => {
+    if (card.chars > CARD_MAX_CHARS) problems.push(`criterion card ${i + 1} shows ${card.chars} chars, expected at most ${CARD_MAX_CHARS}`);
+    if (card.fixBoxes > 1) problems.push(`criterion card ${i + 1} shows ${card.fixBoxes} suggested fixes, expected at most 1`);
+  });
+  if (dom.priorities.length > 3) problems.push(`${dom.priorities.length} priorities on the page, expected at most 3`);
+  if (new Set(dom.priorities.map((p) => p.toLowerCase())).size !== dom.priorities.length) problems.push('the page repeats a priority');
   return problems;
 }
 

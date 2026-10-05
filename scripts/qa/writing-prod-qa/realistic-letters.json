@@ -1,0 +1,77 @@
+{
+  "_comment": "Realistic candidate letters (200-270 words) with a mix of critical, major and minor defects, each pinned to its production scenario. Synthetic QA letters from the Writing regression corpora; text uses the editor form: blank line = new paragraph, single newline = line break.",
+  "letters": [
+    {
+      "id": "WC3A74B35F",
+      "profession": "nursing",
+      "letterType": "LT-TR",
+      "scenarioId": "00dab50b-9b46-4a4f-a4a2-31e30682cbbe",
+      "plantedDefects": {
+        "critical": 3,
+        "major": 16,
+        "minor": 7
+      },
+      "text": "Maria DiCoccio\nProudhurst Mental Health Home\nProudhurst\n\nHi Maria,\n\nRe: Bethany Tailor\n\nI am writing this letter about my patient Bethany Tailor. She was in our psychiatric ward. She have schizophrenia and she is 35 years old. Her father Henry is 65 years old and her mother Barbara is 58 years old.\n\nShe self admited on 01/03/2018 because of decompensated schizophrenia. Before this she was not taking her medicine. She was hearing crazy voices telling her to harm herself and she tried to harm herself before she came. Also she saw shadow figures with grinning faces and she believed she had personal connections to various political leaders. On the first day she was totally out of it, agitated and aggressive and responding to internal stimuli with thought blocking and latency. We started her on risperidone. In the ward we assessed her for objective signs of psychosis, redirected her from her delusions, helped her to maintain behavioural control and gave her therapy where possible. Making sure she took her medicine was our priority. By 10/03/2018 she stopped reporting halucinations. Now her hallucinations and delusions are all gone and her thinking is less disorganised with no thought blocking or latency, and she can focus on her daily activities. Insight good, judgement fair.\n\nDiagnosis - schizophrenia.\n\nShe go back to her apartment on 18/03/2018 on risperidone 2mg at night. Its very important that she keeps taking her medicine because her illness can get worse if she stops it. Honestly I am really worried about her. So please look after her.\n\nPMH - hypertension secondary to fibromuscular dysplasia.\n\nThanks a lot!!\nBest regards,\nNurse"
+    },
+    {
+      "id": "W6488AA2A5",
+      "profession": "pharmacy",
+      "letterType": "LT-OT",
+      "scenarioId": "0d0e6b51-cc89-441d-8cac-baa44f756681",
+      "plantedDefects": {
+        "critical": 6,
+        "major": 11,
+        "minor": 10
+      },
+      "text": "Holly Kerr\nSpringbank\n\n8 August 2018\n\nDear Holly,\n\nRe: Mrs Alice Ramsey\n\nYour mother, Mrs Alice Ramsey, was knocked down by a car in a car park on 11 July 2018 and was brought to the emergency department by ambulance, where she was seen by Dr Hogarth and give pethidine for the pain. She had an operation for her broken femur on 12 July under general anaesthetic with propofol, sevoflurane, fentanyl and midazolam. She is 168cm tall and weighs 75kg, BMI 26.8. Poor thing, it has been a very hard time for her and for all of you.\n\nNow she was discharge from Newtown Hospital and she is going to stay with you, so I just wanted to tell you some things about her tablets.\n\nZantac 150mg once in the morning for her reflux. Lipitor 20mg is for her cholesterol but it usually causes muscle damage. She also have Fragmin injection s/c 2500IU, which is LMWH, and she was given it because she had a blood clot in her leg. She can take Panadeine Forte (paracetamol and codeine) 500mg every four hours as needed for pain. Durolax 10mg at night. For consitpation. She has no allergies.\n\nSide effects - headache, rash, stomach upset, reduced alertness, nausia and vomiting, dependence. Also flu-like symptoms.\n\nPlease dont worry too much about her! If anything happens, just call someone.\n\nBest regards,\n\nPharmacist"
+    },
+    {
+      "id": "WE0629D703",
+      "profession": "physiotherapy",
+      "letterType": "LT-UR",
+      "scenarioId": "0a935f31-5d0f-42f9-b36a-68090d3ed939",
+      "plantedDefects": {
+        "critical": 4,
+        "major": 10,
+        "minor": 12
+      },
+      "text": "Dr Sarah Patel\nCity General Hospital\nBirmingham\n\n3 November 2026\n\nDear Sarah,\n\nRe: Mr Anthony Miller\n\nI am writing this letter about Mr Anthony Miller, 58 years old, he is a taxi driver and he attends our physio clinic after his knee operation.\n\nToday he complained from pain and swelling in his right calf, which started yesterday evening, pain 6/10 when walking, calf hot and tight. BMI 32. I measured his right calf and it was 2.5cm larger then the left one, 10cm below the tibial tuberosity. Honestly I was quite worried when I saw it!\n\nAs you know, DVT is a clot in the deep veins which can go to the lungs and be very dangerous.\n\nHe had a arthroscopy and partial medial meniscectomy on his left knee on 25 October 2026 and he was discharged on the same day. He was told to mobilise as tolerated and take simple painkillers. On 28 October, at his first assessment, he have mild knee swelling and pain of 4/10. He was walking with one stick and tolerating weight bearing and there was no calf tenderness. On 1 November he said his calf felt tighter after a long car journey.\n\nHe has high blood pressure, which is controled with amlodipine 5mg daily. Also he smokes 10 cigarettes a day.\n\nThe knee wound is clean. We stopped his exercises and advised him not to massage the calf.\n\nHe has developed a DVT in his right leg. Could you please see him when you have time.\n\nThanks,\n\nPhysiotherapist"
+    },
+    {
+      "id": "WE2AF0BA76",
+      "profession": "nursing",
+      "letterType": "LT-RR",
+      "scenarioId": "035403b8-a8da-42a9-97ea-298b4038b55c",
+      "plantedDefects": {
+        "critical": 1,
+        "major": 1,
+        "minor": 2
+      },
+      "text": "Dr Dudley Hill\n185 Payneharn Road\nSt Peters\nSouth Australia 5069\n\n1 January 1990\n\nDear Dr Hill,\nRe: Mr Greg Whitby\n\nI am writing to refer Mr Greg Whitby, a teenager, who has severe acne, and to inform you of the medication I have prescribed.\n\nMr Whitby has severe acne, diagnosed as acne conglobata, and has become significantly depressed as a result. Doxycycline, 100 mg daily, was prescribed by a visiting school doctor three months ago, and he has also been using an acne cleanser obtained from the local chemist. He denies taking any other medications.\n\nI advised Mr Thompson to continue doxycycline, 100 mg daily, and benzoyl peroxide gel, to be applied twice daily to all affected areas, was added. He was also advised to continue washing with the cleanser BD, and he has been informed of the possible side effects of the antibiotics.\n\nMr Whitby previously had a sudden eruption of severe acne, which was treated successfully with topical steroids from a hospital. He has no known allergies, and his immunisations are up to date.\n\nI would be grateful if you could provide a thorough assesment and appropriate treatment of Mr Whitby's severe acne and arrange an urgent MRI scan.\n\nShould there be any queries, kindly do not hesitate to contact me.\n\nYours sincerely,\n\nRegistered Nurse"
+    },
+    {
+      "id": "W3C6F17D8E",
+      "profession": "radiography",
+      "letterType": "LT-RR",
+      "scenarioId": "1c67f18d-af85-4ce0-9570-0c8c2657e765",
+      "plantedDefects": {
+        "critical": 1,
+        "major": 2,
+        "minor": 1
+      },
+      "text": "Dr Mark Reilly\nNorthgate Medical Practice\n8 Station Road\nNorthgate\n\n22 May 2019\n\nDear Dr Reilly,\nRe: Mrs Patricia Nguyen, DOB: 3 September 1965\n\nI am writing to report the findings of the non-contrast CT of the urinary tract performed today on Mrs Patricia Nguyen, who was referred with suspected renal colic, and to request your conservative management of the confirmed ureteric calculus.\n\nMrs Nguyen presented today with a two-day history of acute colicky left unbearable flank pain radiating to the groin, with restlessness, nausea and one episode of vomiting. Mrs Nguyen was also commenced on amoxicillin, 500 mg three times daily. Dipstick testing showed microscopic haematuria, and her pain was only partially relieved by NSAIDs, she remained afebrile with stable observations. She is post-menopausal and pregnancy was excluded.\n\nThe scan revealed a 6 mm calculus in the mid-left ureter with mild proximal hydronephrosis, confirming an obstructing calculus that accounts for Mrs Nguyen's presentation and is likely to pass. An incidental 3.5 cm right adrenal mass with indeterminate features was also identified, discussed with the reporting radiologist and flagged for your follow-up.\n\nMrs Nguyen has diet-controlled type two diabetes mellitus and hypertension, with no previous renal calculi.\n\nI would be grateful if you could arrange a dedicated adrenal-protocol CT, together with hormonal evaluation or endocrine referral, for this indeterminate lesion. In addition, she works full-time as an accountant.\n\nShould there be any queries, kindly do not hesitate to contact me.\n\nYours sincerely,\n\nRadiographer"
+    },
+    {
+      "id": "WF99DF5756",
+      "profession": "dentistry",
+      "letterType": "LT-RR",
+      "scenarioId": "a131651c-03dc-4d4e-84ab-700b2a1a358f",
+      "plantedDefects": {
+        "critical": 1,
+        "major": 1,
+        "minor": 2
+      },
+      "text": "Dr Tanya Wong\nNewtown Medical Centre\n77 North Road\nNewtown\n\n30 August 2019\n\nDear Dr Wong,\nRe: Mr William Hunter, DOB: 4 December 1964\n\nI am writing to request further assessment and management of Mr William Hunter's blood glucose levels before extraction of tooth 36.\n\nSadly, Mr Hunter attended today, when a full periodontal chart confirmed moderate to severe generalised periodontitis, with gross full-mouth supragingival calculus. His blood sugar level on finger-prick testing was 20 mmol/L, against a normal range of 3.0 to 6.7 mmol/L. He has chosen extraction at his next visit. Extraction should be deferred until his diabetes is better controlled, given the risk of further infection.\n\nOn 9 August 2019, Mr Hunter were found to have a draining sinus adjacent to tooth 36, with no buccal swelling. Radiographs showed a disto-occlusal carious lesion and radiolucency at the distal root, and the diagnosis was pulpal necrosis.\n\nMr Hunter has type two diabetes mellitus and takes metformin hydrochloride, 500 mg twice daily and captopril, 25 mg twice daily. His blood pressure was 150/95 mmHg. He last attended his doctor for diabetes in February 2019 and attends irregularly. He smokes twenty-five cigarettes per day and has a poor diet.\n\nI would be grateful if you could also discuss smoking cessation with Mr Hunter.\n\nShould there be any queries, kindly do not hesitate to contact me.\n\nYours faithfully,\n\nDentist"
+    }
+  ]
+}

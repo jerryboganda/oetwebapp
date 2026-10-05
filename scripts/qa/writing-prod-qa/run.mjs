@@ -16,7 +16,7 @@ import {
   buildTable, categoryForLetterType, createLane, creditPreflight, creditVerdict, deriveDeviceId, faultSideEffects,
   freeSampleProblems, gradingStepsProblems, guardDecision, myWorkProblems, overallVerdict, pacingDelayMs,
   paidSpendProblems, parseInputs, planDiscovery, planRows, preflightDecision, providerEvidence, scriptFor,
-  splitText, suiteRuns, syntheticEmail, timerVerdict, validateScripts, verdictOf, writingHealth,
+  matchLetters, splitText, suiteRuns, syntheticEmail, timerVerdict, validateLetters, validateScripts, verdictOf, writingHealth,
 } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -46,6 +46,14 @@ function loadScripts() {
   const check = validateScripts(doc);
   if (!check.ok) throw new Error(`scripts.json is invalid: ${check.problems.join('; ')}`);
   return doc.scripts;
+}
+
+// suite=letters: realistic candidate letters (mixed major/minor defects), each pinned to its own production scenario.
+function loadLetters() {
+  const doc = JSON.parse(fs.readFileSync(path.join(here, 'realistic-letters.json'), 'utf8'));
+  const check = validateLetters(doc);
+  if (!check.ok) throw new Error(`realistic-letters.json is invalid: ${check.problems.join('; ')}`);
+  return doc.letters;
 }
 
 // Is a production deploy running or queued? (gh CLI with the job's token; unknown = not busy, logged.)
@@ -393,6 +401,51 @@ async function matrixSuite(ctx, plan) {
       const attempt = () => runTest(ctx, rows[i], ['editor', 'grading', 'results', 'postSubmissions'], async (t) => {
         const opened = await openAndType(ctx, session, learner, pick, script.text, t, { readingWindow: ctx.inputs.readingWindow });
         await submitAndVerify(ctx, session, learner, pick, script.text, t, { kind: 'paid', ...opened });
+      });
+      let result = await attempt();
+      if (result.status === 'VOID_DEPLOY' && !ctx.halted) {
+        log(`re-queueing ${rows[i].category} once after a deploy`);
+        result = await attempt();
+      }
+      ctx.tables.qa2.push(result);
+    }
+    await session.close();
+  };
+  const worker = async () => { while (queue.length) await professionRun(queue.shift()); };
+  await Promise.all(Array.from({ length: Math.min(ctx.inputs.concurrency, queue.length) }, worker));
+}
+
+/**
+ * Owner review 5 Oct 2026: realistic mixed major/minor letters through the real grader. Per letter the report must keep
+ * three distinct priorities, short criterion cards, no internal labels and no "Exemplar" (gradeFacts + resultsUiChecks).
+ */
+async function lettersSuite(ctx, plan) {
+  const { runs, blocked } = matchLetters(plan, ctx.letters);
+  const letterRow = (letter, extra = {}) => ({
+    profession: ctx.labels[letter.profession] ?? letter.profession, task: `${letter.letterType} ${letter.scenarioId}`,
+    category: `realistic letter ${letter.id}`, notes: '', ...extra,
+  });
+  for (const { letter, reason } of blocked) ctx.tables.qa2.push(letterRow(letter, { status: 'BLOCKED', notes: reason }));
+  const queue = [...runs];
+  const professionRun = async ({ profession, letters }) => {
+    const rows = letters.map(({ letter }) => letterRow(letter));
+    let learner;
+    let session;
+    try {
+      learner = await provisionLearner(ctx, { key: profession.profession, professionId: profession.catalogId, letters: letters.length });
+      session = await startSession(ctx, learner, { seedClock: ctx.inputs.readingWindow === 'seed' });
+      if (ctx.inputs.verifyCredits) await verifyFunding(ctx, session, learner, 'paid');
+    } catch (error) {
+      const status = error instanceof Blocked ? 'BLOCKED' : 'FAIL';
+      for (const row of rows) ctx.tables.qa2.push({ ...row, status, notes: `learner setup: ${error.message}` });
+      await session?.close();
+      return;
+    }
+    for (const [i, { letter, task }] of letters.entries()) {
+      const attempt = () => runTest(ctx, rows[i], ['editor', 'grading', 'results', 'postSubmissions'], async (t) => {
+        const opened = await openAndType(ctx, session, learner, task, letter.text, t, { readingWindow: ctx.inputs.readingWindow });
+        const done = await submitAndVerify(ctx, session, learner, task, letter.text, t, { ...opened, kind: 'paid', ui: { desktop: false, mobile: false } });
+        t.partials.push(...(done.facts?.severityMix ?? []));
       });
       let result = await attempt();
       if (result.status === 'VOID_DEPLOY' && !ctx.halted) {
@@ -849,7 +902,9 @@ async function run() {
     return 0;
   }
   ctx.lane = createLane();
-  const planned = plan.reduce((n, p) => n + (p.enabled ? p.picks.length : 0), 0);
+  const lettersOnly = inputs.suite === 'letters';
+  ctx.letters = lettersOnly ? loadLetters().filter((l) => inputs.professions.includes(l.profession)) : [];
+  const planned = lettersOnly ? ctx.letters.length : plan.reduce((n, p) => n + (p.enabled ? p.picks.length : 0), 0);
   const notEnabled = planRows(plan.filter((p) => !p.enabled), ctx.labels);
   let ok = false;
   let guard = null;
@@ -857,6 +912,12 @@ async function run() {
     ok = await preflight(ctx, planned + 6, true);
     if (!ok) {
       if (suiteRuns(inputs.suite, 'matrix')) ctx.tables.qa2.push(...planRows(plan, ctx.labels).map((r) => (r.status === 'NOT_RUN' ? { ...r, notes: 'not started: preflight did not pass' } : r)));
+      if (lettersOnly) {
+        ctx.tables.qa2.push(...ctx.letters.map((l) => ({
+          profession: ctx.labels[l.profession] ?? l.profession, task: `${l.letterType} ${l.scenarioId}`,
+          category: `realistic letter ${l.id}`, status: 'NOT_RUN', notes: 'not started: preflight did not pass',
+        })));
+      }
     } else {
       guard = startGuard(ctx);
       ctx.guard = guard;
@@ -867,6 +928,7 @@ async function run() {
         await matrixSuite(ctx, plan);
         ctx.tables.qa2.push(...notEnabled);
       }
+      if (lettersOnly) await lettersSuite(ctx, plan); // not part of `all`: it grades extra letters
       await guard.tick();
     }
   } finally {
@@ -901,6 +963,7 @@ try {
   if (mode === 'check-inputs') {
     const inputs = parseInputs(process.env);
     loadScripts();
+    loadLetters();
     console.log(JSON.stringify(inputs));
     process.exitCode = 0;
   } else if (mode === 'safety-net') process.exitCode = await safetyNet();

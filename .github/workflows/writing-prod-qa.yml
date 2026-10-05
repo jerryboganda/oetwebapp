@@ -14,9 +14,9 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: discover (read-only plan, default) | matrix (3 letters per enabled profession) | acceptance (P0-3 S1-S8, reading resume, L1+L2 fault) | ui (phone devices) | all
+        description: discover (read-only plan, default) | matrix (3 letters per enabled profession) | acceptance (P0-3 S1-S8, reading resume, L1+L2 fault) | ui (phone devices) | letters (6 realistic mixed major/minor letters, each on its own scenario; NOT part of all) | all
         type: choice
-        options: [discover, matrix, acceptance, ui, all]
+        options: [discover, matrix, acceptance, ui, letters, all]
         default: discover
       professions:
         description: Comma-separated handoff profession ids to include (blank = all twelve; disabled ones are reported NOT_ENABLED)
@@ -152,7 +152,7 @@ jobs:
       - name: Stage the harness next to an isolated Playwright
         run: |
           mkdir -p "$RUNNER_TEMP/wqa"
-          cp scripts/qa/writing-prod-qa/*.mjs scripts/qa/writing-prod-qa/scripts.json "$RUNNER_TEMP/wqa/"
+          cp scripts/qa/writing-prod-qa/*.mjs scripts/qa/writing-prod-qa/scripts.json scripts/qa/writing-prod-qa/realistic-letters.json "$RUNNER_TEMP/wqa/"
       - name: Install isolated Playwright browsers
         if: ${{ inputs.suite != 'discover' }}
         run: |
