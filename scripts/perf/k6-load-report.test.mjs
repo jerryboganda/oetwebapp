@@ -180,3 +180,13 @@ test('parseArgs and main wire files, the verdict and the exit code', () => {
   // without --require-pass the report is still produced but the exit code stays 0
   assert.equal(main(['--input', 'b.json', '--out', 'r3.md'], io).exitCode, 0);
 });
+
+test('the report says hub polling stretches think time, and prints the effective cadence when the leg recorded it', () => {
+  const plain = renderReport(buildModel([leg()]));
+  assert.match(plain, /returns on the server's 15 s keep-alive/);
+  assert.doesNotMatch(plain, /effective mean pause/);
+  const rows = [{ activity: 'browse tick', nominalS: 16.5, effectiveS: 23.8, slowdown: 1.44 }];
+  const withRows = renderReport(buildModel([leg({ meta: { hubCadence: rows } })]));
+  assert.match(withRows, /\| activity \| nominal mean pause \(s\) \| effective mean pause \(s\) \| slowdown \|/);
+  assert.match(withRows, /\| browse tick \| 16\.5 \| 23\.8 \| 1\.44 \|/);
+});

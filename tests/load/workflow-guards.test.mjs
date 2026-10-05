@@ -92,6 +92,17 @@ test('the fleet workflow never swallows a failure and keeps its non-production g
   }
 });
 
+test('every dispatch input the plan script reads is passed by the workflow, and the oversubscribe escape hatch is declared', () => {
+  const plan = readFileSync(new URL('../../scripts/perf/load-plan.mjs', import.meta.url), 'utf8');
+  const wanted = [...new Set([...plan.matchAll(/env\.(INPUT_[A-Z_]+)/g)].map((match) => match[1]))];
+  assert.ok(wanted.includes('INPUT_ALLOW_OVERSUBSCRIBE'), 'load-plan.mjs reads the escape hatch docs/ops/LOAD-TESTING.md documents');
+  const source = activeLines(read('load-fleet.yml'));
+  for (const name of wanted) {
+    assert.match(source, new RegExp(`\\b${name}\\b`), `${name} is read by load-plan.mjs but the workflow never sets it`);
+  }
+  assert.match(onBlock(source), /^\s+allow_oversubscribe:/m, 'allow_oversubscribe must be a declared dispatch input');
+});
+
 test('runBodies reads inline and block scalars by indentation', () => {
   const sample = [
     'jobs:',

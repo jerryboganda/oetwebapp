@@ -31,9 +31,10 @@ function connectFailed(failed) {
   M.signalrConnectFailed.add(failed, tags);
 }
 
-function newConnection(sess, hubUrl, token) {
+function newConnection(sess, hubUrl, hubPath, token) {
   return {
     hubUrl,
+    hubPath,
     url: transportUrl(hubUrl, token),
     token,
     handshaken: false,
@@ -48,7 +49,7 @@ function newConnection(sess, hubUrl, token) {
 
 /** One long poll: blocks until the server has a frame (<= ~15 s with pings). Updates `conn`. */
 export function pollOnce(sess, conn) {
-  const r = call(sess, ACTIONS.hubPoll, { url: `${conn.url}&_=${Date.now()}`, timeout: POLL_TIMEOUT });
+  const r = call(sess, ACTIONS.hubPoll, { url: `${conn.url}&_=${Date.now()}`, timeout: POLL_TIMEOUT, hubPath: conn.hubPath });
   if (r.status === 204 || r.status === 404 || r.status === 410) {
     // 204: the server ended the connection; 404/410: it no longer knows the token (slot cutover).
     conn.closed = true;
@@ -74,7 +75,7 @@ export function pollOnce(sess, conn) {
 /** Negotiate, start the transport and complete the JSON handshake. Returns the connection or null. */
 export function hubConnect(sess, hubPath) {
   const hubUrl = `${sess.prefix}${hubPath}`;
-  const negotiated = call(sess, ACTIONS.hubNegotiate, { url: negotiateUrl(hubUrl), body: '' });
+  const negotiated = call(sess, ACTIONS.hubNegotiate, { url: negotiateUrl(hubUrl), body: '', hubPath });
   if (!negotiated.ok) {
     connectFailed(1);
     return null;
@@ -84,15 +85,15 @@ export function hubConnect(sess, hubPath) {
     connectFailed(1);
     return null;
   }
-  const conn = newConnection(sess, hubUrl, parsed.connectionToken);
+  const conn = newConnection(sess, hubUrl, hubPath, parsed.connectionToken);
 
   // First poll "finishes initialising the connection" and returns without data.
-  const first = call(sess, ACTIONS.hubPoll, { url: `${conn.url}&_=${Date.now()}`, timeout: '30s' });
+  const first = call(sess, ACTIONS.hubPoll, { url: `${conn.url}&_=${Date.now()}`, timeout: '30s', hubPath });
   if (!first.ok) {
     connectFailed(1);
     return null;
   }
-  const sent = call(sess, ACTIONS.hubSend, { url: conn.url, body: handshakeFrame() });
+  const sent = call(sess, ACTIONS.hubSend, { url: conn.url, body: handshakeFrame(), hubPath });
   if (!sent.ok) {
     connectFailed(1);
     return null;
@@ -105,7 +106,7 @@ export function hubConnect(sess, hubPath) {
 }
 
 export function hubPing(sess, conn) {
-  const r = call(sess, ACTIONS.hubSend, { url: conn.url, body: pingFrame() });
+  const r = call(sess, ACTIONS.hubSend, { url: conn.url, body: pingFrame(), hubPath: conn.hubPath });
   conn.lastPingMs = Date.now();
   if (r.status === 404 || r.status === 410 || r.status === 0) conn.closed = true;
   return r.ok;
@@ -115,7 +116,7 @@ export function hubPing(sess, conn) {
 export function hubInvoke(sess, conn, target, args) {
   const id = String(conn.nextInvocation);
   conn.nextInvocation += 1;
-  const r = call(sess, ACTIONS.hubSend, { url: conn.url, body: invocationFrame(id, target, args) });
+  const r = call(sess, ACTIONS.hubSend, { url: conn.url, body: invocationFrame(id, target, args), hubPath: conn.hubPath });
   conn.lastPingMs = Date.now();
   if (r.status === 404 || r.status === 410 || r.status === 0) conn.closed = true;
   return r.ok ? id : null;
@@ -144,7 +145,7 @@ export function hubHold(sess, conn, seconds) {
 /** Best-effort teardown (DELETE ends a long-polling connection). */
 export function hubClose(sess, conn) {
   if (conn === null || conn === undefined) return;
-  call(sess, ACTIONS.hubClose, { url: conn.url });
+  call(sess, ACTIONS.hubClose, { url: conn.url, hubPath: conn.hubPath });
 }
 
 /** Re-establish a dropped connection (counts a reconnect). Backs off when the limiter pushes back. */

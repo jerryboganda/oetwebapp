@@ -42,7 +42,10 @@ export const ACTIONS = Object.freeze({
   bootstrap: act('bootstrap', 'GET', '/v1/me/bootstrap', 'critical-read'),
   dashboard: act('dashboard', 'GET', '/v1/learner/dashboard', 'critical-read'),
   entitlement: act('entitlement', 'GET', '/v1/me/entitlement-snapshot', 'critical-read'),
-  subscription: act('subscription', 'GET', '/v1/subscriptions/me', 'critical-read'),
+  // 404 is the API's answer for an account with no Subscription row (BillingSubscriptionEndpoints
+  // GetMySubscription returns NotFound), and the seeder only creates the account and its credit pools:
+  // every seeded learner gets it. It is the documented answer, not a failure (contract.test.mjs).
+  subscription: act('subscription', 'GET', '/v1/subscriptions/me', 'critical-read', { domain: [404] }),
   readiness: act('readiness', 'GET', '/v1/readiness', 'critical-read'),
   studyPlan: act('study-plan', 'GET', '/v1/study-plan', 'critical-read'),
   engagement: act('engagement', 'GET', '/v1/learner/engagement', 'critical-read'),
@@ -118,6 +121,16 @@ export const HUBS = Object.freeze({
   notifications: '/v1/notifications/hub',
   speakingLiveRoom: '/v1/speaking/live-rooms/hub',
 });
+
+/**
+ * The hubs the web origin's /api/backend proxy exempts from its double-submit CSRF check. This mirrors
+ * SIGNALR_HUB_PATH_PATTERN in lib/backend-proxy.ts (notifications, conversations, ai-assistant,
+ * owner-agent) restricted to the hubs this harness uses; contract.test.mjs reads that file and fails
+ * when the two disagree. The live-room hub is NOT in the proxy's list today.
+ */
+export const CSRF_EXEMPT_HUBS = Object.freeze([HUBS.notifications]);
+
+export const isCsrfExemptHub = (hubPath) => CSRF_EXEMPT_HUBS.includes(hubPath);
 
 /** Endpoint ids for the smoke status matrix (every action the harness can call). */
 export const ENDPOINT_IDS = Object.freeze(Object.values(ACTIONS).map((spec) => spec.id));

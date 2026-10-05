@@ -48,6 +48,11 @@ on:
         required: true
         default: false
         type: boolean
+      allow_oversubscribe:
+        description: 'Allow more than 300 learners per leg (generator CPU may then distort latency; the report warns)'
+        required: false
+        default: false
+        type: boolean
       seed_accounts:
         description: 'Create the disposable accounts first (idempotent; needs the OET_LOAD_ADMIN_* and OET_LOAD_PASSWORD secrets)'
         required: false
@@ -136,6 +141,7 @@ jobs:
           INPUT_API_URL: ${{ inputs.api_url }}
           INPUT_WEB_URL: ${{ inputs.web_url }}
           INPUT_CONFIRM_NON_PRODUCTION: ${{ inputs.confirm_non_production }}
+          INPUT_ALLOW_OVERSUBSCRIBE: ${{ inputs.allow_oversubscribe }}
           INPUT_LEARNERS: ${{ inputs.learners }}
           INPUT_STEADY_MINUTES: ${{ inputs.steady_minutes }}
           ROOMS_JSON: ${{ inputs.rooms_json }}

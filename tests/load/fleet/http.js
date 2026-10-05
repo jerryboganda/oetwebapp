@@ -6,7 +6,7 @@ import http from 'k6/http';
 import { sleep } from 'k6';
 import exec from 'k6/execution';
 import { CFG, TIMELINE, accountOf } from './config.js';
-import { ACTIONS } from './contract.js';
+import { ACTIONS, isCsrfExemptHub } from './contract.js';
 import { classifyResponse, errorCodeOf, headerOf, retryAfterSeconds } from './classify.mjs';
 import * as M from './metrics.js';
 
@@ -59,11 +59,16 @@ function headersFor(sess, spec, method, options) {
   if (spec.auth) headers['X-OET-Client-Platform'] = 'native';
   const mutating = method !== 'GET' && method !== 'HEAD';
   if (mutating && CFG.viaWeb) {
-    // The Next.js BFF rejects a state-changing request without a same-origin Origin, and (when the
-    // refresh cookie is present) without the double-submit CSRF header. Hub requests are exempt from
-    // the CSRF header exactly as in lib/backend-proxy.ts; so are the auth bootstrap calls.
+    // The Next.js BFF rejects a state-changing request without a same-origin Origin, and (once the
+    // refresh cookie is in the jar, i.e. after sign-in) without the double-submit CSRF header
+    // (validateProxyCsrf in lib/backend-proxy.ts). Exempt from the header there: the auth bootstrap
+    // calls and the hubs in SIGNALR_HUB_PATH_PATTERN (contract.js CSRF_EXEMPT_HUBS). Any other hub,
+    // today the tutor-room hub, is NOT exempt, so its negotiate / send / close POSTs carry the header
+    // here; a browser's SignalR client sends none and would be refused with 403 (a known finding,
+    // docs/ops/LOAD-TESTING.md section 11). A hub request with no `hubPath` gets the header too.
     headers.Origin = CFG.webUrl;
-    if (!spec.auth && !spec.hub) {
+    const exempt = spec.auth || (spec.hub && isCsrfExemptHub(options.hubPath));
+    if (!exempt) {
       const csrf = csrfToken();
       if (csrf) headers['X-CSRF-Token'] = csrf;
     }
@@ -94,7 +99,8 @@ function record(sess, spec, status, c, phase) {
 /**
  * Make one classified request.
  * options: path (override the template, e.g. with ids filled), body (object or string), url (absolute),
- *          direct (use the API origin instead of the web proxy), multipart, headers, timeout, _retried.
+ *          direct (use the API origin instead of the web proxy), multipart, headers, timeout,
+ *          hubPath (hub requests: which hub, so the CSRF exemption can be decided), _retried.
  * Returns { res, status, ok, kind, domain, shed, unexpected, errorCode, retryAfter, text, json(), ms }.
  */
 export function call(sess, spec, options = {}) {

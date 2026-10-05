@@ -9,7 +9,8 @@
 //   OET_LOAD_ADMIN_EMAIL=... OET_LOAD_ADMIN_PASSWORD=... \
 //   node tests/load/seed/audit-ledger.mjs --api https://api.staging.example --learners 1500 --report ledger-audit.json
 //
-// Exit code 1 when any duplicate or negative balance is found; the report lists them.
+// Exit code 1 when any duplicate or negative balance is found, an account cannot be read, or an account
+// is missing (it was not audited); the report lists them.
 
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -71,8 +72,19 @@ export async function auditAccounts(client, options) {
       report.failed.push({ email: account.email, error: String(error.message ?? error).slice(0, 200) });
     }
   });
-  report.passed = report.duplicates.length === 0 && report.negativeBalances.length === 0 && report.failed.length === 0;
+  // An account that was not found was not audited: "no duplicate charges" must not be claimed for a
+  // fraction of the fleet (a short user listing, a purged account, a wrong prefix).
+  report.passed = report.duplicates.length === 0 && report.negativeBalances.length === 0
+    && report.failed.length === 0 && report.missing === 0;
   return report;
+}
+
+/** One line saying why an audit did not pass (printed to stderr by the CLI; empty when it passed). */
+export function describeFailure(report) {
+  if (report?.passed) return '';
+  return `${report?.duplicates?.length ?? 0} duplicate charge(s), ${report?.negativeBalances?.length ?? 0} negative balance(s), `
+    + `${report?.failed?.length ?? 0} account(s) that could not be read, ${report?.missing ?? 0} account(s) not found `
+    + `(of ${report?.accounts ?? 0} audited)`;
 }
 
 export async function main(argv, env = process.env, deps = {}) {
@@ -91,6 +103,7 @@ if (isMain) {
   main(process.argv.slice(2))
     .then((report) => {
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+      if (!report.passed) process.stderr.write(`audit-ledger: FAILED: ${describeFailure(report)}\n`);
       process.exitCode = report.passed ? 0 : 1;
     })
     .catch((error) => {

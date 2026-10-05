@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { analyseLedger, auditAccounts, main, movesCredits } from './audit-ledger.mjs';
+import { analyseLedger, auditAccounts, describeFailure, main, movesCredits } from './audit-ledger.mjs';
 
 const debit = (referenceId, reason = 'GradingDeduct', delta = -2) => ({ reason, referenceId, writingOnlyCreditsDelta: delta });
 
@@ -72,6 +72,18 @@ test('an all-clean run passes', async () => {
   const report = await auditAccounts(client, { learners: 1, experts: 0, prefix: 'lt', domain: 'x.test' });
   assert.equal(report.passed, true);
   assert.equal(report.transactionsInspected, 1);
+});
+
+test('an account that was not found is not audited, so the audit cannot pass', async () => {
+  // learner 1 was never created (or was purged): everything that was found is clean, yet nothing is claimed
+  const client = fakeAuditClient({ 'lt-probe-0000@x.test': { transactions: [] }, 'lt-learner-0000@x.test': { transactions: [] } });
+  const report = await auditAccounts(client, { learners: 2, experts: 0, prefix: 'lt', domain: 'x.test' });
+  assert.equal(report.accounts, 3);
+  assert.equal(report.missing, 1);
+  assert.deepEqual([report.duplicates.length, report.negativeBalances.length, report.failed.length], [0, 0, 0]);
+  assert.equal(report.passed, false);
+  assert.match(describeFailure(report), /1 account\(s\) not found \(of 3 audited\)/);
+  assert.equal(describeFailure({ passed: true }), '');
 });
 
 test('the CLI needs admin credentials and refuses production', async () => {

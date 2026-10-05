@@ -306,6 +306,16 @@ export function renderReport(model, options = {}) {
   lines.push('- Every learner is a distinct disposable account with its own device id; sign-ins are paced to stay under the per-IP limit of 100 / min.');
   lines.push('- Notification hub connections use long-polling through the web origin, as browsers do in production (the BFF proxy cannot upgrade WebSockets).');
   lines.push('- Think times are randomised around realistic dwell times; request mix and cadence are defined in `tests/load/fleet/flows.js`.');
+  lines.push('- While a hub connection is open, think time is spent long-polling it and a poll returns on the server\'s 15 s keep-alive, so every pause lasts whole polls (15 s at least): the achieved action rates are below the nominal think-time mix.');
+  const cadence = Array.isArray(meta.hubCadence) ? meta.hubCadence : [];
+  if (cadence.length > 0) {
+    lines.push('');
+    lines.push(table(
+      ['activity', 'nominal mean pause (s)', 'effective mean pause (s)', 'slowdown'],
+      cadence.map((row) => [row.activity, row.nominalS, row.effectiveS, row.slowdown]),
+    ));
+    lines.push('');
+  }
   lines.push('- Provider simulators keep the real Writing lane bounds (one CLI at a time, queue 40, 7-minute wait) so the true grading bottleneck is exercised.');
   lines.push('- This is evidence for one commit on one non-production stack. It is not a release proof and does not replace the production deploy gates.');
   lines.push('');
