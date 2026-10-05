@@ -69,9 +69,11 @@ Reading this table:
 
 Each process now carries its own Npgsql `Application Name` (`oet-api-blue`,
 `oet-api-green`, `oet-ai-worker`), set per service in `docker-compose.production.yml`.
-Before this all three were indistinguishable in `pg_stat_activity` and
-`pg_stat_statements` consumers. It is a plain connection-string keyword: no behaviour
-change, no new connection.
+Before this all three were indistinguishable in `pg_stat_activity` (and in the Postgres
+log, where `%a` in `log_line_prefix` prints it). `pg_stat_statements` aggregates across
+sessions and does not carry the name; use it for "which statements", and
+`pg_stat_activity` for "which process". It is a plain connection-string keyword: no
+behaviour change, no new connection.
 
 ## Load removed from the database by this change set
 

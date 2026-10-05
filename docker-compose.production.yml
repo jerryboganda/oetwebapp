@@ -417,9 +417,10 @@ services:
     container_name: oet-api-blue
     environment:
       <<: *api-env
-      # Per-process Npgsql Application Name: pg_stat_activity / pg_stat_statements can
-      # then tell the two API slots and the ai-worker apart (they share one login and
-      # database, so all three looked identical). Same string as the anchor otherwise.
+      # Per-process Npgsql Application Name: pg_stat_activity (and %a in the Postgres
+      # log) can then tell the two API slots and the ai-worker apart (they share one
+      # login and database, so all three looked identical). Same string as the anchor
+      # otherwise.
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};Application Name=oet-api-blue
       OwnerAgent__Enabled: ${OWNER_AGENT__ENABLED:-false}
       OwnerAgent__BaseUrl: ${OWNER_AGENT__BASEURL:-http://oet-agent-console:8410}
