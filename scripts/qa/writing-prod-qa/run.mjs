@@ -973,3 +973,6 @@ try {
   console.log(`::error::${String(error.message).replace(/\r?\n/g, ' ')}`);
   process.exitCode = 1;
 }
+// Evidence, tables and cleanup are finished by here. A lingering handle (browser, keep-alive socket) kept some runs
+// "in progress" for hours after the last letter (runs 37261674873, 37274160131, 37279045941): exit explicitly.
+process.exit(process.exitCode ?? 0);
