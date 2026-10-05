@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { usePasteExempt } from '@/lib/paste-exempt';
 
 /**
  * App-wide clipboard guard for the learner experience.
@@ -61,7 +62,8 @@ const GUARDED_EVENTS = ['paste', 'copy', 'cut', 'dragstart', 'drop'] as const;
 
 export function LearnerPasteGuard(): null {
   const pathname = usePathname();
-  const excluded = isExcludedPath(pathname);
+  const exempt = usePasteExempt();
+  const excluded = exempt || isExcludedPath(pathname);
 
   useEffect(() => {
     // On admin/auth routes we attach nothing so native paste keeps working.

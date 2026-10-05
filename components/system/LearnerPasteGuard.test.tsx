@@ -9,6 +9,14 @@ vi.mock('next/navigation', () => ({
   usePathname: () => mockUsePathname(),
 }));
 
+const { mockUsePasteExempt } = vi.hoisted(() => ({
+  mockUsePasteExempt: vi.fn<() => boolean>(() => false),
+}));
+
+vi.mock('@/lib/paste-exempt', () => ({
+  usePasteExempt: () => mockUsePasteExempt(),
+}));
+
 import { LearnerPasteGuard } from './LearnerPasteGuard';
 
 /**
@@ -27,6 +35,15 @@ describe('LearnerPasteGuard', () => {
   afterEach(() => {
     cleanup();
     mockUsePathname.mockReset();
+    mockUsePasteExempt.mockReturnValue(false);
+  });
+
+  it('does NOT prevent paste for the exempt account on a learner path', () => {
+    mockUsePasteExempt.mockReturnValue(true);
+    mockUsePathname.mockReturnValue('/writing/practice');
+    render(<LearnerPasteGuard />);
+
+    expect(dispatchPaste()).toBe(false);
   });
 
   it('prevents paste on a learner path', () => {

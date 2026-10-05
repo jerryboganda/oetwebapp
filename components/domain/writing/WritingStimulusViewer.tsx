@@ -13,6 +13,7 @@
 import { useEffect, useRef, useState, KeyboardEvent } from 'react';
 import { Hand } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePasteExempt } from '@/lib/paste-exempt';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { usePanScroll, PAN_SURFACE_CLASS } from '@/lib/use-pan-scroll';
 
@@ -98,6 +99,7 @@ export function WritingStimulusViewer({
   highlights: controlledHighlights,
   onHighlightsChange,
 }: WritingStimulusViewerProps) {
+  const pasteExempt = usePasteExempt();
   const [pdfSrc, setPdfSrc] = useState<string | null>(null);
   const [pages, setPages] = useState<PdfPage[]>([]);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -322,8 +324,12 @@ export function WritingStimulusViewer({
   const lockProps = {
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
     onDragStart: (e: React.DragEvent) => e.preventDefault(),
-    onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
-    onCut: (e: React.ClipboardEvent) => e.preventDefault(),
+    ...(pasteExempt
+      ? {}
+      : {
+          onCopy: (e: React.ClipboardEvent) => e.preventDefault(),
+          onCut: (e: React.ClipboardEvent) => e.preventDefault(),
+        }),
   };
 
   const zoomBtn =

@@ -24,6 +24,7 @@ import {
 } from '@/lib/mocks/workflow';
 import { useMockProctoring } from '@/lib/hooks/use-mock-proctoring';
 import { useFullscreenGuard } from '@/hooks/use-fullscreen-guard';
+import { usePasteExempt } from '@/lib/paste-exempt';
 
 type PreflightKind = 'camera';
 const preflightStorageKey = (kind: PreflightKind, sessionId: string, sectionId: string) =>
@@ -60,11 +61,12 @@ export default function MockPlayerPage() {
   const modePolicy = session ? getMockModePolicy(session.config.mode) : null;
   const selectedSectionPolicy = session && selectedSection ? getMockSectionPolicy(selectedSection.subtest, session.config.mode) : null;
   const submissionReadiness = session ? getMockSubmissionReadiness(session) : null;
+  const pasteExempt = usePasteExempt();
   const proctoring = useMockProctoring({
     attemptId: session?.sessionId ?? null,
     sectionAttemptId: selectedSection?.sectionAttemptId ?? selectedSection?.id ?? null,
     enabled: Boolean(session && (session.config.mode === 'exam' || session.config.strictness === 'exam' || session.config.strictness === 'final_readiness')),
-    blockPaste: Boolean(session && session.config.strictness !== 'learning'),
+    blockPaste: Boolean(session && session.config.strictness !== 'learning') && !pasteExempt,
   });
 
   // Pre-flight webcam gate per section, keyed by sessionId + sectionId. Strict

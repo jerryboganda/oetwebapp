@@ -12,6 +12,7 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { usePasteExempt } from '@/lib/paste-exempt';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   WritingTimerV2,
@@ -272,18 +273,23 @@ export function PaperBookletSimulation({
   );
 
   // Block paste — strict editor rule. Emit a `paste` event for invigilation.
+  const pasteExempt = usePasteExempt();
   const handlePaste = useCallback(
     (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      if (pasteExempt) return;
       e.preventDefault();
       emit('paste', { blocked: true });
     },
-    [emit],
+    [emit, pasteExempt],
   );
 
   // Also block drop, an escape hatch that bypasses onPaste.
-  const handleDrop = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
-    e.preventDefault();
-  }, []);
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLTextAreaElement>) => {
+      if (!pasteExempt) e.preventDefault();
+    },
+    [pasteExempt],
+  );
 
   const handleSubmitClick = useCallback(() => {
     emit('submit_clicked', { wordCount: wordCountRef.current });

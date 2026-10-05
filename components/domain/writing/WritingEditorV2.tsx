@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { usePasteExempt } from '@/lib/paste-exempt';
 import { countLetterWords, letterTextToDoc } from '@/lib/writing/letter-text';
 import type { WritingEditorMode } from '@/lib/writing/types';
 import type {
@@ -172,8 +173,10 @@ export function WritingEditorV2({
 
   // Strict paste/drop guard. Wired to both the textarea fallback and the
   // Tiptap surface. `onPasteBlocked` lets the host log a `paste` event.
-  const blockPasteRef = useRef(blockPaste);
-  blockPasteRef.current = blockPaste;
+  const pasteExempt = usePasteExempt();
+  const pasteBlocked = blockPaste && !pasteExempt;
+  const blockPasteRef = useRef(pasteBlocked);
+  blockPasteRef.current = pasteBlocked;
   const onPasteBlockedRef = useRef(onPasteBlocked);
   onPasteBlockedRef.current = onPasteBlocked;
 
@@ -260,9 +263,9 @@ export function WritingEditorV2({
         data-testid="writing-editor"
         // Capture-phase guards so paste/drop is blocked before ProseMirror
         // (or the textarea) processes it. No-ops unless `blockPaste` is set.
-        onPasteCapture={blockPaste ? handleBlockedPaste : undefined}
-        onDropCapture={blockPaste ? handleBlockedDrop : undefined}
-        onDragOverCapture={blockPaste ? handleDragOver : undefined}
+        onPasteCapture={pasteBlocked ? handleBlockedPaste : undefined}
+        onDropCapture={pasteBlocked ? handleBlockedDrop : undefined}
+        onDragOverCapture={pasteBlocked ? handleDragOver : undefined}
       >
         {tiptap ? (
           <TiptapEditor
@@ -317,9 +320,9 @@ export function WritingEditorV2({
               onChange?.(next, countWords(next));
             }}
             onBlur={onBlur}
-            onPaste={blockPaste ? handleBlockedPaste : undefined}
-            onDrop={blockPaste ? handleBlockedDrop : undefined}
-            onDragOver={blockPaste ? handleDragOver : undefined}
+            onPaste={pasteBlocked ? handleBlockedPaste : undefined}
+            onDrop={pasteBlocked ? handleBlockedDrop : undefined}
+            onDragOver={pasteBlocked ? handleDragOver : undefined}
             aria-label="Writing editor"
           />
         )}
