@@ -243,6 +243,63 @@ public sealed class LiveClassRecordingChunkTranscriptionTests
         Assert.Single(await db.BackgroundJobs.Where(j => j.Type == JobType.LiveClassRecordingSummarize).ToListAsync());
     }
 
+    /// <summary>A service built the way DI builds it: no explicit run budget, only the (optional) remote-jobs options.</summary>
+    private static LiveClassRecordingProcessingService ServiceWithOptions(
+        LearnerDbContext db,
+        IAiGatewayService gateway,
+        IFileStorage storage,
+        TimeProvider time,
+        OetLearner.Api.Configuration.RemoteJobsOptions? options)
+        => new(
+            db,
+            gateway,
+            storage,
+            TestRuntimeSettingsProvider.WithLiveClassAi(enabled: true),
+            time,
+            NullLogger<LiveClassRecordingProcessingService>.Instance,
+            remoteJobsOptions: options is null ? null : Microsoft.Extensions.Options.Options.Create(options));
+
+    [Fact]
+    public async Task Transcribe_TheRunBudgetIsAFewMinutesNotTwelve_AndFollowsTheConfiguredOption()
+    {
+        await using var db = NewDb();
+        var storage = new ChunkStorage();
+        var gateway = ChunkGateway();
+
+        Assert.Equal(TimeSpan.FromMinutes(4), ServiceWithOptions(db, gateway, storage, TimeProvider.System, null).ChunkRunBudget);
+        Assert.Equal(TimeSpan.FromMinutes(4), ServiceWithOptions(db, gateway, storage, TimeProvider.System, new OetLearner.Api.Configuration.RemoteJobsOptions()).ChunkRunBudget);
+        Assert.Equal(
+            TimeSpan.FromMinutes(7),
+            ServiceWithOptions(db, gateway, storage, TimeProvider.System, new OetLearner.Api.Configuration.RemoteJobsOptions { LiveClassChunkRunBudgetMinutes = 7 }).ChunkRunBudget);
+
+        // out-of-range values are clamped: never zero, never close to the background processor's 20-minute execution ceiling
+        Assert.Equal(
+            TimeSpan.FromMinutes(1),
+            ServiceWithOptions(db, gateway, storage, TimeProvider.System, new OetLearner.Api.Configuration.RemoteJobsOptions { LiveClassChunkRunBudgetMinutes = 0 }).ChunkRunBudget);
+        Assert.Equal(
+            TimeSpan.FromMinutes(15),
+            ServiceWithOptions(db, gateway, storage, TimeProvider.System, new OetLearner.Api.Configuration.RemoteJobsOptions { LiveClassChunkRunBudgetMinutes = 500 }).ChunkRunBudget);
+    }
+
+    [Fact]
+    public async Task Transcribe_WithTheDefaultBudget_HandsTheRestToAContinuationAfterTheFirstFiveMinuteCall()
+    {
+        await using var db = NewDb();
+        var storage = new ChunkStorage();
+        var chunks = SeedChunks(storage, 3);
+        await SeedRecordingAsync(db, storage, chunksJson: chunks.ToJson());
+        var clock = new MutableClock(DateTimeOffset.UtcNow);
+        var gateway = ChunkGateway(_ => clock.Advance(TimeSpan.FromMinutes(5))); // each call "takes" five minutes
+
+        await ServiceWithOptions(db, gateway, storage, clock, null).ProcessTranscribeAsync("rec-1", CancellationToken.None);
+
+        // the former 12-minute budget would have transcribed all three chunks (holding the single-threaded processor for 15 minutes)
+        Assert.Single(gateway.Requests);
+        Assert.Equal(new[] { "T0", null, null }, Manifest(await db.LiveClassRecordings.SingleAsync()).Chunks.Select(c => c.Transcript).ToArray());
+        Assert.Single(await db.BackgroundJobs.Where(j => j.Type == JobType.LiveClassRecordingTranscribe).ToListAsync());
+        Assert.Empty(await db.BackgroundJobs.Where(j => j.Type == JobType.LiveClassRecordingSummarize).ToListAsync());
+    }
+
     [Fact]
     public async Task Transcribe_ASilentChunk_IsKeptAsEmptyText_AndIsNotTranscribedTwice()
     {

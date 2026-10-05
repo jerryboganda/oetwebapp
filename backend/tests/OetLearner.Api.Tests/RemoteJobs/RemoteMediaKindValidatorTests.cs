@@ -469,4 +469,20 @@ public sealed class RemoteMediaKindValidatorTests
         Assert.Equal(1, new RemoteJobsOptions { SpeakingJoinOutputTtlHours = 0 }.Normalized().SpeakingJoinOutputTtlHours);
         Assert.Equal(168, new RemoteJobsOptions { SpeakingJoinOutputTtlHours = 100_000 }.Normalized().SpeakingJoinOutputTtlHours);
     }
+
+    [Fact]
+    public void AudioExtractOutputTtl_DefaultsToTwoDaysAndIsClampedToTheRetentionWindow()
+    {
+        Assert.Equal(48, new RemoteJobsOptions().AudioExtractOutputTtlHours);
+        Assert.Equal(1, new RemoteJobsOptions { AudioExtractOutputTtlHours = 0 }.Normalized().AudioExtractOutputTtlHours);
+        Assert.Equal(720, new RemoteJobsOptions { AudioExtractOutputTtlHours = 100_000 }.Normalized().AudioExtractOutputTtlHours);
+    }
+
+    [Fact]
+    public void LiveClassChunkRunBudget_DefaultsToAFewMinutesAndStaysWellUnderTheProcessorCeiling()
+    {
+        Assert.Equal(4, new RemoteJobsOptions().LiveClassChunkRunBudgetMinutes);
+        Assert.Equal(1, new RemoteJobsOptions { LiveClassChunkRunBudgetMinutes = 0 }.Normalized().LiveClassChunkRunBudgetMinutes);
+        Assert.Equal(15, new RemoteJobsOptions { LiveClassChunkRunBudgetMinutes = 100_000 }.Normalized().LiveClassChunkRunBudgetMinutes);
+    }
 }

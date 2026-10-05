@@ -88,8 +88,11 @@ public sealed class RemoteMediaPostgresTests
 
     /// <summary>An Active, freshly heartbeating node that offers (and may run) exactly these kinds at the pinned engines.</summary>
     private static async Task<string> NodeAsync(RemotePgHarness h, params string[] kinds)
+        => await NodeWithPolicyAsync(h, 2, kinds);
+
+    private static async Task<string> NodeWithPolicyAsync(RemotePgHarness h, int maxConcurrency, params string[] kinds)
     {
-        var node = await h.AddNodeAsync(allowedKinds: kinds);
+        var node = await h.AddNodeAsync(allowedKinds: kinds, maxConcurrency: maxConcurrency);
         var offers = kinds.Select(kind => new Dictionary<string, object>
         {
             ["kind"] = kind,
@@ -159,7 +162,11 @@ public sealed class RemoteMediaPostgresTests
     // media.audio-extract: the producer
     // ═════════════════════════════════════════════════════════════════════════
 
-    private static RemoteAudioExtractionProducer AudioProducer(RemotePgHarness h, LearnerDbContext db, bool headroom = false)
+    private static RemoteAudioExtractionProducer AudioProducer(
+        RemotePgHarness h,
+        LearnerDbContext db,
+        bool headroom = false,
+        RemoteLocalWaitTracker? waits = null)
         => new(
             db,
             h.Flags,
@@ -167,13 +174,18 @@ public sealed class RemoteMediaPostgresTests
             new RemotePlacement(db, h.Settings, new FixedHeadroom { Value = headroom }, h.Time),
             h.Storage,
             h.Settings,
+            waits ?? new RemoteLocalWaitTracker(h.Time),
             h.Time,
             NullLogger<RemoteAudioExtractionProducer>.Instance);
 
-    private static async Task<AudioExtractPlan> PlanAudioAsync(RemotePgHarness h, string key = RecordingKey, long? size = null)
+    private static async Task<AudioExtractPlan> PlanAudioAsync(
+        RemotePgHarness h,
+        string key = RecordingKey,
+        long? size = null,
+        RemoteLocalWaitTracker? waits = null)
     {
         await using var db = h.NewContext();
-        return await AudioProducer(h, db).PlanAsync("rec-1", key, size ?? RecordingBytes.Length, CancellationToken.None);
+        return await AudioProducer(h, db, waits: waits).PlanAsync("rec-1", key, size ?? RecordingBytes.Length, CancellationToken.None);
     }
 
     private static async Task SeedRecordingAsync(RemotePgHarness h, string key = RecordingKey, string? transcript = null)
@@ -380,6 +392,184 @@ public sealed class RemoteMediaPostgresTests
 
         Assert.Equal(AudioExtractAction.Local, plan.Action);
         Assert.Equal(0, await JobCountAsync(h));
+    }
+
+    /// <summary>Another job a node is running right now: it takes weight 1 of the node's 2, and the extraction weighs 2.</summary>
+    private static Task LeaseOtherWorkAsync(RemotePgHarness h, string node)
+        => h.InsertLeasedJobAsync(node, RemoteJobKinds.MediaSpeakingJoin);
+
+    /// <summary>(free weight for the extraction right now, a node whose policy could run it when idle).</summary>
+    private static async Task<(bool FreeNow, bool CouldRun)> AudioPlacementAsync(RemotePgHarness h)
+    {
+        await using var db = h.NewContext();
+        var placement = new RemotePlacement(db, h.Settings, new FixedHeadroom(), h.Time);
+        return (
+            await placement.HasEligibleNodeAsync(RemoteJobKinds.MediaAudioExtract, 2, CancellationToken.None),
+            await placement.HasNodeThatCouldRunAsync(RemoteJobKinds.MediaAudioExtract, 2, CancellationToken.None));
+    }
+
+    [PostgreSqlFact]
+    public async Task AudioPlan_ANodeThatIsBusyRightNow_StillGetsTheJob_ItOnlyWaitsItsTurn()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await SeedRecordingAsync(h);
+        var node = await NodeAsync(h, RemoteJobKinds.MediaAudioExtract, RemoteJobKinds.MediaSpeakingJoin);
+        await LeaseOtherWorkAsync(h, node);
+
+        // nothing is free for a weight-2 job this second, but the node is a perfectly good home for it
+        Assert.Equal((false, true), await AudioPlacementAsync(h));
+
+        var plan = await PlanAudioAsync(h);
+
+        // an oversize recording has no local path: "busy" must never be read as "nobody", or it would fail for good
+        Assert.Equal(AudioExtractAction.Pending, plan.Action);
+        var job = await h.JobAsync(plan.JobId!);
+        Assert.Equal("Queued", job.State);
+        Assert.Equal(RemoteJobKinds.MediaAudioExtract, job.Kind);
+        Assert.Equal(1, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobs" WHERE "Kind" = 'media.audio-extract';"""));
+    }
+
+    [PostgreSqlFact]
+    public async Task AudioPlan_AnAgentUnderPressure_IsStillANodeThatCouldRunIt()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await SeedRecordingAsync(h);
+        var node = await NodeAsync(h, RemoteJobKinds.MediaAudioExtract);
+
+        // the pressure governor lowered the agent to one slot: a momentary state that recovers by itself
+        await h.SqlAsync("""UPDATE "RemoteWorkers" SET "LastCapacityJson" = '{"effectiveConcurrency": 1}'::jsonb WHERE "Id" = @id;""", ("id", node));
+        Assert.Equal((false, true), await AudioPlacementAsync(h));
+
+        Assert.Equal(AudioExtractAction.Pending, (await PlanAudioAsync(h)).Action);
+    }
+
+    [PostgreSqlFact]
+    public async Task AudioPlan_AWithdrawnJob_IsQueuedAgainEvenWhileTheNodeIsBusy()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await SeedRecordingAsync(h);
+        var node = await NodeAsync(h, RemoteJobKinds.MediaAudioExtract, RemoteJobKinds.MediaSpeakingJoin);
+        var jobId = (await PlanAudioAsync(h)).JobId!;
+
+        // nobody claimed it within the wait, so the reaper handed it back: that is not "no remote path" while a node is merely occupied
+        await SetFinishedAsync(h, jobId, "FallbackLocal", completedAgo: "1 hour");
+        await LeaseOtherWorkAsync(h, node);
+        Assert.Equal((false, true), await AudioPlacementAsync(h));
+
+        var again = await PlanAudioAsync(h);
+
+        Assert.Equal(AudioExtractAction.Pending, again.Action);
+        Assert.Equal(jobId, again.JobId);
+        Assert.Equal("Queued", await h.StateOfAsync(jobId));
+        Assert.Equal(1, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobs" WHERE "Kind" = 'media.audio-extract';"""));
+    }
+
+    [PostgreSqlFact]
+    public async Task AudioPlan_ANodeThatCanNeverTakeTheJob_IsNoRemotePath()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await SeedRecordingAsync(h);
+
+        // the extraction weighs 2: a node that may run only one job at a time never can
+        var node = await NodeWithPolicyAsync(h, 1, RemoteJobKinds.MediaAudioExtract);
+        Assert.Equal((false, false), await AudioPlacementAsync(h));
+        Assert.Equal(AudioExtractAction.Local, (await PlanAudioAsync(h)).Action);
+
+        // a per-kind cap of one
+        await h.SqlAsync(
+            """UPDATE "RemoteWorkers" SET "MaxConcurrency" = 2, "KindLimitsJson" = '{"media.audio-extract": 1}'::jsonb WHERE "Id" = @id;""",
+            ("id", node));
+        Assert.Equal((false, false), await AudioPlacementAsync(h));
+        Assert.Equal(AudioExtractAction.Local, (await PlanAudioAsync(h)).Action);
+
+        // budgets below what the kind needs (2000 millicores; 1024 + 1536 MiB of memory; 1536 MiB of scratch)
+        await h.SqlAsync("""UPDATE "RemoteWorkers" SET "KindLimitsJson" = '{}'::jsonb, "CpuBudgetMilli" = 1000 WHERE "Id" = @id;""", ("id", node));
+        Assert.Equal(AudioExtractAction.Local, (await PlanAudioAsync(h)).Action);
+        await h.SqlAsync(
+            """UPDATE "RemoteWorkers" SET "CpuBudgetMilli" = 3000, "MemBudgetMiB" = 2000, "TmpBudgetMiB" = 1000 WHERE "Id" = @id;""",
+            ("id", node));
+        Assert.Equal(AudioExtractAction.Local, (await PlanAudioAsync(h)).Action);
+        Assert.Equal(0, await JobCountAsync(h));
+
+        // a policy that fits: the same node is a home for it
+        await h.SqlAsync("""UPDATE "RemoteWorkers" SET "MemBudgetMiB" = 5120, "TmpBudgetMiB" = 3072 WHERE "Id" = @id;""", ("id", node));
+        Assert.Equal((true, true), await AudioPlacementAsync(h));
+        Assert.Equal(AudioExtractAction.Pending, (await PlanAudioAsync(h)).Action);
+    }
+
+    [PostgreSqlFact]
+    public async Task AudioPlan_AJobNoHelperEverStarts_EndsTheWaitAtTheHardDeadline_AndALaterRetryGetsAFreshWindow()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await SeedRecordingAsync(h);
+        await NodeAsync(h, RemoteJobKinds.MediaAudioExtract);
+        var clock = new MutableClock(DateTimeOffset.UtcNow);
+        var waits = new RemoteLocalWaitTracker(clock);
+
+        var first = await PlanAudioAsync(h, waits: waits);
+        Assert.Equal(AudioExtractAction.Pending, first.Action);
+
+        // a node that is online and capable, yet never starts it: the stage keeps asking while FallbackHardAfterMinutes (60) last
+        for (var elapsed = 10; elapsed < 60; elapsed += 10)
+        {
+            clock.Advance(TimeSpan.FromMinutes(10));
+            Assert.Equal(AudioExtractAction.Pending, (await PlanAudioAsync(h, waits: waits)).Action);
+        }
+
+        clock.Advance(TimeSpan.FromMinutes(10));
+        var expired = await PlanAudioAsync(h, waits: waits);
+        Assert.Equal(AudioExtractAction.Failed, expired.Action);
+        Assert.Contains("60 minutes", expired.Note, StringComparison.Ordinal);
+        Assert.Equal(first.JobId, expired.JobId);
+
+        // the transcribe job retries within seconds: it must meet the same answer (a fresh window here would swallow the failure)
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal(AudioExtractAction.Failed, (await PlanAudioAsync(h, waits: waits)).Action);
+        clock.Advance(TimeSpan.FromSeconds(10));
+        Assert.Equal(AudioExtractAction.Failed, (await PlanAudioAsync(h, waits: waits)).Action);
+
+        // nobody asked for a while: that wait is over, so a retry of the recording starts a new one instead of failing on the stale clock
+        clock.Advance(TimeSpan.FromMinutes(16));
+        Assert.Equal(AudioExtractAction.Pending, (await PlanAudioAsync(h, waits: waits)).Action);
+        Assert.Equal(1, await JobCountAsync(h));
+        Assert.Equal("Queued", await h.StateOfAsync(first.JobId!));
+    }
+
+    [PostgreSqlFact]
+    public async Task AudioPlan_AHelperThatStartsTheJob_EndsTheWait()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await SeedRecordingAsync(h);
+        var node = await NodeAsync(h, RemoteJobKinds.MediaAudioExtract);
+        var clock = new MutableClock(DateTimeOffset.UtcNow);
+        var waits = new RemoteLocalWaitTracker(clock);
+        var jobId = (await PlanAudioAsync(h, waits: waits)).JobId!;
+        for (var elapsed = 10; elapsed < 60; elapsed += 10)
+        {
+            clock.Advance(TimeSpan.FromMinutes(10));
+            Assert.Equal(AudioExtractAction.Pending, (await PlanAudioAsync(h, waits: waits)).Action);
+        }
+
+        // five minutes short of the deadline a helper takes it: the wait is over, whatever happens to the lease afterwards
+        clock.Advance(TimeSpan.FromMinutes(5));
+        await ClaimAsync(h, node, RemoteJobKinds.MediaAudioExtract);
+        Assert.Equal(AudioExtractAction.Pending, (await PlanAudioAsync(h, waits: waits)).Action);
+        await h.SqlAsync(
+            """
+            UPDATE "RemoteJobs" SET "State" = 'Queued', "LeaseOwner" = NULL, "LeaseExpiresAt" = NULL, "DeadlineAt" = NULL, "ClaimNonce" = NULL
+            WHERE "Id" = @id;
+            """,
+            ("id", jobId));
+
+        // past the ORIGINAL deadline, but a new wait began when the helper started it
+        clock.Advance(TimeSpan.FromMinutes(6));
+        Assert.Equal(AudioExtractAction.Pending, (await PlanAudioAsync(h, waits: waits)).Action);
     }
 
     private static Task SetFinishedAsync(RemotePgHarness h, string jobId, string state, string completedAgo, string? failureCode = null)
@@ -804,8 +994,16 @@ public sealed class RemoteMediaPostgresTests
         Assert.Equal(new long[] { ClipB.Length, ClipA.Length }, inputs.Select(i => i.SizeBytes).ToArray());
         Assert.All(inputs, input => Assert.Equal("audio/webm", input.ContentType));
 
-        // the hash nobody recorded was computed once and recorded on the asset, so the audio stage derives the very same key
-        Assert.Equal(shaA, await h.ScalarAsync<string>("""SELECT "Sha256" FROM "MediaAssets" WHERE "Id" = 'asset-rec-a';"""));
+        // the hash nobody recorded was computed once and recorded on the RECORDING that owns the clip, so the audio stage derives the very
+        // same key; the shared asset column (the cross-asset dedupe key of other upload paths) is never written for a learner's clip
+        Assert.Equal(shaA, await h.ScalarAsync<string>("""SELECT "Sha256" FROM "SpeakingRecordings" WHERE "Id" = 'rec-a';"""));
+        Assert.Null(await h.ScalarAsync<string>("""SELECT "Sha256" FROM "MediaAssets" WHERE "Id" = 'asset-rec-a';"""));
+        await using (var db = h.NewContext())
+        {
+            var segments = await h.ScalarAsync<string>("""SELECT "SegmentsJson" FROM "SpeakingTranscripts" WHERE "SpeakingSessionId" = 'session-1';""");
+            var clips = await SpeakingAudioClips.LoadAsync(db, "session-1", SpeakingAudioEvidenceService.ReadCandidateTurns(segments), CancellationToken.None);
+            Assert.Equal(new[] { shaB, shaA }, clips.Select(c => c.Sha256).ToArray());
+        }
 
         // what the node is told: names, sizes, hashes and content types. Never a storage key, a recording id or the session.
         var wire = RemoteJobWire.ToClaimJob(job, 1000, h.Options.Normalized());
@@ -816,6 +1014,50 @@ public sealed class RemoteMediaPostgresTests
         Assert.DoesNotContain("session-1", wireJson, StringComparison.Ordinal);
         Assert.DoesNotContain("recordingId", wireJson, StringComparison.Ordinal);
         Assert.DoesNotContain("storageKey", wireJson, StringComparison.Ordinal);
+    }
+
+    [PostgreSqlFact]
+    public async Task JoinEnqueue_WaitsForTheTranscript_SoTheJobIsKeyedByTheClipsTheGradeWillActuallyUse()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await EnableAudioStageAsync(h);
+        await NodeAsync(h, RemoteJobKinds.MediaSpeakingJoin);
+        var chatter = Filler(40, 5);
+        await SeedClipAsync(h, "session-1", "rec-a", ClipA, assetSha: RemoteIds.Sha256Hex(ClipA));
+        await SeedClipAsync(h, "session-1", "rec-b", ClipB, assetSha: RemoteIds.Sha256Hex(ClipB));
+        await SeedClipAsync(h, "session-1", "rec-chatter", chatter, assetSha: RemoteIds.Sha256Hex(chatter));
+
+        // no transcript yet: the grade will pick the spoken turns' clips, which "every clip, oldest first" may not equal
+        Assert.Equal(SpeakingJoinEnqueue.NotEligible, await EnqueueJoinAsync(h));
+        Assert.Equal(0, await JobCountAsync(h));
+
+        // once it exists the next pass enqueues exactly the clips of the candidate's turns, in turn order
+        await SeedTranscriptAsync(h, "session-1", ("candidate", "rec-b"), ("patient", null), ("candidate", "rec-a"));
+        Assert.Equal(SpeakingJoinEnqueue.Enqueued, await EnqueueJoinAsync(h));
+
+        var job = await h.JobAsync((await h.ScalarAsync<string>("""SELECT "Id" FROM "RemoteJobs";"""))!);
+        Assert.Equal(SpeakingJoinSettings.InputSha256([RemoteIds.Sha256Hex(ClipB), RemoteIds.Sha256Hex(ClipA)]), job.InputSha256);
+        Assert.Equal(2, RemoteInputOutputService.ReadManifest(job.InputsJson).Count);
+    }
+
+    [PostgreSqlFact]
+    public async Task JoinEnqueue_NeverOverwritesAHashARecordingAlreadyCarries_AndNeverWritesTheSharedAssetColumn()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await EnableAudioStageAsync(h);
+        await NodeAsync(h, RemoteJobKinds.MediaSpeakingJoin);
+
+        // the recording already holds a value that is not a SHA-256 (evidence of some other path): it stays as it is and the session stays local
+        await SeedClipAsync(h, "session-1", "rec-a", ClipA, assetSha: null, recordingSha: "legacy-value");
+        await SeedTranscriptAsync(h, "session-1", ("candidate", "rec-a"));
+
+        Assert.Equal(SpeakingJoinEnqueue.NotEligible, await EnqueueJoinAsync(h));
+
+        Assert.Equal("legacy-value", await h.ScalarAsync<string>("""SELECT "Sha256" FROM "SpeakingRecordings" WHERE "Id" = 'rec-a';"""));
+        Assert.Null(await h.ScalarAsync<string>("""SELECT "Sha256" FROM "MediaAssets" WHERE "Id" = 'asset-rec-a';"""));
+        Assert.Equal(0, await JobCountAsync(h));
     }
 
     [PostgreSqlFact]
@@ -1030,7 +1272,7 @@ public sealed class RemoteMediaPostgresTests
         }
 
         await AddGradeOperationAsync(h, "op-1", "session-wait", state: 0);
-        await AddGradeOperationAsync(h, "op-2", "session-lease", state: 1);
+        await AddGradeOperationAsync(h, "op-2", "session-lease", state: 1);              // Leased: already inside the audio stage, which joins locally within seconds
         await AddGradeOperationAsync(h, "op-3", "session-retry", state: 4);
         await AddGradeOperationAsync(h, "op-4", "session-done", state: 3);               // Completed: nothing is waiting
         await AddGradeOperationAsync(h, "op-5", "session-other", feature: "writing.grade"); // another feature
@@ -1044,14 +1286,43 @@ public sealed class RemoteMediaPostgresTests
         Assert.Equal(0, await JobCountAsync(h));
 
         h.Flags.Set(RemoteJobFlagKeys.Master, RemoteJobFlagKeys.MediaSpeakingJoin);
-        Assert.Equal(3, await sweeper.RunOnceAsync(CancellationToken.None));
+        Assert.Equal(2, await sweeper.RunOnceAsync(CancellationToken.None));
         Assert.Equal(
-            new[] { "session-lease", "session-retry", "session-wait" },
+            new[] { "session-retry", "session-wait" },
             (await h.ScalarAsync<string>("""SELECT string_agg("ResourceId", ',' ORDER BY "ResourceId") FROM "RemoteJobs";"""))!.Split(','));
 
         // the next pass finds them already handled
         Assert.Equal(0, await sweeper.RunOnceAsync(CancellationToken.None));
-        Assert.Equal(3, await JobCountAsync(h));
+        Assert.Equal(2, await JobCountAsync(h));
+    }
+
+    [PostgreSqlFact]
+    public async Task JoinSweeper_NeverLetsSessionsThatWereAlreadyHandledCrowdOutNewerOnes()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await EnableAudioStageAsync(h);
+        await NodeAsync(h, RemoteJobKinds.MediaSpeakingJoin);
+
+        // more already-handled sessions than one pass can take (25), their grades stuck in a retry loop
+        for (var i = 0; i < 26; i++)
+        {
+            var session = $"session-old-{i:D2}";
+            await TwoClipSessionAsync(h, session);
+            Assert.Equal(SpeakingJoinEnqueue.Enqueued, await EnqueueJoinAsync(h, session));
+            await AddGradeOperationAsync(h, $"op-old-{i:D2}", session, state: 4, age: "90 minutes");
+        }
+
+        await TwoClipSessionAsync(h, "session-new");
+        await AddGradeOperationAsync(h, "op-new", "session-new", state: 0, age: "1 minute");
+        await using var provider = SweeperServices(h);
+        var sweeper = new RemoteSpeakingJoinSweeper(provider.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System, NullLogger<RemoteSpeakingJoinSweeper>.Instance);
+
+        // the oldest-first pass this replaces spent its whole budget on the 25 handled sessions and never reached the new one
+        Assert.Equal(1, await sweeper.RunOnceAsync(CancellationToken.None));
+        Assert.Equal(1, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobs" WHERE "ResourceId" = 'session-new';"""));
+        Assert.Equal(27, await JobCountAsync(h));
+        Assert.Equal(0, await sweeper.RunOnceAsync(CancellationToken.None));
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -1080,43 +1351,80 @@ public sealed class RemoteMediaPostgresTests
     }
 
     [PostgreSqlFact]
-    public async Task Reaper_ExpiresASpeakingJoinAfterItsShortTtl_AndOtherOutputsOnlyWithTheJobRow()
+    public async Task Reaper_ExpiresEachMediaKindsOutputsAfterItsShortTtl_AndAnyOtherOutputOnlyWithTheJobRow()
     {
         await using var h = await RemotePgHarness.CreateAsync();
         await SetUpAsync(h);
         var staleJoin = await FinishedJobWithOutputAsync(h, "session-old", RemoteJobKinds.MediaSpeakingJoin, "30 hours", "join.mp3", Filler(50, 1));
         var freshJoin = await FinishedJobWithOutputAsync(h, "session-new", RemoteJobKinds.MediaSpeakingJoin, "2 hours", "join.mp3", Filler(50, 2));
-        var recentChunk = await FinishedJobWithOutputAsync(h, "rec-recent", RemoteJobKinds.MediaAudioExtract, "2 days", "chunk-0000.mp3", Filler(50, 3));
+        var recentChunk = await FinishedJobWithOutputAsync(h, "rec-recent", RemoteJobKinds.MediaAudioExtract, "20 hours", "chunk-0000.mp3", Filler(50, 3));
+        // a chunk whose delete failed in the transcription stage is still learner audio: it goes after the (48 h) audio TTL, not 30 days
+        var staleChunk = await FinishedJobWithOutputAsync(h, "rec-stale", RemoteJobKinds.MediaAudioExtract, "3 days", "chunk-0000.mp3", Filler(50, 5));
         var oldChunk = await FinishedJobWithOutputAsync(h, "rec-old", RemoteJobKinds.MediaAudioExtract, "40 days", "chunk-0000.mp3", Filler(50, 4));
+        var otherKind = await FinishedJobWithOutputAsync(h, "paper-x", RemoteJobKinds.PdfExtract, "5 days", "extra.bin", Filler(50, 6));
 
         await using var db = h.NewContext();
         var expired = await h.Sweeper(db).SweepExpiredOutputsAsync(h.Settings.Current, CancellationToken.None);
 
-        Assert.Equal(2, expired);
+        Assert.Equal(3, expired);
         Assert.False(await h.Storage.ExistsAsync(staleJoin, CancellationToken.None));
         Assert.True(await h.Storage.ExistsAsync(freshJoin, CancellationToken.None));
         Assert.True(await h.Storage.ExistsAsync(recentChunk, CancellationToken.None));
+        Assert.False(await h.Storage.ExistsAsync(staleChunk, CancellationToken.None));
         Assert.False(await h.Storage.ExistsAsync(oldChunk, CancellationToken.None));
-        Assert.Equal(2, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobOutputs";"""));
+        Assert.True(await h.Storage.ExistsAsync(otherKind, CancellationToken.None));
+        Assert.Equal(3, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobOutputs";"""));
     }
 
     [PostgreSqlFact]
-    public async Task Reaper_TheTtlIsTheConfiguredOne_AndRunsInTheFullSweepBeforeThePurge()
+    public async Task Reaper_TheTtlsAreTheConfiguredOnes_AndRunInTheFullSweepBeforeThePurge()
     {
         await using var h = await RemotePgHarness.CreateAsync();
         await SetUpAsync(h);
         h.Options.SpeakingJoinOutputTtlHours = 1;
+        h.Options.AudioExtractOutputTtlHours = 1;
         var oneHourOld = await FinishedJobWithOutputAsync(h, "session-a", RemoteJobKinds.MediaSpeakingJoin, "2 hours", "join.mp3", Filler(50, 1));
+        var twoHourChunk = await FinishedJobWithOutputAsync(h, "rec-recent", RemoteJobKinds.MediaAudioExtract, "2 hours", "chunk-0000.mp3", Filler(50, 3));
         var veryOld = await FinishedJobWithOutputAsync(h, "rec-ancient", RemoteJobKinds.MediaAudioExtract, "45 days", "chunk-0000.mp3", Filler(50, 2));
 
         await using var db = h.NewContext();
         var result = await h.Sweeper(db).SweepAsync(CancellationToken.None);
 
-        Assert.Equal(2, result.ExpiredOutputSets);
+        Assert.Equal(3, result.ExpiredOutputSets);
         Assert.False(await h.Storage.ExistsAsync(oneHourOld, CancellationToken.None));
+        Assert.False(await h.Storage.ExistsAsync(twoHourChunk, CancellationToken.None));
         Assert.False(await h.Storage.ExistsAsync(veryOld, CancellationToken.None));
         // the 45-day-old job row was purged in the SAME pass, but only after its outputs were gone
         Assert.Equal(1, result.Purged);
+        Assert.Equal(0, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobOutputs";"""));
+    }
+
+    [PostgreSqlFact]
+    public async Task Reaper_ADiscardedJobsOutputsGoOnTheNextPass_NotAnHourOrADayLater()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await SetUpAsync(h);
+        await EnableAudioStageAsync(h);
+        await TwoClipSessionAsync(h);
+        var node = await NodeAsync(h, RemoteJobKinds.MediaSpeakingJoin);
+        Assert.Equal(SpeakingJoinEnqueue.Enqueued, await EnqueueJoinAsync(h));
+        var job = await ClaimAsync(h, node, RemoteJobKinds.MediaSpeakingJoin);
+        var files = await UploadAsync(h, job, ("join.mp3", Filler(900, 7)));
+        var key = RemoteInputOutputService.OutputKey(job.Id, job.FenceToken, "join.mp3");
+
+        // the learner erased a clip while the helper was joining: the erasure found no output yet, and the applier refuses the result
+        await h.SqlAsync("""UPDATE "SpeakingRecordings" SET "IsArchived" = true WHERE "Id" = 'rec-b-session-1';""");
+        var outcome = await h.CompleteAsync(node, job, Body(job.FenceToken, JoinResultJson(job, files[0], 2, 9_000), files), Handlers());
+        Assert.Equal("resource_gone", outcome.Error!.Code);
+        Assert.Equal("Cancelled", await h.StateOfAsync(job.Id));
+        Assert.True(await h.Storage.ExistsAsync(key, CancellationToken.None)); // the helper's upload is still there
+
+        await using var db = h.NewContext();
+        var expired = await h.Sweeper(db).SweepExpiredOutputsAsync(h.Settings.Current, CancellationToken.None);
+
+        // no hour of "unchanged" for the orphan sweep, no 24-hour TTL: the learner's audio derivative is deleted right away
+        Assert.Equal(1, expired);
+        Assert.False(await h.Storage.ExistsAsync(key, CancellationToken.None));
         Assert.Equal(0, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobOutputs";"""));
     }
 

@@ -300,6 +300,28 @@ public sealed class RemoteMediaWiringTests
 
         Assert.Contains("require_int_min_if_set REMOTEJOBS__SPEAKINGJOINOUTPUTTTLHOURS 1", script, StringComparison.Ordinal);
         Assert.Contains("RemoteJobs__SpeakingJoinOutputTtlHours: ${REMOTEJOBS__SPEAKINGJOINOUTPUTTTLHOURS:-24}", compose, StringComparison.Ordinal);
+
+        // the two options of the fix pass: chunk-audio expiry and the transcription run budget
+        Assert.Contains("require_int_min_if_set REMOTEJOBS__AUDIOEXTRACTOUTPUTTTLHOURS 1", script, StringComparison.Ordinal);
+        Assert.Contains("require_int_min_if_set REMOTEJOBS__LIVECLASSCHUNKRUNBUDGETMINUTES 1", script, StringComparison.Ordinal);
+        Assert.Contains("RemoteJobs__AudioExtractOutputTtlHours: ${REMOTEJOBS__AUDIOEXTRACTOUTPUTTTLHOURS:-48}", compose, StringComparison.Ordinal);
+        Assert.Contains("RemoteJobs__LiveClassChunkRunBudgetMinutes: ${REMOTEJOBS__LIVECLASSCHUNKRUNBUDGETMINUTES:-4}", compose, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheAudioProducer_NeverReadsBusyAsNobody_AndTheJoinHashNeverGoesToTheSharedAssetColumn()
+    {
+        var audio = CodeOnly("Services/RemoteJobs/RemoteAudioExtractionProducer.cs");
+        var join = CodeOnly("Services/RemoteJobs/RemoteSpeakingJoinProducer.cs");
+
+        // an oversize recording has no local path: only the capacity CEILING may decide "no remote path", never free weight right now
+        Assert.Contains("HasNodeThatCouldRunAsync", audio, StringComparison.Ordinal);
+        Assert.DoesNotContain("DecideAsync", audio, StringComparison.Ordinal);
+        Assert.DoesNotContain("HasEligibleNodeAsync", audio, StringComparison.Ordinal);
+
+        // MediaAssets.Sha256 is a cross-asset dedupe key (ChunkedUploadService, the content importers): a learner's clip never writes it
+        Assert.DoesNotContain("db.MediaAssets", join, StringComparison.Ordinal);
+        Assert.Contains("db.SpeakingRecordings", join, StringComparison.Ordinal);
     }
 
     private static string FindRepoRoot()

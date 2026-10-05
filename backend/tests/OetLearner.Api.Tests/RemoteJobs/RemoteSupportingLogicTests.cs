@@ -264,6 +264,37 @@ public sealed class RemoteSupportingLogicTests
         Assert.False(tracker.HardDeadlinePassed("pdf:p1", hardAfter));
     }
 
+    [Fact]
+    public void LocalWaitTracker_WithAnIdleReset_NeverFailsANewWaitOnTheStaleClockOfAnEarlierOne()
+    {
+        var clock = new MutableClock(DateTimeOffset.UtcNow);
+        var tracker = new RemoteLocalWaitTracker(clock);
+        var hardAfter = TimeSpan.FromMinutes(60);
+        var idle = TimeSpan.FromMinutes(15);
+
+        // asked about regularly: the wait accumulates exactly as without the reset
+        Assert.False(tracker.HardDeadlinePassed("audio:r1", hardAfter, idle));
+        for (var minutes = 10; minutes < 60; minutes += 10)
+        {
+            clock.Advance(TimeSpan.FromMinutes(10));
+            Assert.False(tracker.HardDeadlinePassed("audio:r1", hardAfter, idle));
+        }
+
+        clock.Advance(TimeSpan.FromMinutes(10));
+        Assert.True(tracker.HardDeadlinePassed("audio:r1", hardAfter, idle));
+
+        // nobody asked for longer than the idle window: that wait ended elsewhere, so this one starts afresh
+        clock.Advance(TimeSpan.FromMinutes(16));
+        Assert.False(tracker.HardDeadlinePassed("audio:r1", hardAfter, idle));
+        clock.Advance(TimeSpan.FromMinutes(14));
+        Assert.False(tracker.HardDeadlinePassed("audio:r1", hardAfter, idle));
+
+        // without the reset a caller keeps the original clock (the PDF producer's behaviour is unchanged)
+        Assert.False(tracker.HardDeadlinePassed("pdf:p1", hardAfter));
+        clock.Advance(TimeSpan.FromHours(3));
+        Assert.True(tracker.HardDeadlinePassed("pdf:p1", hardAfter));
+    }
+
     // ── small pure helpers ───────────────────────────────────────────────────
 
     [Fact]
