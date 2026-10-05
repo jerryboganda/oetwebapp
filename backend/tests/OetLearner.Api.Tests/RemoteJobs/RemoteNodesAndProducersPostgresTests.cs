@@ -861,6 +861,57 @@ public sealed class RemoteNodesAndProducersPostgresTests
         Assert.Contains(job.JobId, json, StringComparison.Ordinal);
     }
 
+    [PostgreSqlFact]
+    public async Task FleetStats_ReportTheQueueShapeLeasesAndNodeHealth_WithoutAnyContent()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var node = await h.AddNodeAsync();
+        await h.InsertLeasedJobAsync(node, RemoteJobKinds.PdfExtract);
+        await h.EnqueueAsync();
+        await using var db = h.NewContext();
+
+        var stats = await h.FleetJobs(db).StatsAsync(CancellationToken.None);
+
+        var queue = Assert.IsType<Dictionary<string, object?>>(stats["queue"]);
+        var pdf = Assert.IsType<Dictionary<string, int>>(queue[RemoteJobKinds.PdfExtract]);
+        Assert.Equal(1, pdf["Queued"]);
+        Assert.Equal(1, pdf["Leased"]);
+        Assert.Equal(1, Assert.IsType<int>(stats["leasedCount"]));
+        Assert.Equal(1, Assert.IsType<Dictionary<string, int>>(stats["leasedWeightByNode"])[node]);
+        Assert.NotNull(stats["oldestQueuedAgeSeconds"]);
+        var nodes = Assert.IsType<Dictionary<string, object?>>(stats["nodes"]);
+        Assert.Equal(1, Assert.IsType<Dictionary<string, int>>(nodes["byStatus"])[RemoteNodeStatus.Active]);
+        Assert.Equal(1, Assert.IsType<Dictionary<string, int>>(nodes["byHealth"]).Values.Sum());
+        var json = JsonSerializer.Serialize(stats);
+        Assert.DoesNotContain("storageKey", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("media/sample.pdf", json, StringComparison.Ordinal);
+    }
+
+    [PostgreSqlFact]
+    public async Task FleetStatus_ReportsTheEffectiveFlagsOptionsAndKindRegistry_ReadOnly()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        h.Options.VerifySampleRate = 0.05;
+        await using var db = h.NewContext();
+
+        var status = await h.FleetJobs(db).StatusAsync(CancellationToken.None);
+
+        var flags = Assert.IsType<Dictionary<string, object?>>(status["flags"]);
+        Assert.Equal(true, flags[RemoteJobFlagKeys.Master]);
+        Assert.Equal(true, flags[RemoteJobFlagKeys.PdfExtract]);
+        Assert.Equal(false, flags[RemoteJobFlagKeys.FreezeApplies]);
+        Assert.Equal(RemoteJobFlagKeys.All.Count, flags.Count);
+        var options = Assert.IsType<Dictionary<string, object?>>(status["options"]);
+        Assert.Equal(0.05, options["verifySampleRate"]);
+        Assert.Equal(false, options["fairShareGate"]);
+        var kinds = Assert.IsType<List<Dictionary<string, object?>>>(status["kinds"]);
+        var pdf = Assert.Single(kinds, kind => (string?)kind["kind"] == RemoteJobKinds.PdfExtract);
+        Assert.Equal(true, pdf["enabled"]);
+        var media = Assert.Single(kinds, kind => (string?)kind["kind"] == RemoteJobKinds.MediaAudioExtract);
+        Assert.Equal(false, media["enabled"]);
+        Assert.Null(media["engineVersion"]); // a media kind stays unoffered until an operator pins an engine
+    }
+
     private static async Task FailTerminalAsync(RemotePgHarness h, string node, RemoteJobRow leased)
     {
         await using var db = h.NewContext();
