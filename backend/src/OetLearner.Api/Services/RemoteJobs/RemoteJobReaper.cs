@@ -151,7 +151,8 @@ public sealed class RemoteJobSweeper(
         {
             try
             {
-                await storage.DeletePrefixAsync(RemoteInputOutputService.OutputKey(jobId, fence, string.Empty).TrimEnd('/'), ct);
+                // The trailing slash matters: fence 2 must never match the keys of fence 20 (object stores match by raw prefix).
+                await storage.DeletePrefixAsync(RemoteInputOutputService.OutputKey(jobId, fence, string.Empty), ct);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {

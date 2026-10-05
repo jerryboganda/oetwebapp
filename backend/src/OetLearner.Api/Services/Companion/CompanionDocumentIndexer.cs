@@ -95,13 +95,16 @@ public sealed class CompanionDocumentIndexer(
         // goes first, then the least recently indexed. WriteAsync stamps the source row on every pass, so successive runs
         // advance through any number of PDFs. (Ordering by File.UpdatedAt alone never reached anything beyond the first
         // MaxDocumentsPerRun, because nothing here ever updates it.)
+        // Grouped in memory: the SQLite desktop provider cannot translate Max over a DateTimeOffset, and one row per material
+        // version is a small set.
         var lastIndexed = await db.CompanionSources
             .AsNoTracking()
             .Where(s => s.SourceKey.StartsWith("material:"))
-            .GroupBy(s => s.SourceKey)
-            .Select(g => new { SourceKey = g.Key, UpdatedAt = g.Max(s => s.UpdatedAt) })
+            .Select(s => new { s.SourceKey, s.UpdatedAt })
             .ToListAsync(ct);
-        var lastIndexedBySource = lastIndexed.ToDictionary(x => x.SourceKey, x => x.UpdatedAt, StringComparer.Ordinal);
+        var lastIndexedBySource = lastIndexed
+            .GroupBy(x => x.SourceKey, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Max(x => x.UpdatedAt), StringComparer.Ordinal);
 
         var pdfs = CompanionIndexSelection.Take(
                 files.Where(x => string.Equals(x.File.Kind, "pdf", StringComparison.OrdinalIgnoreCase)),

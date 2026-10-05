@@ -179,7 +179,7 @@ public sealed class RemoteCompanionIndexPrepProducer(
             .ToListAsync(ct);
         if (rows.Count == 0) return null;
 
-        var drafts = rows.Select(r => new CompanionChunkDraft(r.Heading, r.Text, r.PageNumber, r.TimestampSeconds)).ToList();
+        var drafts = rows.Select(r => new CompanionChunkDraft(r.Heading ?? string.Empty, r.Text, r.PageNumber, r.TimestampSeconds)).ToList();
         return new CompanionPrepPlan(CompanionPrepAction.Ready, null, null, version, drafts);
     }
 

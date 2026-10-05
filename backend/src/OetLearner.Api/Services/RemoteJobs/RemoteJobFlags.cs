@@ -59,6 +59,10 @@ public sealed class RemoteJobFlags(
     // UTC ticks of the last load attempt; 0 = never. Read and written atomically (64-bit).
     private long _loadedTicks;
 
+    // UTC ticks of the last SUCCESSFUL load; 0 = never. The stale-snapshot limit is measured from here, not from the last
+    // attempt, so a database that stays down turns every flag off after MaxStale instead of serving old values forever.
+    private long _successTicks;
+
     public async Task<RemoteFlagSnapshot> GetAsync(CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow();
@@ -70,15 +74,16 @@ public sealed class RemoteJobFlags(
             now = timeProvider.GetUtcNow();
             if (IsFresh(now)) return _snapshot;
 
-            var previousLoadTicks = Volatile.Read(ref _loadedTicks);
             try
             {
                 _snapshot = await LoadAsync(ct);
+                Volatile.Write(ref _successTicks, now.UtcTicks);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogWarning(ex, "Remote job flags could not be read; failing closed.");
-                var age = previousLoadTicks == 0 ? MaxStale : now - new DateTimeOffset(previousLoadTicks, TimeSpan.Zero);
+                var successTicks = Volatile.Read(ref _successTicks);
+                var age = successTicks == 0 ? MaxStale : now - new DateTimeOffset(successTicks, TimeSpan.Zero);
                 if (age >= MaxStale) _snapshot = RemoteFlagSnapshot.AllOff;
             }
 

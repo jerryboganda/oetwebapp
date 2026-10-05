@@ -145,6 +145,11 @@ public sealed partial class RemoteWorkerService(
         {
             await using var transaction = await db.Database.BeginTransactionAsync(ct);
             db.RemoteWorkers.Add(node);
+
+            // The credential's foreign key is not modelled in EF (the table constraint is hand-authored), so EF cannot order the two
+            // inserts itself: persist the node first, then the credential and its audit row in the same transaction.
+            await db.SaveChangesAsync(ct);
+
             db.RemoteCredentials.Add(new RemoteCredential
             {
                 TokenId = token.TokenId,
