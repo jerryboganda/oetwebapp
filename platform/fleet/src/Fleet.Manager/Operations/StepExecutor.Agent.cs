@@ -391,6 +391,27 @@ public sealed partial class StepExecutor
                 h.AppliedRevision = last?.AppliedRevision ?? h.AppliedRevision;
             },
             cancellationToken);
+        await PruneAgentImagesAsync(host, cancellationToken);
         return StepOutcome.Done("the node is active and claiming work");
+    }
+
+    /// <summary>
+    /// Disk hygiene after a node proved itself: the <c>prune</c> verb keeps the running image and the two newest others (the rollback
+    /// candidates) and removes older agent-repository images only. Never fails a step: a helper that cannot prune is still a working helper.
+    /// </summary>
+    private async Task PruneAgentImagesAsync(HostEntity host, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var result = await _access.CtlAsync(host, "prune", Array.Empty<string>(), null, cancellationToken);
+            if (!result.Success)
+            {
+                _logger.LogWarning("Pruning old agent images on host {NodeRef} failed: {Reason}.", host.NodeRef, result.FailureReason ?? "ctl_error");
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Pruning old agent images on host {NodeRef} failed: {Type}.", host.NodeRef, ex.GetType().Name);
+        }
     }
 }

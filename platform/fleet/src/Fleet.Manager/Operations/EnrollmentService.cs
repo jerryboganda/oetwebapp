@@ -284,6 +284,14 @@ public sealed class EnrollmentService
             : await ResumeGenericAsync(op, cancellationToken);
         if (!moved)
         {
+            // No operation is waiting for this root-capable secret any more: do not leave it in the vault for its 60-minute lifetime.
+            // The one exception is a concurrent submit that already moved the operation on; the credential then belongs to that run.
+            var current = await _operations.GetAsync(op.Id, cancellationToken);
+            if (!OwnerCredentialInUse(current))
+            {
+                await _credentials.DestroyAsync(host.Id, CredentialPurposes.OwnerBootstrap, cancellationToken);
+            }
+
             throw new FleetOperationException("conflict", "The operation changed while the credential was stored; refresh and retry.");
         }
 
@@ -358,6 +366,13 @@ public sealed class EnrollmentService
     }
 
     // ---- helpers ---------------------------------------------------------------------------
+
+    /// <summary>True when the operation is in a state that is (or is about to be) running with the temporary owner credential.</summary>
+    private static bool OwnerCredentialInUse(OperationEntity? op) =>
+        op is not null
+        && op.State is nameof(EnrollmentState.Bootstrapping)
+            or nameof(GenericOperationState.Queued)
+            or nameof(GenericOperationState.Running);
 
     private async Task<OperationEntity> RequireEnrollAsync(string operationId, CancellationToken cancellationToken)
     {

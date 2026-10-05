@@ -50,14 +50,22 @@ public sealed class FakeSshKeyTool : ISshKeyTool
         return Task.FromResult(new GeneratedKeyPair(SecretBuffer.FromBytes(material), FakeKeys.PublicLine(material)));
     }
 
-    public Task<string?> DerivePublicKeyAsync(SecretBuffer privateKey, CancellationToken cancellationToken)
+    /// <summary>Runs inside <see cref="DerivePublicKeyAsync"/>: a test's way to change the world between two steps of one service call (a concurrent writer).</summary>
+    public Func<Task>? OnDerive { get; set; }
+
+    public async Task<string?> DerivePublicKeyAsync(SecretBuffer privateKey, CancellationToken cancellationToken)
     {
+        if (OnDerive is { } hook)
+        {
+            await hook();
+        }
+
         var text = Encoding.UTF8.GetString(privateKey.AsSpan());
         if (text.Contains("PASSPHRASE-PROTECTED", StringComparison.Ordinal))
         {
-            return Task.FromResult<string?>(null);
+            return null;
         }
 
-        return Task.FromResult<string?>(FakeKeys.PublicLine(privateKey.AsSpan().ToArray()));
+        return FakeKeys.PublicLine(privateKey.AsSpan().ToArray());
     }
 }

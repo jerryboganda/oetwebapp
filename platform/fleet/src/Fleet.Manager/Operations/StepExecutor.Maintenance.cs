@@ -186,10 +186,16 @@ public sealed partial class StepExecutor
             return StepOutcome.Skipped("the host has no API node to drain");
         }
 
-        if (node.Status is "Draining" or "Disabled" or "Quarantined" or "Revoked")
+        // The API drains only an Active node (OET-RWP/1 section 3.9). Every other status either is already out of the claim path
+        // (Draining, Disabled, Quarantined, Revoked) or never entered it (Pending, Probation: a failed or half-finished enrollment),
+        // so there is nothing to drain and the removal must go on to uninstall and revoke instead of failing on a 409.
+        if (node.Status is "Draining" or "Disabled" or "Quarantined" or "Revoked" or "Pending" or "Probation")
         {
             await _hosts.UpdateAsync(host.Id, h => h.Lifecycle = node.Status == "Draining" ? nameof(HostLifecycle.Draining) : h.Lifecycle, cancellationToken);
-            return StepOutcome.Skipped("the node is already " + node.Status);
+            var neverActive = node.Status is "Pending" or "Probation";
+            return StepOutcome.Skipped(neverActive
+                ? "the node never became active; there is nothing to drain"
+                : "the node is already " + node.Status);
         }
 
         try
@@ -324,10 +330,25 @@ public sealed partial class StepExecutor
             return StepOutcome.Skipped("the host never completed enrollment; nothing was installed");
         }
 
+        // The verb removes everything fleet-owned and closes the manager's own login LAST. Record the attempt before sending it, so that
+        // after a lost response, a timeout or a crash the retry can tell "never ran" (host still reachable) from "already ran" (login refused).
+        var alreadyAttempted = ctx.Data.UninstallRequested;
+        if (!alreadyAttempted)
+        {
+            ctx.Data.UninstallRequested = true;
+            await _operations.SaveDataAsync(ctx.Op.Id, ctx.Data, cancellationToken);
+        }
+
         var result = await _access.CtlAsync(host, "uninstall", Array.Empty<string>(), null, cancellationToken);
         if (result.Success)
         {
             return StepOutcome.Done("fleet components removed from the helper");
+        }
+
+        // ExitCode -1 means the manager never reached the helper (no key in the vault); only a REFUSED login after an earlier attempt counts.
+        if (alreadyAttempted && result.FailureReason == FailureReasons.AuthFailed && result.ExitCode != -1)
+        {
+            return StepOutcome.Skipped("the helper no longer accepts the manager key: an earlier uninstall already removed it");
         }
 
         if (ParamBool(ctx.Op, "force"))
@@ -435,14 +456,31 @@ public sealed partial class StepExecutor
         return StepOutcome.Done("a new token was rendered; the old one expires after the grace period");
     }
 
+    /// <summary>
+    /// The ctl <c>restart</c> verb RECREATES the container from the env file (a plain <c>docker restart</c> would keep the environment it was
+    /// created with, i.e. the OLD token). The id of the agent instance running now is remembered first, so the next step can tell a new
+    /// process from the old one that keeps heartbeating on the old token during its grace period.
+    /// </summary>
     private async Task<StepOutcome> RestartAgentAsync(StepContext ctx, CancellationToken cancellationToken)
     {
         var host = ctx.RequireHost();
+        if (ctx.Data.PreviousAgentInstanceId is null && host.ApiNodeId is not null)
+        {
+            try
+            {
+                ctx.Data.PreviousAgentInstanceId = (await _api.GetNodeAsync(host.ApiNodeId, cancellationToken))?.Agent?.InstanceId;
+            }
+            catch (FleetApiException)
+            {
+                // Best effort: without it the next step falls back to the heartbeat time alone.
+            }
+        }
+
         ctx.Data.RestartRequestedAt = _time.GetUtcNow();
         await _operations.SaveDataAsync(ctx.Op.Id, ctx.Data, cancellationToken);
         var result = await _access.CtlAsync(host, "restart", Array.Empty<string>(), null, cancellationToken);
         return result.Success
-            ? StepOutcome.Done("the agent was restarted")
+            ? StepOutcome.Done("the agent was recreated from the new environment file")
             : FromCtl(result, FailureReasons.AgentStartFailed, "the agent could not be restarted");
     }
 
@@ -455,14 +493,18 @@ public sealed partial class StepExecutor
         }
 
         var since = (ctx.Data.RestartRequestedAt ?? _time.GetUtcNow()) - TimeSpan.FromSeconds(1);
+        var previousInstance = ctx.Data.PreviousAgentInstanceId;
         var (satisfied, _) = await PollNodeAsync(
             host.ApiNodeId,
             TimeSpan.FromSeconds(Timing.HeartbeatAfterRestartSeconds),
-            node => node.LastHeartbeatAt is { } heartbeat && heartbeat >= since,
+            node => node.LastHeartbeatAt is { } heartbeat
+                && heartbeat >= since
+                && (previousInstance is null
+                    || (node.Agent?.InstanceId is { } current && !string.Equals(current, previousInstance, StringComparison.Ordinal))),
             cancellationToken);
         return satisfied
-            ? StepOutcome.Done("the agent heartbeats with the new token")
-            : StepOutcome.Fail(FailureReasons.AgentNotHeartbeating, "no heartbeat arrived after the restart", "agent is not heartbeating");
+            ? StepOutcome.Done("a new agent process heartbeats with the new token")
+            : StepOutcome.Fail(FailureReasons.AgentNotHeartbeating, "no heartbeat from a restarted agent process arrived", "agent is not heartbeating");
     }
 
     private async Task<StepOutcome> FinalizeRotateAsync(StepContext ctx, CancellationToken cancellationToken)
@@ -557,6 +599,12 @@ public sealed partial class StepExecutor
     {
         ctx.Data.CanaryRequestedAt = null;
         var outcome = await CanaryCoreAsync(ctx, skipWhenActive: false, cancellationToken);
+        if (outcome.Verdict == StepVerdict.Done)
+        {
+            // The new image is proven: old agent images beyond the two newest rollback candidates would otherwise pile up on every rollout.
+            await PruneAgentImagesAsync(ctx.RequireHost(), cancellationToken);
+        }
+
         if (outcome.Verdict == StepVerdict.Failed)
         {
             var host = ctx.RequireHost();

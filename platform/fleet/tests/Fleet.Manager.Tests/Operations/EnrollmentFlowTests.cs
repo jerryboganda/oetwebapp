@@ -592,6 +592,72 @@ public sealed class EnrollmentFlowTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_restricted_login_is_proven_with_status_before_docker_exists_on_the_helper()
+    {
+        var (operation, helper) = await _driver.EnrollToActiveAsync();
+
+        Assert.Equal("Active", operation.State);
+        Assert.Equal("done", operation.Steps.Single(s => s.Name == "install-key").State);
+
+        // S3 verifies the restricted login BEFORE S4 installs Docker, so `status` must work on a helper without it; the first ctl call
+        // of an enrollment is exactly that, and every verb that drives the Docker daemon is refused there (as on a real clean helper).
+        Assert.Equal(1, helper.StatusCallsWithoutDocker);
+        Assert.Equal("status", helper.CtlLog[0].Verb);
+        Assert.True(helper.DockerInstalled);
+    }
+
+    [Fact]
+    public async Task A_submission_that_lost_a_race_does_not_leave_the_owner_credential_in_the_vault()
+    {
+        var (operation, helper) = await _driver.AddAsync();
+        operation = await _driver.RunAsync(operation.Id);
+        operation = await _driver.ConfirmAsync(operation.Id, helper);
+        var hostId = (await _driver.HostAsync()).Id;
+
+        // The owner abandons the enrollment in the instant between the state check and the move (the key tool runs in that window).
+        World.Keys.OnDerive = async () =>
+        {
+            World.Keys.OnDerive = null;
+            await _driver.Enrollment.CancelAsync(operation.Id, "owner", CancellationToken.None);
+        };
+
+        var refusal = await Assert.ThrowsAsync<FleetOperationException>(() => _driver.SubmitOwnerKeyAsync(operation.Id, helper));
+
+        Assert.Equal("conflict", refusal.Code);
+        Assert.Equal("Cancelled", (await _driver.Hosts.GetOperationAsync(operation.Id, CancellationToken.None)).State);
+        Assert.False(
+            await _host.Get<CredentialStore>().ExistsAnyAsync(hostId, CredentialPurposes.OwnerBootstrap, CancellationToken.None),
+            "no operation waits for the root-capable key, so it must not sit in the vault for its 60 minutes");
+    }
+
+    [Fact]
+    public async Task A_duplicate_submission_keeps_the_credential_the_winning_run_is_using()
+    {
+        var (operation, helper) = await _driver.AddAsync();
+        operation = await _driver.RunAsync(operation.Id);
+        operation = await _driver.ConfirmAsync(operation.Id, helper);
+        var hostId = (await _driver.HostAsync()).Id;
+
+        // A double click: the second request wins while the first one is still between its check and its move.
+        World.Keys.OnDerive = async () =>
+        {
+            World.Keys.OnDerive = null;
+            await _driver.SubmitOwnerKeyAsync(operation.Id, helper);
+        };
+
+        var refusal = await Assert.ThrowsAsync<FleetOperationException>(() => _driver.SubmitOwnerKeyAsync(operation.Id, helper));
+
+        Assert.Equal("conflict", refusal.Code);
+        Assert.Equal("Bootstrapping", (await _driver.Hosts.GetOperationAsync(operation.Id, CancellationToken.None)).State);
+        Assert.True(await _host.Get<CredentialStore>().ExistsAnyAsync(hostId, CredentialPurposes.OwnerBootstrap, CancellationToken.None));
+
+        await _driver.ApproveReleaseAsync();
+        await _driver.SyncAsync();
+        operation = await _driver.RunAsync(operation.Id);
+        Assert.Equal("Active", operation.State);
+    }
+
+    [Fact]
     public async Task An_unreachable_api_fails_registration_with_api_unreachable()
     {
         var (operation, helper) = await _driver.AddAsync();

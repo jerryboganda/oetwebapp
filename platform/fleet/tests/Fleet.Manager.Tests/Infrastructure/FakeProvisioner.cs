@@ -62,7 +62,14 @@ public sealed class FakeHost
 
     public int Pulls { get; set; }
 
+    /// <summary>The env FILE on the helper (what <c>put-env</c> wrote).</summary>
     public string? EnvText { get; set; }
+
+    /// <summary>
+    /// The environment the running container was CREATED with. Docker bakes <c>--env-file</c> in at creation, so a later <c>put-env</c> changes
+    /// <see cref="EnvText"/> but not this; only <c>run</c> and <c>restart</c> (which recreates the container) copy the file into it.
+    /// </summary>
+    public string? ContainerEnvText { get; set; }
 
     public int EnvWrites { get; set; }
 
@@ -71,6 +78,11 @@ public sealed class FakeHost
     public int Runs { get; set; }
 
     public int Restarts { get; set; }
+
+    public int Prunes { get; set; }
+
+    /// <summary>How often <c>status</c> was answered while Docker was not installed yet (S3 proves the restricted login before S4 installs it).</summary>
+    public int StatusCallsWithoutDocker { get; set; }
 
     public bool UnitWritten { get; set; }
 
@@ -123,6 +135,9 @@ public sealed class FakeProvisioner : IProvisioner
     public Dictionary<EnrollStep, ProvisionResult> FailStepOnce { get; } = new();
 
     public Dictionary<string, CtlResult> FailCtlOnce { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Verbs whose next call RUNS on the helper but whose answer never reaches the manager (the connection drops after the effect).</summary>
+    public HashSet<string> LoseResponseOnce { get; } = new(StringComparer.Ordinal);
 
     public IReadOnlyCollection<FakeHost> Hosts => _hosts.Values;
 
@@ -322,6 +337,13 @@ public sealed class FakeProvisioner : IProvisioner
         }
 
         var result = Execute(host, request);
+        if (LoseResponseOnce.Remove(request.Verb))
+        {
+            // The verb ran (its effect is on the helper) but the answer was lost: the manager only sees a dropped connection.
+            Leave();
+            return Task.FromResult(new CtlResult(false, FailureReasons.SshUnreachable, "connection lost", string.Empty, 255));
+        }
+
         Leave();
         return Task.FromResult(result);
     }
@@ -330,9 +352,21 @@ public sealed class FakeProvisioner : IProvisioner
 
     private CtlResult Execute(FakeHost host, CtlRequest request)
     {
+        // Like the real ctl: only `status` works on a helper without Docker (a missing binary is "docker.running = false"); every verb that
+        // drives the daemon fails there, and S3 must therefore prove the restricted login with `status` alone.
+        if (!host.DockerInstalled && request.Verb is "login" or "pull" or "verify" or "run" or "stop" or "restart" or "prune" or "wipe-scratch" or "logs")
+        {
+            return Failed("docker: not found");
+        }
+
         switch (request.Verb)
         {
             case "status":
+                if (!host.DockerInstalled)
+                {
+                    host.StatusCallsWithoutDocker++;
+                }
+
                 return Ok(StatusJson(host));
 
             case "harden-check":
@@ -417,25 +451,51 @@ public sealed class FakeProvisioner : IProvisioner
                 }
 
                 host.EnvText = string.Join('\n', lines) + "\n";
+                host.ContainerEnvText = host.EnvText;
                 host.RunningDigest = digest;
                 host.Runs++;
-                OnAgentStart?.Invoke(host, host.EnvText, digest);
+                OnAgentStart?.Invoke(host, host.ContainerEnvText, digest);
                 return Ok("{\"ok\":true,\"containerId\":\"c0ffee\"}");
             }
 
             case "restart":
-                if (host.RunningDigest is null)
+            {
+                // Like the real ctl: the container is RECREATED from the CURRENT env file, because `docker restart` would keep the environment
+                // it was created with (the old node token). The digest comes from that file, exactly as in oet-fleet-ctl.
+                var digest = host.EnvText?
+                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Where(line => line.StartsWith("OET_AGENT_IMAGE_DIGEST=", StringComparison.Ordinal))
+                    .Select(line => line["OET_AGENT_IMAGE_DIGEST=".Length..])
+                    .FirstOrDefault();
+                if (host.EnvText is null)
                 {
-                    return Failed("no such container");
+                    return Failed("no env file; put-env first");
                 }
 
+                if (digest is null)
+                {
+                    return Failed("the env file names no agent image digest");
+                }
+
+                if (!host.Images.Contains(digest))
+                {
+                    return Failed("image is not present");
+                }
+
+                host.ContainerEnvText = host.EnvText;
+                host.RunningDigest = digest;
                 host.Restarts++;
-                OnAgentStart?.Invoke(host, host.EnvText ?? string.Empty, host.RunningDigest);
-                return Ok("{\"ok\":true}");
+                OnAgentStart?.Invoke(host, host.ContainerEnvText, digest);
+                return Ok("{\"ok\":true,\"containerId\":\"c0ffee\"}");
+            }
 
             case "stop":
                 host.RunningDigest = null;
                 return Ok("{\"ok\":true}");
+
+            case "prune":
+                host.Prunes++;
+                return Ok("{\"ok\":true,\"removed\":0}");
 
             case "unit-sync":
                 host.UnitWritten = true;
@@ -446,6 +506,7 @@ public sealed class FakeProvisioner : IProvisioner
                 host.RunningDigest = null;
                 host.Images.Clear();
                 host.EnvText = null;
+                host.ContainerEnvText = null;
                 host.UnitWritten = false;
                 host.Uninstalled = true;
                 host.ManagerAccountLocked = true;
@@ -493,7 +554,7 @@ public sealed class FakeProvisioner : IProvisioner
         {
             ["schema"] = "oet-fleet-ctl.status/1",
             ["host"] = new Dictionary<string, object?> { ["os"] = host.Os, ["arch"] = "x86_64", ["cpuCores"] = host.CpuCores, ["memTotalMiB"] = host.MemMiB, ["swapMiB"] = 0 },
-            ["docker"] = new Dictionary<string, object?> { ["version"] = "27.3.1", ["running"] = host.DockerInstalled },
+            ["docker"] = new Dictionary<string, object?> { ["version"] = host.DockerInstalled ? "27.3.1" : null, ["running"] = host.DockerInstalled },
             ["agent"] = agent,
             ["ctl"] = new Dictionary<string, object?> { ["version"] = 1 },
         });

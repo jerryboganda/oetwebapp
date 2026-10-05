@@ -24,6 +24,19 @@ public sealed class OperationData
 
     public DateTimeOffset? RestartRequestedAt { get; set; }
 
+    /// <summary>
+    /// The agent instance id the API reported before a token rotation restarted the agent. An agent generates a new id at every
+    /// process start, so a changed id is the proof that a NEW process (the recreated container, started with the new token) is running.
+    /// Kept across retries on purpose (never reset): a retried verification still has to see an id different from this one.
+    /// </summary>
+    public string? PreviousAgentInstanceId { get; set; }
+
+    /// <summary>
+    /// Set BEFORE the <c>uninstall</c> verb is sent. The verb closes the manager's own way in as its last act, so after a lost response
+    /// or a crash a refused restricted login (<c>auth_failed</c>) means the uninstall already ran. Never reset by a retry.
+    /// </summary>
+    public bool UninstallRequested { get; set; }
+
     /// <summary>Fingerprint hint (not the token) of the token rendered by a rotation, recorded by its finalize step.</summary>
     public string? NewTokenFingerprint { get; set; }
 

@@ -51,7 +51,8 @@ public sealed class FleetWorld
             .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.Ordinal);
         if (values.TryGetValue("OET_NODE_ID", out var nodeId) && values.TryGetValue("OET_NODE_TOKEN", out var token))
         {
-            Api.AgentHeartbeat(nodeId, token, values.GetValueOrDefault("OET_AGENT_IMAGE_DIGEST", digest));
+            // Every start is a new process, and a new process generates a new instance id.
+            Api.AgentHeartbeat(nodeId, token, values.GetValueOrDefault("OET_AGENT_IMAGE_DIGEST", digest), instanceId: Guid.NewGuid().ToString("D"));
         }
     }
 }

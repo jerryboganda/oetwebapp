@@ -172,6 +172,58 @@ public sealed class ResumeAfterRestartTests
     }
 
     [Fact]
+    public async Task Dying_between_the_last_bootstrap_step_and_the_move_to_provisioned_does_not_strand_the_operation()
+    {
+        await using var host = await FleetTestHost.CreateAsync();
+        var driver = new EnrollmentDriver(host);
+        var (operation, helper) = await driver.AddAsync();
+        operation = await driver.RunAsync(operation.Id);
+        operation = await driver.ConfirmAsync(operation.Id, helper);
+        operation = await driver.SubmitOwnerKeyAsync(operation.Id, helper);
+
+        // No release and no registry token yet: the run stops at ImageAwaitingSync with S1..S8 finished and the owner key destroyed.
+        operation = await driver.RunAsync(operation.Id);
+        Assert.Equal("ImageAwaitingSync", operation.State);
+        Assert.Equal("done", operation.Steps.Single(s => s.Name == "discard-owner-key").State);
+        var hostId = (await driver.HostAsync()).Id;
+        Assert.False(await host.Get<CredentialStore>().ExistsAnyAsync(hostId, CredentialPurposes.OwnerBootstrap, CancellationToken.None));
+
+        // The manager died after S8's step row was written but before the state moved: that window leaves Bootstrapping behind it.
+        Assert.True(await host.Get<OperationStore>().UpdateAsync(
+            operation.Id,
+            nameof(EnrollmentState.ImageAwaitingSync),
+            o => o.State = nameof(EnrollmentState.Bootstrapping),
+            CancellationToken.None));
+        await host.RestartAsync();
+        Assert.Equal("Bootstrapping", (await driver.Hosts.GetOperationAsync(operation.Id, CancellationToken.None)).State);
+
+        await driver.ApproveReleaseAsync();
+        await driver.SyncAsync();
+        operation = await driver.RunAsync(operation.Id);
+
+        Assert.Equal("Active", operation.State);
+        Assert.Equal(1, helper.ApplyCounts[EnrollStep.HardenSsh]);
+        Assert.Equal(1, helper.KeyInstalls);
+    }
+
+    [Fact]
+    public async Task An_impossible_transition_is_refused_with_false_instead_of_throwing_out_of_the_worker()
+    {
+        await using var host = await FleetTestHost.CreateAsync();
+        var driver = new EnrollmentDriver(host);
+        var (operation, helper) = await driver.AddAsync();
+        operation = await driver.RunAsync(operation.Id);
+        operation = await driver.ConfirmAsync(operation.Id, helper);
+        Assert.Equal("HostKeyConfirmed", operation.State);
+
+        var entity = (await host.Get<OperationStore>().GetAsync(operation.Id, CancellationToken.None))!;
+        var moved = await driver.Runner.TransitionAsync(entity, EnrollmentState.Active, CancellationToken.None);
+
+        Assert.False(moved);
+        Assert.Equal("HostKeyConfirmed", (await driver.Hosts.GetOperationAsync(operation.Id, CancellationToken.None)).State);
+    }
+
+    [Fact]
     public async Task Dying_right_after_the_node_was_registered_is_recovered_by_rotating_the_token()
     {
         var world = new FleetWorld();

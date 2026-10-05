@@ -270,6 +270,16 @@ public sealed class OperationRunner
                 return await TransitionAsync(op, EnrollmentState.ImagePulling, cancellationToken) ? Advance.Continue : Advance.Blocked;
 
             case EnrollmentState.Bootstrapping:
+                // S8 marks itself done and THEN moves the operation to Provisioned: two writes. A process killed between them leaves
+                // Bootstrapping with S1..S8 finished, and no step is left that could require the Bootstrapping state. Finish the move here
+                // (the owner credential is already destroyed, so a stuck operation could only be abandoned and re-added).
+                if (await BootstrapFinishedAsync(op, cancellationToken))
+                {
+                    return await TransitionAsync(op, EnrollmentState.Provisioned, cancellationToken) ? Advance.Continue : Advance.Blocked;
+                }
+
+                return await RunNextStepAsync(op, cancellationToken);
+
             case EnrollmentState.ImagePulling:
             case EnrollmentState.AgentStarting:
             case EnrollmentState.Verifying:
@@ -309,6 +319,15 @@ public sealed class OperationRunner
             default:
                 return Advance.Blocked;
         }
+    }
+
+    /// <summary>True when every owner-credential step (S1..S8) of an enrollment is done or skipped, which is exactly when Bootstrapping is over.</summary>
+    private async Task<bool> BootstrapFinishedAsync(OperationEntity op, CancellationToken cancellationToken)
+    {
+        var bootstrap = (await _store.GetStepsAsync(op.Id, cancellationToken))
+            .Where(s => EnrollSteps.TryParse(s.Name, out var step) && step <= EnrollStep.DiscardOwnerKey)
+            .ToList();
+        return bootstrap.Count > 0 && bootstrap.All(s => s.State is "done" or "skipped");
     }
 
     /// <summary>Created: fetch the host's key fingerprints for DISPLAY. Nothing is trusted until the owner confirms one out of band.</summary>
@@ -536,7 +555,10 @@ public sealed class OperationRunner
 
     // ---- state changes ---------------------------------------------------------------------
 
-    /// <summary>A validated enrollment transition (OET-RWP/1 section 8.1). Returns false when another writer won.</summary>
+    /// <summary>
+    /// A validated enrollment transition (OET-RWP/1 section 8.1). Returns false when another writer won, and also when the edge is
+    /// not in the table (nothing is written then; the runner logs it and stops this tick instead of throwing out of the worker loop).
+    /// </summary>
     public async Task<bool> TransitionAsync(OperationEntity op, EnrollmentState to, CancellationToken cancellationToken)
     {
         if (!EnrollmentStateMachine.TryParse(op.State, out var from))
@@ -544,7 +566,12 @@ public sealed class OperationRunner
             return false;
         }
 
-        EnrollmentStateMachine.Require(from, to);
+        if (!EnrollmentStateMachine.CanTransition(from, to))
+        {
+            _logger.LogError("Operation {Operation} cannot move from {From} to {To}; the transition was refused.", op.Id, from, to);
+            return false;
+        }
+
         var now = _time.GetUtcNow();
         var changed = await _store.UpdateAsync(
             op.Id,

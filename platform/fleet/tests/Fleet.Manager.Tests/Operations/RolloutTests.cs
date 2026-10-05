@@ -68,10 +68,15 @@ public sealed class RolloutTests : IAsyncLifetime
         Assert.All(started.Steps.Skip(7), step => Assert.EndsWith(":" + SecondRef, step.Name));
 
         var callsBefore = World.Api.Calls.Count;
+        var prunesBefore = (First: first.Prunes, Second: second.Prunes);
         var finished = await RunAsync(started);
 
         Assert.Equal("Succeeded", finished.State);
         Assert.All(finished.Steps, step => Assert.Contains(step.State, new[] { "done", "skipped" }));
+
+        // Every helper prunes old agent images once its new agent has passed the canary, so disk use does not grow with each rollout.
+        Assert.Equal(prunesBefore.First + 1, first.Prunes);
+        Assert.Equal(prunesBefore.Second + 1, second.Prunes);
 
         // Strictly sequential: the second helper is never drained before the first one is enabled again.
         var transitions = World.Api.Calls.Skip(callsBefore).Where(call => call is "drain" or "enable").ToArray();

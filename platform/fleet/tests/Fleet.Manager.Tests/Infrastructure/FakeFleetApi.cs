@@ -38,6 +38,9 @@ public sealed class FakeApiNode
 
     public string? AgentDigest { get; set; }
 
+    /// <summary>The instance id of the agent process that heartbeated last (a real agent generates a new one at every process start).</summary>
+    public string? InstanceId { get; set; }
+
     public int AgentProtocol { get; set; } = 1;
 
     public bool AutoHeartbeat { get; set; }
@@ -129,8 +132,11 @@ public sealed class FakeFleetApi : IFleetApi
         }
     }
 
-    /// <summary>What a started agent does: heartbeat with its node token. Returns false (HTTP 401) for an invalid, expired or revoked token.</summary>
-    public bool AgentHeartbeat(string nodeId, string tokenValue, string digest, int protocol = 1)
+    /// <summary>
+    /// What a started agent does: heartbeat with its node token. Returns false (HTTP 401) for an invalid, expired or revoked token.
+    /// <paramref name="instanceId"/> is the id of a NEW agent process; null keeps the one the node already has (a later heartbeat of the same process).
+    /// </summary>
+    public bool AgentHeartbeat(string nodeId, string tokenValue, string digest, int protocol = 1, string? instanceId = null)
     {
         lock (_gate)
         {
@@ -147,6 +153,7 @@ public sealed class FakeFleetApi : IFleetApi
 
             node.AgentDigest = digest;
             node.AgentProtocol = protocol;
+            node.InstanceId = instanceId ?? node.InstanceId;
             node.AutoHeartbeat = true;
             node.LastHeartbeatAt = _time.GetUtcNow();
             node.AppliedRevision = node.PolicyRevision;
@@ -512,7 +519,7 @@ public sealed class FakeFleetApi : IFleetApi
             null,
             node.AgentDigest is null
                 ? null
-                : new ApiAgentDto("1.0.0", node.AgentDigest, node.AgentProtocol, Guid.Empty.ToString(), new[] { new ApiKindDto("pdf.extract", new[] { 1 }, Engine) }),
+                : new ApiAgentDto("1.0.0", node.AgentDigest, node.AgentProtocol, node.InstanceId ?? Guid.Empty.ToString(), new[] { new ApiKindDto("pdf.extract", new[] { 1 }, Engine) }),
             new ApiCapacityDto(2000, 3500, 2900, 1, 2),
             new ApiLoadDto(node.CpuPct, node.MemFreePct, "normal"),
             new ApiLeasesDto(node.LeaseCount, node.LeaseCount, 2),

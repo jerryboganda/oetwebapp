@@ -58,8 +58,13 @@ public sealed class MaintenanceTests : IAsyncLifetime
         return rows.Any(r => r.Action == action && (target is null || r.Target == target));
     }
 
-    private static string TokenIn(FakeHost helper) =>
-        helper.EnvText!
+    private static string TokenIn(FakeHost helper) => TokenOf(helper.EnvText!);
+
+    /// <summary>The token of the RUNNING container: the env it was created with, which a later <c>put-env</c> does not change.</summary>
+    private static string TokenInContainer(FakeHost helper) => TokenOf(helper.ContainerEnvText!);
+
+    private static string TokenOf(string envText) =>
+        envText
             .Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Single(line => line.StartsWith("OET_NODE_TOKEN=", StringComparison.Ordinal))["OET_NODE_TOKEN=".Length..];
 
@@ -392,7 +397,147 @@ public sealed class MaintenanceTests : IAsyncLifetime
         Assert.Equal("Succeeded", again.State);
     }
 
+    [Fact]
+    public async Task A_host_whose_agent_never_heartbeated_can_be_removed_through_the_manager()
+    {
+        // S11 fails: the node is registered but stays Pending, and the API refuses to drain a node that is not Active.
+        World.Provisioner.OnAgentStart = (_, _, _) => { };
+        var (failedEnrollment, helper) = await _driver.EnrollToActiveAsync();
+        Assert.Equal("Failed", failedEnrollment.State);
+        Assert.Equal(FailureReasons.AgentNotHeartbeating, failedEnrollment.FailureReason);
+        var node = Node();
+        Assert.Equal("Pending", node.Status);
+
+        await RemoveAndExpectCleanHelperAsync(helper, node);
+    }
+
+    [Fact]
+    public async Task A_host_whose_canary_timed_out_can_be_removed_through_the_manager()
+    {
+        // S12 fails: the node is on Probation, which the API refuses to drain as well.
+        World.Api.AutoCompleteCanary = false;
+        var (failedEnrollment, helper) = await _driver.EnrollToActiveAsync();
+        Assert.Equal("Failed", failedEnrollment.State);
+        Assert.Equal(FailureReasons.CanaryTimeout, failedEnrollment.FailureReason);
+        var node = Node();
+        Assert.Equal("Probation", node.Status);
+
+        await RemoveAndExpectCleanHelperAsync(helper, node);
+    }
+
+    private async Task RemoveAndExpectCleanHelperAsync(FakeHost helper, FakeApiNode node)
+    {
+        var host = await _driver.HostAsync();
+
+        var finished = await RunAsync(await Hosts.StartRemoveAsync(host.Id, force: false, "owner", CancellationToken.None));
+
+        Assert.Equal("Succeeded", finished.State);
+        Assert.Equal("skipped", finished.Steps.Single(s => s.Name == "api-drain").State);
+        Assert.Equal("done", finished.Steps.Single(s => s.Name == "uninstall").State);
+        Assert.DoesNotContain("drain", World.Api.Calls);
+        Assert.True(helper.Uninstalled);
+        Assert.Equal("Revoked", node.Status);
+        Assert.Equal(0, await CredentialCountAsync(host.Id));
+        Assert.Equal("Removed", (await _driver.HostAsync()).Lifecycle);
+    }
+
+    [Fact]
+    public async Task A_lost_uninstall_response_does_not_strand_the_removal()
+    {
+        var (host, helper) = await EnrollAsync();
+        World.Provisioner.LoseResponseOnce.Add("uninstall");
+
+        var failed = await RunAsync(await Hosts.StartRemoveAsync(host.Id, force: false, "owner", CancellationToken.None));
+
+        Assert.Equal("Failed", failed.State);
+        Assert.Equal(FailureReasons.SshUnreachable, failed.FailureReason);
+        Assert.True(helper.Uninstalled, "the verb ran on the helper; only its answer was lost");
+        Assert.True(helper.ManagerAccountLocked);
+
+        // The retry finds the restricted login closed, which after an attempted uninstall proves the uninstall happened.
+        await _driver.Enrollment.RetryAsync(failed.Id, "owner", CancellationToken.None);
+        var finished = await RunAsync(failed);
+
+        Assert.Equal("Succeeded", finished.State);
+        var step = finished.Steps.Single(s => s.Name == "uninstall");
+        Assert.Equal("skipped", step.State);
+        Assert.Contains("earlier uninstall", step.Summary);
+        Assert.Equal("Revoked", Node().Status);
+        Assert.Equal(0, await CredentialCountAsync(host.Id));
+        Assert.Equal("Removed", (await _driver.HostAsync()).Lifecycle);
+    }
+
+    [Fact]
+    public async Task A_refused_login_on_the_first_uninstall_attempt_is_still_an_error()
+    {
+        var (host, helper) = await EnrollAsync();
+        helper.ManagerAccountLocked = true;
+
+        var failed = await RunAsync(await Hosts.StartRemoveAsync(host.Id, force: false, "owner", CancellationToken.None));
+
+        Assert.Equal("Failed", failed.State);
+        Assert.Equal(FailureReasons.AuthFailed, failed.FailureReason);
+        Assert.Equal("failed", failed.Steps.Single(s => s.Name == "uninstall").State);
+        Assert.NotEqual("Revoked", Node().Status);
+        Assert.True(await CredentialCountAsync(host.Id) > 0);
+    }
+
+    // ---- image hygiene ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Old_agent_images_are_pruned_once_the_node_is_active()
+    {
+        var (_, helper) = await EnrollAsync();
+
+        Assert.Equal(1, helper.Prunes);
+        Assert.Contains(helper.CtlLog, call => call.Verb == "prune");
+    }
+
     // ---- token rotation --------------------------------------------------------------------
+
+    [Fact]
+    public async Task The_agent_is_recreated_with_the_new_token_so_it_survives_the_end_of_the_grace_period()
+    {
+        var (host, helper) = await EnrollAsync();
+        var node = Node();
+        var oldToken = TokenIn(helper);
+        Assert.Equal(oldToken, TokenInContainer(helper));
+        var instanceBefore = node.InstanceId;
+        Assert.NotNull(instanceBefore);
+
+        var finished = await RunAsync(await Hosts.StartRotateTokenAsync(host.Id, "owner", CancellationToken.None));
+
+        Assert.Equal("Succeeded", finished.State);
+        var newToken = TokenIn(helper);
+        Assert.NotEqual(oldToken, newToken);
+
+        // The RUNNING container was created from the new env file. A plain `docker restart` would have kept the old token in here,
+        // the check below would have passed during the grace period and the node would have dropped off the API an hour later.
+        Assert.Equal(newToken, TokenInContainer(helper));
+        Assert.NotEqual(instanceBefore, node.InstanceId);
+
+        World.Time.Advance(TimeSpan.FromSeconds(3601));
+        Assert.False(World.Api.TokenAccepted(node.Id, oldToken));
+        Assert.True(
+            World.Api.AgentHeartbeat(node.Id, TokenInContainer(helper), FleetWorld.AgentDigest),
+            "the agent must still authenticate after the old token expired");
+    }
+
+    [Fact]
+    public async Task A_rotation_whose_restart_never_produced_a_new_agent_process_fails_verification()
+    {
+        var (host, _) = await EnrollAsync();
+        // The old process keeps heartbeating on its old token (inside its grace period); no new process ever starts.
+        World.Provisioner.OnAgentStart = (_, _, _) => { };
+
+        var failed = await RunAsync(await Hosts.StartRotateTokenAsync(host.Id, "owner", CancellationToken.None));
+
+        Assert.Equal("Failed", failed.State);
+        Assert.Equal(FailureReasons.AgentNotHeartbeating, failed.FailureReason);
+        Assert.Equal("done", failed.Steps.Single(s => s.Name == "restart-agent").State);
+        Assert.Equal("failed", failed.Steps.Single(s => s.Name == "verify-heartbeat").State);
+        Assert.Equal("pending", failed.Steps.Single(s => s.Name == "finalize-rotate").State);
+    }
 
     [Fact]
     public async Task Rotating_the_token_keeps_the_old_one_valid_for_the_grace_period_only()
