@@ -156,7 +156,9 @@ jobs:
     # each shard is its own `dotnet test` process running a DISJOINT subset of
     # test CLASSES, so each finishes well under the cap. Shard 2 alone runs
     # ~38 min on main, so 40 left no headroom for any new test class.
-    timeout-minutes: 60
+    # Raised 60 -> 90 on 5 Oct 2026: adding one test class re-balanced the round-robin and shard 1 (which also
+    # holds PlacementEndpointsTests) hit the 60-min cap and was cancelled; it had already needed ~49 min.
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
