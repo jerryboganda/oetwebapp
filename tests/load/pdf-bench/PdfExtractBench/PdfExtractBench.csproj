@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    PDF extraction benchmark kernel. Compiled and run ONLY by .github/workflows/pdf-extract-bench.yml
+    (workflow_dispatch); it is not part of OetLearner.sln, is never built by the production pipeline and
+    lives outside backend/ so a change here does not start a production build.
+
+    It link-compiles the API's PdfPigPdfTextExtractor VERBATIM (the parity oracle: whatever the API
+    extracts in-process is by definition correct) with a ~15 line shim of IPdfTextExtractor, exactly the
+    determinism contract the remote-worker agent follows (OET-RWP/1 section 6.1.4, kind pdf.extract).
+    The PdfPig version string is the one OetLearner.Api.csproj pins.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>PdfExtractBench</AssemblyName>
+    <RootNamespace>PdfExtractBench</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- Same culture behaviour as the API image: ICU on, invariant culture by environment. -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.Extensions.Logging" />
+    <Compile Include="..\..\..\..\backend\src\OetLearner.Api\Services\Content\PdfPigPdfTextExtractor.cs" Link="Linked\PdfPigPdfTextExtractor.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.*" />
+  </ItemGroup>
+
+</Project>

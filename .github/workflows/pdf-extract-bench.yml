@@ -1,0 +1,118 @@
+name: PDF extraction benchmark (labelled evidence, dispatch only)
+
+# MANUAL ONLY, and LABELLED: this is benchmark EVIDENCE for sizing the helper fleet and for the Rust
+# decision. It is not a release proof, it deploys nothing and it never touches production. There is no
+# push, pull_request or schedule trigger and there must never be one (AGENTS.md "NO AUTOMATED E2E IN CI"
+# and "Benchmarks ... stay separate labelled tools").
+#
+# What it measures, over every PDF tracked in the repository (40 today; no Listening question paper is
+# among them, so Part B/C parser parity is not covered here):
+#   oracle  the API's own PdfPigPdfTextExtractor (link-compiled verbatim), cold, one process per run:
+#           wall time, CPU time, peak RSS per document, p50 / p95 over the corpus, and the in-process
+#           steady-state cost the primary pays per document today. It is the PARITY ORACLE.
+#   kernel  optional: the remote-worker agent's extraction kernel, same measurements, compared against
+#           the oracle byte for byte (page count, characters, every page hash, text hash).
+#   rust    optional: a Rust candidate. Owner decision D6: Rust is NOT built. If a candidate is ever
+#           supplied, the explicit gate decides: exact parity AND (p95 at least 30 % lower OR CPU per job
+#           at least 40 % lower than the .NET baseline it replaces). With no candidate the report says
+#           so and records the baseline a candidate would have to beat.
+# A contender is a command with a {pdf} placeholder that prints ONE JSON line of hashes and counts (never
+# extracted text): see scripts/perf/pdf-extract-bench.mjs for the contract. Extracted text is never
+# written to a log or an artifact (the corpus carries a rights-review provenance default).
+#
+# Timings come from a shared GitHub-hosted runner: read the shape, not the third digit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Measured runs per document per contender'
+        required: false
+        default: '5'
+        type: string
+      warmup:
+        description: 'Throw-away warm-up runs per document per contender'
+        required: false
+        default: '1'
+        type: string
+      max_pdfs:
+        description: 'Limit to the first N tracked PDFs (0 = all)'
+        required: false
+        default: '0'
+        type: string
+      steady_state:
+        description: 'Also measure the in-process steady-state cost (no process start), the number the primary pays today'
+        required: false
+        default: true
+        type: boolean
+      kernel_command:
+        description: 'Optional agent-kernel command, e.g. "dotnet kernel/Fleet.Agent.dll bench-extract {pdf}" (must print the result JSON)'
+        required: false
+        type: string
+      rust_command:
+        description: 'Optional Rust candidate command with {pdf}; blank = not evaluated (owner decision: Rust is not built)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pdf-extract-bench
+  cancel-in-progress: false
+
+jobs:
+  bench:
+    name: Benchmark and parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test the benchmark harness
+        run: node --test scripts/perf/pdf-extract-bench.test.mjs
+
+      - name: Build the benchmark kernel (the API extractor, link-compiled verbatim)
+        run: |
+          dotnet restore tests/load/pdf-bench/PdfExtractBench/PdfExtractBench.csproj
+          dotnet build tests/load/pdf-bench/PdfExtractBench/PdfExtractBench.csproj -c Release --no-restore -o bench-out
+          dotnet bench-out/PdfExtractBench.dll version
+
+      # The harness' exit code is the gate: a failing oracle, or (with a second contender) any parity
+      # mismatch, fails the run. The Rust gate verdict is data in the report, not a pass / fail of CI.
+      - name: Run the benchmark
+        env:
+          ITERATIONS: ${{ inputs.iterations }}
+          WARMUP: ${{ inputs.warmup }}
+          MAX_PDFS: ${{ inputs.max_pdfs }}
+          STEADY: ${{ inputs.steady_state && '--steady' || '' }}
+          KERNEL_COMMAND: ${{ inputs.kernel_command }}
+          RUST_COMMAND: ${{ inputs.rust_command }}
+        run: |
+          set -euo pipefail
+          args=(--bench-dll bench-out/PdfExtractBench.dll --iterations "${ITERATIONS}" --warmup "${WARMUP}" --max-pdfs "${MAX_PDFS}" --out pdf-bench.json --md pdf-bench.md)
+          if [ -n "${STEADY}" ]; then args+=(--steady); fi
+          if [ -n "${KERNEL_COMMAND}" ]; then args+=(--kernel "${KERNEL_COMMAND}" --require-parity); fi
+          if [ -n "${RUST_COMMAND}" ]; then args+=(--rust "${RUST_COMMAND}" --require-parity); fi
+          status=0
+          node scripts/perf/pdf-extract-bench.mjs "${args[@]}" > /dev/null || status=$?
+          if [ -f pdf-bench.md ]; then cat pdf-bench.md >> "$GITHUB_STEP_SUMMARY"; fi
+          exit "${status}"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pdf-extract-bench
+          path: |
+            pdf-bench.json
+            pdf-bench.md
+          if-no-files-found: ignore
+          retention-days: 90
