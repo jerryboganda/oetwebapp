@@ -51,6 +51,20 @@ internal sealed class RemotePgHarness : IAsyncDisposable
             "RowVersion"        integer                  NOT NULL DEFAULT 0,
             "UpdatedAt"         timestamp with time zone NOT NULL DEFAULT now()
         );
+        CREATE TABLE "CompanionSources" (
+            "Id"        uuid NOT NULL PRIMARY KEY,
+            "SourceKey" text NOT NULL,
+            "Version"   text NOT NULL
+        );
+        CREATE TABLE "CompanionChunks" (
+            "Id"               uuid    NOT NULL PRIMARY KEY DEFAULT gen_random_uuid(),
+            "SourceId"         uuid    NOT NULL,
+            "Ordinal"          integer NOT NULL,
+            "Heading"          text    NULL,
+            "Text"             text    NOT NULL,
+            "PageNumber"       integer NULL,
+            "TimestampSeconds" integer NULL
+        );
         """;
 
     public const string PdfParams =
