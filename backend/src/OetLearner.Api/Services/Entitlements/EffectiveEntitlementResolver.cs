@@ -1153,19 +1153,24 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             return new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         }
 
-        var items = await db.SubscriptionItems.AsNoTracking()
+        // Items that have not started yet are loaded too: their start is a time-driven change of
+        // the snapshot, so it must cap the shared cache entry (see nextChangeAt). They are not
+        // granted until StartsAt <= now, exactly as before.
+        var itemRows = await db.SubscriptionItems.AsNoTracking()
             .Where(item => subscriptionIds.Contains(item.SubscriptionId)
                 && item.Status == SubscriptionItemStatus.Active
-                && item.StartsAt <= now
                 && (item.EndsAt == null || item.EndsAt > now))
-            .Select(item => new { item.SubscriptionId, item.ItemCode, item.EndsAt })
+            .Select(item => new { item.SubscriptionId, item.ItemCode, item.StartsAt, item.EndsAt })
             .ToListAsync(ct);
 
-        // An add-on item ending is a time-driven change of the snapshot (see nextChangeAt).
-        foreach (var itemRow in items)
+        foreach (var itemRow in itemRows)
         {
+            // Both are no-ops for an instant that is not in the future.
+            NoteChangeBoundary(itemRow.StartsAt, now);
             NoteChangeBoundary(itemRow.EndsAt, now);
         }
+
+        var items = itemRows.Where(item => item.StartsAt <= now).ToList();
 
         var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         foreach (var group in items.GroupBy(item => item.SubscriptionId, StringComparer.Ordinal))

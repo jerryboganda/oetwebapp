@@ -158,6 +158,43 @@ public sealed class UserStateCacheConsumerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Entitlement_snapshot_is_never_served_past_a_scheduled_add_on_item_start()
+    {
+        await SeedSubscriptionAsync("user-ent-3b");
+        await using (var db = new LearnerDbContext(_tracked))
+        {
+            var now = DateTimeOffset.UtcNow;
+            db.SubscriptionItems.Add(new SubscriptionItem
+            {
+                Id = "item-ent-3b",
+                SubscriptionId = "sub-user-ent-3b",
+                ItemType = "addon",
+                ItemCode = "scheduled-addon",
+                Quantity = 1,
+                Status = SubscriptionItemStatus.Active,
+                // Derived from the cache clock, so the start is exactly 5 cache-seconds away.
+                StartsAt = _clock.GetUtcNow().AddSeconds(5),
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var first = await ResolveInNewRequestAsync("user-ent-3b");
+        Assert.DoesNotContain("scheduled-addon", first.ActiveAddOnCodes);
+
+        _clock.Advance(TimeSpan.FromSeconds(3));
+        _commands.Reset();
+        await ResolveInNewRequestAsync("user-ent-3b");
+        Assert.Equal(0, _commands.Count); // still inside both the TTL and the add-on start
+
+        _clock.Advance(TimeSpan.FromSeconds(3)); // 6 s: past the add-on start, well inside the 15 s TTL
+        _commands.Reset();
+        await ResolveInNewRequestAsync("user-ent-3b");
+        Assert.True(_commands.Count > 0, "A scheduled add-on start must end the cached entry before the TTL does.");
+    }
+
+    [Fact]
     public async Task Naming_a_user_in_Invalidate_drops_the_shared_entry_too()
     {
         await SeedSubscriptionAsync("user-ent-4");
