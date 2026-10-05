@@ -17,7 +17,8 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
     /// sit on a long tail of slow jobs (AI evaluations run for minutes) while the
     /// other two processes idled; 20 keeps bursts of fast jobs moving and the
     /// hoard bounded. Correctness of a long tail does not depend on this number:
-    /// see <see cref="StampExecutionStartAsync"/>.
+    /// <see cref="TryBeginClaimedJobAsync"/> keeps the unstarted tail from looking
+    /// orphaned and refuses to run a job another process has already taken back.
     /// </summary>
     internal const int JobClaimBatchSize = 20;
     internal const int SqliteQueuedJobScanLimit = 200;
@@ -118,10 +119,13 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
     /// harmless; the sweep itself used to run on every 2-6 s tick in all three
     /// processes.</summary>
     internal static readonly TimeSpan FreezeReconcileInterval = TimeSpan.FromSeconds(60);
-    /// <summary>A job whose claim stamp is older than this when it actually starts is
-    /// re-stamped. Kept well under <see cref="StuckJobStaleThreshold"/> minus
-    /// <see cref="MaxJobExecutionTime"/> (30 - 20 = 10 minutes) so a running job can
-    /// never look orphaned.</summary>
+    /// <summary>Once a claimed job's claim stamp is at least this old when it is about
+    /// to start, <see cref="TryBeginClaimedJobAsync"/> checks that this process still
+    /// owns it and refreshes the stamp of it and of the unstarted tail. A fast batch
+    /// (every job starting within this window of the claim) pays no extra statements.
+    /// Kept well under <see cref="StuckJobStaleThreshold"/> minus
+    /// <see cref="MaxJobExecutionTime"/> (30 - 20 = 10 minutes) so a stamp can never age
+    /// past the stuck-job sweep's threshold while a job runs.</summary>
     internal static readonly TimeSpan JobStartStampAfter = TimeSpan.FromMinutes(5);
     /// <summary>How often to poll <c>DunningAttempts</c> for rows ready to retry.</summary>
     private static readonly TimeSpan BillingDunningRetryDispatchInterval = TimeSpan.FromMinutes(5);
@@ -234,11 +238,18 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
         var jobs = await ClaimQueuedJobsAsync(db, now, cancellationToken);
         _lastClaimedJobCount = jobs.Count;
 
-        foreach (var job in jobs)
+        for (var index = 0; index < jobs.Count; index++)
         {
+            var job = jobs[index];
             try
             {
-                await StampExecutionStartAsync(db, job, cancellationToken);
+                // A job that waited behind slow ones may already have been taken back
+                // by another process's stuck-job sweep: never run it a second time.
+                if (!await TryBeginClaimedJobAsync(db, jobs, index, cancellationToken))
+                {
+                    continue;
+                }
+
                 using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 jobCts.CancelAfter(MaxJobExecutionTime);
                 try
@@ -465,34 +476,168 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
     }
 
     /// <summary>
-    /// A pass claims a whole batch up front (stamping every row's
-    /// <c>LastTransitionAt</c> at claim time) and then runs the jobs serially, so a
-    /// job near the tail can start long after its stamp. Another process's
-    /// stuck-job sweep treats a Processing row older than
-    /// <see cref="StuckJobStaleThreshold"/> as orphaned and re-queues it, which
-    /// would run a job this process is about to start a second time. Stamping again
-    /// when the job actually starts keeps "Processing since" truthful. Only done
-    /// when the claim stamp has aged past <see cref="JobStartStampAfter"/>, so an
-    /// ordinary fast batch pays no extra writes.
+    /// The gate every claimed job passes just before it runs; returns false when the
+    /// caller must skip the job. A pass claims a whole batch up front (stamping every
+    /// row's <c>LastTransitionAt</c> at claim time) and then runs the jobs serially, so
+    /// a job near the tail can start long after its stamp. Another process's stuck-job
+    /// sweep (<see cref="RecoverStuckJobsAsync"/>) treats a Processing row older than
+    /// <see cref="StuckJobStaleThreshold"/> as orphaned and re-queues it, and this
+    /// process would still hold the stale in-memory row: both would run the job (double
+    /// AI cost and notifications, burned retries, and after three requeues a false
+    /// "evaluation failed" notice plus an admin stuck-job alert).
+    ///
+    /// <para>
+    /// Once the claim stamp has aged past <see cref="JobStartStampAfter"/> this
+    /// (1) confirms in the store that the row is still ours, and (2) refreshes the
+    /// stamp of this job and of the whole unstarted tail, so no tail row can age past
+    /// the sweep's threshold while it waits behind a job capped at
+    /// <see cref="MaxJobExecutionTime"/>. A fast batch (every job starting within
+    /// <see cref="JobStartStampAfter"/> of the claim) pays no extra statements.
+    /// </para>
+    ///
+    /// <para>
+    /// "Still ours" means still Processing under the <see cref="BackgroundJobItem.RetryCount"/>
+    /// this process claimed it with: every way the sweep takes a row back either leaves
+    /// Processing or increments RetryCount, so a row the sweep re-queued and another
+    /// process then re-claimed is told apart too (a stamp comparison could not). If
+    /// ownership cannot be confirmed (the store errored) the job is skipped, which is the
+    /// safe side: it stays Processing and the sweep re-queues it, instead of risking a
+    /// second run.
+    /// </para>
     /// </summary>
-    internal async Task StampExecutionStartAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    internal async Task<bool> TryBeginClaimedJobAsync(
+        LearnerDbContext db,
+        IReadOnlyList<BackgroundJobItem> batch,
+        int index,
+        CancellationToken cancellationToken)
     {
+        var job = batch[index];
         var now = DateTimeOffset.UtcNow;
         if (now - job.LastTransitionAt < JobStartStampAfter)
         {
-            return;
+            return true;
         }
 
-        job.LastTransitionAt = now;
+        bool owned;
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
+            owned = db.Database.IsNpgsql()
+                ? await RefreshClaimInStoreAsync(db, batch, index, now, cancellationToken)
+                : await RefreshClaimTrackedAsync(db, batch, index, now, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Best effort: the worst case is the pre-existing one (a stale stamp).
-            logger.LogWarning(ex, "Could not re-stamp job {JobId} ({JobType}) at execution start; continuing.", job.Id, job.Type);
+            logger.LogWarning(ex,
+                "Could not confirm that this process still owns job {JobId} ({JobType}); skipping it here and leaving it to the stuck-job sweep.",
+                job.Id, job.Type);
+            owned = false;
         }
+
+        if (!owned)
+        {
+            logger.LogWarning(
+                "Job {JobId} ({JobType}) is no longer owned by this process (taken back by the stuck-job sweep after waiting in the claimed batch); not running it a second time.",
+                job.Id, job.Type);
+            // Whatever this stale copy holds must never be written back over the live row.
+            db.Entry(job).State = EntityState.Detached;
+        }
+
+        return owned;
+    }
+
+    /// <summary>PostgreSQL: one compare-and-swap UPDATE for the job about to run
+    /// (<c>WHERE Id = x AND State = Processing AND RetryCount = claimed</c>; zero rows
+    /// affected = lost) and one best-effort keep-alive UPDATE for the unstarted tail.</summary>
+    private async Task<bool> RefreshClaimInStoreAsync(
+        LearnerDbContext db,
+        IReadOnlyList<BackgroundJobItem> batch,
+        int index,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var job = batch[index];
+        var claimedRetryCount = job.RetryCount;
+        var owned = await db.BackgroundJobs
+            .Where(x => x.Id == job.Id
+                && x.State == AsyncState.Processing
+                && x.RetryCount == claimedRetryCount)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.LastTransitionAt, now), cancellationToken);
+        if (owned == 0)
+        {
+            return false;
+        }
+
+        var tailIds = new List<string>(Math.Max(0, batch.Count - index - 1));
+        for (var i = index + 1; i < batch.Count; i++)
+        {
+            tailIds.Add(batch[i].Id);
+        }
+
+        if (tailIds.Count > 0)
+        {
+            try
+            {
+                // A tail row the sweep already took back is not Processing (or was
+                // re-claimed elsewhere, where a fresher stamp does no harm); its own
+                // gate, when its turn comes, finds it is no longer ours.
+                await db.BackgroundJobs
+                    .Where(x => tailIds.Contains(x.Id) && x.State == AsyncState.Processing)
+                    .ExecuteUpdateAsync(set => set.SetProperty(x => x.LastTransitionAt, now), cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // This job is ours, so it runs; the next job's gate refreshes the tail again.
+                logger.LogWarning(ex, "Could not refresh the claim stamps of {Count} unstarted job(s) behind {JobId}; continuing.", tailIds.Count, job.Id);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Non-PostgreSQL providers (the in-memory and SQLite test providers; one
+    /// process, so a read followed by a write loses no atomicity): the same ownership
+    /// rule as <see cref="RefreshClaimInStoreAsync"/>, evaluated against a fresh read of the
+    /// store, with the refresh written through the tracked rows that are still ours and
+    /// the rows that are not detached so they can never be saved over the live ones.</summary>
+    private static async Task<bool> RefreshClaimTrackedAsync(
+        LearnerDbContext db,
+        IReadOnlyList<BackgroundJobItem> batch,
+        int index,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var ids = new List<string>(batch.Count - index);
+        for (var i = index; i < batch.Count; i++)
+        {
+            ids.Add(batch[i].Id);
+        }
+
+        var stored = (await db.BackgroundJobs.AsNoTracking()
+                .Where(x => ids.Contains(x.Id))
+                .Select(x => new { x.Id, x.State, x.RetryCount })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(x => x.Id);
+
+        var currentOwned = false;
+        for (var i = index; i < batch.Count; i++)
+        {
+            var candidate = batch[i];
+            var stillOurs = stored.TryGetValue(candidate.Id, out var row)
+                && row.State == AsyncState.Processing
+                && row.RetryCount == candidate.RetryCount;
+            if (stillOurs)
+            {
+                candidate.LastTransitionAt = now;
+                currentOwned |= i == index;
+            }
+            else if (i > index)
+            {
+                db.Entry(candidate).State = EntityState.Detached;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return currentOwned;
     }
 
     /// <summary>
