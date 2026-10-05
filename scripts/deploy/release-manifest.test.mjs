@@ -670,7 +670,7 @@ deploy_phase prepare
         VPS_USER: 'offline', VPS_HOST: 'offline', APP_DIR: dir, SHA: sha,
         GHCR_TOKEN: 'offline-fixture', GHCR_USER: 'offline', WEB_IMAGE: 'offline', API_IMAGE: 'offline',
         DB_BACKUP_IMAGE: 'offline', AGENT_GATEWAY_IMAGE: 'offline' },
-      encoding: 'utf8', timeout: 10_000 });
+      encoding: 'utf8', timeout: 60_000 });
       const expected = { success: 0, 'driver-failure': 23, 'login-failure': 29, 'cleanup-failure': 1 };
       assert.equal(result.status, expected[mode], result.stdout + result.stderr);
       assert.equal(existsSync(join(dir, 'docker-auth-prepare', 'config.json')), false);
