@@ -471,6 +471,55 @@ public sealed class FleetRepositoryTests
         Assert.Equal(new[] { "inventory/target.yml" }, Directory.EnumerateFiles(Path.Combine(Root, "ansible", "inventory")).Select(p => Relative(p).Replace("ansible/", string.Empty, StringComparison.Ordinal)).ToArray());
     }
 
+    [Fact]
+    public void The_ansible_ssh_arguments_replace_the_default_that_would_keep_a_multiplexed_master_alive()
+    {
+        var config = WithoutComments(Read("ansible", "ansible.cfg"));
+
+        // Ansible's default ssh_args are "-o ControlMaster=auto -o ControlPersist=60s". OpenSSH keeps the FIRST value it sees, so unless the
+        // config replaces them, the manager's own "-o ControlMaster=no" (ansible_ssh_common_args) is ignored (OET-RWP/1 section 7.4, RW-136).
+        var sshArgs = Regex.Match(config, "(?m)^ssh_args\\s*=\\s*(?<value>.+)$");
+        Assert.True(sshArgs.Success, "ansible.cfg must set ssh_args");
+        Assert.Contains("-o ControlMaster=no", sshArgs.Groups["value"].Value);
+        Assert.DoesNotContain("ControlPersist", config);
+        Assert.DoesNotContain("ControlMaster=auto", config);
+        Assert.Contains("ControlMaster=no", Read("src", "Fleet.Core", "Ssh", "SshOptions.cs"));
+    }
+
+    [Fact]
+    public void The_baseline_creates_the_docker_configuration_directory_before_it_writes_daemon_json()
+    {
+        var text = Read("ansible", "playbooks", "host-baseline.yml");
+
+        var directory = text.IndexOf("path: /etc/docker\n", StringComparison.Ordinal);
+        var file = text.IndexOf("dest: /etc/docker/daemon.json", StringComparison.Ordinal);
+        Assert.True(directory > 0, "the playbook must make sure /etc/docker exists (docker-ce does not create it)");
+        Assert.True(file > directory, "the directory task must come before the copy into it");
+        Assert.Contains("state: directory", text[directory..file]);
+    }
+
+    [Fact]
+    public void The_firewall_persists_its_table_only_after_the_manager_proved_a_new_connection_still_gets_through()
+    {
+        var text = Read("ansible", "playbooks", "firewall.yml");
+
+        var liveLoad = text.IndexOf("nft -f -", StringComparison.Ordinal);
+        var newConnection = text.IndexOf("A new connection from the manager must still be accepted", StringComparison.Ordinal);
+        var persisted = text.IndexOf("dest: /etc/nftables.d/oet-fleet.nft", StringComparison.Ordinal);
+        var boot = text.IndexOf("path: /etc/nftables.conf", StringComparison.Ordinal);
+        var rescue = text.IndexOf("rescue:", StringComparison.Ordinal);
+
+        // Live first, proof second, disk last: a failed proof removes the live table and leaves nothing for a reboot to reload.
+        Assert.True(liveLoad > 0 && newConnection > liveLoad, "the table is loaded live before the new-connection check");
+        Assert.True(persisted > newConnection, "the table file is written only after the new-connection check passed");
+        Assert.True(boot > newConnection && boot < rescue, "the boot-time include is added only after the check, inside the block");
+        Assert.Contains("nft delete table inet oet_fleet", text[rescue..]);
+
+        // IPv6 sessions are allowed too, so a helper reached over IPv6 cannot be cut off by its own default-deny table.
+        Assert.Contains("ip6 saddr", text);
+        Assert.Contains("fleet_allowed_v6", text);
+    }
+
     // ---- the manager's own code ------------------------------------------------------------
 
     [Fact]

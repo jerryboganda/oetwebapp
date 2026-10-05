@@ -297,6 +297,164 @@ public sealed partial class FleetCtlGateTests : IDisposable
         }
     }
 
+    // ---- the ctl as a module: single verbs with docker replaced ----------------------------
+
+    /// <summary>
+    /// Runs a python snippet with the ctl LOADED AS A MODULE (never as a program, nothing is executed on the machine): <c>ctl</c> is the module and
+    /// <c>call(verb, *args)</c> runs one verb and returns (exit code or the Failed/Refused text, what it printed). The snippet prints one JSON line.
+    /// </summary>
+    private (int Exit, JsonElement Json) RunHarness(params string[] snippet)
+    {
+        var helper = Path.Combine(_scratch, "harness-" + Guid.NewGuid().ToString("N") + ".py");
+        File.WriteAllText(
+            helper,
+            string.Join(
+                '\n',
+                new[]
+                {
+                    "import contextlib, importlib.machinery, importlib.util, io, json, os, sys, tempfile",
+                    "sys.dont_write_bytecode = True",
+                    "loader = importlib.machinery.SourceFileLoader('oet_fleet_ctl', sys.argv[1])",
+                    "spec = importlib.util.spec_from_loader('oet_fleet_ctl', loader)",
+                    "ctl = importlib.util.module_from_spec(spec)",
+                    "loader.exec_module(ctl)",
+                    "def call(verb, *args):",
+                    "    buffer = io.StringIO()",
+                    "    code = None",
+                    "    try:",
+                    "        with contextlib.redirect_stdout(buffer):",
+                    "            verb(*args)",
+                    "    except SystemExit as stop:",
+                    "        code = stop.code",
+                    "    except (ctl.Failed, ctl.Refused) as error:",
+                    "        code = 'raised: ' + str(error)",
+                    "    return code, buffer.getvalue()",
+                }.Concat(snippet).Append(string.Empty)));
+
+        var (exit, stdout, stderr) = Python.Run(helper, new[] { Ctl }, new Dictionary<string, string> { ["PYTHONDONTWRITEBYTECODE"] = "1" });
+        Assert.True(exit == 0, "the harness failed: " + stderr);
+        using var document = JsonDocument.Parse(stdout);
+        return (exit, document.RootElement.Clone());
+    }
+
+    [PythonFact]
+    public void The_ctl_reports_a_missing_program_as_a_failed_command_not_as_a_crash()
+    {
+        var (_, json) = RunHarness(
+            "missing = os.path.join(tempfile.gettempdir(), 'oet-fleet-no-such-dir', 'no-such-program')",
+            "quiet = ctl.run([missing], check=False)",
+            "try:",
+            "    ctl.run([missing])",
+            "    raised = None",
+            "except ctl.Failed as error:",
+            "    raised = str(error)",
+            "print(json.dumps({'code': quiet[0], 'stdout': quiet[1], 'raised': raised}))");
+
+        Assert.Equal(127, json.GetProperty("code").GetInt32());
+        Assert.Equal(string.Empty, json.GetProperty("stdout").GetString());
+        Assert.Equal("no-such-program: not found", json.GetProperty("raised").GetString());
+    }
+
+    [PythonFact]
+    public void The_ctl_status_works_on_a_helper_that_has_no_docker_yet()
+    {
+        // S3 proves the restricted login with `status` BEFORE S4 installs Docker. A missing docker binary used to raise FileNotFoundError, which the
+        // ctl turned into {"ok":false,"error":"FileNotFoundError"} with exit 1, so the very first enrollment of every clean helper failed at S3.
+        var (_, json) = RunHarness(
+            "ctl.DOCKER = os.path.join(tempfile.gettempdir(), 'oet-fleet-no-such-dir', 'docker')",
+            "code, out = call(ctl.verb_status, [])",
+            "print(json.dumps({'code': code, 'status': json.loads(out)}))");
+
+        Assert.Equal(0, json.GetProperty("code").GetInt32());
+        var status = json.GetProperty("status");
+        Assert.Equal("oet-fleet-ctl.status/1", status.GetProperty("schema").GetString());
+        Assert.False(status.GetProperty("docker").GetProperty("running").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, status.GetProperty("docker").GetProperty("version").ValueKind);
+        Assert.False(status.GetProperty("agent").GetProperty("present").GetBoolean());
+        Assert.True(status.GetProperty("host").GetProperty("cpuCores").GetInt32() >= 1);
+    }
+
+    /// <summary>Env file lines as python string-literal text (the two characters backslash and n stand for a newline inside the python snippet).</summary>
+    private static readonly string AgentEnvLines =
+        "OET_API_BASE=https://api.example.test\\n"
+        + "OET_NODE_ID=rw_00000000000000000000000001\\n"
+        + "OET_NODE_TOKEN=orw1_0123456789abcdef_tokenvalue\\n"
+        + "OET_AGENT_IMAGE_DIGEST=sha256:" + new string('a', 64) + "\\n";
+
+    [PythonFact]
+    public void The_ctl_restart_recreates_the_container_from_the_env_file_instead_of_docker_restart()
+    {
+        // `docker restart` keeps the environment the container was CREATED with, so a rotated node token would never reach the agent.
+        var (_, json) = RunHarness(
+            "scratch = tempfile.mkdtemp()",
+            "ctl.ENV_FILE = os.path.join(scratch, 'agent.env')",
+            "with open(ctl.ENV_FILE, 'w') as handle:",
+            "    handle.write('" + AgentEnvLines + "OET_BUDGET_CPU_MILLI=64000\\nOET_BUDGET_MEM_MIB=262144\\nOET_BUDGET_TMP_MIB=3072\\n')",
+            "calls = []",
+            "def fake_docker(*args, **kwargs):",
+            "    calls.append(list(args))",
+            "    return 0, 'c0ffee\\n', ''",
+            "ctl.docker = fake_docker",
+            "code, out = call(ctl.verb_restart, [])",
+            "print(json.dumps({'code': code, 'out': json.loads(out), 'calls': calls, 'envFile': ctl.ENV_FILE, 'cores': os.cpu_count() or 1, 'memTotalMiB': ctl.meminfo('MemTotal') // 1024}))");
+
+        Assert.Equal(0, json.GetProperty("code").GetInt32());
+        Assert.True(json.GetProperty("out").GetProperty("ok").GetBoolean());
+        Assert.Equal("c0ffee", json.GetProperty("out").GetProperty("containerId").GetString());
+
+        var calls = json.GetProperty("calls").EnumerateArray().Select(call => call.EnumerateArray().Select(part => part.GetString()!).ToList()).ToList();
+        Assert.Equal(new[] { "rm", "-f", "oet-fleet-agent" }, calls[0]);
+        Assert.Equal("run", calls[1][0]);
+        Assert.DoesNotContain(calls, call => call[0] == "restart");
+        var run = calls[1];
+        Assert.Equal(json.GetProperty("envFile").GetString(), run[run.IndexOf("--env-file") + 1]);
+        Assert.Equal(FleetCtlVerbs.AgentRepository + "@sha256:" + new string('a', 64), run[^1]);
+        Assert.Equal(2, calls.Count);
+
+        // The stored budgets (64 cores, 256 GiB) are clamped to what this machine has: Docker refuses --cpus above the core count.
+        var cpus = double.Parse(run[run.IndexOf("--cpus") + 1], System.Globalization.CultureInfo.InvariantCulture);
+        Assert.InRange(cpus, 0.5, json.GetProperty("cores").GetInt32());
+        var memory = int.Parse(run[run.IndexOf("--memory") + 1].TrimEnd('m'), System.Globalization.CultureInfo.InvariantCulture);
+        var memTotal = json.GetProperty("memTotalMiB").GetInt32();
+        Assert.InRange(memory, 512, memTotal > 0 ? Math.Max(512, memTotal) : 262144);
+    }
+
+    [PythonFact]
+    public void The_ctl_restart_refuses_to_guess_when_there_is_no_env_file_or_no_digest_in_it()
+    {
+        var (_, json) = RunHarness(
+            "scratch = tempfile.mkdtemp()",
+            "ctl.ENV_FILE = os.path.join(scratch, 'agent.env')",
+            "calls = []",
+            "def fake_docker(*args, **kwargs):",
+            "    calls.append(list(args))",
+            "    return 0, '', ''",
+            "ctl.docker = fake_docker",
+            "missing = call(ctl.verb_restart, [])",
+            "with open(ctl.ENV_FILE, 'w') as handle:",
+            "    handle.write('OET_API_BASE=https://api.example.test\\nOET_NODE_ID=rw_1\\nOET_NODE_TOKEN=orw1_x\\n')",
+            "no_digest = call(ctl.verb_restart, [])",
+            "print(json.dumps({'missing': missing[0], 'noDigest': no_digest[0], 'calls': calls}))");
+
+        Assert.Equal("raised: no env file; put-env first", json.GetProperty("missing").GetString());
+        Assert.Equal("raised: the env file names no agent image digest", json.GetProperty("noDigest").GetString());
+        Assert.Equal(0, json.GetProperty("calls").GetArrayLength());
+    }
+
+    [Fact]
+    public void The_ctl_uninstall_closes_the_managers_way_in_last_so_a_retry_can_tell_that_it_ran()
+    {
+        var text = File.ReadAllText(Ctl);
+        var uninstall = text[text.IndexOf("def verb_uninstall", StringComparison.Ordinal)..text.IndexOf("HANDLERS = {", StringComparison.Ordinal)];
+
+        var removeConfig = uninstall.IndexOf("shutil.rmtree(CONFIG_DIR", StringComparison.Ordinal);
+        var removeKey = uninstall.IndexOf("/home/oetfleet/.ssh/authorized_keys", StringComparison.Ordinal);
+        var lockAccount = uninstall.IndexOf("usermod", StringComparison.Ordinal);
+        Assert.True(removeConfig >= 0 && removeKey > removeConfig, "everything fleet-owned is removed before the key");
+        Assert.True(lockAccount > removeKey, "the account lock is the very last act, after the key and the gate are gone");
+        Assert.True(uninstall.IndexOf("emit(", StringComparison.Ordinal) > lockAccount);
+    }
+
     [PythonFact]
     public void The_ctl_env_parser_accepts_what_the_manager_renders_and_refuses_what_the_manager_refuses()
     {
@@ -306,6 +464,7 @@ public sealed partial class FleetCtlGateTests : IDisposable
             string.Join(
                 '\n',
                 "import importlib.machinery, importlib.util, json, sys",
+                "sys.dont_write_bytecode = True",
                 "loader = importlib.machinery.SourceFileLoader('oet_fleet_ctl', sys.argv[1])",
                 "spec = importlib.util.spec_from_loader('oet_fleet_ctl', loader)",
                 "module = importlib.util.module_from_spec(spec)",

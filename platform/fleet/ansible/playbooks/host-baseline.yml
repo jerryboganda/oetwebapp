@@ -90,6 +90,14 @@
             name: systemd-journald
             state: restarted
 
+        - name: Make sure the Docker configuration directory exists
+          ansible.builtin.file:
+            path: /etc/docker
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
         - name: Docker logging driver local with size limits
           ansible.builtin.copy:
             dest: /etc/docker/daemon.json

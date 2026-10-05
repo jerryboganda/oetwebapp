@@ -8,7 +8,8 @@ depth: the gate and this script share one verb table), never uses a shell, and c
   * log in to GHCR with a token read from STDIN into a temporary tmpfs docker config, pull the agent image BY
     DIGEST, verify it, and log out again;
   * write the allow-listed agent environment file, (re)create the single agent container with FIXED hardened
-    flags, stop/restart it, show its logs, prune old agent images, write the boot unit;
+    flags (`restart` RECREATES it from the current env file, because Docker bakes --env-file in at creation), stop it,
+    show its logs, prune old agent images, write the boot unit;
   * uninstall: remove ONLY what this fleet installed (the agent container, images of the agent repository,
     /etc/oet-fleet, the boot unit) and lock the oetfleet account. Docker itself, the firewall table, other
     containers, other images and every volume are never touched.
@@ -18,6 +19,7 @@ No job content or secret is ever printed.
 """
 import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -80,17 +82,29 @@ def emit(payload, code=0):
 
 
 def run(command, stdin_text=None, check=True, timeout=600):
-    """Runs a program with an argument LIST and a fixed PATH. Returns (returncode, stdout, stderr)."""
+    """Runs a program with an argument LIST and a fixed PATH. Returns (returncode, stdout, stderr).
+
+    A program that does not exist (a clean helper has no docker yet, S3 checks the login BEFORE S4 installs it) or cannot
+    be executed is reported the way a shell would, as 127 / 126, instead of raising: `check=False` callers then see an
+    ordinary failure and `check=True` callers get Failed.
+    """
     env = {"PATH": SAFE_PATH, "LC_ALL": "C.UTF-8"}
-    completed = subprocess.run(
-        command,
-        input=stdin_text,
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=timeout,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            input=stdin_text,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=timeout,
+            check=False,
+        )
+    except OSError as error:
+        missing = isinstance(error, FileNotFoundError)
+        message = os.path.basename(command[0]) + (": not found" if missing else ": cannot be executed")
+        if check:
+            raise Failed(message)
+        return (127 if missing else 126), "", message
     if check and completed.returncode != 0:
         raise Failed((completed.stderr or completed.stdout or "command failed").strip()[:300])
     return completed.returncode, completed.stdout, completed.stderr
@@ -108,11 +122,22 @@ def read_stdin(limit):
 
 
 def meminfo(key):
-    with open("/proc/meminfo", "r", encoding="ascii") as handle:
-        for line in handle:
-            if line.startswith(key + ":"):
-                return int(re.sub(r"[^0-9]", "", line))
+    try:
+        with open("/proc/meminfo", "r", encoding="ascii") as handle:
+            for line in handle:
+                if line.startswith(key + ":"):
+                    return int(re.sub(r"[^0-9]", "", line))
+    except (OSError, ValueError):
+        pass
     return 0
+
+
+def uptime_seconds():
+    try:
+        with open("/proc/uptime", "r", encoding="ascii") as handle:
+            return int(float(handle.read().split()[0]))
+    except (OSError, ValueError, IndexError):
+        return 0
 
 
 def os_pretty():
@@ -147,7 +172,9 @@ def inspect_agent():
     }
 
 
-def verb_status(args):
+def collect_status():
+    """The status document. It must work on a helper that has no Docker yet: S3 proves the restricted login with `status`
+    BEFORE S4 installs Docker, so a missing docker binary is the answer docker.running=false, never an error."""
     docker_version = None
     docker_running = False
     code, out, _ = docker("version", "--format", "{{.Server.Version}}", check=False)
@@ -158,26 +185,28 @@ def verb_status(args):
     code, out, _ = run(["/usr/bin/timedatectl", "show", "-p", "NTPSynchronized", "--value"], check=False)
     if code == 0:
         sync_ok = out.strip() == "yes"
-    with open("/proc/uptime", "r", encoding="ascii") as handle:
-        uptime = int(float(handle.read().split()[0]))
     usage = shutil.disk_usage("/")
-    emit({
+    return {
         "schema": "oet-fleet-ctl.status/1",
         "host": {
             "os": os_pretty(),
-            "arch": os.uname().machine,
+            "arch": platform.machine() or "unknown",
             "cpuCores": os.cpu_count(),
             "memTotalMiB": meminfo("MemTotal") // 1024,
             "memAvailableMiB": meminfo("MemAvailable") // 1024,
             "diskFreeGiB": usage.free // (1024 ** 3),
-            "uptimeSeconds": uptime,
+            "uptimeSeconds": uptime_seconds(),
             "swapMiB": meminfo("SwapTotal") // 1024,
             "timeSyncOk": sync_ok,
         },
         "docker": {"version": docker_version, "running": docker_running},
         "agent": inspect_agent() if docker_running else {"present": False},
         "ctl": {"version": 1},
-    })
+    }
+
+
+def verb_status(args):
+    emit(collect_status())
 
 
 def verb_harden_check(args):
@@ -300,15 +329,17 @@ def clamp(value, low, high):
     return max(low, min(high, value))
 
 
-def verb_run(args):
-    digest = args[0]
-    if not os.path.exists(ENV_FILE):
-        raise Failed("no env file; put-env first")
-    values = read_env()
-    values["OET_AGENT_IMAGE_DIGEST"] = digest
-    write_env(values)
-    cpu_milli = clamp(int(values.get("OET_BUDGET_CPU_MILLI", "3000")), 500, 64000)
-    mem_mib = clamp(int(values.get("OET_BUDGET_MEM_MIB", "5120")), 512, 262144)
+def start_agent(values, digest):
+    """(Re)creates THE agent container from the env file, with the fixed hardened flags. Returns the container id.
+
+    The stored budgets are clamped to what this machine can actually give: Docker refuses `--cpus` above the core count,
+    so a stored global policy of 3000 millicores on a 2-core helper would otherwise stop the agent from ever starting.
+    """
+    cores = os.cpu_count() or 1
+    total_mib = meminfo("MemTotal") // 1024
+    cpu_milli = clamp(int(values.get("OET_BUDGET_CPU_MILLI", "3000")), 500, max(500, cores * 1000))
+    mem_cap = max(512, total_mib) if total_mib > 0 else 262144
+    mem_mib = clamp(int(values.get("OET_BUDGET_MEM_MIB", "5120")), 512, min(262144, mem_cap))
     tmp_mib = clamp(int(values.get("OET_BUDGET_TMP_MIB", "3072")), 64, mem_mib)
     docker("rm", "-f", CONTAINER, check=False)
     _, out, _ = docker(
@@ -334,7 +365,17 @@ def verb_run(args):
         "--health-interval", "30s",
         AGENT_REPO + "@" + digest,
     )
-    emit({"ok": True, "containerId": out.strip()[:64]})
+    return out.strip()[:64]
+
+
+def verb_run(args):
+    digest = args[0]
+    if not os.path.exists(ENV_FILE):
+        raise Failed("no env file; put-env first")
+    values = read_env()
+    values["OET_AGENT_IMAGE_DIGEST"] = digest
+    write_env(values)
+    emit({"ok": True, "containerId": start_agent(values, digest)})
 
 
 def verb_stop(args):
@@ -344,8 +385,16 @@ def verb_stop(args):
 
 
 def verb_restart(args):
-    docker("restart", CONTAINER)
-    emit({"ok": True})
+    # `docker restart` would keep the environment the container was CREATED with: Docker bakes --env-file in at creation, so a
+    # rotated node token written by put-env would never reach the agent and it would fall off the API when the old token's
+    # grace period ends (and after every reboot, the boot unit only runs `docker start`). Recreate it from the env file instead.
+    if not os.path.exists(ENV_FILE):
+        raise Failed("no env file; put-env first")
+    values = read_env()
+    digest = values.get("OET_AGENT_IMAGE_DIGEST", "")
+    if DIGEST.fullmatch(digest) is None:
+        raise Failed("the env file names no agent image digest")
+    emit({"ok": True, "containerId": start_agent(values, digest)})
 
 
 def verb_logs(args):
@@ -440,13 +489,15 @@ def verb_uninstall(args):
     run(["/usr/bin/systemctl", "daemon-reload"], check=False)
     shutil.rmtree(CONFIG_DIR, ignore_errors=True)
     shutil.rmtree("/run/oet-fleet", ignore_errors=True)
-    # The manager can no longer log in: lock the account and drop its key and the forced-command gate.
-    run(["/usr/sbin/usermod", "-L", "oetfleet"], check=False)
+    # Closing the manager's way in is the LAST thing done, key first and the account lock very last: everything above has
+    # already happened by the time a login can fail, so a manager whose connection or process died during this verb can
+    # treat "the restricted login is refused" as proof that the uninstall ran (see StepExecutor UninstallAsync).
     for path in ("/home/oetfleet/.ssh/authorized_keys", SUDOERS_PATH, "/usr/local/sbin/oet-fleet-gate"):
         try:
             os.unlink(path)
         except OSError:
             pass
+    run(["/usr/sbin/usermod", "-L", "oetfleet"], check=False)
     emit({"ok": True, "warnings": warnings})
 
 

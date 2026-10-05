@@ -42,3 +42,11 @@ wg*.conf
 *.local.*
 .env
 .env.*
+
+# python bytecode left behind when the tests load the helper scripts as modules
+__pycache__/
+*.pyc
+
+# produced by the fleet CI workflow (the agent track): the directory the images are built from, and test result files
+publish/
+*.trx

@@ -106,11 +106,19 @@ raising concurrency.
 
 `fleet-user.yml` installs the restricted account, `oet-fleet-gate`, `oet-fleet-ctl` and the one-line sudoers drop-in;
 `install-key.yml` writes the manager key behind `restrict,command="/usr/local/sbin/oet-fleet-gate",no-pty`; `docker.yml`,
-`firewall.yml` (own nftables table, SSH from the primary and the connecting address only), `host-baseline.yml` (swap off,
-no core dumps, volatile journal, chrony, `local` log driver) and `harden-ssh.yml` (verifies a NEW manager login before and
-after, rolls back on any doubt) follow the order of 8.2. Only `ansible.builtin` modules are used. `oet-fleet-ctl` adds one
-verb to the table of 7.4, `uninstall`, which removes ONLY fleet-owned components and locks the `oetfleet` account.
-`run` also rewrites `OET_AGENT_IMAGE_DIGEST` in the env file so a rolling update never needs the node token.
+`firewall.yml` (own nftables table, SSH from the primary and the connecting IPv4 or IPv6 address only; the table is loaded
+live, a NEW connection is proven, and only then is it written to disk, so a failed proof leaves nothing for a reboot to
+reload), `host-baseline.yml` (swap off, no core dumps, volatile journal, chrony, `local` log driver) and `harden-ssh.yml`
+(verifies a NEW manager login before and after, rolls back on any doubt) follow the order of 8.2. Only `ansible.builtin`
+modules are used; `ansible.cfg` sets `ssh_args` explicitly so Ansible's default `ControlMaster=auto`/`ControlPersist=60s`
+cannot override the manager's `ControlMaster=no`. `oet-fleet-ctl` adds one verb to the table of 7.4, `uninstall`, which
+removes ONLY fleet-owned components and closes the `oetfleet` login as its very last act (key and gate first, account lock
+last), so a retry after a lost response can tell from a refused login that it already ran.
+`run` also rewrites `OET_AGENT_IMAGE_DIGEST` in the env file so a rolling update never needs the node token. `restart`
+RECREATES the container from the env file (Docker bakes `--env-file` in at creation, so a plain `docker restart` would keep the
+old node token after a rotation); token rotation then waits for a heartbeat from a NEW agent instance id. `status` works on a
+helper without Docker (S3 proves the login before S4 installs it), `run` clamps the budgets to the machine's cores and RAM,
+and the manager runs `prune` (running image plus the two newest others are kept) after enrollment and after every rollout.
 
 The playbooks are covered by static repository tests (forbidden tokens, parity of the verb table, `restrict`), not by a
 real Ansible run: do the first enrollment against a disposable helper.
@@ -140,6 +148,11 @@ the way to run them.
 * The `GET /v1/internal/fleet/nodes` list and `GET /status` bodies are parsed tolerantly (a bare array or `items`/`nodes`;
   kinds as strings or objects) because the spec does not fix their envelope.
 * `repair` and `uninstall` are additions: the operation kinds listed in 8.1 needed concrete steps.
+* The helper-side Ansible in `ansible/` (flat playbooks, a Python `oet-fleet-ctl`/`oet-fleet-gate`, vars such as
+  `fleet_manager_pubkey`) is the tree `AnsibleProvisioner` drives and the repository tests guard. The `feat/fleet-agent*`
+  branches ship a second, role-based tree under the same path (`roles/`, `bootstrap.yml`, a bash ctl, other variable names,
+  `requirements.yml`). Exactly one of the two must survive the merge: this README and `FleetRepositoryTests` assume this one
+  (builtin modules only, no `requirements.yml`, a single inventory template).
 * JSON enums (for example a placement decision's `kind`) go over the wire by name (`"Remote"`, `"Wait"`), never as numbers.
 * The operator CLI prints only its result on stdout; informational logs are suppressed and warnings go to stderr, so the
   one-time TOTP secret of `owner-init` is never interleaved with log lines.
