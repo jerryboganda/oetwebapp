@@ -558,16 +558,14 @@ public sealed class ReadingAttemptService(
             throw new ReadingAttemptException("attempt_deadline_passed", "Attempt deadline has passed.");
         }
 
-        // Validate the question exists and belongs to the paper.
-        var q = await db.ReadingQuestions
+        // Validate the question exists and belongs to the paper. Read-only, so untracked;
+        // Include(Part) already carries the owning PaperId (a separate ReadingParts query
+        // used to re-read the same row on every autosave).
+        var q = await db.ReadingQuestions.AsNoTracking()
             .Include(x => x.Part)
             .FirstOrDefaultAsync(x => x.Id == questionId, ct)
             ?? throw new ReadingAttemptException("question_not_found", "Question not found.");
-        var owningPaperId = await db.ReadingParts.AsNoTracking()
-            .Where(p => p.Id == q.ReadingPartId)
-            .Select(p => p.PaperId)
-            .FirstOrDefaultAsync(ct);
-        if (owningPaperId != attempt.PaperId)
+        if (q.Part?.PaperId != attempt.PaperId)
             throw new ReadingAttemptException(
                 "question_paper_mismatch",
                 "Question does not belong to this attempt's paper.");
@@ -621,8 +619,8 @@ public sealed class ReadingAttemptService(
             }
         }
 
-        // Reject malformed JSON
-        try { JsonDocument.Parse(userAnswerJson); }
+        // Reject malformed JSON (the parse is only a validity check: dispose it)
+        try { using var _ = JsonDocument.Parse(userAnswerJson); }
         catch (JsonException)
         {
             throw new ReadingAttemptException(
@@ -641,6 +639,35 @@ public sealed class ReadingAttemptService(
             sanitisedElapsedMs = Math.Min(e, MaxElapsedMsPerSave);
         }
 
+        // Overlapping autosaves (two tabs, a retry racing the original) used to 409: the
+        // attempt was saved as a TRACKED RowVersion++ guarded by the RowVersion read at the
+        // top of this method, so whichever save landed second failed with
+        // DbUpdateConcurrencyException AFTER its answer was already committed (and an
+        // automatic retry then re-applied the TotalElapsedMs delta). The bump is now one
+        // targeted UPDATE (RowVersion = RowVersion + 1) made BEFORE any answer write, so
+        // concurrent autosaves commute, and a concurrent timer/break writer that holds an
+        // older RowVersion is still invalidated exactly as before. It is guarded on
+        // Status = InProgress so a save can never land on an attempt that was just
+        // submitted or expired; that case fails here, before anything is written.
+        // The EF in-memory provider (unit tests) has no ExecuteUpdate, so it keeps the
+        // tracked bump at the end of the method, exactly as before.
+        var relational = db.Database.IsRelational();
+        if (relational)
+        {
+            var bumped = await db.ReadingAttempts
+                .Where(a => a.Id == attemptId && a.UserId == userId && a.Status == ReadingAttemptStatus.InProgress)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.LastActivityAt, _ => now)
+                    .SetProperty(a => a.RowVersion, a => a.RowVersion + 1),
+                    ct);
+            if (bumped == 0)
+            {
+                throw new ReadingAttemptException(
+                    "attempt_not_in_progress",
+                    "Cannot save to an attempt that is no longer in progress.");
+            }
+        }
+
         // P0-H 2026-05 hardening: TotalElapsedMs increment must be atomic at
         // DB level so two tabs autosaving the same question do not race and
         // lose increments. Strategy:
@@ -655,8 +682,6 @@ public sealed class ReadingAttemptService(
         //   3. UPDATE uses ExecuteUpdateAsync (SET col = col + @delta) so
         //      the accumulator is incremented by the database, not by EF
         //      change-tracking after a read.
-        var existingAnswerCount = await db.ReadingAnswers
-            .CountAsync(a => a.ReadingAttemptId == attemptId, ct);
         var existingRow = await db.ReadingAnswers
             .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
             .Select(a => new { a.Id, a.UserAnswerJson })
@@ -673,9 +698,10 @@ public sealed class ReadingAttemptService(
 
         if (existingRowId is null)
         {
+            ReadingAnswer? insertRow = null;
             try
             {
-                var insertRow = new ReadingAnswer
+                insertRow = new ReadingAnswer
                 {
                     Id = Guid.NewGuid().ToString("N"),
                     ReadingAttemptId = attemptId,
@@ -693,8 +719,15 @@ public sealed class ReadingAttemptService(
             }
             catch (DbUpdateException)
             {
-                // Concurrent insert beat us. Fall through to UPDATE.
-                db.ChangeTracker.Clear();
+                // Concurrent insert beat us. Fall through to UPDATE. Detach only the
+                // failed insert: ChangeTracker.Clear() also detached the tracked attempt,
+                // so the later attempt bump (LastActivityAt / RowVersion) modified a
+                // detached entity and was silently never written on this race.
+                if (insertRow is not null)
+                {
+                    db.Entry(insertRow).State = EntityState.Detached;
+                }
+
                 existingRowId = await db.ReadingAnswers
                     .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
                     .Select(a => a.Id)
@@ -750,13 +783,19 @@ public sealed class ReadingAttemptService(
             }
         }
 
-        // Update attempt.LastActivityAt + write audit log in a fresh save so
-        // it does not get tangled with the answer write path above.
-        attempt.LastActivityAt = now;
-        attempt.RowVersion++;
+        if (!relational)
+        {
+            // In-memory provider only (no ExecuteUpdate): the tracked bump, saved below.
+            attempt.LastActivityAt = now;
+            attempt.RowVersion++;
+        }
 
         // Wave 1 — append a changed-answer revision row when the value moved.
         // attempt.Status is guaranteed InProgress here (asserted at entry).
+        // The revision rows ARE the audit trail of what the learner answered and when.
+        // The per-save "ReadingAnswerSaved" AuditEvent (and the per-save COUNT that only
+        // fed its detail string) is intentionally gone: owner-approved 2026-10-05, it was
+        // one extra row and one extra query on every autosave of a 42-question exam.
         if (answerChanged)
         {
             db.ReadingAnswerRevisions.Add(new ReadingAnswerRevision
@@ -769,18 +808,6 @@ public sealed class ReadingAttemptService(
             });
         }
 
-        var elapsedDetail = sanitisedElapsedMs is int dm ? $"; elapsedMs={dm}" : string.Empty;
-        db.AuditEvents.Add(new AuditEvent
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            OccurredAt = now,
-            ActorId = userId,
-            ActorName = userId,
-            Action = "ReadingAnswerSaved",
-            ResourceType = "ReadingAttempt",
-            ResourceId = attempt.Id,
-            Details = $"question={questionId}; answered={(isNewAnswer ? existingAnswerCount + 1 : existingAnswerCount)}{elapsedDetail}",
-        });
         await db.SaveChangesAsync(ct);
     }
 
