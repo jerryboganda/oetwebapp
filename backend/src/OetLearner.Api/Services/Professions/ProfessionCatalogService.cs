@@ -47,6 +47,20 @@ public interface IProfessionCatalogService
     void Invalidate();
 }
 
+/// <summary>
+/// Cache keys and TTL for the static reference lists the learner bootstrap embeds
+/// (<c>LearnerService.GetProfessionsAsync</c> / <c>GetSubtestsAsync</c>). Same read-through
+/// pattern, TTL and invalidation trigger as <see cref="ProfessionCatalogService"/>:
+/// <see cref="ProfessionCatalogService.Invalidate"/> drops these too, and it is called after
+/// every admin profession/taxonomy write.
+/// </summary>
+public static class LearnerReferenceDataCache
+{
+    public const string ProfessionsKey = "learner-reference:professions:v1";
+    public const string SubtestsKey = "learner-reference:subtests:v1";
+    public static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
+}
+
 public sealed class ProfessionCatalogService(LearnerDbContext db, IMemoryCache cache)
     : IProfessionCatalogService
 {
@@ -93,7 +107,12 @@ public sealed class ProfessionCatalogService(LearnerDbContext db, IMemoryCache c
             .FirstOrDefault(item => string.Equals(item.Id, normalized, StringComparison.OrdinalIgnoreCase));
     }
 
-    public void Invalidate() => cache.Remove(CacheKey);
+    public void Invalidate()
+    {
+        cache.Remove(CacheKey);
+        cache.Remove(LearnerReferenceDataCache.ProfessionsKey);
+        cache.Remove(LearnerReferenceDataCache.SubtestsKey);
+    }
 }
 
 /// <summary>

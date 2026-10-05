@@ -91,16 +91,7 @@ public partial class LearnerService
         object? latestEvaluationSummary = null;
         if (latestEvaluationRow is not null)
         {
-            await RecordEventAsync(
-                userId,
-                "evaluation_viewed",
-                new
-                {
-                    evaluationId = latestEvaluationRow.Evaluation.Id,
-                    attemptId = latestEvaluationRow.Attempt.Id,
-                    subtest = latestEvaluationRow.Evaluation.SubtestCode
-                },
-                cancellationToken);
+            // No server-side "evaluation_viewed" write on this read path: the client tracks the view.
             latestEvaluationSummary = BuildWritingEvaluationSummaryDto(
                 latestEvaluationRow.Evaluation,
                 latestEvaluationRow.Attempt,
@@ -810,7 +801,7 @@ public partial class LearnerService
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
-        await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
+        // No server-side "evaluation_viewed" write on this read path: the client tracks the view.
         return BuildWritingEvaluationSummaryDto(evaluation, attempt, content);
     }
 

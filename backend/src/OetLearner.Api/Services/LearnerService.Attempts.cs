@@ -633,7 +633,7 @@ public partial class LearnerService
         }
 
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
-        await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
+        // No server-side "evaluation_viewed" write on this read path: the client tracks the view.
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(content.DetailJson, new Dictionary<string, object?>());
         var questions = detail.TryGetValue("questions", out var questionsValue)
             ? JsonSupport.Deserialize<List<Dictionary<string, object?>>>(JsonSupport.Serialize(questionsValue), [])

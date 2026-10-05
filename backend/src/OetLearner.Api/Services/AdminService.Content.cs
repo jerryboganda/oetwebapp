@@ -354,6 +354,7 @@ public partial class AdminService
             SortOrder = maxSort + 1
         });
         await db.SaveChangesAsync(ct);
+        InvalidateProfessionCatalogCache();
 
         await LogAuditAsync(adminId, adminName, "Created", "Taxonomy", id, $"Created profession: {request.Label}", ct);
         return new { id, status = "active" };
@@ -369,6 +370,7 @@ public partial class AdminService
         if (request.Code is not null) p.Code = request.Code;
         if (request.Status is not null) p.Status = request.Status;
         await db.SaveChangesAsync(ct);
+        InvalidateProfessionCatalogCache();
 
         await LogAuditAsync(adminId, adminName, "Updated", "Taxonomy", professionId, $"Updated profession: {p.Label}", ct);
         return new { id = professionId, status = p.Status };
@@ -382,6 +384,7 @@ public partial class AdminService
 
         p.Status = "archived";
         await db.SaveChangesAsync(ct);
+        InvalidateProfessionCatalogCache();
 
         await LogAuditAsync(adminId, adminName, "Archived", "Taxonomy", professionId, $"Archived profession: {p.Label}", ct);
         return new { id = professionId, status = "archived" };
@@ -403,6 +406,7 @@ public partial class AdminService
 
         db.Professions.Remove(p);
         await db.SaveChangesAsync(ct);
+        InvalidateProfessionCatalogCache();
         await LogAuditAsync(adminId, adminName, "ForceDeleted", "Taxonomy", professionId, $"Force-deleted profession: {p.Label}", ct);
         return new { id = professionId, deleted = true };
     }

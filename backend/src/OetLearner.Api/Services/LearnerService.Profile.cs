@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -16,6 +17,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Assessment;
+using OetLearner.Api.Services.Professions;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Services;
@@ -138,17 +140,43 @@ public partial class LearnerService
         }
     };
 
-    public async Task<IEnumerable<object>> GetProfessionsAsync(CancellationToken cancellationToken) =>
-        await db.Professions
+    // Static reference lists embedded in every bootstrap. Read-through cached for 5 minutes
+    // with the ProfessionCatalogService pattern (IMemoryCache + Invalidate()): the rows
+    // change only on admin taxonomy CRUD, which calls ProfessionCatalogService.Invalidate().
+    // memoryCache is null in unit tests that construct LearnerService without it.
+    public async Task<IEnumerable<object>> GetProfessionsAsync(CancellationToken cancellationToken)
+    {
+        if (memoryCache is not null
+            && memoryCache.TryGetValue(LearnerReferenceDataCache.ProfessionsKey, out IReadOnlyList<object>? cached)
+            && cached is not null)
+        {
+            return cached;
+        }
+
+        var rows = await db.Professions
             .OrderBy(x => x.SortOrder)
             .Select(x => (object)new { professionId = x.Id, code = x.Code, label = x.Label, status = x.Status, sortOrder = x.SortOrder })
             .ToListAsync(cancellationToken);
+        memoryCache?.Set(LearnerReferenceDataCache.ProfessionsKey, (IReadOnlyList<object>)rows, LearnerReferenceDataCache.Ttl);
+        return rows;
+    }
 
-    public async Task<IEnumerable<object>> GetSubtestsAsync(CancellationToken cancellationToken) =>
-        await db.Subtests
+    public async Task<IEnumerable<object>> GetSubtestsAsync(CancellationToken cancellationToken)
+    {
+        if (memoryCache is not null
+            && memoryCache.TryGetValue(LearnerReferenceDataCache.SubtestsKey, out IReadOnlyList<object>? cached)
+            && cached is not null)
+        {
+            return cached;
+        }
+
+        var rows = await db.Subtests
             .OrderBy(x => x.Label)
             .Select(x => (object)new { subtestId = x.Id, code = x.Code, label = x.Label, supportsProfessionSpecificContent = x.SupportsProfessionSpecificContent })
             .ToListAsync(cancellationToken);
+        memoryCache?.Set(LearnerReferenceDataCache.SubtestsKey, (IReadOnlyList<object>)rows, LearnerReferenceDataCache.Ttl);
+        return rows;
+    }
 
     public async Task<IEnumerable<object>> GetCriteriaAsync(string? subtest, CancellationToken cancellationToken)
     {

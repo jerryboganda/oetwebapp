@@ -215,7 +215,11 @@ public partial class LearnerService
         payload["snapshotId"] = snapshot.Id;
         payload["computedAt"] = snapshot.ComputedAt;
         payload["snapshotVersion"] = snapshot.Version;
-        await RecordEventAsync(profile.User.Id, "readiness_viewed", new { userId = profile.User.Id, snapshotId = snapshot.Id, computedAt = snapshot.ComputedAt }, cancellationToken);
+        // No server-side "readiness_viewed" write on this read path. RecordEventAsync only
+        // adds the row to the change tracker (a GET almost never saves, so it was normally
+        // discarded), the client already tracks the view (lib/hooks/use-dashboard-home.ts),
+        // and a pending tracked change stops EffectiveEntitlementResolver from memoizing
+        // inside the request.
         return payload;
     }
 
