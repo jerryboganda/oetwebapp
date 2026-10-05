@@ -214,8 +214,18 @@ export const apiClient = {
   delete<T = any>(path: string, init?: ApiClientInit): Promise<T> {
     return apiRequest<T>(path, { ...init, method: 'DELETE' });
   },
-  postForm<T = any>(path: string, body: FormData, init?: ApiClientInit): Promise<T> {
-    return apiRequest<T>(path, { ...init, method: 'POST', body }, { json: false });
+  /**
+   * `options` is for uploads that must not use the defaults: `maxRetries: 0` for a body that
+   * is expensive to send again (a replay re-uploads all of it) and a `timeoutMs` that covers
+   * the upload itself rather than the 30 s default.
+   */
+  postForm<T = any>(
+    path: string,
+    body: FormData,
+    init?: ApiClientInit,
+    options?: { maxRetries?: number; timeoutMs?: number },
+  ): Promise<T> {
+    return apiRequest<T>(path, { ...init, method: 'POST', body }, { json: false, ...options });
   },
 };
 
@@ -443,6 +453,7 @@ export {
   fetchAchievements,
   fetchLeaderboard,
   fetchLearnerFeatureFlag,
+  fetchLearnerFeatureFlags,
   fetchMyLeaderboardPosition,
   fetchStreak,
   fetchXP,

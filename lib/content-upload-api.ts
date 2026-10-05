@@ -501,6 +501,13 @@ export const startUpload = (body: {
   method: 'POST', body: JSON.stringify(body),
 });
 
+/**
+ * One chunk is several MB, and the request timer runs until the response headers
+ * arrive. The 30 s default aborted a chunk on any connection slower than about
+ * 2 Mbps, with no retry or resume.
+ */
+const PART_UPLOAD_TIMEOUT_MS = 5 * 60_000;
+
 export async function uploadPart(uploadId: string, partNumber: number, body: Blob): Promise<void> {
   const token = await ensureFreshAccessToken();
   const csrf = readCsrfCookie();
@@ -516,6 +523,7 @@ export async function uploadPart(uploadId: string, partNumber: number, body: Blo
         'Content-Type': 'application/octet-stream',
       },
     },
+    PART_UPLOAD_TIMEOUT_MS,
   );
   if (!res.ok) throw await toApiError(res, 'Upload part failed:');
 }

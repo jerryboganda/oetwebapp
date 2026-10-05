@@ -18,6 +18,9 @@ import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
+/** The staging request covers the whole upload plus extraction, so it needs far more than the 30 s default. */
+const ZIP_STAGING_TIMEOUT_MS = 30 * 60_000;
+
 interface ReadinessIssue {
   code: string;
   severity: 'error' | 'warning' | string;
@@ -129,7 +132,12 @@ export default function BulkImportPage() {
     try {
       const form = new FormData();
       form.set('file', file);
-      const data = await apiClient.postForm<StagedResponse>('/v1/admin/imports/zip', form);
+      // A ZIP can be up to 1 GiB and is staged synchronously: never replay it (the default
+      // retry would upload it up to three times) and allow the upload plus extraction time.
+      const data = await apiClient.postForm<StagedResponse>('/v1/admin/imports/zip', form, undefined, {
+        maxRetries: 0,
+        timeoutMs: ZIP_STAGING_TIMEOUT_MS,
+      });
       setStaged(data);
       setApproved(Object.fromEntries([
         ...data.papers.map((p) => [p.proposalId, true] as const),
