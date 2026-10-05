@@ -38,6 +38,7 @@ import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking/intro-questions';
 import {
   getSpeakingExam,
   finishSpeakingExamIntro,
+  leaveSpeakingExamQueue,
   recordSpeakingExamConsent,
   startSpeakingExamCard,
   type SpeakingExamDetail,
@@ -52,7 +53,11 @@ import {
   type LiveRoomTokenResponse,
 } from '@/lib/api/speaking-live-rooms';
 import type { LiveVoiceProvider } from '@/lib/api/speaking-live-voice';
-import { isTransientAdmissionFailure, isWaitingForAdmission } from '@/lib/api/speaking-admission';
+import {
+  isAlreadyPastGateConflict,
+  isTransientAdmissionFailure,
+  isWaitingForAdmission,
+} from '@/lib/api/speaking-admission';
 
 // The LiveKit client (and its stylesheet, imported by the shell itself) is only needed by a human live-tutor
 // exam. Loading it on demand keeps ~100 kB of WebRTC code out of every AI exam, which never mounts it.
@@ -96,9 +101,12 @@ export default function SpeakingExamPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
-  // A refusal that waiting cannot fix (credits, state) ends the admission wait: the learner sees the message and
-  // the Begin button again.
+  // A refusal that waiting cannot fix (credits, another live session) ends the admission wait: the learner sees the
+  // message and the Begin button again.
   const [waitHalted, setWaitHalted] = useState(false);
+  // That refusal lives in its own state, not in `loadError`: every successful poll clears `loadError`, which wiped the
+  // reason about three seconds after it appeared and left the Begin button with no explanation.
+  const [admissionError, setAdmissionError] = useState<string | null>(null);
   const [introConsentAccepted, setIntroConsentAccepted] = useState(false);
   const [requestedVoiceProvider, setRequestedVoiceProvider] = useState<LiveVoiceProvider | undefined>();
   const [liveTutorConsentAccepted, setLiveTutorConsentAccepted] = useState(false);
@@ -109,6 +117,8 @@ export default function SpeakingExamPage() {
 
   const examRef = useRef<SpeakingExamDetail | null>(null);
   examRef.current = exam;
+  const waitHaltedRef = useRef(false);
+  waitHaltedRef.current = waitHalted;
   const mockSectionCompletedRef = useRef(false);
   const refreshingRef = useRef(false);
   const failedFlushesRef = useRef(0);
@@ -257,7 +267,14 @@ export default function SpeakingExamPage() {
   // Initial load + poll for server-authoritative phase changes.
   useEffect(() => {
     void refresh();
-    const interval = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
+    const interval = window.setInterval(() => {
+      // While the admission wait panel is on screen it repeats finish-intro itself (the answer carries the newest
+      // place). A second poll here would race it and could put a stale answer over a fresher one, and it costs the
+      // server an extra read per waiting learner. A cancelled or ended exam is still noticed: the panel's next retry
+      // is refused with a 409 and re-reads the exam (see retryAdmission).
+      if (isWaitingForAdmission(examRef.current?.admission) && !waitHaltedRef.current) return;
+      void refresh();
+    }, POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [refresh]);
 
@@ -323,6 +340,7 @@ export default function SpeakingExamPage() {
     if (busy) return;
     setBusy(true);
     setWaitHalted(false);
+    setAdmissionError(null);
     try {
       // While the live AI session cap is full this answers 200 with the exam still in `intro` and `admission`
       // set (nothing held, nothing timed): the wait panel below takes over and repeats this call.
@@ -330,7 +348,9 @@ export default function SpeakingExamPage() {
       setExam(detail);
       setFetchedAt(Date.now());
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.userMessage : 'Could not start Part 2.');
+      // A refusal at the gate (no credits, another live session, a full line) stays on screen until the learner
+      // tries again: a later poll must not wipe it.
+      setAdmissionError(err instanceof ApiError ? err.userMessage : 'Could not start Part 2.');
     } finally {
       setBusy(false);
     }
@@ -343,13 +363,29 @@ export default function SpeakingExamPage() {
       const detail = await finishSpeakingExamIntro(examId);
       setExam(detail);
       setFetchedAt(Date.now());
-      setLoadError(null);
+      setAdmissionError(null);
     } catch (err) {
-      setLoadError(err instanceof ApiError ? err.userMessage : 'Could not start Part 2.');
       const status = err instanceof ApiError ? err.status : undefined;
-      if (!isTransientAdmissionFailure(status)) setWaitHalted(true);
+      const code = err instanceof ApiError ? err.code : undefined;
+      if (isAlreadyPastGateConflict(status, code)) {
+        // Not in the intro any more (another tab was admitted, or the exam ended): read the truth and let the page
+        // move on; never an error, and the wait is not halted by it.
+        await refresh();
+        return;
+      }
+      // A blip (network, a proxy 5xx, a busy line) keeps the learner waiting: the next retry is already scheduled.
+      if (isTransientAdmissionFailure(status)) return;
+      // Anything else (no credits, another live session) cannot be cured by waiting: say why, and stop waiting.
+      setAdmissionError(err instanceof ApiError ? err.userMessage : 'Could not start Part 2.');
+      setWaitHalted(true);
     }
-  }, [examId]);
+  }, [examId, refresh]);
+
+  // "Leave the queue": give the place back at once (best effort; the heartbeat window frees it anyway), then go.
+  const leaveQueue = useCallback(() => {
+    void leaveSpeakingExamQueue(examId).catch(() => undefined);
+    router.push('/speaking');
+  }, [examId, router]);
 
   // Rules + consent at the intro, then straight into Card A prep.
   const handleConsentAndBegin = useCallback(async () => {
@@ -472,6 +508,11 @@ export default function SpeakingExamPage() {
               ))}
             </ul>
           </div>
+          {admissionError ? (
+            <div className="mt-5 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700" role="alert">
+              <p>{admissionError}</p>
+            </div>
+          ) : null}
           {exam.consentAccepted || introConsentAccepted ? (
             !waitHalted && isWaitingForAdmission(exam.admission) ? (
               <SpeakingAdmissionWait
@@ -479,7 +520,7 @@ export default function SpeakingExamPage() {
                 subject="exam"
                 admission={exam.admission}
                 onAttempt={retryAdmission}
-                onLeave={() => router.push('/speaking')}
+                onLeave={leaveQueue}
               />
             ) : (
               <Button className="mt-5 w-full" onClick={handleFinishIntro} disabled={busy}>

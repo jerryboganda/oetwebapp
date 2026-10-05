@@ -24,6 +24,7 @@ import { analytics } from '@/lib/analytics';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import { listFreeSamples, type FreeSampleOption } from '@/lib/api/free-samples';
 import {
+  isAlreadyPastGateConflict,
   isTransientAdmissionFailure,
   isWaitingForAdmission,
   type SpeakingLiveAdmission,
@@ -31,6 +32,7 @@ import {
 import {
   createSpeakingSession,
   finishSpeakingWarmup,
+  leaveSpeakingSessionQueue,
   recordConsent,
   startSpeakingWarmup,
   type SpeakingSessionDetail,
@@ -39,9 +41,12 @@ import type { RoleCard } from '@/lib/mock-data';
 
 const CONSENT_VERSION = 'recording.v1';
 
-/** A repeat call after a partial failure may hit an already-advanced state. */
+/**
+ * A repeat call after a partial failure may hit an already-advanced state. The one-place-per-learner refusal is also a
+ * 409 but means nothing started: it is rethrown so the learner sees why.
+ */
 function ignoreConflict(err: unknown): null {
-  if (err instanceof ApiError && err.status === 409) return null;
+  if (err instanceof ApiError && isAlreadyPastGateConflict(err.status, err.code)) return null;
   throw err;
 }
 
@@ -114,7 +119,7 @@ export default function RoleCardPreview() {
       setWaiting(null);
       enterPrep(sessionId, prep);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
+      if (err instanceof ApiError && isAlreadyPastGateConflict(err.status, err.code)) {
         // Already past warm-up (another tab was admitted): prep is open.
         setWaiting(null);
         enterPrep(sessionId, null);
@@ -124,6 +129,13 @@ export default function RoleCardPreview() {
       // A refusal that waiting cannot fix (credits, plan) ends the wait: the consent step is shown again.
       if (!isTransientAdmissionFailure(err instanceof ApiError ? err.status : undefined)) setWaiting(null);
     }
+  };
+
+  // "Leave the queue": give the place back at once (best effort; the heartbeat window frees it anyway), then go.
+  const leaveQueue = () => {
+    const sessionId = waiting?.sessionId ?? sessionIdRef.current;
+    if (sessionId) void leaveSpeakingSessionQueue(sessionId).catch(() => undefined);
+    router.push('/speaking');
   };
 
   const handleStart = async () => {
@@ -213,7 +225,7 @@ export default function RoleCardPreview() {
                   subject="practice"
                   admission={waiting.admission}
                   onAttempt={retryAdmission}
-                  onLeave={() => router.push('/speaking')}
+                  onLeave={leaveQueue}
                 />
               </>
             ) : (

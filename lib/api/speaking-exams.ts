@@ -245,6 +245,17 @@ export function startSpeakingExamCard(examId: string) {
   );
 }
 
+/**
+ * Leave the live AI session admission line: releases this exam's waiting place at once so it stops counting towards
+ * the positions of everyone behind it. The exam stays in its intro. A no-op when the exam is not waiting.
+ */
+export function leaveSpeakingExamQueue(examId: string) {
+  return apiClient.post<void>(
+    `/v1/speaking/exams/${encodeURIComponent(examId)}/leave-queue`,
+    {},
+  );
+}
+
 export function cancelSpeakingExam(examId: string) {
   return apiClient.post<SpeakingExamDetail>(
     `/v1/speaking/exams/${encodeURIComponent(examId)}/cancel`,

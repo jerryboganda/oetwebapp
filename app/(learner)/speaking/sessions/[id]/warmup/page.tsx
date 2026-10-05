@@ -21,6 +21,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { SpeakingAdmissionWait } from '@/components/domain/speaking/SpeakingAdmissionWait';
 import { ApiError } from '@/lib/api';
 import {
+  isAlreadyPastGateConflict,
   isTransientAdmissionFailure,
   isWaitingForAdmission,
   type SpeakingLiveAdmission,
@@ -28,6 +29,7 @@ import {
 import {
   finishSpeakingWarmup,
   getSpeakingSession,
+  leaveSpeakingSessionQueue,
   startSpeakingWarmup,
   type SpeakingSessionDetail,
 } from '@/lib/api/speaking-sessions';
@@ -146,7 +148,7 @@ export default function SpeakingWarmupPage() {
       setWaitingAdmission(null);
       openPrep(sessionId, finished);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
+      if (err instanceof ApiError && isAlreadyPastGateConflict(err.status, err.code)) {
         // Already past warm-up (another tab was admitted): prep is open.
         setWaitingAdmission(null);
         openPrep(sessionId, null);
@@ -156,6 +158,12 @@ export default function SpeakingWarmupPage() {
       // A refusal that waiting cannot fix (credits, plan) ends the wait: the buttons are shown again.
       if (!isTransientAdmissionFailure(err instanceof ApiError ? err.status : undefined)) setWaitingAdmission(null);
     }
+  }
+
+  // "Leave the queue": give the place back at once (best effort; the heartbeat window frees it anyway), then go.
+  function leaveQueue() {
+    if (sessionId) void leaveSpeakingSessionQueue(sessionId).catch(() => undefined);
+    router.push('/speaking');
   }
 
   if (!sessionId) {
@@ -191,7 +199,7 @@ export default function SpeakingWarmupPage() {
             subject="practice"
             admission={waitingAdmission}
             onAttempt={retryAdmission}
-            onLeave={() => router.push('/speaking')}
+            onLeave={leaveQueue}
           />
         ) : (
           <Card className="space-y-6 p-6">

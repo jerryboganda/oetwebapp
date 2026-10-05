@@ -45,3 +45,18 @@ export function isTransientAdmissionFailure(status: number | undefined): boolean
   if (status === undefined) return true;
   return status >= 500 || status === 408 || status === 429;
 }
+
+/**
+ * The 409 `code` for "one live place per learner": this learner already has another live AI Speaking place (waiting
+ * or running). Refused up front, so it is a message to show, never a sign that the subject was admitted.
+ */
+export const LIVE_SESSION_ACTIVE_CODE = 'speaking_live_session_active';
+
+/**
+ * A 409 from finish-intro / finish-warmup that means "this exam or card is already past the gate" (admitted by another
+ * tab, or the exam ended): the page should re-read the truth instead of showing an error. The one-place-per-learner
+ * refusal is ALSO a 409 but means the opposite (nothing started), so it is excluded.
+ */
+export function isAlreadyPastGateConflict(status: number | undefined, code: string | undefined): boolean {
+  return status === 409 && code !== LIVE_SESSION_ACTIVE_CODE;
+}

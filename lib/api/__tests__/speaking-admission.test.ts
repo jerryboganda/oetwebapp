@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LIVE_SESSION_ACTIVE_CODE,
   formatAdmissionWait,
+  isAlreadyPastGateConflict,
   isTransientAdmissionFailure,
   isWaitingForAdmission,
   type SpeakingLiveAdmission,
@@ -42,5 +44,19 @@ describe('speaking admission helpers', () => {
     expect(isTransientAdmissionFailure(404)).toBe(false);
     expect(isTransientAdmissionFailure(409)).toBe(false);
     expect(isTransientAdmissionFailure(403)).toBe(false);
+  });
+
+  it('reads a 409 as "already past the gate" unless it is the one-live-place-per-learner refusal', () => {
+    expect(LIVE_SESSION_ACTIVE_CODE).toBe('speaking_live_session_active');
+    // Another tab was admitted, or the exam ended: re-read the truth.
+    expect(isAlreadyPastGateConflict(409, 'speaking_exam_invalid_state')).toBe(true);
+    expect(isAlreadyPastGateConflict(409, 'speaking_session_invalid_state')).toBe(true);
+    expect(isAlreadyPastGateConflict(409, undefined)).toBe(true);
+    // Nothing started: show the reason.
+    expect(isAlreadyPastGateConflict(409, 'speaking_live_session_active')).toBe(false);
+    // Not a conflict at all.
+    expect(isAlreadyPastGateConflict(402, 'ai_credits_insufficient')).toBe(false);
+    expect(isAlreadyPastGateConflict(503, 'speaking_live_queue_full')).toBe(false);
+    expect(isAlreadyPastGateConflict(undefined, undefined)).toBe(false);
   });
 });

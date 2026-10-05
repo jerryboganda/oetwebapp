@@ -288,6 +288,17 @@ export async function finishSpeakingWarmup(sessionId: string): Promise<SpeakingS
   );
 }
 
+/**
+ * Leave the live AI session admission line: releases this card's waiting place at once so it stops counting towards
+ * the positions of everyone behind it. The card stays in warm-up. A no-op when the card is not waiting.
+ */
+export async function leaveSpeakingSessionQueue(sessionId: string): Promise<void> {
+  return apiClient.post<void>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/leave-queue`,
+    {},
+  );
+}
+
 export async function endSpeakingSession(sessionId: string): Promise<SpeakingSessionDetail> {
   return apiClient.post<SpeakingSessionDetail>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/end`,

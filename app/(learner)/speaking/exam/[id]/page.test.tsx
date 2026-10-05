@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ExamCandidateCard, SpeakingExamDetail } from '@/lib/api/speaking-exams';
 
 const { router, mockGetExam, mockCompleteMockSection, stopBySession } = vi.hoisted(() => ({
@@ -23,6 +23,7 @@ vi.mock('@/lib/api', () => ({
 vi.mock('@/lib/api/speaking-exams', () => ({
   getSpeakingExam: mockGetExam,
   finishSpeakingExamIntro: vi.fn(),
+  leaveSpeakingExamQueue: vi.fn(),
   recordSpeakingExamConsent: vi.fn(),
   startSpeakingExamCard: vi.fn(),
 }));
@@ -59,7 +60,7 @@ vi.mock('@/components/domain/speaking/ExamConversationPanel', async () => {
 });
 
 import { ApiError } from '@/lib/api';
-import { finishSpeakingExamIntro } from '@/lib/api/speaking-exams';
+import { finishSpeakingExamIntro, leaveSpeakingExamQueue } from '@/lib/api/speaking-exams';
 import SpeakingExamPage from './page';
 
 const NOW = '2026-09-30T12:00:00.000Z';
@@ -395,8 +396,13 @@ describe('Speaking exam page', () => {
       admission: { status: 'waiting', position, queueLength: 5, estimatedWaitSeconds: 130, pollAfterSeconds: 4 },
     });
 
+    // What the shared client throws for a refused call: the learner-facing text is in `userMessage`, the server's code in `code`.
+    const refusal = (status: number, code: string, userMessage: string) =>
+      Object.assign(new (ApiError as unknown as new (message: string) => Error)(code), { status, code, userMessage });
+
     beforeEach(() => {
       vi.mocked(finishSpeakingExamIntro).mockReset();
+      vi.mocked(leaveSpeakingExamQueue).mockReset().mockResolvedValue(undefined);
     });
 
     it('shows the place in the line instead of the Begin button, and repeats finish-intro while waiting', async () => {
@@ -441,6 +447,116 @@ describe('Speaking exam page', () => {
       expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
       expect(screen.getByRole('alert')).toHaveTextContent('You do not have enough credits to start this activity.');
       expect(screen.getByRole('button', { name: /begin part 2/i })).toBeInTheDocument();
+    });
+
+    it('keeps the reason on screen after a refusal: a later poll must not wipe it and leave a bare Begin button', async () => {
+      mockGetExam.mockResolvedValue(waitingIntro());
+      vi.mocked(finishSpeakingExamIntro).mockRejectedValue(
+        refusal(402, 'ai_credits_insufficient', 'You do not have enough credits to start this activity.'),
+      );
+      await renderPage();
+
+      await flush(4_000);
+      expect(screen.getByRole('alert')).toHaveTextContent('You do not have enough credits to start this activity.');
+
+      // The page's own polling resumes once the wait has ended, and every successful poll clears loadError.
+      await flush(9_000);
+      expect(mockGetExam.mock.calls.length).toBeGreaterThan(1);
+      expect(screen.getByRole('alert')).toHaveTextContent('You do not have enough credits to start this activity.');
+      expect(screen.getByRole('button', { name: /begin part 2/i })).toBeInTheDocument();
+    });
+
+    it('shows a refusal of the very first Begin press too (another live session, a full line) and keeps it', async () => {
+      mockGetExam.mockResolvedValue(exam({
+        state: 'intro',
+        currentCardNumber: 0,
+        currentSessionId: null,
+        currentCard: null,
+        consentAccepted: true,
+        admission: null,
+      }));
+      vi.mocked(finishSpeakingExamIntro).mockRejectedValue(
+        refusal(409, 'speaking_live_session_active', 'You already have a live Speaking session open or waiting.'),
+      );
+      await renderPage();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /begin part 2/i }));
+      });
+      await flush(9_000);
+
+      expect(screen.getByRole('alert')).toHaveTextContent('You already have a live Speaking session open or waiting.');
+      expect(screen.getByRole('button', { name: /begin part 2/i })).toBeInTheDocument();
+    });
+
+    it('does not run its own 3 s refresh while the wait panel is on screen: the two would race', async () => {
+      mockGetExam.mockResolvedValue(waitingIntro());
+      vi.mocked(finishSpeakingExamIntro).mockResolvedValue(waitingIntro(2));
+      await renderPage();
+      expect(mockGetExam).toHaveBeenCalledTimes(1);
+
+      await flush(12_000);
+
+      // Only the initial load: the panel's retries (finish-intro) carry the newest place on their own.
+      expect(mockGetExam).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(finishSpeakingExamIntro).mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('treats a 409 on a retry as "the exam moved on": it re-reads the exam instead of showing an error', async () => {
+      mockGetExam
+        .mockResolvedValueOnce(waitingIntro())
+        .mockResolvedValue(exam({ state: 'prep_a', currentSessionId: 'sess-a' }));
+      vi.mocked(finishSpeakingExamIntro).mockRejectedValue(
+        refusal(409, 'speaking_exam_invalid_state', 'Intro cannot be finished in state prep_a.'),
+      );
+      await renderPage();
+
+      await flush(4_000);
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
+      expect(screen.getByText('Part 2 — Card A')).toBeInTheDocument();
+    });
+
+    it('ends the wait and shows the reason when the 409 is the one-live-place-per-learner refusal', async () => {
+      mockGetExam.mockResolvedValue(waitingIntro());
+      vi.mocked(finishSpeakingExamIntro).mockRejectedValue(
+        refusal(409, 'speaking_live_session_active', 'You already have a live Speaking session open or waiting.'),
+      );
+      await renderPage();
+
+      await flush(4_000);
+
+      expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent('You already have a live Speaking session open or waiting.');
+    });
+
+    it('keeps waiting through a network blip: a transient failure is retried, never shown', async () => {
+      mockGetExam.mockResolvedValue(waitingIntro());
+      vi.mocked(finishSpeakingExamIntro)
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValue(waitingIntro(1));
+      await renderPage();
+
+      await flush(4_000);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByTestId('speaking-admission-wait')).toBeInTheDocument();
+
+      await flush(4_000);
+      expect(screen.getByTestId('speaking-admission-position')).toHaveTextContent('Position 1 of 5');
+    });
+
+    it('gives the place back when the learner leaves the queue, then goes to the Speaking home', async () => {
+      mockGetExam.mockResolvedValue(waitingIntro());
+      vi.mocked(finishSpeakingExamIntro).mockResolvedValue(waitingIntro());
+      await renderPage();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /leave the queue/i }));
+      });
+
+      expect(leaveSpeakingExamQueue).toHaveBeenCalledWith('exam-1');
+      expect(router.push).toHaveBeenCalledWith('/speaking');
     });
 
     it('shows the Begin button, not the queue, for an exam that is not waiting', async () => {
