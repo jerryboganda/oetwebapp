@@ -2,9 +2,11 @@ namespace OetLearner.Api.Configuration;
 
 /// <summary>
 /// Live AI Speaking admission control (owner decision 5 Oct 2026). Bound from <c>Speaking:LiveAdmission</c>
-/// (env <c>Speaking__LiveAdmission__*</c>). The owner-tunable cap and kill switch live in the
-/// <c>SpeakingLiveAdmissionSettings</c> row (admin API, no restart); these values are the defaults when
-/// that row is absent, plus the timing of the queue itself.
+/// configuration. NOTE: the production compose file has a closed environment list and forwards no
+/// <c>Speaking__LiveAdmission__*</c> key, so in production these keys are NOT reachable from the environment and the
+/// shipped defaults apply; the operational levers are the cap and the kill switch in the
+/// <c>SpeakingLiveAdmissionSettings</c> row (admin API, no restart). These values are the defaults when that row
+/// is absent, plus the timing of the queue itself.
 ///
 /// The gate counts live AI patient sessions (an AI exam or a standalone AI practice card) that were
 /// ADMITTED and are still running. It never evicts a running session, never starts a clock and never
@@ -14,7 +16,8 @@ public sealed class SpeakingLiveAdmissionOptions
 {
     public const string SectionName = "Speaking:LiveAdmission";
 
-    /// <summary>Hard environment kill switch, on top of the admin one. False = the gate never queues.</summary>
+    /// <summary>Configuration-level kill switch, on top of the admin one. False = the gate never queues. (Only
+    /// reachable where a configuration source other than the production compose environment is used.)</summary>
     public bool Enabled { get; set; } = true;
 
     /// <summary>Concurrent live AI Speaking sessions when no admin setting exists (owner target: 100). A value
@@ -26,11 +29,15 @@ public sealed class SpeakingLiveAdmissionOptions
     /// learner page polls every <see cref="PollAfterSeconds"/> while visible and every 20 s while hidden.</summary>
     public int WaiterHeartbeatSeconds { get; set; } = 90;
 
-    /// <summary>Longest a place in the line is kept even for a learner who keeps polling (clamped 60..7200 s).
-    /// Past it the learner is put at the back of the line on the next poll.</summary>
-    public int MaxWaitSeconds { get; set; } = 1800;
+    /// <summary>Safety bound on how long a place in the line is kept for a learner who keeps polling (clamped
+    /// 60..14400 s; default 2 h). It exists so a forgotten tab cannot hold a place (and later start a session
+    /// unattended) for ever, never as a routine expiry: the line is never allowed to grow longer than this can
+    /// serve at the average session length (<see cref="MaxLineLengthFor"/>), so a waiter that keeps polling is served
+    /// before it and is not sent to the back of the line.</summary>
+    public int MaxWaitSeconds { get; set; } = 7200;
 
-    /// <summary>Largest line (clamped 1..100000). Beyond it a new waiter is refused with a retryable 503.</summary>
+    /// <summary>Largest line (clamped 1..100000). Beyond it (or beyond <see cref="MaxLineLengthFor"/>, whichever is
+    /// smaller) a new waiter is refused with a retryable 503.</summary>
     public int MaxQueueLength { get; set; } = 1000;
 
     /// <summary>How long a freshly admitted session counts as holding a slot before its subject has
@@ -58,8 +65,20 @@ public sealed class SpeakingLiveAdmissionOptions
     public int DefaultMaxConcurrentResolved()
         => DefaultMaxConcurrent < MinConcurrent ? OwnerTargetConcurrent : Math.Min(DefaultMaxConcurrent, MaxConcurrent);
     public TimeSpan WaiterHeartbeat() => TimeSpan.FromSeconds(Math.Clamp(WaiterHeartbeatSeconds, 15, 600));
-    public TimeSpan MaxWait() => TimeSpan.FromSeconds(Math.Clamp(MaxWaitSeconds, 60, 7200));
+    public TimeSpan MaxWait() => TimeSpan.FromSeconds(Math.Clamp(MaxWaitSeconds, 60, 14400));
     public int MaxQueueLengthResolved() => Math.Clamp(MaxQueueLength, 1, 100000);
+
+    /// <summary>
+    /// The longest line that can still be served within <see cref="MaxWait"/> at <paramref name="cap"/> places and the
+    /// average session length (places free at about <c>cap / AverageSessionSeconds</c> per second), bounded by
+    /// <see cref="MaxQueueLength"/>. A new waiter beyond it is refused up front with a retryable 503 instead of
+    /// being queued for a wait the server could not honour.
+    /// </summary>
+    public int MaxLineLengthFor(int cap)
+    {
+        var servable = (long)MaxWait().TotalSeconds * Math.Max(1, cap) / AverageSessionSecondsResolved();
+        return (int)Math.Clamp(servable, 1L, (long)MaxQueueLengthResolved());
+    }
     public TimeSpan ClaimWindow() => TimeSpan.FromSeconds(Math.Clamp(ClaimWindowSeconds, 30, 900));
     public TimeSpan ExamAdmittedTtl() => TimeSpan.FromMinutes(Math.Clamp(ExamAdmittedTtlMinutes, 10, 240));
     public TimeSpan PracticeAdmittedTtl() => TimeSpan.FromMinutes(Math.Clamp(PracticeAdmittedTtlMinutes, 10, 240));

@@ -18,6 +18,7 @@ namespace OetLearner.Api.Endpoints;
 ///   * POST   /{id}/consent            record recording/AI consent at the intro (before any timer)
 ///   * POST   /{id}/finish-intro       intro → prep_a (reveals Card A, holds 2 AI credits); while the live AI session
 ///                                     cap is full it answers 200 with state intro + `admission` and holds nothing
+///   * POST   /{id}/leave-queue        leave the live AI session admission line (releases the waiting place)
 ///   * POST   /{id}/start-card         prep → active for the current card
 ///   * POST   /{id}/cancel             abandon the exam
 ///   * POST   /{id}/technical-issue    flag a technical issue (never affects scoring)
@@ -67,6 +68,11 @@ public static class SpeakingExamEndpoints
             .Produces(StatusCodes.Status402PaymentRequired)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        learner.MapPost("/{id}/leave-queue", LeaveQueueAsync)
+            .WithSummary("Leave the live AI session admission line: this exam's waiting place is released at once (the exam stays in intro). A no-op when the exam is not waiting.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
 
         learner.MapPost("/{id}/start-card", StartCardAsync)
             .WithSummary("Start the current card's discussion (prep → active).")
@@ -139,6 +145,14 @@ public static class SpeakingExamEndpoints
     {
         var userId = ResolveUserId(http);
         return Results.Ok(await exams.FinishIntroAsync(userId, id, ct));
+    }
+
+    private static async Task<IResult> LeaveQueueAsync(
+        HttpContext http, string id, SpeakingExamService exams, CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        await exams.LeaveAdmissionQueueAsync(userId, id, ct);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> StartCardAsync(

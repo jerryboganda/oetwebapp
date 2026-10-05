@@ -25,6 +25,8 @@ public sealed class SpeakingLiveAdmissionFlowTests : IAsyncLifetime
 {
     private const string Learner1 = "adm-learner-1";
     private const string Learner2 = "adm-learner-2";
+    // Seeded WITHOUT a credit wallet by the tests that need an account with no credits at all.
+    private const string Learner3 = "adm-learner-3";
 
     private LearnerDbContext _db = default!;
     private MutableTimeProvider _clock = default!;
@@ -204,6 +206,87 @@ public sealed class SpeakingLiveAdmissionFlowTests : IAsyncLifetime
         Assert.Equal("prep_a", (await plain.FinishIntroAsync(Learner2, second, default)).State);
     }
 
+    [Fact]
+    public async Task AnExamAccountWithNoCreditWalletAtAll_FailsFastAndNeverQueues_WhereHoldsGoThroughReservations()
+    {
+        await SeedTwoPublishedCardsAsync();
+        var first = await CreateExamAsync(Learner1);
+        await _exams.FinishIntroAsync(Learner1, first, default);
+        // A brand-new account has no package wallet, so its Card A hold could only be refused (402) at the end of the line.
+        SeedLearner(Learner3);
+        var exams = NewExams(_probe, new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, _credits, _clock));
+        var third = await CreateExamAsync(Learner3, exams);
+
+        var refused = await Assert.ThrowsAsync<ApiException>(() => exams.FinishIntroAsync(Learner3, third, default));
+
+        Assert.Equal(402, refused.StatusCode);
+        Assert.Equal("ai_credits_insufficient", refused.ErrorCode);
+        Assert.False(await _db.SpeakingLiveAdmissions.AnyAsync(a => a.SubjectId == third));
+    }
+
+    [Fact]
+    public async Task AFailedCardAHold_GivesTheExamPlaceBackAtOnce_SoTheNextLearnerStartsWithoutWaitingForTheClaimWindow()
+    {
+        await SeedTwoPublishedCardsAsync();
+        var refusing = NewExams(_probe, new RefusingReservations());
+        var first = await CreateExamAsync(Learner1, refusing);
+        var second = await CreateExamAsync(Learner2);
+
+        // The place is taken, then the Card A hold is refused: the exam stays in Intro and the place is freed now.
+        var refused = await Assert.ThrowsAsync<ApiException>(() => refusing.FinishIntroAsync(Learner1, first, default));
+        Assert.Equal(402, refused.StatusCode);
+        Assert.Equal(SpeakingExamState.Intro, (await _db.SpeakingExamSessions.AsNoTracking().SingleAsync(e => e.Id == first)).State);
+        Assert.Equal(
+            SpeakingLiveAdmissionState.Released,
+            (await _db.SpeakingLiveAdmissions.AsNoTracking().SingleAsync(a => a.SubjectId == first)).State);
+
+        // No clock advance: the 30 s claim window is nowhere near over, and the cap is one.
+        var started = await _exams.FinishIntroAsync(Learner2, second, default);
+        Assert.Equal("prep_a", started.State);
+        Assert.Null(started.Admission);
+    }
+
+    [Fact]
+    public async Task CancellingAnAdmittedExam_FreesItsPlaceAtOnce()
+    {
+        await SeedTwoPublishedCardsAsync();
+        var first = await CreateExamAsync(Learner1);
+        var second = await CreateExamAsync(Learner2);
+        await _exams.FinishIntroAsync(Learner1, first, default);
+        Assert.NotNull((await _exams.FinishIntroAsync(Learner2, second, default)).Admission);
+
+        await _exams.CancelAsync(Learner1, first, default);
+
+        // The claim window of the cancelled exam is NOT over (no clock advance): its place is free anyway.
+        var started = await _exams.FinishIntroAsync(Learner2, second, default);
+        Assert.Equal("prep_a", started.State);
+    }
+
+    [Fact]
+    public async Task LeavingTheExamQueue_ReleasesTheWaitingPlaceAtOnce_AndNeverCancelsTheExam()
+    {
+        await SeedTwoPublishedCardsAsync();
+        var first = await CreateExamAsync(Learner1);
+        var second = await CreateExamAsync(Learner2);
+        await _exams.FinishIntroAsync(Learner1, first, default);
+        Assert.NotNull((await _exams.FinishIntroAsync(Learner2, second, default)).Admission);
+
+        await _exams.LeaveAdmissionQueueAsync(Learner2, second, default);
+
+        Assert.Equal(
+            SpeakingLiveAdmissionState.Released,
+            (await _db.SpeakingLiveAdmissions.AsNoTracking().SingleAsync(a => a.SubjectId == second)).State);
+        var read = await _exams.GetExamForLearnerAsync(Learner2, second, default);
+        Assert.Equal("intro", read.State);
+        Assert.Null(read.Admission);
+        // Someone else's exam is not found, and an admitted place is not touched by a leave.
+        await Assert.ThrowsAsync<ApiException>(() => _exams.LeaveAdmissionQueueAsync(Learner1, second, default));
+        await _exams.LeaveAdmissionQueueAsync(Learner1, first, default);
+        Assert.Equal(
+            SpeakingLiveAdmissionState.Admitted,
+            (await _db.SpeakingLiveAdmissions.AsNoTracking().SingleAsync(a => a.SubjectId == first)).State);
+    }
+
     // ── Practice: finish-warmup ──────────────────────────────────────────────
 
     [Fact]
@@ -280,6 +363,117 @@ public sealed class SpeakingLiveAdmissionFlowTests : IAsyncLifetime
         Assert.Empty(await _db.SpeakingLiveAdmissions.ToListAsync());
     }
 
+    [Fact]
+    public async Task AnUnfundedPracticeLearner_FailsFastAndNeverQueues()
+    {
+        var cardId = await SeedPracticeCardAsync();
+        var first = await SeedWarmUpSessionAsync(Learner1, cardId);
+        await _sessions.FinishWarmupAsync(Learner1, first, default);
+        // A single stranded credit cannot pay for a 2-credit card.
+        (await _db.AiPackageCreditAccounts.SingleAsync(a => a.UserId == Learner2)).SpeakingOnlyCredits = 1;
+        await _db.SaveChangesAsync();
+        var second = await SeedWarmUpSessionAsync(Learner2, cardId);
+
+        // The cap is full, yet the learner is refused at once instead of queueing for a place it cannot pay for.
+        var refused = await Assert.ThrowsAsync<ApiException>(() => _sessions.FinishWarmupAsync(Learner2, second, default));
+
+        Assert.Equal(402, refused.StatusCode);
+        Assert.False(await _db.SpeakingLiveAdmissions.AnyAsync(a => a.SubjectId == second));
+        Assert.Equal(SpeakingSessionState.WarmUp, (await _db.SpeakingSessions.AsNoTracking().SingleAsync(s => s.Id == second)).State);
+    }
+
+    [Fact]
+    public async Task AnUnfundedPracticeLearner_IsRefusedBeforeAFreeSlot_WhereHoldsGoThroughReservations()
+    {
+        var cardId = await SeedPracticeCardAsync();
+        SeedLearner(Learner3);
+        var sessions = NewSessions(new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, _credits, _clock));
+        var session = await SeedWarmUpSessionAsync(Learner3, cardId);
+
+        // A free place exists (cap one, nobody running) but the account has no credits at all: 402, no row, no hold.
+        var refused = await Assert.ThrowsAsync<ApiException>(() => sessions.FinishWarmupAsync(Learner3, session, default));
+
+        Assert.Equal(402, refused.StatusCode);
+        Assert.Equal("ai_credits_insufficient", refused.ErrorCode);
+        Assert.Empty(await _db.SpeakingLiveAdmissions.ToListAsync());
+        Assert.Empty(await _db.AiCreditReservations.ToListAsync());
+    }
+
+    [Fact]
+    public async Task AFundedPracticeLearner_IsStillAdmitted_WhereHoldsGoThroughReservations()
+    {
+        // The pre-check mirrors the hold, so a learner the hold would accept is never refused by it.
+        var cardId = await SeedPracticeCardAsync();
+        var session = await SeedWarmUpSessionAsync(Learner1, cardId);
+        var sessions = NewSessions(new OetLearner.Api.Services.Ai.AiCreditReservationService(_db, _credits, _clock));
+
+        var started = await sessions.FinishWarmupAsync(Learner1, session, default);
+
+        Assert.Equal(SpeakingSessionStates.Prep, started.State);
+        Assert.Null(started.Admission);
+        Assert.Equal(4, (await _credits.GetSnapshotAsync(Learner1, 0, default)).SpeakingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task AFailedCreditHold_GivesThePracticePlaceBackAtOnce()
+    {
+        var cardId = await SeedPracticeCardAsync();
+        var first = await SeedWarmUpSessionAsync(Learner1, cardId);
+        var second = await SeedWarmUpSessionAsync(Learner2, cardId);
+        var refusing = NewSessions(new RefusingReservations());
+
+        // The place is taken, then the hold is refused: the card stays in warm-up and the place is freed now.
+        var refused = await Assert.ThrowsAsync<ApiException>(() => refusing.FinishWarmupAsync(Learner1, first, default));
+        Assert.Equal(402, refused.StatusCode);
+        Assert.Equal(SpeakingSessionState.WarmUp, (await _db.SpeakingSessions.AsNoTracking().SingleAsync(s => s.Id == first)).State);
+        Assert.Equal(
+            SpeakingLiveAdmissionState.Released,
+            (await _db.SpeakingLiveAdmissions.AsNoTracking().SingleAsync(a => a.SubjectId == first)).State);
+
+        // No clock advance: the claim window is not over, and the cap is one. The next learner starts at once.
+        var started = await _sessions.FinishWarmupAsync(Learner2, second, default);
+        Assert.Equal(SpeakingSessionStates.Prep, started.State);
+        Assert.Null(started.Admission);
+    }
+
+    [Fact]
+    public async Task ALearnerHoldsOneLivePlace_ASecondPracticeCardIsRefusedWithAClearMessageAndStartsNothing()
+    {
+        var cardId = await SeedPracticeCardAsync();
+        var first = await SeedWarmUpSessionAsync(Learner1, cardId);
+        var second = await SeedWarmUpSessionAsync(Learner1, cardId);
+        Assert.Equal(SpeakingSessionStates.Prep, (await _sessions.FinishWarmupAsync(Learner1, first, default)).State);
+
+        var refused = await Assert.ThrowsAsync<ApiException>(() => _sessions.FinishWarmupAsync(Learner1, second, default));
+
+        Assert.Equal(409, refused.StatusCode);
+        Assert.Equal("speaking_live_session_active", refused.ErrorCode);
+        Assert.Equal(SpeakingSessionState.WarmUp, (await _db.SpeakingSessions.AsNoTracking().SingleAsync(s => s.Id == second)).State);
+        Assert.False(await _db.SpeakingLiveAdmissions.AnyAsync(a => a.SubjectId == second));
+        // Only the first card's 2 credits are held.
+        Assert.Equal(4, (await _credits.GetSnapshotAsync(Learner1, 0, default)).SpeakingOnlyCredits);
+    }
+
+    [Fact]
+    public async Task LeavingThePracticeQueue_ReleasesTheWaitingPlaceAtOnce_AndTheCardStaysInWarmup()
+    {
+        var cardId = await SeedPracticeCardAsync();
+        var first = await SeedWarmUpSessionAsync(Learner1, cardId);
+        var second = await SeedWarmUpSessionAsync(Learner2, cardId);
+        await _sessions.FinishWarmupAsync(Learner1, first, default);
+        Assert.NotNull((await _sessions.FinishWarmupAsync(Learner2, second, default)).Admission);
+
+        await _sessions.LeaveAdmissionQueueAsync(Learner2, second, default);
+
+        Assert.Equal(
+            SpeakingLiveAdmissionState.Released,
+            (await _db.SpeakingLiveAdmissions.AsNoTracking().SingleAsync(a => a.SubjectId == second)).State);
+        var read = await _sessions.GetSessionForLearnerAsync(Learner2, second, default);
+        Assert.Equal(SpeakingSessionStates.WarmUp, read.State);
+        Assert.Null(read.Admission);
+        await Assert.ThrowsAsync<ApiException>(() => _sessions.LeaveAdmissionQueueAsync(Learner1, second, default));
+    }
+
     // ── The sweeper's housekeeping pass ──────────────────────────────────────
 
     [Fact]
@@ -317,15 +511,46 @@ public sealed class SpeakingLiveAdmissionFlowTests : IAsyncLifetime
         return probe;
     }
 
-    private SpeakingExamService NewExams(LiveVoiceProviderProbeState probe)
+    private SpeakingExamService NewExams(
+        LiveVoiceProviderProbeState probe,
+        OetLearner.Api.Services.Ai.IAiCreditReservationService? reservations = null)
         => new(
             _db,
             null!,
             NullLogger<SpeakingExamService>.Instance,
             _credits,
+            creditReservations: reservations,
             liveVoiceProbe: probe,
             liveVoiceOptions: _liveOptions,
             admission: _gate);
+
+    private SpeakingSessionService NewSessions(OetLearner.Api.Services.Ai.IAiCreditReservationService? reservations)
+        => new(
+            _db,
+            aiPackageCreditService: _credits,
+            creditReservations: reservations,
+            liveVoiceProbe: _probe,
+            liveVoiceOptions: _liveOptions,
+            admission: _gate);
+
+    /// <summary>A credit hold that is always refused (402), to prove a place taken for a start that then fails is
+    /// given back at once. Only the speaking hold is ever reached.</summary>
+    private sealed class RefusingReservations : OetLearner.Api.Services.Ai.IAiCreditReservationService
+    {
+        public Task<OetLearner.Api.Services.Ai.AiCreditReservationTicket> ReserveWritingAsync(
+            string userId, string operationId, string businessReference, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<OetLearner.Api.Services.Ai.AiCreditReservationTicket> ReserveSpeakingAsync(
+            string userId, string operationId, string businessReference, CancellationToken ct)
+            => throw ApiException.PaymentRequired("ai_credits_insufficient", "The hold was refused.");
+
+        public Task CommitAsync(string reservationId, CancellationToken ct) => Task.CompletedTask;
+
+        public Task CommitByBusinessReferenceAsync(string businessReference, CancellationToken ct) => Task.CompletedTask;
+
+        public Task ReleaseAsync(string reservationId, CancellationToken ct) => Task.CompletedTask;
+    }
 
     private async Task<string> CreateExamAsync(string userId, SpeakingExamService? exams = null)
         => (await (exams ?? _exams).CreateExamAsync(

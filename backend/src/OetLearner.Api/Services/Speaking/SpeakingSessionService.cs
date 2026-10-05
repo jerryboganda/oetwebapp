@@ -254,15 +254,25 @@ public sealed class SpeakingSessionService(
         // to wait has paid nothing and started nothing. The session is untouched while waiting (still
         // warm-up); the page repeats this call until a place is free. A free-sample card uses live voice too,
         // so it is gated like any other. With no healthy live provider the learner uses the recorder
-        // fallback and the gate does not apply.
+        // fallback and the gate does not apply. A learner who cannot fund the hold is refused (402) by the
+        // gate's pre-check BEFORE taking a place or a line position (it runs only when this call is about to
+        // take a place, never on a waiting learner's repeat poll).
+        SpeakingLiveAdmissionResult? gate = null;
         if (session.Mode == SpeakingSessionMode.AiSelfPractice && admission is not null)
         {
-            var gate = await admission.AdmitOrQueueAsync(
+            gate = await admission.AdmitOrQueueAsync(
                 userId,
                 SpeakingLiveAdmissionKinds.Practice,
                 session.Id,
                 IsLiveVoiceAvailable(),
-                ct);
+                ct,
+                beforeNewPlace: async token =>
+                {
+                    if (!await new FreeSampleService(db).IsFreeAttemptAsync(userId, FreeSampleService.Speaking, session.Id, token))
+                    {
+                        await EnsurePracticeFundableAsync(userId, session.Id, token);
+                    }
+                });
             if (gate.MustWait)
             {
                 return await GetSessionForLearnerAsync(userId, sessionId, ct, waitingView: gate.Waiting);
@@ -276,39 +286,118 @@ public sealed class SpeakingSessionService(
         // pay-per-session (no credit) and AI-exam cards are charged by
         // SpeakingExamService, so only AiSelfPractice debits here.
         string? feedbackMessage = null;
-        // A bound free-sample use holds no credits (free = 0 AI credits).
-        if (session.Mode == SpeakingSessionMode.AiSelfPractice
-            && !await new FreeSampleService(db).IsFreeAttemptAsync(userId, FreeSampleService.Speaking, session.Id, ct))
+        try
         {
-            var refId = $"practice:{session.Id}";
-            if (creditReservations is not null)
+            // A bound free-sample use holds no credits (free = 0 AI credits).
+            if (session.Mode == SpeakingSessionMode.AiSelfPractice
+                && !await new FreeSampleService(db).IsFreeAttemptAsync(userId, FreeSampleService.Speaking, session.Id, ct))
             {
-                var operationId = Guid.NewGuid().ToString("N");
-                await creditReservations.ReserveSpeakingAsync(userId, operationId, refId, ct);
-            }
-            else if (aiPackageCreditService is not null)
-            {
-                var debit = await aiPackageCreditService.DeductGradingCreditAsync(
-                    userId, "speaking", refId, ct);
-                if (!debit.Debited
-                    && !string.Equals(debit.ErrorCode, "already_debited", StringComparison.Ordinal))
+                var refId = $"practice:{session.Id}";
+                if (creditReservations is not null)
                 {
-                    throw ApiException.PaymentRequired(
-                        debit.ErrorCode ?? "no_ai_package_credits",
-                        debit.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+                    var operationId = Guid.NewGuid().ToString("N");
+                    await creditReservations.ReserveSpeakingAsync(userId, operationId, refId, ct);
                 }
+                else if (aiPackageCreditService is not null)
+                {
+                    var debit = await aiPackageCreditService.DeductGradingCreditAsync(
+                        userId, "speaking", refId, ct);
+                    if (!debit.Debited
+                        && !string.Equals(debit.ErrorCode, "already_debited", StringComparison.Ordinal))
+                    {
+                        throw ApiException.PaymentRequired(
+                            debit.ErrorCode ?? "no_ai_package_credits",
+                            debit.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+                    }
 
-                feedbackMessage = debit.FeedbackMessage;
+                    feedbackMessage = debit.FeedbackMessage;
+                }
             }
+
+            session.WarmupEndedAt = now;
+            session.State = SpeakingSessionState.Prep;
+            session.PrepStartedAt = now;
+            session.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+        }
+        catch when (gate is { TookNewPlace: true })
+        {
+            // The start failed AFTER this call took a place (a refused or failed credit hold): give the place back at
+            // once instead of leaving it idle for the claim window. Never touches a running session; never throws.
+            if (admission is not null)
+            {
+                await admission.ReleaseAsync(SpeakingLiveAdmissionKinds.Practice, session.Id, CancellationToken.None);
+            }
+            throw;
         }
 
-        session.WarmupEndedAt = now;
-        session.State = SpeakingSessionState.Prep;
-        session.PrepStartedAt = now;
-        session.UpdatedAt = now;
-        await db.SaveChangesAsync(ct);
-
         return await GetSessionForLearnerAsync(userId, sessionId, ct, feedbackMessage);
+    }
+
+    /// <summary>
+    /// Read-only: refuses (402) a practice card whose 2-credit hold would be refused, mirroring the hold itself
+    /// (<c>AiCreditReservationService.ReserveSpeakingAsync</c> when reservations are wired, as in production, else the
+    /// package ledger's own read-only check) so the live-session gate never queues or admits a learner who can only
+    /// fail at the hold. A reference that already holds its credit (a retry) is funded.
+    /// </summary>
+    private async Task EnsurePracticeFundableAsync(string userId, string sessionId, CancellationToken ct)
+    {
+        if (aiPackageCreditService is null)
+        {
+            return;
+        }
+
+        var refId = $"practice:{sessionId}";
+        if (creditReservations is not null)
+        {
+            if (await db.AiCreditReservations.AsNoTracking().AnyAsync(r => r.BusinessReference == refId, ct))
+            {
+                return;
+            }
+
+            var snapshot = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
+            if (snapshot.SpeakingUnlimited)
+            {
+                return;
+            }
+
+            if (snapshot.ExpiredBecausePassed
+                || (snapshot.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow)
+                || !snapshot.HasSpeakingActivity)
+            {
+                throw ApiException.PaymentRequired(
+                    "ai_credits_insufficient",
+                    "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+            }
+
+            return;
+        }
+
+        if (await aiPackageCreditService.FindGradingDebitAsync(userId, refId, ct) is not null)
+        {
+            return;
+        }
+
+        var check = await aiPackageCreditService.CheckGradingCreditAsync(userId, "speaking", ct);
+        if (!check.Debited)
+        {
+            throw ApiException.PaymentRequired(
+                check.ErrorCode ?? "no_ai_package_credits",
+                check.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+        }
+    }
+
+    /// <summary>
+    /// The learner left the admission line ("Leave the queue"): releases this card's WAITING place at once so it stops
+    /// counting towards the positions of everyone behind it. Owner-checked; a card that is not waiting is a no-op.
+    /// </summary>
+    public async Task LeaveAdmissionQueueAsync(string userId, string sessionId, CancellationToken ct)
+    {
+        var session = await LoadOwnedSessionAsync(userId, sessionId, ct);
+        if (admission is not null)
+        {
+            await admission.LeaveQueueAsync(SpeakingLiveAdmissionKinds.Practice, session.Id, ct);
+        }
     }
 
     public async Task<SpeakingSessionDetail> GetSessionForLearnerAsync(

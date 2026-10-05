@@ -24,15 +24,24 @@ public static class SpeakingLiveAdmissionBypassReasons
     public const string Disabled = "disabled";
     public const string LiveVoiceUnavailable = "live_voice_unavailable";
     public const string AdmissionUnavailable = "admission_unavailable";
+
+    /// <summary>The caller already owns a database transaction (the admin corpus harness): the gate never takes
+    /// its platform-wide lock inside someone else's transaction, so it does not apply.</summary>
+    public const string AmbientTransaction = "ambient_transaction";
 }
 
 public sealed record SpeakingLiveAdmissionResult(
     SpeakingLiveAdmissionOutcome Outcome,
     SpeakingLiveAdmissionView? Waiting = null,
-    string? BypassReason = null)
+    string? BypassReason = null,
+    bool NewPlace = false)
 {
     /// <summary>True when the caller has to stop before any credit hold or timer.</summary>
     public bool MustWait => Outcome == SpeakingLiveAdmissionOutcome.Waiting;
+
+    /// <summary>True only for the call that just took the place (not an idempotent repeat): the one call that
+    /// may give it back at once if the start that follows fails.</summary>
+    public bool TookNewPlace => Outcome == SpeakingLiveAdmissionOutcome.Admitted && NewPlace;
 }
 
 internal readonly record struct EffectiveAdmissionSettings(bool Enabled, int MaxConcurrent, string Source);
@@ -46,28 +55,39 @@ internal readonly record struct EffectiveAdmissionSettings(bool Enabled, int Max
 /// exam, one slot for both cards) and <see cref="SpeakingSessionService.FinishWarmupAsync"/> (a standalone AI
 /// practice card) call <see cref="AdmitOrQueueAsync"/> first; only an <c>Admitted</c> or <c>Bypassed</c> call
 /// goes on to hold the credit and start the clock. A waiting learner's page simply repeats the same call, so the
-/// call that finds a free place admits and starts atomically.
+/// call that finds a free place admits and starts atomically. A learner who cannot fund the hold is refused (402)
+/// by the caller's <c>beforeNewPlace</c> check BEFORE taking a place or a line position, and a start that fails after
+/// the admission gives the place back at once (<see cref="ReleaseAsync"/>).
 ///
 /// HOW it is atomic: every decision runs under one Postgres advisory lock (cross-process: both API slots and
-/// the ai-worker), inside a short transaction. The line is FIFO by a strictly increasing ticket
-/// (<see cref="SpeakingLiveAdmission.Seq"/>); a caller is admitted only when its rank among live waiters is below
-/// the number of free slots, so a newcomer can never overtake an earlier waiter even while that waiter's page has
-/// not polled yet. A waiter silent for the heartbeat window has left the line (its ticket stops counting).
+/// the ai-worker), inside a short transaction of its own that waits at most five seconds for the lock (a hung holder
+/// turns into the fail-open path below, never a connection held for ever). The line is FIFO by a strictly increasing
+/// ticket (<see cref="SpeakingLiveAdmission.Seq"/>); a caller is admitted only when its rank among live waiters is
+/// below the number of free slots, so a newcomer can never overtake an earlier waiter even while that waiter's page
+/// has not polled yet. A waiter silent for the heartbeat window has left the line (its ticket stops counting).
 /// A learner already waiting who still cannot be admitted (the common poll of a long line) takes a lock-free path
 /// that only refreshes its own heartbeat (<see cref="TryKeepWaitingAsync"/>); only an enqueue, an admission or an
 /// expiry takes the lock, so a long line polling every few seconds never queues on it. That path never admits, so
-/// a stale read there can at worst delay an admission by one poll.
+/// a stale read there can at worst delay an admission by one poll. A caller that already owns a database transaction
+/// (the admin corpus harness) is never gated: the lock is transaction-scoped and would be held, platform-wide, until
+/// that foreign transaction ends.
 ///
-/// WHAT counts as a held slot (<see cref="CountHoldingAsync"/>): an Admitted row that is inside its safety TTL AND
+/// ONE PLACE PER LEARNER: a learner holds at most one live place (in the line or holding a slot) at a time. A request
+/// for a DIFFERENT subject while another place is waiting or holding is refused with a 409
+/// <c>speaking_live_session_active</c>, so one account cannot fill the line or the cap by creating many sessions.
+///
+/// WHAT counts as a held slot (<see cref="HoldingRows"/>): an Admitted row that is inside its safety TTL AND
 /// either was admitted within the claim window (it is about to start) or whose subject is running (exam
 /// PrepA..ActiveB, practice Prep/Active). A finished, cancelled or expired subject therefore frees its slot at
-/// once with no release hook on any of the many terminal paths, and a start that failed after the admission (a
-/// refused credit hold) frees it after the short claim window with no compensation step. A running session is
-/// never evicted: lowering the cap only stops new admissions until the count drains.
+/// once with no release hook on any of the many terminal paths. An Admitted row that no longer holds (its claim
+/// window is over and the subject never started: a refused credit hold, a lost response) is NOT admitted again for
+/// free: it asks for a place again and the cap is re-checked like anyone else's. A running session is never
+/// evicted: lowering the cap only stops new admissions until the count drains.
 ///
-/// FAIL OPEN: if the gate itself throws (a missing table, a database fault) the learner is let through with a
-/// logged error; a capacity check must never be the reason a paying learner cannot start. The one deliberate
-/// refusal is a full line (<c>speaking_live_queue_full</c>, a retryable 503).
+/// FAIL OPEN: if the gate itself throws (a missing table, a database fault, a lock wait that timed out) the learner
+/// is let through with a logged error; a capacity check must never be the reason a paying learner cannot start. The
+/// deliberate refusals are a full line (<c>speaking_live_queue_full</c>, a retryable 503), a second place for the same
+/// learner (409) and, from the caller's check, an unfunded learner (402).
 /// </summary>
 public sealed class SpeakingLiveAdmissionService(
     LearnerDbContext db,
@@ -92,16 +112,22 @@ public sealed class SpeakingLiveAdmissionService(
 
     /// <summary>
     /// Admits the subject if a place is free and nobody earlier is waiting for it, otherwise puts it in (or keeps
-    /// it in) the line. Idempotent: an already admitted subject is admitted again, a waiting one refreshes its
-    /// heartbeat and keeps its ticket. <paramref name="liveVoiceAvailable"/> false means no live provider is healthy:
-    /// the learner uses the recorder fallback, which consumes no live capacity, so the gate does not apply.
+    /// it in) the line. Idempotent: an already admitted subject that still holds its place is admitted again, a
+    /// waiting one refreshes its heartbeat and keeps its ticket. <paramref name="liveVoiceAvailable"/> false means no
+    /// live provider is healthy: the learner uses the recorder fallback, which consumes no live capacity, so the gate
+    /// does not apply.
+    /// <paramref name="beforeNewPlace"/> (optional) runs OUTSIDE the lock, only when this call is about to take, or look
+    /// for, a place: not on the poll of a learner who is already waiting and still cannot be admitted. The caller uses
+    /// it for the read-only "can this learner pay for the hold" check; whatever it throws (a 402) propagates and
+    /// nothing is queued.
     /// </summary>
     public async Task<SpeakingLiveAdmissionResult> AdmitOrQueueAsync(
         string userId,
         string kind,
         string subjectId,
         bool liveVoiceAvailable,
-        CancellationToken ct)
+        CancellationToken ct,
+        Func<CancellationToken, Task>? beforeNewPlace = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
         ArgumentException.ThrowIfNullOrWhiteSpace(subjectId);
@@ -120,12 +146,43 @@ public sealed class SpeakingLiveAdmissionService(
             return Bypassed(SpeakingLiveAdmissionBypassReasons.Disabled);
         }
 
+        // The decision lock is transaction-scoped: taken inside a caller-owned transaction it would be held until
+        // THAT transaction ends, blocking every learner platform-wide. Never gate such a caller.
+        if (db.Database.CurrentTransaction is not null)
+        {
+            return Bypassed(SpeakingLiveAdmissionBypassReasons.AmbientTransaction);
+        }
+
         try
         {
-            var settled = await TryKeepWaitingAsync(kind, subjectId, ct);
+            var settings = await ResolveSettingsAsync(ct);
+            if (!settings.Enabled)
+            {
+                // The admin kill switch is the lever for a stuck or slow lock holder, so it must never itself wait
+                // on that lock: a waiting learner's row is released by a single-row UPDATE and the learner goes through.
+                await ReleaseRowAsync(kind, subjectId, includeAdmitted: false, ct);
+                return Bypassed(SpeakingLiveAdmissionBypassReasons.Disabled);
+            }
+
+            var settled = await TryKeepWaitingAsync(kind, subjectId, settings, ct);
             if (settled is not null)
             {
                 return settled;
+            }
+
+            if (beforeNewPlace is not null)
+            {
+                try
+                {
+                    await beforeNewPlace(ct);
+                }
+                catch (ApiException)
+                {
+                    // A refusal (the learner can no longer pay) ends this learner's wait: a line position it already
+                    // had goes at once, instead of blocking everyone behind it until its heartbeat lapses.
+                    await LeaveQueueAsync(kind, subjectId, CancellationToken.None);
+                    throw;
+                }
             }
 
             return await WithLockAsync(() => AdmitOrQueueLockedAsync(userId, kind, subjectId, ct), ct);
@@ -150,22 +207,73 @@ public sealed class SpeakingLiveAdmissionService(
     }
 
     /// <summary>
-    /// The lock-free path of a subject that is already in the system: an admitted one is admitted again (idempotent), and a
-    /// waiting one that cannot be admitted yet only has its own heartbeat refreshed and its place reported. Returns null
-    /// whenever the locked decision is needed: not queued yet, expired or abandoned, the kill switch is off (the locked
-    /// path releases the waiter), or a place may be free for it. Reads are untracked and the heartbeat is a single-row
-    /// update that never touches the caller's change tracker. It never admits a waiting subject, so a stale read here
-    /// can only delay an admission by one poll, never exceed the cap.
+    /// Gives the subject's place back at once: a waiting row leaves the line, an admitted row whose subject is NOT
+    /// running stops holding a slot. Called when a start fails after the admission (a refused credit hold) and when an
+    /// exam is cancelled, so a place never sits idle for the claim window. Never touches a running subject, never takes
+    /// the lock (one single-row UPDATE that cannot flush the caller's pending changes) and never throws: if it fails
+    /// the claim window frees the place anyway.
     /// </summary>
-    private async Task<SpeakingLiveAdmissionResult?> TryKeepWaitingAsync(string kind, string subjectId, CancellationToken ct)
+    public async Task ReleaseAsync(string kind, string subjectId, CancellationToken ct)
     {
-        var opt = options.Value;
-        var settings = await ResolveSettingsAsync(ct);
-        if (!settings.Enabled)
+        if (!SpeakingLiveAdmissionKinds.IsKnown(kind) || string.IsNullOrWhiteSpace(subjectId))
         {
-            return null;
+            return;
         }
 
+        try
+        {
+            var running = await IsSubjectRunningAsync(kind, subjectId, ct);
+            await ReleaseRowAsync(kind, subjectId, includeAdmitted: !running, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Could not release the live Speaking place of {Kind} {SubjectId}; the claim window will.", kind, subjectId);
+        }
+    }
+
+    /// <summary>
+    /// The learner left the line (the "Leave the queue" button): a WAITING row is released at once so it stops
+    /// counting towards every other waiter's position. An admitted row is left alone. Same single-row, lock-free,
+    /// never-throwing update as <see cref="ReleaseAsync"/>.
+    /// </summary>
+    public async Task LeaveQueueAsync(string kind, string subjectId, CancellationToken ct)
+    {
+        if (!SpeakingLiveAdmissionKinds.IsKnown(kind) || string.IsNullOrWhiteSpace(subjectId))
+        {
+            return;
+        }
+
+        try
+        {
+            await ReleaseRowAsync(kind, subjectId, includeAdmitted: false, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Could not release the live Speaking queue place of {Kind} {SubjectId}; the heartbeat window will.", kind, subjectId);
+        }
+    }
+
+    /// <summary>
+    /// The lock-free path of a subject that is already in the system: an admitted one that still holds its place is
+    /// admitted again (idempotent), and a waiting one that cannot be admitted yet only has its own heartbeat
+    /// refreshed and its place reported. Returns null whenever the locked decision is needed: not queued yet,
+    /// expired or abandoned, an admission whose place lapsed (the cap is re-checked), or a place may be free for it.
+    /// Reads are untracked and the heartbeat is a single-row update that never touches the caller's change tracker.
+    /// It never admits a waiting subject, so a stale read here can only delay an admission by one poll, never exceed
+    /// the cap.
+    /// </summary>
+    private async Task<SpeakingLiveAdmissionResult?> TryKeepWaitingAsync(
+        string kind, string subjectId, EffectiveAdmissionSettings settings, CancellationToken ct)
+    {
+        var opt = options.Value;
         var now = time.GetUtcNow();
         var heartbeatCutoff = now - opt.WaiterHeartbeat();
         var maxWaitCutoff = now - opt.MaxWait();
@@ -176,9 +284,13 @@ public sealed class SpeakingLiveAdmissionService(
             return null;
         }
 
-        if (row.State == SpeakingLiveAdmissionState.Admitted && row.ExpiresAt > now)
+        if (row.State == SpeakingLiveAdmissionState.Admitted)
         {
-            return new SpeakingLiveAdmissionResult(SpeakingLiveAdmissionOutcome.Admitted);
+            // Idempotent only while the row still HOLDS its place. A lapsed claim (the subject never started) holds
+            // nothing: it goes through the locked path, which re-checks the cap like any new request.
+            return await HoldingRows(now).AnyAsync(a => a.Id == id, ct)
+                ? new SpeakingLiveAdmissionResult(SpeakingLiveAdmissionOutcome.Admitted)
+                : null;
         }
 
         if (row.State != SpeakingLiveAdmissionState.Waiting
@@ -232,6 +344,43 @@ public sealed class SpeakingLiveAdmissionService(
         }
     }
 
+    /// <summary>
+    /// Marks a subject's WAITING row (and, with <paramref name="includeAdmitted"/>, its ADMITTED row) Released with one
+    /// single-row UPDATE: no lock, no change-tracker flush on any relational provider (production is PostgreSQL). Safe
+    /// without the lock because releasing can only free capacity or shorten the line; the worst a concurrent
+    /// decision can do is re-admit a subject whose learner just left, which the claim window frees. The in-memory
+    /// provider (tests) has no bulk update and uses a tracked save of that one row.
+    /// </summary>
+    private async Task ReleaseRowAsync(string kind, string subjectId, bool includeAdmitted, CancellationToken ct)
+    {
+        var now = time.GetUtcNow();
+        var id = RowId(kind, subjectId);
+        var also = includeAdmitted ? SpeakingLiveAdmissionState.Admitted : SpeakingLiveAdmissionState.Waiting;
+
+        if (db.Database.IsRelational())
+        {
+            await db.SpeakingLiveAdmissions
+                .Where(a => a.Id == id
+                    && (a.State == SpeakingLiveAdmissionState.Waiting || a.State == also))
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.State, SpeakingLiveAdmissionState.Released)
+                    .SetProperty(a => a.EndedAt, now)
+                    .SetProperty(a => a.UpdatedAt, now), ct);
+            return;
+        }
+
+        var tracked = await db.SpeakingLiveAdmissions
+            .FirstOrDefaultAsync(a => a.Id == id
+                && (a.State == SpeakingLiveAdmissionState.Waiting || a.State == also), ct);
+        if (tracked is not null)
+        {
+            tracked.State = SpeakingLiveAdmissionState.Released;
+            tracked.EndedAt = now;
+            tracked.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+        }
+    }
+
     private async Task<SpeakingLiveAdmissionResult> AdmitOrQueueLockedAsync(
         string userId, string kind, string subjectId, CancellationToken ct)
     {
@@ -242,7 +391,8 @@ public sealed class SpeakingLiveAdmissionService(
 
         if (!settings.Enabled)
         {
-            // The admin kill switch was flipped while this learner waited: let them through, count nothing.
+            // The admin kill switch was flipped while this call waited for the lock: let the learner through,
+            // count nothing.
             var open = await db.SpeakingLiveAdmissions
                 .FirstOrDefaultAsync(a => a.Id == id && a.State == SpeakingLiveAdmissionState.Waiting, ct);
             if (open is not null)
@@ -259,16 +409,26 @@ public sealed class SpeakingLiveAdmissionService(
         await ExpireStaleAsync(now, ct);
 
         var row = await db.SpeakingLiveAdmissions.FirstOrDefaultAsync(a => a.Id == id, ct);
-        if (row is { State: SpeakingLiveAdmissionState.Admitted })
+        if (row is { State: SpeakingLiveAdmissionState.Admitted }
+            && await HoldingRows(now).AnyAsync(a => a.Id == id, ct))
         {
             return new SpeakingLiveAdmissionResult(SpeakingLiveAdmissionOutcome.Admitted);
         }
 
+        // A row that is new, expired, released, or admitted-but-no-longer-holding (its claim lapsed with the subject
+        // never started) asks for a place again: a fresh ticket, the cap re-checked like anyone else's.
         if (row is null || row.State != SpeakingLiveAdmissionState.Waiting)
         {
+            if (await UserHoldsAnotherPlaceAsync(userId, id, now, ct))
+            {
+                throw ApiException.Conflict(
+                    "speaking_live_session_active",
+                    "You already have a live Speaking session open or waiting. Finish it, or leave the queue, before starting another.");
+            }
+
             var waitingNow = await db.SpeakingLiveAdmissions
                 .CountAsync(a => a.State == SpeakingLiveAdmissionState.Waiting, ct);
-            if (waitingNow >= opt.MaxQueueLengthResolved())
+            if (waitingNow >= opt.MaxLineLengthFor(settings.MaxConcurrent))
             {
                 throw ApiException.ServiceUnavailable(
                     "speaking_live_queue_full",
@@ -284,7 +444,6 @@ public sealed class SpeakingLiveAdmissionService(
                 db.SpeakingLiveAdmissions.Add(row);
             }
 
-            // A fresh ticket for a new, expired or released place: the back of the line.
             row.UserId = userId;
             row.State = SpeakingLiveAdmissionState.Waiting;
             row.Seq = maxSeq + 1;
@@ -315,7 +474,7 @@ public sealed class SpeakingLiveAdmissionService(
             row.ExpiresAt = now + (kind == SpeakingLiveAdmissionKinds.Exam ? opt.ExamAdmittedTtl() : opt.PracticeAdmittedTtl());
             row.UpdatedAt = now;
             await db.SaveChangesAsync(ct);
-            return new SpeakingLiveAdmissionResult(SpeakingLiveAdmissionOutcome.Admitted);
+            return new SpeakingLiveAdmissionResult(SpeakingLiveAdmissionOutcome.Admitted, NewPlace: true);
         }
 
         await db.SaveChangesAsync(ct);
@@ -324,6 +483,23 @@ public sealed class SpeakingLiveAdmissionService(
         return new SpeakingLiveAdmissionResult(
             SpeakingLiveAdmissionOutcome.Waiting,
             Waiting: BuildView(rank, queueLength, settings.MaxConcurrent));
+    }
+
+    /// <summary>True when the learner already has ANOTHER live place: a waiting row with a fresh heartbeat, or an
+    /// admitted row that still holds a slot (see <see cref="HoldingRows"/>). Must run under the admission lock.</summary>
+    private async Task<bool> UserHoldsAnotherPlaceAsync(string userId, string id, DateTimeOffset now, CancellationToken ct)
+    {
+        var heartbeatCutoff = now - options.Value.WaiterHeartbeat();
+        if (await db.SpeakingLiveAdmissions.AsNoTracking()
+                .AnyAsync(a => a.UserId == userId
+                    && a.Id != id
+                    && a.State == SpeakingLiveAdmissionState.Waiting
+                    && a.LastSeenAt >= heartbeatCutoff, ct))
+        {
+            return true;
+        }
+
+        return await HoldingRows(now).AnyAsync(a => a.UserId == userId && a.Id != id, ct);
     }
 
     /// <summary>
@@ -445,10 +621,17 @@ public sealed class SpeakingLiveAdmissionService(
     /// <summary>
     /// Housekeeping for the sweeper: expires abandoned waiters and over-TTL admissions, purges ended rows older
     /// than the retention. Correctness never depends on it (every admission decision expires stale rows itself);
-    /// it only keeps the table small. Returns the number of rows changed or removed.
+    /// it only keeps the table small. Returns the number of rows changed or removed. A caller-owned transaction is
+    /// never joined (the lock is transaction-scoped): such a call does nothing.
     /// </summary>
     public Task<int> SweepAsync(CancellationToken ct)
-        => WithLockAsync(async () =>
+    {
+        if (db.Database.CurrentTransaction is not null)
+        {
+            return Task.FromResult(0);
+        }
+
+        return WithLockAsync(async () =>
         {
             var now = time.GetUtcNow();
             var changed = await ExpireStaleAsync(now, ct);
@@ -466,6 +649,7 @@ public sealed class SpeakingLiveAdmissionService(
             }
             return changed + old.Count;
         }, ct);
+    }
 
     // ─────────────────────────────────────────────────────────────────
     // Internals
@@ -477,7 +661,8 @@ public sealed class SpeakingLiveAdmissionService(
     private SpeakingLiveAdmissionView BuildView(int rank, int queueLength, int cap)
     {
         var opt = options.Value;
-        // Slots free at cap per average session length, so the (rank + 1)-th place opens in about this long.
+        // Slots free at cap per average session length, so the (rank + 1)-th place opens in about this long. Never
+        // shown beyond the maximum wait (the line is never longer than that can serve, see MaxLineLengthFor).
         var estimate = (int)Math.Ceiling((rank + 1.0) * opt.AverageSessionSecondsResolved() / Math.Max(1, cap));
         // The page repeats the start call at this interval: a long line backs off (+1 s per 25 waiters, at most 20 s,
         // always inside the heartbeat window) so the waiters' own polling never becomes the load it is meant to cap.
@@ -487,7 +672,7 @@ public sealed class SpeakingLiveAdmissionService(
             Status: SpeakingLiveAdmissionView.WaitingStatus,
             Position: rank + 1,
             QueueLength: Math.Max(queueLength, rank + 1),
-            EstimatedWaitSeconds: Math.Clamp(estimate, 5, 7200),
+            EstimatedWaitSeconds: Math.Clamp(estimate, 5, (int)opt.MaxWait().TotalSeconds),
             PollAfterSeconds: poll);
     }
 
@@ -533,11 +718,12 @@ public sealed class SpeakingLiveAdmissionService(
         return stale.Count;
     }
 
-    /// <summary>The number of slots in use now (see the class summary). Read straight from the database.</summary>
-    private async Task<int> CountHoldingAsync(DateTimeOffset now, CancellationToken ct)
+    /// <summary>The admitted rows that hold a slot now (see the class summary): inside the safety TTL AND either
+    /// admitted within the claim window or whose subject is running. Untracked, read straight from the database.</summary>
+    private IQueryable<SpeakingLiveAdmission> HoldingRows(DateTimeOffset now)
     {
         var claimCutoff = now - options.Value.ClaimWindow();
-        return await db.SpeakingLiveAdmissions.AsNoTracking()
+        return db.SpeakingLiveAdmissions.AsNoTracking()
             .Where(a => a.State == SpeakingLiveAdmissionState.Admitted && a.ExpiresAt > now)
             .Where(a => a.AdmittedAt > claimCutoff
                 || (a.SubjectKind == SpeakingLiveAdmissionKinds.Exam
@@ -548,13 +734,31 @@ public sealed class SpeakingLiveAdmissionService(
                             || e.State == SpeakingExamState.ActiveB)))
                 || (a.SubjectKind == SpeakingLiveAdmissionKinds.Practice
                     && db.SpeakingSessions.Any(s => s.Id == a.SubjectId
-                        && (s.State == SpeakingSessionState.Prep || s.State == SpeakingSessionState.Active))))
-            .CountAsync(ct);
+                        && (s.State == SpeakingSessionState.Prep || s.State == SpeakingSessionState.Active))));
     }
 
+    /// <summary>The number of slots in use now (see the class summary). Read straight from the database.</summary>
+    private Task<int> CountHoldingAsync(DateTimeOffset now, CancellationToken ct)
+        => HoldingRows(now).CountAsync(ct);
+
+    /// <summary>True while the subject itself is running (exam PrepA..ActiveB, practice Prep/Active): its place is
+    /// then in use and is never given back by <see cref="ReleaseAsync"/>.</summary>
+    private Task<bool> IsSubjectRunningAsync(string kind, string subjectId, CancellationToken ct)
+        => kind == SpeakingLiveAdmissionKinds.Exam
+            ? db.SpeakingExamSessions.AsNoTracking()
+                .AnyAsync(e => e.Id == subjectId
+                    && (e.State == SpeakingExamState.PrepA
+                        || e.State == SpeakingExamState.ActiveA
+                        || e.State == SpeakingExamState.PrepB
+                        || e.State == SpeakingExamState.ActiveB), ct)
+            : db.SpeakingSessions.AsNoTracking()
+                .AnyAsync(s => s.Id == subjectId
+                    && (s.State == SpeakingSessionState.Prep || s.State == SpeakingSessionState.Active), ct);
+
     /// <summary>Runs <paramref name="body"/> serialised against every other admission decision: a Postgres
-    /// transaction-scoped advisory lock (cross-process) inside a short transaction, joining an ambient
-    /// transaction when the caller already has one; a process gate on providers without advisory locks.</summary>
+    /// transaction-scoped advisory lock (cross-process) inside a short transaction of its own that waits at most five
+    /// seconds for the lock; a process gate on providers without advisory locks. Every caller has already refused a
+    /// caller-owned transaction (the lock would outlive the decision inside it).</summary>
     private async Task<T> WithLockAsync<T>(Func<Task<T>> body, CancellationToken ct)
     {
         if (!db.Database.IsNpgsql())
@@ -570,17 +774,15 @@ public sealed class SpeakingLiveAdmissionService(
             }
         }
 
-        await using var transaction = db.Database.CurrentTransaction is null
-            ? await db.Database.BeginTransactionAsync(ct)
-            : null;
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        // A hung lock holder must turn into a fast failure (the gate then fails open), never a pooled connection
+        // waiting for ever. SET LOCAL lasts for this transaction only.
+        await db.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s';", ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock(hashtextextended({LockName}, 0));",
             ct);
         var result = await body();
-        if (transaction is not null)
-        {
-            await transaction.CommitAsync(ct);
-        }
+        await transaction.CommitAsync(ct);
         return result;
     }
 

@@ -262,16 +262,18 @@ public sealed class SpeakingLiveAdmissionServiceTests : IDisposable
     [Fact]
     public async Task APlaceKeptPastTheMaximumWait_GoesToTheBackOfTheLine()
     {
+        // A short average session lets a 120 s maximum wait serve two places (the line limit follows the maximum wait).
         var options = Opts();
-        options.MaxWaitSeconds = 60;
+        options.MaxWaitSeconds = 120;
+        options.AverageSessionSeconds = 60;
         await SeedPracticeAsync("practice-a", SpeakingSessionState.Active);
         Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await PracticeAsync(Svc(options), "a")).Outcome);
         Assert.True((await PracticeAsync(Svc(options), "b")).MustWait);
         _clock.Advance(TimeSpan.FromSeconds(30));
         Assert.True((await PracticeAsync(Svc(options), "c")).MustWait);
 
-        // B has been polling the whole time but has now waited longer than the maximum.
-        _clock.Advance(TimeSpan.FromSeconds(31));
+        // B has been polling the whole time but has now waited longer than the safety bound.
+        _clock.Advance(TimeSpan.FromSeconds(91));
         var bAgain = await PracticeAsync(Svc(options), "b");
 
         Assert.True(bAgain.MustWait);
@@ -409,11 +411,14 @@ public sealed class SpeakingLiveAdmissionServiceTests : IDisposable
     [Fact]
     public async Task ALongLine_BacksOffItsPolling_ButNeverBelowTheConfiguredInterval()
     {
-        await ExamAsync(Svc(), "a");
+        // A short average session keeps a 60-deep line inside what the maximum wait can serve at a cap of one.
+        var options = Opts();
+        options.AverageSessionSeconds = 60;
+        await ExamAsync(Svc(options), "a");
         SpeakingLiveAdmissionView? last = null;
         for (var i = 0; i < 60; i++)
         {
-            last = (await ExamAsync(Svc(), $"w{i}")).Waiting;
+            last = (await ExamAsync(Svc(options), $"w{i}")).Waiting;
         }
 
         // 4 s base + 1 s per 25 waiters: 60 in line is 6 s.
@@ -421,9 +426,306 @@ public sealed class SpeakingLiveAdmissionServiceTests : IDisposable
         Assert.Equal(6, last.PollAfterSeconds);
 
         var slower = Opts();
+        slower.AverageSessionSeconds = 60;
         slower.PollAfterSeconds = 30;
         var view = (await ExamAsync(Svc(slower), "late")).Waiting!;
         Assert.Equal(30, view.PollAfterSeconds);
+    }
+
+    [Fact]
+    public async Task ALineLongerThanTheMaximumWaitCanServe_IsRefusedUpFront_NeverQueuedForAWaitItCannotHonour()
+    {
+        // Cap 1 and a 600 s average session free a place every 600 s: a 3600 s maximum wait can serve six waiters.
+        var options = Opts();
+        options.MaxWaitSeconds = 3600;
+        Assert.Equal(6, options.MaxLineLengthFor(1));
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(options), "a")).Outcome);
+        SpeakingLiveAdmissionView? sixth = null;
+        for (var i = 0; i < 6; i++)
+        {
+            var queued = await ExamAsync(Svc(options), $"w{i}");
+            Assert.True(queued.MustWait);
+            sixth = queued.Waiting;
+        }
+
+        // The last place still inside the line is within the maximum wait, so a polling waiter is served before it
+        // is ever sent to the back (nobody is demoted for waiting "too long" at the pace the line really moves).
+        Assert.Equal(3600, sixth!.EstimatedWaitSeconds);
+        var refused = await Assert.ThrowsAsync<ApiException>(() => ExamAsync(Svc(options), "late"));
+        Assert.Equal(503, refused.StatusCode);
+        Assert.Equal("speaking_live_queue_full", refused.ErrorCode);
+        Assert.False(await NewDb().SpeakingLiveAdmissions.AnyAsync(a => a.SubjectId == "exam-late"));
+    }
+
+    [Fact]
+    public void TheLineLimit_GrowsWithTheCap_AndIsNeverAboveTheConfiguredMaximum()
+    {
+        var options = Opts();
+        options.MaxWaitSeconds = 3600;
+        options.MaxQueueLength = 1000;
+
+        Assert.Equal(6, options.MaxLineLengthFor(1));
+        Assert.Equal(60, options.MaxLineLengthFor(10));
+        Assert.Equal(600, options.MaxLineLengthFor(100));
+        // Capped by MaxQueueLength however fast the line moves, and never below one place.
+        Assert.Equal(1000, options.MaxLineLengthFor(10_000));
+        options.MaxQueueLength = 5;
+        Assert.Equal(5, options.MaxLineLengthFor(100));
+        Assert.Equal(1, new SpeakingLiveAdmissionOptions { MaxWaitSeconds = 60, AverageSessionSeconds = 3600 }.MaxLineLengthFor(1));
+    }
+
+    [Fact]
+    public async Task ALearnerHoldsOnePlaceAtATime_ASecondSubjectIsRefusedWhileTheFirstWaits()
+    {
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(), "a")).Outcome);
+        Assert.True((await ExamAsync(Svc(), "b")).MustWait);
+
+        // user-b is already in the line for an exam: a practice card of theirs may not take a second place.
+        var refused = await Assert.ThrowsAsync<ApiException>(() =>
+            AdmitAsync(Svc(), "user-b", SpeakingLiveAdmissionKinds.Practice, "practice-b"));
+
+        Assert.Equal(409, refused.StatusCode);
+        Assert.Equal("speaking_live_session_active", refused.ErrorCode);
+        Assert.False(await NewDb().SpeakingLiveAdmissions.AnyAsync(a => a.SubjectId == "practice-b"));
+        // The first place is untouched, and the learner can still poll it.
+        var again = await ExamAsync(Svc(), "b");
+        Assert.True(again.MustWait);
+        Assert.Equal(1, again.Waiting!.Position);
+    }
+
+    [Fact]
+    public async Task ALearnerWhoseOtherSessionIsRunning_CannotStartAnotherUntilItEnds()
+    {
+        var options = Opts(cap: 2);
+        await SeedExamAsync("exam-a", SpeakingExamState.ActiveA);
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(options), "a")).Outcome);
+
+        // Past the claim window the exam still runs: user-a still holds a place, although a slot is free.
+        _clock.Advance(TimeSpan.FromSeconds(31));
+        var refused = await Assert.ThrowsAsync<ApiException>(() =>
+            AdmitAsync(Svc(options), "user-a", SpeakingLiveAdmissionKinds.Practice, "practice-a"));
+        Assert.Equal("speaking_live_session_active", refused.ErrorCode);
+
+        await SetExamStateAsync("exam-a", SpeakingExamState.Completed);
+        Assert.Equal(
+            SpeakingLiveAdmissionOutcome.Admitted,
+            (await AdmitAsync(Svc(options), "user-a", SpeakingLiveAdmissionKinds.Practice, "practice-a")).Outcome);
+    }
+
+    [Fact]
+    public async Task OneLearnerCannotFillTheLine_ManySessionsCostTheLineOnePlace()
+    {
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(), "holder")).Outcome);
+        Assert.True((await AdmitAsync(Svc(), "greedy", SpeakingLiveAdmissionKinds.Practice, "practice-1")).MustWait);
+
+        for (var i = 2; i <= 5; i++)
+        {
+            await Assert.ThrowsAsync<ApiException>(() =>
+                AdmitAsync(Svc(), "greedy", SpeakingLiveAdmissionKinds.Practice, $"practice-{i}"));
+        }
+
+        Assert.Equal(1, await NewDb().SpeakingLiveAdmissions.CountAsync(a => a.UserId == "greedy"));
+    }
+
+    [Fact]
+    public async Task ALearnerWhoLeftTheQueue_CanAskForAnotherPlaceAtOnce_AndTheLeftPlaceStopsCounting()
+    {
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(), "a")).Outcome);
+        Assert.True((await ExamAsync(Svc(), "b")).MustWait);
+        Assert.Equal(2, (await ExamAsync(Svc(), "c")).Waiting!.Position);
+
+        await Svc().LeaveQueueAsync(SpeakingLiveAdmissionKinds.Exam, "exam-b", CancellationToken.None);
+
+        var left = await RowAsync(SpeakingLiveAdmissionKinds.Exam, "exam-b");
+        Assert.Equal(SpeakingLiveAdmissionState.Released, left.State);
+        Assert.NotNull(left.EndedAt);
+        // C moves up the very moment B leaves (no 90 s heartbeat wait), and B may start something else.
+        Assert.Equal(1, (await ExamAsync(Svc(), "c")).Waiting!.Position);
+        Assert.True((await AdmitAsync(Svc(), "user-b", SpeakingLiveAdmissionKinds.Practice, "practice-b")).MustWait);
+    }
+
+    [Fact]
+    public async Task LeavingTheQueue_NeverTouchesAnAdmittedPlace_AndIgnoresAnUnknownSubject()
+    {
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(), "a")).Outcome);
+
+        await Svc().LeaveQueueAsync(SpeakingLiveAdmissionKinds.Exam, "exam-a", CancellationToken.None);
+        await Svc().LeaveQueueAsync(SpeakingLiveAdmissionKinds.Exam, "never-queued", CancellationToken.None);
+        await Svc().LeaveQueueAsync("something-else", "exam-a", CancellationToken.None);
+
+        Assert.Equal(SpeakingLiveAdmissionState.Admitted, (await RowAsync(SpeakingLiveAdmissionKinds.Exam, "exam-a")).State);
+        Assert.False(await NewDb().SpeakingLiveAdmissions.AnyAsync(a => a.SubjectId == "never-queued"));
+    }
+
+    [Fact]
+    public async Task AReleasedPlace_FreesTheSlotAtOnce_WithoutWaitingForTheClaimWindow()
+    {
+        // A practice card admitted but never started (its credit hold was then refused).
+        await SeedPracticeAsync("practice-a", SpeakingSessionState.WarmUp);
+        Assert.True((await PracticeAsync(Svc(), "a")).TookNewPlace);
+        Assert.True((await PracticeAsync(Svc(), "b")).MustWait);
+
+        await Svc().ReleaseAsync(SpeakingLiveAdmissionKinds.Practice, "practice-a", CancellationToken.None);
+
+        Assert.Equal(SpeakingLiveAdmissionState.Released, (await RowAsync(SpeakingLiveAdmissionKinds.Practice, "practice-a")).State);
+        // No clock advance: the 30 s claim window is nowhere near over, yet the next in line is admitted.
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await PracticeAsync(Svc(), "b")).Outcome);
+    }
+
+    [Fact]
+    public async Task OnlyTheCallThatTookThePlace_IsToldItMayGiveItBack()
+    {
+        var first = await ExamAsync(Svc(), "a");
+        var repeat = await ExamAsync(Svc(), "a");
+
+        Assert.True(first.TookNewPlace);
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, repeat.Outcome);
+        Assert.False(repeat.TookNewPlace);
+        Assert.False((await ExamAsync(Svc(), "b")).TookNewPlace);
+    }
+
+    [Fact]
+    public async Task ARunningSubject_IsNeverReleased()
+    {
+        await SeedPracticeAsync("practice-a", SpeakingSessionState.Active);
+        await PracticeAsync(Svc(), "a");
+        await SeedExamAsync("exam-x", SpeakingExamState.ActiveB);
+        await ExamAsync(Svc(Opts(cap: 2)), "x");
+
+        await Svc().ReleaseAsync(SpeakingLiveAdmissionKinds.Practice, "practice-a", CancellationToken.None);
+        await Svc().ReleaseAsync(SpeakingLiveAdmissionKinds.Exam, "exam-x", CancellationToken.None);
+
+        Assert.Equal(SpeakingLiveAdmissionState.Admitted, (await RowAsync(SpeakingLiveAdmissionKinds.Practice, "practice-a")).State);
+        Assert.Equal(SpeakingLiveAdmissionState.Admitted, (await RowAsync(SpeakingLiveAdmissionKinds.Exam, "exam-x")).State);
+    }
+
+    [Fact]
+    public async Task AnAdmissionWhoseClaimLapsedWithoutStarting_IsReCheckedAgainstTheCap_NotAdmittedForFree()
+    {
+        // Admitted, but the response was lost: the subject never left warm-up.
+        await SeedPracticeAsync("practice-a", SpeakingSessionState.WarmUp);
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await PracticeAsync(Svc(), "a")).Outcome);
+
+        // The claim window is over, the place holds nothing, and another learner takes the only slot.
+        _clock.Advance(TimeSpan.FromSeconds(31));
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await PracticeAsync(Svc(), "b")).Outcome);
+
+        // The first learner asks again: it must wait for a place like anyone else, not start next to the cap.
+        var again = await PracticeAsync(Svc(), "a");
+
+        Assert.True(again.MustWait);
+        Assert.Equal(1, again.Waiting!.Position);
+        Assert.Equal(SpeakingLiveAdmissionState.Waiting, (await RowAsync(SpeakingLiveAdmissionKinds.Practice, "practice-a")).State);
+        var counts = await Svc().GetCountsAsync(CancellationToken.None);
+        Assert.Equal(1, counts.Admitted);
+        Assert.Equal(1, counts.Waiting);
+    }
+
+    [Fact]
+    public async Task AnAdmissionThatStillHoldsItsPlace_IsAdmittedAgainIdempotently()
+    {
+        await SeedPracticeAsync("practice-a", SpeakingSessionState.Prep);
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await PracticeAsync(Svc(), "a")).Outcome);
+
+        // Long past the claim window, but its card is preparing: it holds the place and a repeat is idempotent.
+        _clock.Advance(TimeSpan.FromMinutes(5));
+        var repeat = await PracticeAsync(Svc(), "a");
+
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, repeat.Outcome);
+        Assert.False(repeat.TookNewPlace);
+        Assert.Equal(1, await NewDb().SpeakingLiveAdmissions.CountAsync(a => a.SubjectId == "practice-a"));
+    }
+
+    [Fact]
+    public async Task TheBeforeNewPlaceCheck_RunsOnlyWhenACallIsAboutToTakeAPlace_NeverOnAWaitersRepeatPoll()
+    {
+        var checks = 0;
+        Task Check(CancellationToken _)
+        {
+            checks++;
+            return Task.CompletedTask;
+        }
+
+        Task<SpeakingLiveAdmissionResult> Ask(string n) => Svc().AdmitOrQueueAsync(
+            $"user-{n}", SpeakingLiveAdmissionKinds.Exam, $"exam-{n}", true, CancellationToken.None, beforeNewPlace: Check);
+
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await Ask("a")).Outcome);
+        Assert.Equal(1, checks);
+        Assert.True((await Ask("b")).MustWait);
+        Assert.Equal(2, checks);
+
+        // Polls of a waiter who still cannot be admitted take the lock-free path: no wallet check each time.
+        _clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.True((await Ask("b")).MustWait);
+        Assert.True((await Ask("b")).MustWait);
+        Assert.Equal(2, checks);
+        // An admitted repeat is idempotent too.
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await Ask("a")).Outcome);
+        Assert.Equal(2, checks);
+    }
+
+    [Fact]
+    public async Task ARefusalFromTheBeforeNewPlaceCheck_PropagatesAndQueuesNothing()
+    {
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(), "a")).Outcome);
+
+        var refused = await Assert.ThrowsAsync<ApiException>(() => Svc().AdmitOrQueueAsync(
+            "user-b",
+            SpeakingLiveAdmissionKinds.Exam,
+            "exam-b",
+            true,
+            CancellationToken.None,
+            beforeNewPlace: _ => throw ApiException.PaymentRequired("ai_credits_insufficient", "No credits.")));
+
+        Assert.Equal(402, refused.StatusCode);
+        Assert.False(await NewDb().SpeakingLiveAdmissions.AnyAsync(a => a.SubjectId == "exam-b"));
+    }
+
+    [Fact]
+    public async Task ARefusalOnAWaitersTurn_ReleasesItsPlaceAtOnce_SoNobodyWaitsBehindItForTheHeartbeat()
+    {
+        await SeedExamAsync("exam-a", SpeakingExamState.ActiveA);
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(), "a")).Outcome);
+        Assert.True((await ExamAsync(Svc(), "b")).MustWait);
+        Assert.Equal(2, (await ExamAsync(Svc(), "c")).Waiting!.Position);
+
+        // A's exam ends and its claim window is over: B's turn has come, but B can no longer pay for the hold.
+        await SetExamStateAsync("exam-a", SpeakingExamState.Completed);
+        _clock.Advance(TimeSpan.FromSeconds(31));
+        var refused = await Assert.ThrowsAsync<ApiException>(() => Svc().AdmitOrQueueAsync(
+            "user-b",
+            SpeakingLiveAdmissionKinds.Exam,
+            "exam-b",
+            true,
+            CancellationToken.None,
+            beforeNewPlace: _ => throw ApiException.PaymentRequired("ai_credits_insufficient", "No credits.")));
+
+        Assert.Equal(402, refused.StatusCode);
+        Assert.Equal(SpeakingLiveAdmissionState.Released, (await RowAsync(SpeakingLiveAdmissionKinds.Exam, "exam-b")).State);
+        // C is first in line now and takes the free place at once (B's ticket no longer counts ahead of it).
+        Assert.Equal(SpeakingLiveAdmissionOutcome.Admitted, (await ExamAsync(Svc(), "c")).Outcome);
+    }
+
+    [Fact]
+    public async Task TheBeforeNewPlaceCheck_DoesNotRunWhenTheGateDoesNotApply()
+    {
+        var checks = 0;
+        Task Check(CancellationToken _)
+        {
+            checks++;
+            return Task.CompletedTask;
+        }
+
+        var noLive = await Svc().AdmitOrQueueAsync(
+            "user-a", SpeakingLiveAdmissionKinds.Exam, "exam-a", false, CancellationToken.None, beforeNewPlace: Check);
+        var options = Opts();
+        options.Enabled = false;
+        var disabled = await Svc(options).AdmitOrQueueAsync(
+            "user-a", SpeakingLiveAdmissionKinds.Exam, "exam-a", true, CancellationToken.None, beforeNewPlace: Check);
+
+        Assert.Equal(SpeakingLiveAdmissionBypassReasons.LiveVoiceUnavailable, noLive.BypassReason);
+        Assert.Equal(SpeakingLiveAdmissionBypassReasons.Disabled, disabled.BypassReason);
+        Assert.Equal(0, checks);
     }
 
     [Fact]
