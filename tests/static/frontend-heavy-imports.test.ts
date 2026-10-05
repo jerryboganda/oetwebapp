@@ -102,4 +102,18 @@ describe('frontend heavy import boundaries', () => {
     expect(promoSlider).toContain('renderedSlideIndices.map');
     expect(promoSlider).not.toContain('{SLIDES.map((src, i) => (');
   });
+
+  it('loads LiveKit (client and stylesheet) only for a live-tutor room, never for an AI Speaking exam', () => {
+    const examPage = source('app/(learner)/speaking/exam/[id]/page.tsx');
+    const speakingLayout = source('app/(learner)/speaking/layout.tsx');
+    const learnerRoomShell = source('components/domain/speaking/LearnerLiveRoomShell.tsx');
+
+    // The AI exam page loads the room shell on demand; only live_tutor mode ever renders it.
+    expect(examPage).toMatch(/from 'next\/dynamic'/);
+    expect(examPage).toContain("import('@/components/domain/speaking/LearnerLiveRoomShell')");
+    expect(examPage).not.toMatch(/^import\s[^;]*LearnerLiveRoomShell[^;]*from\s/m);
+    // The stylesheet rides with the shell, not with every /speaking route.
+    expect(speakingLayout).not.toMatch(/^import\s+['"]@livekit\/components-styles['"]/m);
+    expect(learnerRoomShell).toMatch(/^import\s+['"]@livekit\/components-styles['"]/m);
+  });
 });
