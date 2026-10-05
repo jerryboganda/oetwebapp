@@ -1,0 +1,339 @@
+name: Fleet load test (dispatch only)
+
+# MANUAL ONLY (owner directive 2026-10-05; same rule as every browser / e2e lane, AGENTS.md "NO AUTOMATED
+# E2E IN CI"): there is no push, pull_request or schedule trigger and there must never be one. A load run
+# creates 1,000+ disposable accounts and hours of traffic on a NON-production stack; it is started by hand.
+#
+# What it does (docs/ops/LOAD-TESTING.md): validates the inputs (production hosts are refused), optionally
+# seeds the disposable accounts, drives the stack with k6 from N parallel GitHub-hosted legs (one hosted
+# runner cannot drive 1,000 learners; each leg owns a disjoint slice of accounts and its own source IP),
+# merges the legs into a markdown report, audits the credit ledger for duplicate charges, and optionally
+# purges the accounts.
+#
+# GATING: the k6 thresholds are the owner's targets. A breached threshold makes k6 exit 99 and the leg
+# fail; the report and the ledger audit fail the run on their own verdicts. Nothing here swallows an
+# exit code (no `|| true`, no continue-on-error), and the run is evidence for one commit on one
+# non-production stack, never a release proof.
+#
+# The workflow does NOT start the system under test. Provision it first (docs/ops/LOAD-TESTING.md:
+# docker-compose.staging.yml + tests/load/sut/docker-compose.load-overrides.yml on a DEDICATED staging
+# host, never the primary VPS) and pass its HTTPS URLs. Hosted runners are refused on a private repo
+# (AGENTS.md "GitHub Actions on a public-when-working repo").
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'smoke (about 5 min, 20 learners) | capacity (stepped 100/300/600/1000) | steady (1,000 learners, 60 min) | overload (1,000 then +500 surge)'
+        required: true
+        default: smoke
+        type: choice
+        options: [smoke, capacity, steady, overload]
+      legs:
+        description: 'Parallel GitHub-hosted generator legs (max 300 learners each: steady/capacity need 4+, overload 5+)'
+        required: true
+        default: '1'
+        type: choice
+        options: ['1', '2', '3', '4', '5', '6']
+      api_url:
+        description: 'HTTPS origin of the NON-production API under test (production hosts are refused)'
+        required: true
+        type: string
+      web_url:
+        description: 'HTTPS origin of the NON-production web app (traffic then goes through /api/backend like browsers); empty = API direct'
+        required: false
+        type: string
+      confirm_non_production:
+        description: 'I confirm both URLs are a dedicated non-production stack and may receive 1,000+ disposable accounts'
+        required: true
+        default: false
+        type: boolean
+      seed_accounts:
+        description: 'Create the disposable accounts first (idempotent; needs the OET_LOAD_ADMIN_* and OET_LOAD_PASSWORD secrets)'
+        required: false
+        default: false
+        type: boolean
+      audit_ledger:
+        description: 'After the run, audit every account credit ledger for duplicate charges and negative balances'
+        required: false
+        default: true
+        type: boolean
+      purge_accounts:
+        description: 'Delete the disposable accounts when the run is over'
+        required: false
+        default: false
+        type: boolean
+      learners:
+        description: 'Override the profile learner count (blank = profile default)'
+        required: false
+        type: string
+      steady_minutes:
+        description: 'Override the steady / base hold in minutes (blank = profile default: 60 steady, 10 overload)'
+        required: false
+        type: string
+      hub_mode:
+        description: 'Notification / room hubs over long-polling (what browsers do) or off'
+        required: false
+        default: longpoll
+        type: choice
+        options: [longpoll, off]
+      think_scale:
+        description: 'Multiplier on all think times (blank = 1, or 0.15 for smoke)'
+        required: false
+        type: string
+      rooms_json:
+        description: 'Optional pre-provisioned tutor rooms with an assigned expert: [{"ordinal":0,"liveRoomId":"lvrm_..."}]'
+        required: false
+        type: string
+      simulators_note:
+        description: 'Free text recorded in the report: the simulator latency / fault settings in force'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: load-fleet
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  preflight:
+    name: Validate inputs and unit-test the harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      legs: ${{ steps.plan.outputs.legs }}
+      total_learners: ${{ steps.plan.outputs.total_learners }}
+      accounts_learners: ${{ steps.plan.outputs.accounts_learners }}
+      accounts_experts: ${{ steps.plan.outputs.accounts_experts }}
+      api_url: ${{ steps.plan.outputs.api_url }}
+      web_url: ${{ steps.plan.outputs.web_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # The harness' own tests gate the run: a broken scheduler or classifier must not spend an hour of
+      # generator time. (This also wires tests/load/critical-paths.k6.test.mjs, which no job ran before.)
+      - name: Test the load harness
+        run: |
+          node --test --test-timeout=120000 \
+            'tests/load/**/*.test.mjs' \
+            'scripts/perf/k6-load-report.test.mjs' \
+            'scripts/perf/load-plan.test.mjs'
+
+      - name: Validate inputs and plan the legs
+        id: plan
+        env:
+          INPUT_PROFILE: ${{ inputs.profile }}
+          INPUT_LEGS: ${{ inputs.legs }}
+          INPUT_API_URL: ${{ inputs.api_url }}
+          INPUT_WEB_URL: ${{ inputs.web_url }}
+          INPUT_CONFIRM_NON_PRODUCTION: ${{ inputs.confirm_non_production }}
+          INPUT_LEARNERS: ${{ inputs.learners }}
+          INPUT_STEADY_MINUTES: ${{ inputs.steady_minutes }}
+          ROOMS_JSON: ${{ inputs.rooms_json }}
+        run: |
+          set -euo pipefail
+          paired=0
+          if [ -n "${ROOMS_JSON}" ]; then
+            paired="$(node -e 'const r=JSON.parse(process.env.ROOMS_JSON); if(!Array.isArray(r)) throw new Error("rooms_json must be an array"); console.log(r.length)')"
+          fi
+          INPUT_PAIRED_ROOMS="${paired}" node scripts/perf/load-plan.mjs
+
+  seed:
+    name: Seed disposable accounts
+    needs: preflight
+    if: ${{ inputs.seed_accounts }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Create the accounts (idempotent)
+        env:
+          K6_API_URL: ${{ needs.preflight.outputs.api_url }}
+          OET_LOAD_ADMIN_EMAIL: ${{ secrets.OET_LOAD_ADMIN_EMAIL }}
+          OET_LOAD_ADMIN_PASSWORD: ${{ secrets.OET_LOAD_ADMIN_PASSWORD }}
+          OET_LOAD_PASSWORD: ${{ secrets.OET_LOAD_PASSWORD }}
+          LEARNERS: ${{ needs.preflight.outputs.accounts_learners }}
+          EXPERTS: ${{ needs.preflight.outputs.accounts_experts }}
+        run: |
+          node tests/load/seed/seed-accounts.mjs --api "${K6_API_URL}" \
+            --learners "${LEARNERS}" --experts "${EXPERTS}" --report seed-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: seed-report
+          path: seed-report.json
+          if-no-files-found: ignore
+
+  load:
+    name: k6 leg ${{ matrix.leg }}
+    needs: [preflight, seed]
+    # `seed` is skipped unless requested; a failed seed must stop the run.
+    if: ${{ always() && needs.preflight.result == 'success' && (needs.seed.result == 'success' || needs.seed.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: ${{ fromJSON(needs.preflight.outputs.legs) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install -y k6
+          k6 version
+
+      - name: Write the rooms manifest
+        if: ${{ inputs.rooms_json != '' }}
+        env:
+          ROOMS_JSON: ${{ inputs.rooms_json }}
+        run: printf '%s' "${ROOMS_JSON}" > "${RUNNER_TEMP}/rooms.json"
+
+      # No `|| true`, no continue-on-error: a breached threshold (exit 99) fails this leg and the run.
+      - name: Run the load test (gating)
+        env:
+          K6_API_URL: ${{ needs.preflight.outputs.api_url }}
+          K6_WEB_URL: ${{ needs.preflight.outputs.web_url }}
+          K6_PROFILE: ${{ inputs.profile }}
+          K6_LEG_COUNT: ${{ inputs.legs }}
+          K6_LEG_INDEX: ${{ matrix.leg }}
+          K6_LEARNERS: ${{ inputs.learners }}
+          K6_STEADY_MINUTES: ${{ inputs.steady_minutes }}
+          K6_HUB_MODE: ${{ inputs.hub_mode }}
+          K6_THINK_SCALE: ${{ inputs.think_scale != '' && inputs.think_scale || (inputs.profile == 'smoke' && '0.15' || '1') }}
+          K6_SIMULATORS_NOTE: ${{ inputs.simulators_note }}
+          K6_SUMMARY_PATH: k6-summary.json
+          K6_STATUS_MATRIX: ${{ inputs.profile == 'smoke' && '1' || '0' }}
+          K6_RUN_ID: ${{ github.run_id }}
+          OET_LOAD_PASSWORD: ${{ secrets.OET_LOAD_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export K6_VERSION_STRING="$(k6 version)"
+          export K6_TARGET_LABEL="$(node -e 'console.log(new URL(process.env.K6_API_URL).hostname)')"
+          if [ -f "${RUNNER_TEMP}/rooms.json" ]; then export K6_ROOMS_FILE="${RUNNER_TEMP}/rooms.json"; fi
+          k6 run tests/load/fleet-1000.k6.js
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-summary-leg-${{ matrix.leg }}
+          path: k6-summary.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  report:
+    name: Merge legs into the report
+    needs: [preflight, load]
+    if: ${{ always() && needs.preflight.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: k6-summary-leg-*
+          path: summaries
+      - name: Build the report
+        env:
+          ALLOW_NO_DATA: ${{ inputs.profile == 'smoke' && '--allow-no-data' || '' }}
+        run: |
+          set -euo pipefail
+          inputs=()
+          for f in summaries/*/k6-summary.json; do
+            if [ -f "$f" ]; then
+              inputs+=(--input "$f")
+            fi
+          done
+          if [ "${#inputs[@]}" -eq 0 ]; then
+            echo "::error::no leg produced a summary; see the leg logs"
+            exit 1
+          fi
+          # shellcheck disable=SC2086
+          node scripts/perf/k6-load-report.mjs "${inputs[@]}" --out report.md --json verdict.json ${ALLOW_NO_DATA}
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-report
+          path: |
+            report.md
+            verdict.json
+          if-no-files-found: ignore
+          retention-days: 90
+      - name: Fail unless every owner target passed
+        run: |
+          node -e '
+            const v = JSON.parse(require("fs").readFileSync("verdict.json", "utf8"));
+            if (v.verdict !== "PASS") { console.error("load verdict: " + v.verdict); process.exit(1); }
+            console.log("load verdict: PASS");
+          '
+
+  audit:
+    name: Credit ledger audit
+    needs: [preflight, load]
+    if: ${{ always() && inputs.audit_ledger && needs.preflight.result == 'success' && needs.load.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: No duplicate charges, no negative balances
+        env:
+          K6_API_URL: ${{ needs.preflight.outputs.api_url }}
+          OET_LOAD_ADMIN_EMAIL: ${{ secrets.OET_LOAD_ADMIN_EMAIL }}
+          OET_LOAD_ADMIN_PASSWORD: ${{ secrets.OET_LOAD_ADMIN_PASSWORD }}
+          LEARNERS: ${{ needs.preflight.outputs.accounts_learners }}
+          EXPERTS: ${{ needs.preflight.outputs.accounts_experts }}
+        run: |
+          node tests/load/seed/audit-ledger.mjs --api "${K6_API_URL}" \
+            --learners "${LEARNERS}" --experts "${EXPERTS}" --report ledger-audit.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ledger-audit
+          path: ledger-audit.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  purge:
+    name: Purge disposable accounts
+    needs: [preflight, report, audit]
+    if: ${{ always() && inputs.purge_accounts && needs.preflight.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Delete every account of the run
+        env:
+          K6_API_URL: ${{ needs.preflight.outputs.api_url }}
+          OET_LOAD_ADMIN_EMAIL: ${{ secrets.OET_LOAD_ADMIN_EMAIL }}
+          OET_LOAD_ADMIN_PASSWORD: ${{ secrets.OET_LOAD_ADMIN_PASSWORD }}
+          LEARNERS: ${{ needs.preflight.outputs.accounts_learners }}
+          EXPERTS: ${{ needs.preflight.outputs.accounts_experts }}
+        run: |
+          node tests/load/seed/seed-accounts.mjs --api "${K6_API_URL}" \
+            --learners "${LEARNERS}" --experts "${EXPERTS}" --purge

@@ -70,6 +70,15 @@ _previous_chat_history/
 dmb_*.py
 n u l  
 
+# Load / benchmark run output (never commit): k6 leg summaries, merged reports, seed and ledger reports, bench build
+k6-summary*.json
+leg[0-9]*.json
+seed-report.json
+ledger-audit.json
+pdf-bench.json
+pdf-bench.md
+bench-out/
+
 # Local test/build/audit output (never commit)
 nul
 *_out.txt
