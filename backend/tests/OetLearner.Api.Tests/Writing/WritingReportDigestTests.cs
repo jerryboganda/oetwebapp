@@ -36,24 +36,19 @@ public sealed class WritingReportDigestTests
 
     private static Dictionary<string, List<RecordedFinding>> LoadRuns()
     {
+        // tests/writing-regression/runs is gitignored, so the findings of 13 real runs are checked in as a fixture.
         var runs = new Dictionary<string, List<RecordedFinding>>();
-        var dir = Path.Combine(FindRepoRoot(), "tests", "writing-regression", "runs");
-        foreach (var path in Directory.GetFiles(dir, "*.json").OrderBy(p => p, StringComparer.Ordinal))
+        var path = Path.Combine(FindRepoRoot(), "backend", "tests", "OetLearner.Api.Tests", "Writing", "Fixtures", "recorded-grader-findings.json");
+        using var doc = JsonDocument.Parse(File.ReadAllText(path));
+        foreach (var run in doc.RootElement.GetProperty("runs").EnumerateObject())
         {
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            if (!doc.RootElement.TryGetProperty("parsed", out var parsed)
-                || parsed.ValueKind != JsonValueKind.Object
-                || !parsed.TryGetProperty("findings", out var findings)
-                || findings.ValueKind != JsonValueKind.Array) continue;
             var list = new List<RecordedFinding>();
-            foreach (var f in findings.EnumerateArray())
+            foreach (var f in run.Value.EnumerateArray())
             {
                 string? S(string name) => f.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-                var criterion = S("criterionCode") ?? S("criterion");
-                if (criterion is null || S("message") is null) continue;
-                list.Add(new RecordedFinding(S("ruleId") ?? string.Empty, S("severity") ?? "major", S("message")!, S("quote"), S("fixSuggestion"), criterion));
+                list.Add(new RecordedFinding(S("ruleId") ?? string.Empty, S("severity") ?? "major", S("message")!, S("quote"), S("fixSuggestion"), S("criterionCode")!));
             }
-            if (list.Count > 0) runs[Path.GetFileNameWithoutExtension(path)] = list;
+            runs[run.Name] = list;
         }
         return runs;
     }
@@ -66,10 +61,10 @@ public sealed class WritingReportDigestTests
     {
         var runs = LoadRuns();
 
-        Assert.True(runs.Count >= 20, $"expected the saved grader runs, found {runs.Count}");
+        Assert.True(runs.Count >= 10, $"expected the recorded grader runs, found {runs.Count}");
         var mixed = runs.Values.Count(findings =>
             findings.Any(f => f.Severity is "critical" or "major") && findings.Any(f => f.Severity == "minor"));
-        Assert.True(mixed >= 5, $"only {mixed} runs mix major and minor findings");
+        Assert.True(mixed >= 8, $"only {mixed} runs mix major and minor findings");
         Assert.Contains(runs.Values, findings => findings.Count >= 25);
     }
 
