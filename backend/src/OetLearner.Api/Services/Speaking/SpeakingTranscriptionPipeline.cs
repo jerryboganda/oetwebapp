@@ -406,20 +406,26 @@ public sealed class SpeakingTranscriptionPipeline(
                 && o.ResourceId == sessionId, ct);
         if (!requested) return;
 
+        using var ceiling = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        ceiling.CancelAfter(InlineAssessCeiling);
         try
         {
-            using var ceiling = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            ceiling.CancelAfter(InlineAssessCeiling);
             await canonical.AssessNowAsync(sessionId, ceiling.Token);
         }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && ceiling.IsCancellationRequested)
         {
+            // Only OUR ceiling counts as "handed back": the canonical service requeues the
+            // operation for any cancellation of the token it was given.
             logger.LogWarning(
                 "Inline assessment for session {SessionId} hit the {Ceiling} ceiling; handed back to the AI worker queue.",
                 sessionId, InlineAssessCeiling);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
+            // Any other failure - including a cancellation this ceiling did not cause (an
+            // HttpClient timeout surfaces as TaskCanceledException, and the canonical service
+            // does not hand those back) - is a failed auto-assessment the learner can retry.
+            // Only a real shutdown (ct) propagates.
             logger.LogWarning(ex,
                 "Auto-assessment after transcription failed for session {SessionId}; the learner can retry.",
                 sessionId);

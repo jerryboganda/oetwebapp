@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -108,6 +109,73 @@ public sealed class SpeakingTranscriptionQueueTests
         Assert.True(SpeakingTranscriptionPipeline.InlineAssessCeiling > TimeSpan.FromMinutes(12));
     }
 
+    // ── inline grade after a transcript lands ───────────────────────────
+    //
+    // The grade that follows a landed transcript runs under a ceiling (InlineAssessCeiling). Only
+    // THAT ceiling firing means "handed back to the AI worker queue"; a cancellation it did not
+    // cause (an HttpClient timeout surfaces as TaskCanceledException) is a failed auto-assessment,
+    // and only a real shutdown propagates. (The ceiling itself is 20 minutes, so its branch is
+    // pinned by the filter reading the ceiling's own token, not by waiting it out here.)
+
+    [Fact]
+    public async Task InlineGrade_CancelledByAnHttpTimeout_IsLoggedAsAFailure_NotAsTheCeilingHandBack()
+    {
+        await using var db = NewDb();
+        await SeedLandableTranscriptAsync(db);
+        var logger = new CapturingLogger();
+        var pipeline = new SpeakingTranscriptionPipeline(
+            db,
+            new FakeAsrProvider(),
+            logger,
+            new StubCanonicalAssessment(_ => throw new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.")));
+
+        Assert.True(await pipeline.ProcessNextAsync(default));
+
+        // The transcript itself landed before the grade started.
+        var row = await db.SpeakingTranscripts.AsNoTracking().SingleAsync(t => t.Id == "t-1");
+        Assert.Equal(FakeAsrProvider.Code, row.Provider);
+        Assert.True(row.IsLatest);
+        Assert.Contains(logger.Messages, m => m.Contains("Auto-assessment after transcription failed", StringComparison.Ordinal));
+        Assert.DoesNotContain(logger.Messages, m => m.Contains("handed back to the AI worker queue", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InlineGrade_ThatFailsOutright_IsLoggedAsAFailure_AndTheQueueMovesOn()
+    {
+        await using var db = NewDb();
+        await SeedLandableTranscriptAsync(db);
+        var logger = new CapturingLogger();
+        var pipeline = new SpeakingTranscriptionPipeline(
+            db,
+            new FakeAsrProvider(),
+            logger,
+            new StubCanonicalAssessment(_ => throw new InvalidOperationException("grader exploded")));
+
+        Assert.True(await pipeline.ProcessNextAsync(default));
+
+        Assert.Contains(logger.Messages, m => m.Contains("Auto-assessment after transcription failed", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task InlineGrade_InterruptedByAHostShutdown_StillPropagates()
+    {
+        await using var db = NewDb();
+        await SeedLandableTranscriptAsync(db);
+        using var shutdown = new CancellationTokenSource();
+        var pipeline = new SpeakingTranscriptionPipeline(
+            db,
+            new FakeAsrProvider(),
+            new CapturingLogger(),
+            new StubCanonicalAssessment(token =>
+            {
+                shutdown.Cancel();
+                token.ThrowIfCancellationRequested();
+                return Task.CompletedTask;
+            }));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pipeline.ProcessNextAsync(shutdown.Token));
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private static LearnerDbContext NewDb(string? name = null)
@@ -117,6 +185,101 @@ public sealed class SpeakingTranscriptionQueueTests
 
     private static SpeakingTranscriptionPipeline Pipeline(LearnerDbContext db)
         => new(db, provider: null!, NullLogger<SpeakingTranscriptionPipeline>.Instance);
+
+    /// <summary>A queued transcript whose session is submitted (so the inline grade is requested)
+    /// and whose recording + media asset resolve, so <c>ProcessNextAsync</c> reaches the grade.</summary>
+    private static async Task SeedLandableTranscriptAsync(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        Seed(db, "t-1", SpeakingTranscriptionPipeline.StateQueued, now.AddMinutes(-1));
+        const string sessionId = "session-t-1";
+        db.SpeakingSessions.Add(new SpeakingSession
+        {
+            Id = sessionId,
+            UserId = "learner-1",
+            RolePlayCardId = "card-1",
+            SubmittedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = "media-1",
+            OriginalFilename = "role-play.webm",
+            MimeType = "audio/webm",
+            Format = "webm",
+            StoragePath = "speaking/role-play.webm",
+            UploadedAt = now,
+        });
+        db.SpeakingRecordings.Add(new SpeakingRecording
+        {
+            Id = SpeakingSessionRecordingService.RecordingIdFor(sessionId),
+            SpeakingSessionId = sessionId,
+            MediaAssetId = "media-1",
+            Sha256 = "sha-1",
+            CreatedAt = now,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private sealed class FakeAsrProvider : ISpeakingTranscriptionProvider
+    {
+        public const string Code = "fake-asr";
+
+        public string ProviderCode => Code;
+
+        public Task<SpeakingTranscriptionProviderResult> TranscribeAsync(string mediaAssetUrl, string language, CancellationToken ct)
+            => Task.FromResult(new SpeakingTranscriptionProviderResult
+            {
+                Provider = Code,
+                Language = "en",
+                SegmentsJson = """[{"speaker":"learner","startMs":0,"endMs":900,"text":"Good morning","confidence":0.9}]""",
+                WordCount = 2,
+                MeanConfidence = 0.9,
+            });
+    }
+
+    /// <summary>Only <c>AssessNowAsync</c> is reachable from the transcription pipeline.</summary>
+    private sealed class StubCanonicalAssessment(Func<CancellationToken, Task> assessNow) : ISpeakingCanonicalAssessmentService
+    {
+        public Task AssessNowAsync(string sessionId, CancellationToken ct) => assessNow(ct);
+
+        public string ComputeIdentityHash(string sessionId, string cardId, string transcriptHash, string rubricVersion, string promptVersion)
+            => throw new NotSupportedException();
+
+        public Task<SpeakingFinalizationTicket> EnqueueAsync(string sessionId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task ExecuteQueuedAsync(string operationId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<SpeakingFinalizationTicket> EnqueueExamCombinedAsync(string examId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task RetryExamCombinedAsync(string examId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<string> GetExamCombinedStateAsync(string examId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<bool> UsesV11Async(string sessionId, CancellationToken ct)
+            => throw new NotSupportedException();
+
+        public Task<SpeakingAssessmentState> GetStateAsync(string sessionId, CancellationToken ct)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class CapturingLogger : ILogger<SpeakingTranscriptionPipeline>
+    {
+        public List<string> Messages { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            => Messages.Add(formatter(state, exception));
+    }
 
     private static void Seed(LearnerDbContext db, string id, string provider, DateTimeOffset generatedAt)
         => db.SpeakingTranscripts.Add(new SpeakingTranscript
