@@ -46,7 +46,8 @@ Options (`RemoteJobs__<Name>` in .NET configuration; secrets are never configura
 `HeartbeatEverySeconds` (20), `NodeHeartbeatSeconds` (15), `NodeStaleAfterSeconds` (45), `NodeOfflineAfterSeconds` (600),
 `MaxAttempts` (3), `ReleaseLimit` (5), `BackoffBaseSeconds`/`BackoffMaxSeconds`/`BackoffJitterPercent` (5/300/20),
 `ReaperIntervalSeconds` (15), `ReaperBatch` (100), `FallbackAfterMinutes` (10), `FallbackHardAfterMinutes` (60),
-`JobRetentionDays` (30), `DeferredResultRetentionDays` (7), `SpeakingJoinOutputTtlHours` (24), `IntegrityStrikeLimit`/`StrikeWindowMinutes` (3/60),
+`JobRetentionDays` (30), `DeferredResultRetentionDays` (7), `SpeakingJoinOutputTtlHours` (24), `AudioExtractOutputTtlHours` (48),
+`LiveClassChunkRunBudgetMinutes` (4), `IntegrityStrikeLimit`/`StrikeWindowMinutes` (3/60),
 `FairShareGate` (false), `ClaimRatePerMinute` (60), `TokenTtlDays` (30), `FleetTokenTtlDays` (90),
 `TokenRotationGraceSeconds` (3600), `FleetAllowedCidrs` (empty), `VerifySampleRate` (0), `Kinds:<kind>:EngineVersion`.
 Out-of-range values are clamped (`RemoteJobsOptions.Normalized`).
@@ -58,9 +59,9 @@ keys: `REMOTEJOBS__FLEETALLOWEDCIDRS__0=172.18.0.0/16` (and `__1`); blank entrie
 `REMOTEJOBS__KINDS__MEDIA_AUDIO_EXTRACT__ENGINEVERSION` / `REMOTEJOBS__KINDS__MEDIA_SPEAKING_JOIN__ENGINEVERSION`. Defaults
 in the compose file equal the code defaults (keep them in step by hand; the test source that compares them is a manual tool,
 no CI runs it); an option that is not in that list cannot be set in production. `validate-production-env.sh` rejects a malformed `REMOTEJOBS__VERIFYSAMPLERATE` (must be 0 to
-1), `REMOTEJOBS__CLAIMRATEPERMINUTE` (integer >= 1), `REMOTEJOBS__SPEAKINGJOINOUTPUTTTLHOURS` (integer >= 1) or
-`REMOTEJOBS__FAIRSHAREGATE` (true/false). Changing one needs a normal
-deploy (a container recreate) to take effect.
+1), `REMOTEJOBS__CLAIMRATEPERMINUTE`, `REMOTEJOBS__SPEAKINGJOINOUTPUTTTLHOURS`, `REMOTEJOBS__AUDIOEXTRACTOUTPUTTTLHOURS` and
+`REMOTEJOBS__LIVECLASSCHUNKRUNBUDGETMINUTES` (integers >= 1) or `REMOTEJOBS__FAIRSHAREGATE` (true/false). Changing one needs a
+normal deploy (a container recreate) to take effect.
 
 ## Bring-up order (owner)
 
@@ -114,8 +115,10 @@ fence is never reset, so zombies of an earlier incarnation stay fenced).
 * The **reaper** (`RemoteJobReaper`, every API process incl. the ai-worker; all statements are state-conditional and skip
   locked rows) is the ONLY code that turns an expired lease back into work (`claim` never selects a `Leased` row).
   R1 expiry (requeue with backoff, or `Quarantined` at the attempt cap), R2 fallback (queue wait ran out, or master off),
-  R3 orphan outputs, R5 output expiry (the media kinds' binary outputs: a Speaking join after `SpeakingJoinOutputTtlHours`,
-  any other output with its job row after `JobRetentionDays`; objects are deleted first, rows after), R4 retention (a row that
+  R3 orphan outputs, R5 output expiry (the media kinds' binary outputs, which are learner audio: a Speaking join after
+  `SpeakingJoinOutputTtlHours`, Live Class chunks after `AudioExtractOutputTtlHours`, the outputs of a job whose result was
+  `Discarded` on the very next pass, any other output with its job row after `JobRetentionDays`; objects are deleted first,
+  rows after), R4 retention (a row that
   still has outputs waits for R5, so no object is ever left without a row that names it). It never calls a hub or an AI
   provider.
 * `complete` is one transaction: fenced CAS to `Succeeded` + the kind's applier; an applier exception rolls everything back
@@ -171,35 +174,58 @@ the recording stays `Pending`, nothing is enqueued, nothing is called):
 
 1. A recording that is small enough takes the single-call path exactly as before. The remote path is never consulted.
 2. An oversize recording with no chunk manifest asks `IRemoteAudioExtraction.PlanAsync`. With the flag off, no pinned engine, no
-   healthy node, an unsupported file type or any doubt the answer is "local" and the stage fails with the SAME message as before
-   (there is deliberately no local ffmpeg chunker: that would put the CPU work back on the primary). Otherwise one idempotent job
+   node whose POLICY could ever run the job, an unsupported file type or any doubt the answer is "local" and the stage fails with
+   the SAME message as before (there is deliberately no local ffmpeg chunker: that would put the CPU work back on the primary).
+   "Could ever run" is the capacity ceiling (`RemotePlacement.HasNodeThatCouldRunAsync`): an Active, unpaused, freshly
+   heartbeating node that is allowed the kind, offers the exact (kind, schema, engine), and whose `MaxConcurrency`, per-kind cap
+   and budgets fit the kind (weight 2). What the node has leased right now and the pressure governor's momentary concurrency are
+   deliberately ignored: a node that is merely busy only delays the extraction. Reading "busy" as "nobody" would fail the
+   recording for good, because there is no local path to fall back to. Otherwise one idempotent job
    is enqueued (`ResourceType=LiveClassRecording`, input `media`, fingerprint = SHA-256 of the stored file, computed once) and the
    stage queues a continuation of itself 45 s later and finishes: the transcribe job never blocks and never burns its retries
    while a helper works. A terminal failure of the job (`no_audio_stream`, `duration_exceeded`, quarantine) fails the recording
-   with the reason; a withdrawn job (`FallbackLocal`, `Cancelled`) is re-enqueued when a node can take it.
+   with the reason; a withdrawn job (`FallbackLocal`, `Cancelled`) is re-enqueued while a node could take it. A job that no helper
+   starts for `FallbackHardAfterMinutes` (60, across the reaper's re-queues) ends the wait with `no helper started the audio
+   extraction within N minutes`. That wait clock is per process and best effort (`RemoteLocalWaitTracker`): it ends when a helper
+   claims the job or the answer is "no remote path", it stays failed for the transcribe job's own retries (a restarted window
+   would swallow the failure), and it restarts after 15 minutes without a question, so a retry of the recording some time later
+   gets a fresh window. A node that is capable on paper but whose agent never reports enough free memory, scratch or CPU for the
+   kind is the usual cause. To abandon a wait on purpose, turn the kind flag off or drain the node: the recording then fails with
+   the old message.
 3. The completion applier verifies a contiguous, sample-exact manifest (6.3), writes it to `LiveClassRecordings.AudioChunksJson`
    in the same transaction that settles the job, and fills `DurationSeconds` only when it was 0. The chunks are NOT registered as
    `MediaAsset`s (nothing needs them as assets, no recording-retention worker exists to find them there, and they would show up in
    media listings); the manifest names their keys, which are server-side only (never in a DTO: guarded by a test).
 4. With a manifest the stage makes ONE `IAiGatewayService` call per chunk (feature `class.recording.transcribe.v1`, so every call
    writes its own `AiUsageRecord` exactly like the single call), saves each chunk's transcript immediately (a retry resumes, it
-   never pays twice), verifies each chunk's size and SHA-256 before sending it, and continues in a new job after 12 minutes of
-   work so it never hits the 20-minute execution ceiling. The transcripts are joined in order into `TranscriptText`.
+   never pays twice), verifies each chunk's size and SHA-256 before sending it, and continues in a new job after
+   `LiveClassChunkRunBudgetMinutes` (4) of work. `BackgroundJobProcessor` runs its jobs one after another in each process, so one
+   long run would hold that process's whole pipeline (and every job it already claimed) and would also approach the 20-minute
+   execution ceiling; the continuation is free, so keep the budget at a few minutes. The transcripts are joined in order into
+   `TranscriptText`.
 5. Delete-on-complete: after the transcript is saved the chunk audio is deleted (the transcripts stay in the manifest). A failed
-   delete never fails the stage; reaper R5 removes what is left after `JobRetentionDays`. A chunk that vanished or changed
-   drops the manifest and the recording is extracted again.
+   delete never fails the stage, and nothing retries it from the stage; reaper R5 removes what is left after
+   `AudioExtractOutputTtlHours` (48), and at once when the job's result was `Discarded`. A chunk that vanished or changed
+   (including one R5 removed before it was transcribed) drops the manifest and the recording is extracted again.
 
 ### `media.speaking-join` (candidate audio)
 
 Replicates `FfmpegSpeakingAudioTranscoder.JoinToMp3Async` (`PcmJoiner` now lives in its own file `PcmJoiner.cs`, which the agent
 link-compiles). The judge call (`openai-audio`) stays in `SpeakingAudioEvidenceService`.
 
-* **Producer.** `RemoteSpeakingJoinSweeper` (ai-worker only, every 20 s) hands the sessions of waiting `speaking.grade`
-  operations (queued, leased or scheduled for retry, at most two hours old) to `RemoteSpeakingJoinProducer`, which enqueues ONE job
-  per session when all of these hold: master flag, kind flag, pinned engine, the `speaking_audio_assessment` flag, a healthy node,
-  at most 64 clips of at most 16 MiB (64 MiB total) of the allowed audio types. It picks the clips through the SAME query as the
-  audio stage (`SpeakingAudioClips`), after the same connectivity-chatter strip, so the key matches. A clip with no recorded hash
-  (several Speaking paths leave it empty) is hashed once and the hash is recorded on its `MediaAsset`.
+* **Producer.** `RemoteSpeakingJoinSweeper` (ai-worker only, every 20 s) hands the sessions of `speaking.grade` operations that
+  have NOT started (queued or scheduled for retry, at most two hours old; a leased grade is already inside the audio stage, which
+  joins locally within seconds) to `RemoteSpeakingJoinProducer`. It looks at the newest 100, skips sessions that already have a
+  join job and takes at most 25, so grades that were handled (or are stuck retrying) never starve newer ones. The producer
+  enqueues ONE job per session when all of these hold: master flag, kind flag, pinned engine, the `speaking_audio_assessment`
+  flag, a healthy node, the session already has a transcript, at most 64 clips of at most 16 MiB (64 MiB total) of the allowed
+  audio types. It picks the clips through the SAME query as the audio stage (`SpeakingAudioClips`), after the same
+  connectivity-chatter strip, so the key matches. Without a transcript the grade's clip order (a live-voice session's clips are
+  chosen per turn) is not known, and a job keyed by the wrong list would block the right one for ever (one job per session), so
+  the session is simply asked again on a later pass. A clip with no recorded hash (several Speaking paths leave it empty) is hashed
+  once and the hash is recorded on its `SpeakingRecording.Sha256` (the value the audio stage reads back). It is never written to
+  `MediaAssets.Sha256`, the cross-asset dedupe key other upload paths look up regardless of owner, and a recording that already
+  carries a non-empty value is never overwritten (that session stays local).
   Key = `(kind, apply, SpeakingSession, sessionId, sha256 of the ORDERED clip shas, engine, settings)`: per session, never
   content-addressed, so byte-identical audio of two learners gets two jobs and two outputs. `params` carry no identifier; the
   claim response shows the node only names, sizes, hashes and content types (never a storage key, recording id or session).
@@ -208,7 +234,9 @@ link-compiles). The judge call (`openai-audio`) stays in `SpeakingAudioEvidenceS
   error, means the unchanged local join. The grade never waits for a remote job.
 * **Learner-audio hygiene.** The derivative is deleted the moment it is used; reaper R5 deletes it after
   `SpeakingJoinOutputTtlHours`; `SpeakingAudioRetentionWorker` and a learner's erasure of a recording delete it with the clips
-  (and withdraw an unclaimed job); the applier refuses (`Discarded`) a join whose clips were archived while the helper worked.
+  (and withdraw an unclaimed job); the applier refuses (`Discarded`) a join whose clips were archived while the helper worked, and
+  the upload the helper had already made is deleted by reaper R5 on its next pass (about `ReaperIntervalSeconds`), not an hour
+  or a day later.
   It is NOT registered as a `SpeakingRecording`/`MediaAsset` linked to the session, because a recording row would make the audio
   stage join the derivative as if it were another clip: the `RemoteJobOutputs` row and the job (resource `SpeakingSession`) are
   the registry, and every cleanup path above walks it.

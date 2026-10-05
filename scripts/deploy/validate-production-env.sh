@@ -649,6 +649,10 @@ require_int_min_if_set REMOTEJOBS__CLAIMRATEPERMINUTE 1
 # Hours a prepared Speaking audio join (learner audio) may wait for its grade before it is deleted: a malformed value would make
 # option binding throw, and 0 is clamped up in code but is almost certainly a typo.
 require_int_min_if_set REMOTEJOBS__SPEAKINGJOINOUTPUTTTLHOURS 1
+# Hours extracted Live Class chunk audio may outlive its job, and minutes one chunk-transcription run may take before it queues a
+# continuation (the background processor is single-threaded): same reasoning, a malformed or zero value is a typo.
+require_int_min_if_set REMOTEJOBS__AUDIOEXTRACTOUTPUTTTLHOURS 1
+require_int_min_if_set REMOTEJOBS__LIVECLASSCHUNKRUNBUDGETMINUTES 1
 fairshare_value=$(read_env_value REMOTEJOBS__FAIRSHAREGATE || true)
 case "$(printf '%s' "$fairshare_value" | tr '[:upper:]' '[:lower:]')" in
   ""|true|false) ;;

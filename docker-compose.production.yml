@@ -253,6 +253,8 @@ x-learner-api-slot: &learner-api-slot
     RemoteJobs__JobRetentionDays: ${REMOTEJOBS__JOBRETENTIONDAYS:-30}
     RemoteJobs__DeferredResultRetentionDays: ${REMOTEJOBS__DEFERREDRESULTRETENTIONDAYS:-7}
     RemoteJobs__SpeakingJoinOutputTtlHours: ${REMOTEJOBS__SPEAKINGJOINOUTPUTTTLHOURS:-24}
+    RemoteJobs__AudioExtractOutputTtlHours: ${REMOTEJOBS__AUDIOEXTRACTOUTPUTTTLHOURS:-48}
+    RemoteJobs__LiveClassChunkRunBudgetMinutes: ${REMOTEJOBS__LIVECLASSCHUNKRUNBUDGETMINUTES:-4}
     RemoteJobs__IntegrityStrikeLimit: ${REMOTEJOBS__INTEGRITYSTRIKELIMIT:-3}
     RemoteJobs__StrikeWindowMinutes: ${REMOTEJOBS__STRIKEWINDOWMINUTES:-60}
     RemoteJobs__FairShareGate: ${REMOTEJOBS__FAIRSHAREGATE:-false}
