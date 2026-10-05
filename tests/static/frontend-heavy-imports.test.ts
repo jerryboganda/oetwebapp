@@ -96,8 +96,11 @@ describe('frontend heavy import boundaries', () => {
     expect(lazyPayPal).toContain('ssr: false');
     expect(lazyWhop).toContain("import('./whop-embedded-checkout')");
     expect(lazyWhop).toContain('ssr: false');
+    // A chunk that cannot be downloaded must reach the payer as the hosted/redirect fallback, not an error page.
+    expect(lazyPayPal).toContain('<CheckoutLoadBoundary onFailed={props.onUnavailable}>');
+    expect(lazyWhop).toContain('<CheckoutLoadBoundary onFailed={props.onUnavailable}>');
     // The Whop id checks the page needs live apart from the SDK-bearing component.
-    expect(whopIds).not.toContain('@whop/');
+    expect(whopIds).not.toMatch(/(?:from\s+|import\(\s*)['"]@whop\//);
   });
 
   it('keeps native shell and settings-only startup code behind runtime boundaries', () => {

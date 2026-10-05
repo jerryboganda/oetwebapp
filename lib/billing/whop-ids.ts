@@ -1,6 +1,6 @@
 /**
  * Whop identifier checks. Kept apart from the Whop checkout component so a page can ask "is this a
- * Whop plan id?" without importing the Whop SDK (`@whop/elements`, `@whop/elements-react`).
+ * Whop plan id?" without importing the Whop SDK packages.
  */
 
 export function isWhopPlanId(value: string | null | undefined): value is string {
