@@ -5,14 +5,14 @@ import { Library, Sparkles, Video } from 'lucide-react';
 import { renderWithRouter } from '@/tests/test-utils';
 
 const {
-  mockFetchLearnerFeatureFlag,
+  mockFetchLearnerFeatureFlags,
   mockFetchMyEntitlementSnapshot,
   mockFetchStreak,
   mockFetchXP,
   mockSignOut,
   mockUseAuth,
 } = vi.hoisted(() => ({
-  mockFetchLearnerFeatureFlag: vi.fn(),
+  mockFetchLearnerFeatureFlags: vi.fn(),
   mockFetchMyEntitlementSnapshot: vi.fn(),
   mockFetchStreak: vi.fn(),
   mockFetchXP: vi.fn(),
@@ -21,7 +21,7 @@ const {
 }));
 
 vi.mock('@/lib/api', () => ({
-  fetchLearnerFeatureFlag: mockFetchLearnerFeatureFlag,
+  fetchLearnerFeatureFlags: mockFetchLearnerFeatureFlags,
   fetchMyEntitlementSnapshot: mockFetchMyEntitlementSnapshot,
   fetchStreak: mockFetchStreak,
   fetchXP: mockFetchXP,
@@ -56,7 +56,7 @@ const adminUser = {
 };
 
 function prepareFlag(enabled: boolean) {
-  mockFetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_lessons', enabled });
+  mockFetchLearnerFeatureFlags.mockResolvedValue({ video_lessons: enabled });
   mockFetchStreak.mockResolvedValue({ currentStreak: 3 });
   mockFetchXP.mockResolvedValue({ level: 4 });
   mockUseAuth.mockReturnValue({ user: learnerUser, signOut: mockSignOut });
@@ -93,7 +93,7 @@ describe('learner feature-gated navigation', () => {
   });
 
   it('keeps the Learn group visible to admin/tutor workspaces when the flag is enabled', async () => {
-    mockFetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_library', enabled: true });
+    mockFetchLearnerFeatureFlags.mockResolvedValue({ video_library: true });
     mockUseAuth.mockReturnValue({ user: adminUser, signOut: mockSignOut });
 
     renderWithRouter(<Sidebar workspaceRole="admin" />, { pathname: '/' });
@@ -118,7 +118,8 @@ describe('learner feature-gated navigation', () => {
     );
 
     await waitFor(() => {
-      expect(mockFetchLearnerFeatureFlag).toHaveBeenCalledWith('video_lessons');
+      // Every flag a page needs is fetched in one batched request, so other keys may ride along.
+      expect(mockFetchLearnerFeatureFlags).toHaveBeenCalledWith(expect.arrayContaining(['video_lessons']));
     });
 
     await userEvent.click(screen.getByRole('button', { name: /open menu/i }));
@@ -168,7 +169,7 @@ describe('learner core navigation parity', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_library', enabled: false });
+    mockFetchLearnerFeatureFlags.mockResolvedValue({ video_library: false });
     mockFetchMyEntitlementSnapshot.mockResolvedValue({ enabledModules: [] });
     mockFetchStreak.mockResolvedValue({ currentStreak: 3 });
     mockFetchXP.mockResolvedValue({ level: 4 });

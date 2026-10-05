@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const mocks = vi.hoisted(() => ({
   auth: { user: null as { userId: string; role: string } | null },
-  fetchLearnerFeatureFlag: vi.fn(),
+  fetchLearnerFeatureFlags: vi.fn(),
   fetchMyEntitlementSnapshot: vi.fn(),
   fetchPlacementStatus: vi.fn(),
 }));
@@ -13,7 +13,7 @@ vi.mock('@/contexts/auth-context', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  fetchLearnerFeatureFlag: mocks.fetchLearnerFeatureFlag,
+  fetchLearnerFeatureFlags: mocks.fetchLearnerFeatureFlags,
   fetchMyEntitlementSnapshot: mocks.fetchMyEntitlementSnapshot,
 }));
 
@@ -47,7 +47,7 @@ describe('useLearnerNavVisibility', () => {
 
     vi.clearAllMocks();
     mocks.auth.user = { userId: 'learner-1', role: 'learner' };
-    mocks.fetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_library', enabled: false });
+    mocks.fetchLearnerFeatureFlags.mockResolvedValue({ video_library: false });
     mocks.fetchMyEntitlementSnapshot.mockResolvedValue({ enabledModules: [] });
     // A rejected status is never cached by loadPlacementAccess, so each test starts clean.
     mocks.fetchPlacementStatus.mockRejectedValue(new Error('placement unavailable'));
@@ -70,7 +70,7 @@ describe('useLearnerNavVisibility', () => {
   });
 
   it('shows a feature-flagged item only once its flag resolves on', async () => {
-    mocks.fetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_library', enabled: true });
+    mocks.fetchLearnerFeatureFlags.mockResolvedValue({ video_library: true });
 
     const { result } = renderVisibility(true);
 
@@ -95,7 +95,7 @@ describe('useLearnerNavVisibility', () => {
     const { result } = renderVisibility(false);
 
     expect(items.every(result.current)).toBe(true);
-    expect(mocks.fetchLearnerFeatureFlag).not.toHaveBeenCalled();
+    expect(mocks.fetchLearnerFeatureFlags).not.toHaveBeenCalled();
     expect(mocks.fetchMyEntitlementSnapshot).not.toHaveBeenCalled();
     expect(mocks.fetchPlacementStatus).not.toHaveBeenCalled();
   });

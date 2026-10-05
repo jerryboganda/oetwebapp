@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchLearnerFeatureFlag } from '@/lib/api';
+import { fetchLearnerFeatureFlags } from '@/lib/api';
 
 export type FeatureFlagMap = Record<string, boolean>;
 
@@ -10,10 +10,10 @@ type FeatureFlaggedItem = {
   featureFlag?: string;
 };
 
-type FeatureFlagLoadResult = {
-  key: string;
-  enabled: boolean;
+/** What one coalesced network round trip produced. It never rejects. */
+type FlagBatchOutcome = {
   succeeded: boolean;
+  flags: Record<string, boolean>;
 };
 
 const EMPTY_FLAGS: FeatureFlagMap = {};
@@ -28,22 +28,53 @@ const inflightFlagMaps = new Map<string, Promise<FeatureFlagMap>>();
 // for the analogous fix on the module-gating side).
 const FLAG_RETRY_DELAYS_MS = [400, 1200];
 
+// Every hook that mounts inside this window shares ONE request. The shell reads
+// flags from several places (top nav, sidebar/search nav, streak badges, the
+// companion mount), each with its own key set; they used to cost one request per
+// flag per key set on every cold load.
+const FLAG_BATCH_WINDOW_MS = 10;
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchFlagWithRetry(key: string): Promise<FeatureFlagLoadResult> {
+async function fetchFlagBatchWithRetry(keys: readonly string[]): Promise<FlagBatchOutcome> {
   for (let attempt = 0; attempt <= FLAG_RETRY_DELAYS_MS.length; attempt += 1) {
     try {
-      const flag = await fetchLearnerFeatureFlag(key);
-      return { key, enabled: flag.enabled, succeeded: true };
+      return { succeeded: true, flags: await fetchLearnerFeatureFlags(keys) };
     } catch {
       if (attempt < FLAG_RETRY_DELAYS_MS.length) {
         await delay(FLAG_RETRY_DELAYS_MS[attempt]);
       }
     }
   }
-  return { key, enabled: false, succeeded: false };
+  return { succeeded: false, flags: {} };
+}
+
+type PendingFlagBatch = {
+  keys: Set<string>;
+  waiters: Array<(outcome: FlagBatchOutcome) => void>;
+};
+
+let pendingBatch: PendingFlagBatch | null = null;
+
+function requestFlags(keys: readonly string[]): Promise<FlagBatchOutcome> {
+  return new Promise((resolve) => {
+    let batch = pendingBatch;
+    if (!batch) {
+      const opened: PendingFlagBatch = { keys: new Set(), waiters: [] };
+      batch = opened;
+      pendingBatch = opened;
+      setTimeout(() => {
+        if (pendingBatch === opened) pendingBatch = null;
+        void fetchFlagBatchWithRetry(Array.from(opened.keys).sort()).then((outcome) => {
+          for (const waiter of opened.waiters) waiter(outcome);
+        });
+      }, FLAG_BATCH_WINDOW_MS);
+    }
+    for (const key of keys) batch.keys.add(key);
+    batch.waiters.push(resolve);
+  });
 }
 
 function synchronizeIdentity(identity: string | null) {
@@ -67,16 +98,16 @@ function loadFeatureFlagMap(
   if (inflight) return inflight;
 
   const requestGeneration = cacheGeneration;
-  const request = Promise.all(keys.map((key) => fetchFlagWithRetry(key)))
-    .then((results) => {
-      const flags = Object.fromEntries(
-        results.map(({ key, enabled }) => [key, enabled]),
+  const request = requestFlags(keys)
+    .then((outcome) => {
+      // A failed request leaves every flag fail-closed for this render but does
+      // not poison the session cache; the next mount can retry the complete key set.
+      const flags: FeatureFlagMap = Object.fromEntries(
+        keys.map((key) => [key, outcome.succeeded && outcome.flags[key] === true]),
       );
 
-      // A rejected flag remains fail-closed for this render, but does not poison
-      // the session cache; the next mount can retry the complete key set.
       if (
-        results.every(({ succeeded }) => succeeded)
+        outcome.succeeded
         && activeIdentity === identity
         && cacheGeneration === requestGeneration
       ) {
