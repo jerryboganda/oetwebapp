@@ -239,6 +239,15 @@ public class LiveClassRecording
     public string? S3AudioKey { get; set; }
     [MaxLength(512)]
     public string? S3TranscriptKey { get; set; }
+
+    /// <summary>
+    /// Chunk manifest (JSON, <c>live-class-audio-chunks/1</c>) written when a remote helper has extracted the recording's audio into
+    /// transcription-sized mp3 chunks (job kind <c>media.audio-extract</c>, OET-RWP/1 section 6.3). Holds server-side storage keys
+    /// and the per-chunk transcripts as they are produced, so it is NEVER exposed to a client. Null for every recording that was
+    /// small enough to transcribe in one call (the unchanged path).
+    /// </summary>
+    public string? AudioChunksJson { get; set; }
+
     public string? TranscriptText { get; set; }
     public string? AiSummary { get; set; }
     public string? AiSummaryAr { get; set; }

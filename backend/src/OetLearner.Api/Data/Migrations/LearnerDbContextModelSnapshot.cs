@@ -14530,6 +14530,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("AiSummaryAr")
                         .HasColumnType("text");
 
+                    b.Property<string>("AudioChunksJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("ChaptersJson")
                         .IsRequired()
                         .HasColumnType("text");
