@@ -50,10 +50,8 @@ public sealed class AiAssistantOrchestratorTurnTests : IAsyncDisposable
             events.Add(e);
         }
 
-        // The invoker saw the malformed args and converted them (no crash, no INTERNAL_ERROR).
-        Assert.Single(toolCtxCaptured);
-        var toolCtx = toolCtxCaptured[0];
-        Assert.Equal(thread.Id, toolCtx.ThreadId);
+        // The invoker rejects the malformed args before the tool runs (no crash, no INTERNAL_ERROR).
+        Assert.Empty(toolCtxCaptured);
 
         // A tool-result message with the unparsable marker was persisted.
         await using var db = new LearnerDbContext(_options);
@@ -166,8 +164,9 @@ public sealed class AiAssistantOrchestratorTurnTests : IAsyncDisposable
             new() { Id = "3", ThreadId = "t", Role = "tool", Content = "{}", ToolCallId = "c", ToolName = "x", CreatedAt = DateTimeOffset.UtcNow.AddSeconds(2) },
         };
         var messages = AiAssistantOrchestrator.BuildLlmMessages("sys", history);
-        Assert.Equal(3, messages.Count);
-        Assert.Equal("tool", messages[2].Role);
+        // system prompt + user + assistant tool call + its tool result
+        Assert.Equal(4, messages.Count);
+        Assert.Equal("tool", messages[3].Role);
     }
 
     private AiAssistantOrchestrator BuildOrchestrator(
