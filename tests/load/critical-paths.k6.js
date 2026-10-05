@@ -1,5 +1,10 @@
-// Staging-only critical read path load test.
+// Staging-only critical read path load test (smoke scale: up to 100 VUs sharing ONE learner session).
 // SLO: P95 < 1s, P99 < 2s, HTTP error rate < 1%.
+//
+// setup() signs in once and every VU reuses that single access token, so the single-active-session
+// policy is never tripped but the run models one session, not 100 learners. The multi-learner
+// scenario (1,000 distinct accounts, SignalR, exam saves, AI speaking, tutor rooms) is
+// tests/load/fleet-1000.k6.js; see docs/ops/LOAD-TESTING.md.
 
 import http from 'k6/http';
 import { check, fail, sleep } from 'k6';
