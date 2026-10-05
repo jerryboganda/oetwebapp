@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
-import { fetchPublicCatalog, fetchMyEntitlementSnapshot, type MyEntitlementSnapshot } from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
+import { fetchPublicCatalog } from '@/lib/api';
+import { useEntitlementSnapshot } from '@/lib/query/hooks';
 import type { PublicCatalogPlanRow } from '@/lib/types/admin';
 import {
   type PublicCatalogResponseWithPresentation,
@@ -34,7 +36,13 @@ export function CatalogStorefront({ variant }: CatalogStorefrontProps) {
   const [data, setData] = useState<PublicCatalogResponseWithPresentation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [entitlement, setEntitlement] = useState<MyEntitlementSnapshot | null>(null);
+  const { user } = useAuth();
+  const userId = user?.userId ?? '';
+  // The dashboard variant shows the owned plan. It reads the shared entitlement query
+  // (cached, deduped with the shell and dashboard) instead of fetching a private copy.
+  const entitlement = useEntitlementSnapshot(userId, {
+    enabled: variant === 'dashboard' && Boolean(userId),
+  }).data ?? null;
   const [selectedPlan, setSelectedPlan] = useState<PublicCatalogPlanRow | null>(null);
   const [activeProfession, setActiveProfession] = useState('all');
   const [query, setQuery] = useState('');
@@ -58,22 +66,6 @@ export function CatalogStorefront({ variant }: CatalogStorefrontProps) {
       cancelled = true;
     };
   }, []);
-
-  useEffect(() => {
-    if (variant !== 'dashboard') return undefined;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const snapshot = await fetchMyEntitlementSnapshot();
-        if (!cancelled) setEntitlement(snapshot);
-      } catch {
-        // Entitlement is optional context for the dashboard variant; ignore failures.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [variant]);
 
   const presentation: CatalogPresentation | null = data?.presentation ?? null;
   const config = useMemo(() => resolveStorefrontConfig(presentation), [presentation]);
