@@ -385,6 +385,10 @@ public static class ContentPapersAdminEndpoints
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             paper.ExtractedTextJson = SpeakingContentStructure.ReplaceStructure(paper.ExtractedTextJson, dto.Structure);
+            // Part of the same fence as Listening authoring and the PDF text extraction
+            // pass: a concurrent writer of this blob now conflicts (409) instead of one
+            // side silently dropping the other's keys.
+            paper.RowVersion++;
             paper.UpdatedAt = DateTimeOffset.UtcNow;
             db.AuditEvents.Add(new AuditEvent
             {
@@ -458,6 +462,8 @@ public static class ContentPapersAdminEndpoints
 
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             paper.ExtractedTextJson = WritingContentStructure.ReplaceStructure(paper.ExtractedTextJson, dto.Structure);
+            // See the Speaking structure save above: same RowVersion fence.
+            paper.RowVersion++;
             paper.UpdatedAt = DateTimeOffset.UtcNow;
             db.AuditEvents.Add(new AuditEvent
             {

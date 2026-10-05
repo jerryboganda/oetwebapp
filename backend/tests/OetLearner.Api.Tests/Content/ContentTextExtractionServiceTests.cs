@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
@@ -13,9 +14,12 @@ namespace OetLearner.Api.Tests.Content;
 /// ContentTextExtractionService hardening: a thrown extraction is never cached as
 /// empty text, failures back off and cap (a paid OCR tier is not re-billed every
 /// tick), a successful empty result is cached once, a pass that changes nothing
-/// writes nothing, and a write bumps RowVersion so it loses to a concurrent admin
-/// save instead of silently dropping it. SQLite twin: concurrency tokens and the
-/// UPDATE ... WHERE RowVersion = @old shape are real here.
+/// writes nothing, and the write re-reads the row and merges only its own keys
+/// (so a save that landed during the minutes-long extraction survives, whether or
+/// not that writer bumps RowVersion) and fences on the RowVersion it read. A pass
+/// that is cancelled keeps what it already extracted, and an asset whose attempts
+/// are used up leaves the worker's candidate set. SQLite twin: concurrency tokens
+/// and the UPDATE ... WHERE RowVersion = @old shape are real here.
 /// </summary>
 public sealed class ContentTextExtractionServiceTests : IAsyncLifetime
 {
@@ -190,21 +194,124 @@ public sealed class ContentTextExtractionServiceTests : IAsyncLifetime
         Assert.Equal("{}", after.ExtractedTextJson);
     }
 
-    [Fact]
-    public async Task TheWrite_BumpsRowVersion_SoAConcurrentAdminSaveWinsInsteadOfBeingOverwritten()
+    // A pass runs for minutes (OCR), so what it read at the start is stale by the time it writes.
+    // The Speaking and Writing structure saves rewrite ExtractedTextJson without bumping RowVersion
+    // on their own, which a RowVersion fence alone cannot see: the write re-reads the row and merges
+    // only its own keys, so the other writer's keys survive either way.
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ASaveThatCommitsDuringExtraction_Survives_WhetherOrNotItBumpsRowVersion(bool bumpRowVersion)
     {
         await SeedPaperAsync("p1", "a1");
-        var extractor = new StubExtractor("extracted") { OnExtract = ConcurrentAdminSaveAsync };
+        var extractor = new StubExtractor("extracted") { OnExtract = () => ConcurrentAdminSaveAsync(bumpRowVersion) };
+
+        Assert.Equal(1, await ExtractAsync("p1", new FakeStorage(), extractor));
+
+        var after = await ReadPaperAsync("p1");
+        var root = JsonDocument.Parse(after.ExtractedTextJson).RootElement;
+        Assert.Equal("extracted", root.GetProperty("a1").GetString());
+        Assert.Equal(2, root.GetProperty("speakingStructure").GetProperty("cards").GetInt32());
+        Assert.Equal("edited by admin", after.Title);
+        Assert.Equal(bumpRowVersion ? 2 : 1, after.RowVersion);
+    }
+
+    [Fact]
+    public async Task ATextCachedByAnotherWriterDuringTheExtraction_IsNotOverwrittenByANormalPass()
+    {
+        await SeedPaperAsync("p1", "a1");
+        var extractor = new StubExtractor("mine") { OnExtract = () => ConcurrentWriteAsync("""{"a1":"someone else got there first"}""") };
+
+        // Nothing of this pass was written, so nothing counts as extracted.
+        Assert.Equal(0, await ExtractAsync("p1", new FakeStorage(), extractor));
+
+        var root = JsonDocument.Parse((await ReadPaperAsync("p1")).ExtractedTextJson).RootElement;
+        Assert.Equal("someone else got there first", root.GetProperty("a1").GetString());
+    }
+
+    [Fact]
+    public async Task AWriterThatSlipsInBetweenTheReReadAndTheSave_CostsAReMerge_NotTheExtraction()
+    {
+        await SeedPaperAsync("p1", "a1");
+        var slipIn = new InjectOnFirstSaveInterceptor(
+            () => ConcurrentWriteAsync("""{"listeningQuestions":[{"number":1}]}"""));
+        var options = new DbContextOptionsBuilder<LearnerDbContext>().UseSqlite(_connection).AddInterceptors(slipIn).Options;
+
+        await using (var db = new LearnerDbContext(options))
+        {
+            Assert.Equal(1, await Service(db, new FakeStorage(), new StubExtractor("paid for")).ExtractForPaperAsync("p1", CancellationToken.None));
+        }
+
+        // The first save lost the compare; the retry merged onto the newer row and won.
+        Assert.Equal(2, slipIn.Saves);
+        var after = await ReadPaperAsync("p1");
+        var root = JsonDocument.Parse(after.ExtractedTextJson).RootElement;
+        Assert.Equal("paid for", root.GetProperty("a1").GetString());
+        Assert.Equal(1, root.GetProperty("listeningQuestions").GetArrayLength());
+        // The slipped-in writer's bump, then this pass's bump on the second attempt.
+        Assert.Equal(2, after.RowVersion);
+    }
+
+    [Fact]
+    public async Task ACancelledPass_KeepsTheAssetsItAlreadyExtracted_ThenStillCancels()
+    {
+        await SeedPaperAsync("p1", "a1");
+        await AddPdfAssetAsync("p1", "a2");
+        using var cts = new CancellationTokenSource();
+        var calls = 0;
+        var extractor = new StubExtractor("paid for text")
+        {
+            OnExtract = () =>
+            {
+                // The second asset is the one the host stops during.
+                if (++calls == 2)
+                {
+                    cts.Cancel();
+                    cts.Token.ThrowIfCancellationRequested();
+                }
+
+                return Task.CompletedTask;
+            },
+        };
 
         await using (var db = new LearnerDbContext(_options))
         {
-            await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() =>
-                Service(db, new FakeStorage(), extractor).ExtractForPaperAsync("p1", CancellationToken.None));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                Service(db, new FakeStorage(), extractor).ExtractForPaperAsync("p1", cts.Token));
         }
 
-        var after = await ReadPaperAsync("p1");
-        Assert.Equal("edited by admin", after.Title);
-        Assert.Equal("{}", after.ExtractedTextJson);
+        Assert.Equal(2, extractor.Calls);
+        var root = JsonDocument.Parse((await ReadPaperAsync("p1")).ExtractedTextJson).RootElement;
+        var texts = root.EnumerateObject().Where(property => property.Value.ValueKind == JsonValueKind.String).ToList();
+        Assert.Single(texts);
+        Assert.Equal("paid for text", texts[0].Value.GetString());
+    }
+
+    [Fact]
+    public async Task AFailureThatUsesUpTheAttempts_ListsTheAssetAsExhausted_UntilAForcedRunSucceeds()
+    {
+        await SeedPaperAsync(
+            "p1",
+            "a1",
+            extractedTextJson: FailureJson("a1", ContentTextExtractionService.MaxAutomaticAttempts - 1, DateTimeOffset.UtcNow.AddMinutes(-1)));
+        var storage = new FakeStorage { FailingKeys = { "papers/a1.pdf" } };
+
+        Assert.Equal(0, await ExtractAsync("p1", storage, new StubExtractor("x")));
+
+        var exhaustedBlob = (await ReadPaperAsync("p1")).ExtractedTextJson;
+        var exhaustedRoot = JsonDocument.Parse(exhaustedBlob).RootElement;
+        Assert.Equal(
+            ContentTextExtractionService.MaxAutomaticAttempts,
+            exhaustedRoot.GetProperty(ContentTextExtractionService.ExhaustedKey).GetProperty("a1").GetInt32());
+        // This is what the worker's pre-filter reads as "nothing left to do for a1".
+        Assert.Contains("\"a1\":", exhaustedBlob);
+
+        Assert.Equal(1, await ExtractAsync("p1", new FakeStorage(), new StubExtractor("recovered"), force: true));
+        var recovered = JsonDocument.Parse((await ReadPaperAsync("p1")).ExtractedTextJson).RootElement;
+        Assert.Equal("recovered", recovered.GetProperty("a1").GetString());
+        Assert.False(recovered.TryGetProperty(ContentTextExtractionService.ExhaustedKey, out _));
+        Assert.False(recovered.TryGetProperty(ContentTextExtractionService.FailuresKey, out _));
     }
 
     [Fact]
@@ -258,13 +365,78 @@ public sealed class ContentTextExtractionServiceTests : IAsyncLifetime
 
     // ── helpers ─────────────────────────────────────────────────────────
 
-    private async Task ConcurrentAdminSaveAsync()
+    /// <summary>An admin structure save committing while an extraction is in flight; only some writers bump RowVersion.</summary>
+    private async Task ConcurrentAdminSaveAsync(bool bumpRowVersion)
     {
         await using var other = new LearnerDbContext(_options);
         var paper = await other.ContentPapers.SingleAsync(p => p.Id == "p1");
         paper.Title = "edited by admin";
+        paper.ExtractedTextJson = """{"speakingStructure":{"cards":2}}""";
+        if (bumpRowVersion)
+        {
+            paper.RowVersion++;
+        }
+
+        await other.SaveChangesAsync();
+    }
+
+    /// <summary>Replaces the blob from another context and bumps RowVersion, like Listening authoring does.</summary>
+    private async Task ConcurrentWriteAsync(string extractedTextJson)
+    {
+        await using var other = new LearnerDbContext(_options);
+        var paper = await other.ContentPapers.SingleAsync(p => p.Id == "p1");
+        paper.ExtractedTextJson = extractedTextJson;
         paper.RowVersion++;
         await other.SaveChangesAsync();
+    }
+
+    private async Task AddPdfAssetAsync(string paperId, string assetId)
+    {
+        await using var db = new LearnerDbContext(_options);
+        var now = DateTimeOffset.UtcNow.AddMinutes(-5);
+        db.MediaAssets.Add(new MediaAsset
+        {
+            Id = $"m-{assetId}",
+            OriginalFilename = $"{assetId}.pdf",
+            MimeType = "application/pdf",
+            Format = "pdf",
+            StoragePath = $"papers/{assetId}.pdf",
+            Status = MediaAssetStatus.Ready,
+            UploadedAt = now,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = assetId,
+            PaperId = paperId,
+            Role = PaperAssetRole.AnswerKey,
+            MediaAssetId = $"m-{assetId}",
+            IsPrimary = true,
+            CreatedAt = now,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Runs <c>inject</c> once, just before the first SaveChanges executes: the writer that
+    /// "slips in" after the service's re-read.</summary>
+    private sealed class InjectOnFirstSaveInterceptor(Func<Task> inject) : SaveChangesInterceptor
+    {
+        private int _saves;
+
+        /// <summary>Every SaveChanges the intercepted context attempted (the injected writer uses another context).</summary>
+        public int Saves => _saves;
+
+        public override async ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _saves) == 1)
+            {
+                await inject();
+            }
+
+            return result;
+        }
     }
 
     private async Task<int> ExtractAsync(string paperId, FakeStorage storage, StubExtractor extractor, bool force = false)
@@ -415,6 +587,12 @@ public sealed class ContentTextExtractionWorkerSelectionTests
                 "p-g",
                 "a-g",
                 cachedJson: ContentTextExtractionServiceTests.FailureJson("a-g", attempts: 1, retryAfter: DateTimeOffset.UtcNow.AddMinutes(-1)));
+            // An exhausted asset (attempts used up) is listed with its id as a key, so it
+            // leaves the candidate set instead of being reloaded every cycle for nothing.
+            Add(db, "p-h", "a-h", cachedJson: """{"extractionExhausted":{"a-h":5}}""");
+            // ... but a paper with one exhausted and one untouched PDF still has work.
+            Add(db, "p-i", "a-i1", cachedJson: """{"extractionExhausted":{"a-i1":5}}""");
+            AddSecondPdf(db, "p-i", "a-i2");
             await db.SaveChangesAsync();
         }
 
@@ -423,8 +601,8 @@ public sealed class ContentTextExtractionWorkerSelectionTests
 
         var processed = await Worker(provider).RunOnceAsync(CancellationToken.None);
 
-        Assert.Equal(4, processed);
-        Assert.Equal(new[] { "p-b", "p-e", "p-f", "p-g" }, extraction.PaperIds);
+        Assert.Equal(5, processed);
+        Assert.Equal(new[] { "p-b", "p-e", "p-f", "p-g", "p-i" }, extraction.PaperIds);
     }
 
     [Fact]
