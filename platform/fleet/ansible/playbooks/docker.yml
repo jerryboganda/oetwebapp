@@ -1,0 +1,102 @@
+---
+# S4 docker: Docker Engine. Default source is the distribution package (docker.io), whose version is fixed by the OS
+# release the preflight accepted. fleet_docker_source=vendor installs Docker's own apt repository instead, with the
+# repository key fingerprint PINNED below and an optional exact package version (fleet_docker_version_pin).
+- name: Docker Engine (S4)
+  hosts: target
+  gather_facts: false
+  vars:
+    # Docker's published apt signing key fingerprint (docs.docker.com/engine/install/ubuntu).
+    fleet_docker_key_fingerprint: "9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+  tasks:
+    - name: Install Docker
+      block:
+        - name: Read the OS identity
+          ansible.builtin.command: cat /etc/os-release
+          register: fleet_os_release
+          changed_when: false
+          check_mode: false
+
+        - name: Derive distro and codename
+          ansible.builtin.set_fact:
+            fleet_os_id: "{{ fleet_os_release.stdout | regex_findall('(?m)^ID=\"?([a-z0-9._-]+)\"?') | first | default('') }}"
+            fleet_os_codename: "{{ fleet_os_release.stdout | regex_findall('(?m)^VERSION_CODENAME=([a-z0-9._-]+)') | first | default('') }}"
+
+        - name: Install Docker from the distribution
+          when: fleet_docker_source | default('distro') == 'distro'
+          ansible.builtin.apt:
+            name: "{{ ['docker.io=' ~ fleet_docker_version_pin] if (fleet_docker_version_pin | default('') | length) > 0 else ['docker.io'] }}"
+            state: present
+            update_cache: true
+            cache_valid_time: 3600
+
+        - name: Prepare Docker's apt repository
+          when: fleet_docker_source | default('distro') == 'vendor'
+          block:
+            - name: Install the packages the repository tasks need
+              ansible.builtin.apt:
+                name: [ca-certificates, curl, gnupg, python3-debian]
+                state: present
+                update_cache: true
+                cache_valid_time: 3600
+
+            - name: Download the repository key
+              ansible.builtin.get_url:
+                url: "https://download.docker.com/linux/{{ fleet_os_id }}/gpg"
+                dest: /etc/apt/keyrings/docker.asc
+                mode: "0644"
+
+            - name: Read the key fingerprint
+              ansible.builtin.command: gpg --show-keys --with-colons /etc/apt/keyrings/docker.asc
+              register: fleet_docker_key
+              changed_when: false
+              check_mode: false
+
+            - name: Refuse a key that is not Docker's
+              ansible.builtin.assert:
+                that:
+                  - "('fpr:::::::::' ~ fleet_docker_key_fingerprint ~ ':') in fleet_docker_key.stdout"
+                quiet: true
+
+            - name: Add the repository
+              ansible.builtin.deb822_repository:
+                name: docker
+                types: [deb]
+                uris: "https://download.docker.com/linux/{{ fleet_os_id }}"
+                suites: ["{{ fleet_os_codename }}"]
+                components: [stable]
+                signed_by: /etc/apt/keyrings/docker.asc
+                state: present
+
+            - name: Install Docker Engine
+              ansible.builtin.apt:
+                name: "{{ ['docker-ce=' ~ fleet_docker_version_pin, 'docker-ce-cli', 'containerd.io'] if (fleet_docker_version_pin | default('') | length) > 0 else ['docker-ce', 'docker-ce-cli', 'containerd.io'] }}"
+                state: present
+                update_cache: true
+
+        - name: Make sure Docker is enabled and running
+          ansible.builtin.systemd:
+            name: docker
+            enabled: true
+            state: started
+
+        - name: Confirm the engine answers
+          ansible.builtin.command: docker version --format '{% raw %}{{.Server.Version}}{% endraw %}'
+          register: fleet_docker_version
+          changed_when: false
+          check_mode: false
+
+        - name: Record success
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': true, 'summary': ('docker ' ~ (fleet_docker_version.stdout | trim)), 'facts': {'dockerVersion': (fleet_docker_version.stdout | trim)}} | to_json }}"
+
+      rescue:
+        - name: Record the failure
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': false, 'reason': 'bootstrap_step_failed', 'detail': 'docker', 'summary': 'docker could not be installed'} | to_json }}"
+
+        - name: Fail the play
+          ansible.builtin.fail:
+            msg: "docker failed"

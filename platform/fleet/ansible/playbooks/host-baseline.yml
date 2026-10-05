@@ -1,0 +1,125 @@
+---
+# S6 host-baseline: nothing a job reads may outlive the job on this host (OET-RWP/1 section 10.1, H4):
+# swap off, core dumps off, volatile journal, time synchronisation, Docker logging driver "local" with size limits.
+- name: Host baseline (S6)
+  hosts: target
+  gather_facts: false
+  tasks:
+    - name: Baseline
+      block:
+        - name: Install chrony
+          ansible.builtin.apt:
+            name: chrony
+            state: present
+            update_cache: true
+            cache_valid_time: 3600
+
+        - name: Enable time synchronisation
+          ansible.builtin.systemd:
+            name: chrony
+            enabled: true
+            state: started
+
+        - name: Comment out swap entries in fstab
+          ansible.builtin.replace:
+            path: /etc/fstab
+            regexp: '^([^#\n].*\sswap\s.*)$'
+            replace: '# \1'
+
+        - name: Check whether swap is active
+          ansible.builtin.shell: "awk '/^SwapTotal:/ {print $2}' /proc/meminfo"
+          register: fleet_swap
+          changed_when: false
+          check_mode: false
+
+        - name: Turn swap off now
+          when: (fleet_swap.stdout | trim | int) > 0
+          ansible.builtin.command: swapoff -a
+
+        - name: Disable core dumps (kernel)
+          ansible.builtin.copy:
+            dest: /etc/sysctl.d/90-oet-fleet.conf
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              # Managed by the OET fleet manager (S6).
+              kernel.core_pattern=|/bin/false
+              fs.suid_dumpable=0
+              vm.swappiness=0
+          register: fleet_sysctl
+
+        - name: Apply the kernel settings
+          when: fleet_sysctl is changed
+          ansible.builtin.command: sysctl --system
+
+        - name: Disable core dumps (limits)
+          ansible.builtin.copy:
+            dest: /etc/security/limits.d/90-oet-fleet.conf
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              # Managed by the OET fleet manager (S6).
+              * hard core 0
+              * soft core 0
+
+        - name: Make sure the journald drop-in directory exists
+          ansible.builtin.file:
+            path: /etc/systemd/journald.conf.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Keep the journal in memory only
+          ansible.builtin.copy:
+            dest: /etc/systemd/journald.conf.d/90-oet-fleet.conf
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              # Managed by the OET fleet manager (S6).
+              [Journal]
+              Storage=volatile
+          register: fleet_journald
+
+        - name: Restart journald
+          when: fleet_journald is changed
+          ansible.builtin.systemd:
+            name: systemd-journald
+            state: restarted
+
+        - name: Docker logging driver local with size limits
+          ansible.builtin.copy:
+            dest: /etc/docker/daemon.json
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              {
+                "log-driver": "local",
+                "log-opts": { "max-size": "5m", "max-file": "2" }
+              }
+          register: fleet_docker_daemon
+
+        - name: Restart Docker to pick up the logging driver
+          when: fleet_docker_daemon is changed
+          ansible.builtin.systemd:
+            name: docker
+            state: restarted
+
+        - name: Record success
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': true, 'summary': 'host baseline applied'} | to_json }}"
+
+      rescue:
+        - name: Record the failure
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': false, 'reason': 'bootstrap_step_failed', 'detail': 'host-baseline', 'summary': 'host baseline could not be applied'} | to_json }}"
+
+        - name: Fail the play
+          ansible.builtin.fail:
+            msg: "host-baseline failed"

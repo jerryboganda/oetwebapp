@@ -1,0 +1,49 @@
+---
+# S3 install-key: the manager's public key, behind the forced command. The key pair was generated in the
+# manager; only the public half arrives here (as data in the vars file).
+- name: Install the manager key (S3)
+  hosts: target
+  gather_facts: false
+  tasks:
+    - name: Install the manager key
+      block:
+        - name: Check the public key is exactly one well-formed line
+          ansible.builtin.assert:
+            that:
+              - fleet_manager_pubkey is defined
+              - fleet_manager_pubkey is string
+              - "'\n' not in fleet_manager_pubkey"
+              - "'\r' not in fleet_manager_pubkey"
+              - fleet_manager_pubkey is match('^ssh-ed25519 [A-Za-z0-9+/]{16,2048}={0,2}( [A-Za-z0-9@._-]{0,64})?$')
+            quiet: true
+
+        - name: Create the .ssh directory
+          ansible.builtin.file:
+            path: "/home/{{ fleet_fleet_user }}/.ssh"
+            state: directory
+            owner: "{{ fleet_fleet_user }}"
+            group: "{{ fleet_fleet_user }}"
+            mode: "0700"
+
+        - name: Install authorized_keys with the forced command (and nothing else)
+          ansible.builtin.copy:
+            dest: "/home/{{ fleet_fleet_user }}/.ssh/authorized_keys"
+            owner: "{{ fleet_fleet_user }}"
+            group: "{{ fleet_fleet_user }}"
+            mode: "0600"
+            content: "restrict,command=\"/usr/local/sbin/oet-fleet-gate\",no-pty {{ fleet_manager_pubkey }}\n"
+
+        - name: Record success
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': true, 'summary': 'manager key installed behind the forced command'} | to_json }}"
+
+      rescue:
+        - name: Record the failure
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': false, 'reason': 'bootstrap_step_failed', 'detail': 'install-key', 'summary': 'manager key could not be installed'} | to_json }}"
+
+        - name: Fail the play
+          ansible.builtin.fail:
+            msg: "install-key failed"

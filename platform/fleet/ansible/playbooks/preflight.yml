@@ -1,0 +1,124 @@
+---
+# S1 preflight (OET-RWP/1 section 8.2): read-only checks with the temporary owner credential.
+# Success: Ubuntu 22.04/24.04 or Debian 12, x86_64, systemd, >= 2 cores, >= 4 GiB RAM, >= 20 GiB free,
+# clock within 5 s of the manager, no containers named oet-* (except our own agent) and no compose project
+# oetwebsite, and the host is not the primary. Facts are returned for the policy defaults.
+- name: Preflight - baseline checks (S1)
+  hosts: target
+  gather_facts: false
+  vars:
+    fleet_preflight_problem: ""
+    fleet_is_primary: false
+  tasks:
+    - name: Preflight
+      block:
+        - name: Read the OS release
+          ansible.builtin.command: cat /etc/os-release
+          register: fleet_os_release
+          changed_when: false
+          check_mode: false
+
+        - name: Read the architecture
+          ansible.builtin.command: uname -m
+          register: fleet_arch
+          changed_when: false
+          check_mode: false
+
+        - name: Probe systemd
+          ansible.builtin.stat:
+            path: /run/systemd/system
+          register: fleet_systemd
+
+        - name: Read the CPU core count
+          ansible.builtin.command: nproc
+          register: fleet_cores
+          changed_when: false
+          check_mode: false
+
+        - name: Read the memory in MiB
+          ansible.builtin.shell: "awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo"
+          register: fleet_mem
+          changed_when: false
+          check_mode: false
+
+        - name: Read the free disk space in GiB
+          ansible.builtin.shell: "df --output=avail -BG / | tail -n 1 | tr -dc '0-9'"
+          register: fleet_disk
+          changed_when: false
+          check_mode: false
+
+        - name: Read the host clock
+          ansible.builtin.command: date +%s
+          register: fleet_epoch
+          changed_when: false
+          check_mode: false
+
+        - name: List existing containers (if Docker is installed)
+          ansible.builtin.shell: "command -v docker >/dev/null 2>&1 && docker ps -a --format '{% raw %}{{.Names}}{% endraw %}' || true"
+          register: fleet_docker_names
+          changed_when: false
+          check_mode: false
+
+        - name: List containers of the production compose project (if Docker is installed)
+          ansible.builtin.shell: "command -v docker >/dev/null 2>&1 && docker ps -a --filter label=com.docker.compose.project=oetwebsite -q || true"
+          register: fleet_project_containers
+          changed_when: false
+          check_mode: false
+
+        - name: Read the host addresses
+          ansible.builtin.shell: "hostname -I 2>/dev/null || true"
+          register: fleet_addresses
+          changed_when: false
+          check_mode: false
+
+        - name: Evaluate the baseline
+          ansible.builtin.set_fact:
+            fleet_os_id: "{{ fleet_os_release.stdout | regex_findall('(?m)^ID=\"?([a-z0-9._-]+)\"?') | first | default('') }}"
+            fleet_os_version: "{{ fleet_os_release.stdout | regex_findall('(?m)^VERSION_ID=\"?([0-9.]+)\"?') | first | default('') }}"
+            fleet_os_pretty: "{{ fleet_os_release.stdout | regex_findall('(?m)^PRETTY_NAME=\"?([^\"\\n]+)\"?') | first | default('unknown') }}"
+            fleet_foreign_containers: "{{ fleet_docker_names.stdout_lines | select('match', '^oet-') | reject('equalto', 'oet-fleet-agent') | list }}"
+            fleet_is_primary: "{{ fleet_primary_address in (fleet_addresses.stdout | trim).split() }}"
+
+        - name: Decide whether the baseline is met
+          ansible.builtin.set_fact:
+            fleet_os_supported: "{{ (fleet_os_id == 'ubuntu' and fleet_os_version in ['22.04', '24.04']) or (fleet_os_id == 'debian' and fleet_os_version == '12') }}"
+
+        - name: Name the first unmet requirement
+          ansible.builtin.set_fact:
+            fleet_preflight_problem: >-
+              {%- if not (fleet_os_supported | bool) -%}os_unsupported
+              {%- elif (fleet_arch.stdout | trim) != 'x86_64' -%}arch_unsupported
+              {%- elif not fleet_systemd.stat.exists -%}no_systemd
+              {%- elif (fleet_cores.stdout | trim | int) < 2 -%}cpu_below_min
+              {%- elif (fleet_mem.stdout | trim | int) < 3800 -%}mem_below_min
+              {%- elif (fleet_disk.stdout | trim | int) < 20 -%}disk_below_min
+              {%- elif (((fleet_epoch.stdout | trim | int) - (fleet_controller_epoch | int)) | abs) > 5 -%}time_skew
+              {%- elif (fleet_foreign_containers | length) > 0 or (fleet_project_containers.stdout | trim | length) > 0 -%}existing_oet_workload
+              {%- endif -%}
+
+        - name: Record a rejection
+          when: (fleet_preflight_problem | trim) != '' or fleet_is_primary | bool
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': false, 'reason': ('forbidden_host' if fleet_is_primary | bool else 'preflight_rejected'), 'detail': ('own_address_is_primary' if fleet_is_primary | bool else (fleet_preflight_problem | trim)), 'summary': 'host rejected'} | to_json }}"
+
+        - name: Stop on a rejection
+          when: (fleet_preflight_problem | trim) != '' or fleet_is_primary | bool
+          ansible.builtin.fail:
+            msg: "preflight rejected the host"
+
+        - name: Record success and the facts
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': true, 'summary': 'host meets the baseline', 'facts': {'os': fleet_os_pretty, 'arch': (fleet_arch.stdout | trim), 'cpuCores': (fleet_cores.stdout | trim | int), 'memMiB': (fleet_mem.stdout | trim | int), 'diskGiB': (fleet_disk.stdout | trim | int)}} | to_json }}"
+
+      rescue:
+        - name: Record a generic failure when no specific rejection was recorded
+          when: (fleet_preflight_problem | default('') | trim) == '' and not (fleet_is_primary | default(false) | bool)
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': false, 'reason': 'bootstrap_step_failed', 'detail': 'preflight', 'summary': 'preflight could not run'} | to_json }}"
+
+        - name: Fail the play
+          ansible.builtin.fail:
+            msg: "preflight failed"

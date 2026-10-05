@@ -1,0 +1,12 @@
+# One target per run. Every value comes from the JSON vars file the manager passes with -e @vars.json
+# (data, never shell-interpolated); nothing about the host is written here.
+all:
+  hosts:
+    target:
+      ansible_host: "{{ fleet_target_address }}"
+      ansible_port: "{{ fleet_target_port }}"
+      ansible_user: "{{ fleet_ssh_user }}"
+      ansible_ssh_private_key_file: "{{ fleet_key_file }}"
+      ansible_ssh_common_args: "{{ fleet_ssh_common_args }}"
+      ansible_become: "{{ fleet_become }}"
+      ansible_become_method: sudo

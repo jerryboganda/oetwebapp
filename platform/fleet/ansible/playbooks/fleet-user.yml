@@ -1,0 +1,72 @@
+---
+# S2 fleet-user: the restricted account, the gate, the ctl and the one-line sudoers drop-in.
+# Idempotent: every task converges on a fixed content, so --check reports "changed=0" when it is already done.
+- name: Fleet user and restricted control surface (S2)
+  hosts: target
+  gather_facts: false
+  tasks:
+    - name: Install the fleet user
+      block:
+        - name: Make sure sudo is present
+          ansible.builtin.apt:
+            name: sudo
+            state: present
+            update_cache: true
+            cache_valid_time: 3600
+
+        - name: Create the oetfleet account (locked password; the shell only runs the forced command)
+          ansible.builtin.user:
+            name: "{{ fleet_fleet_user }}"
+            comment: "OET fleet manager (restricted)"
+            shell: /bin/sh
+            create_home: true
+            password_lock: true
+            state: present
+
+        - name: Make sure the config directory exists
+          ansible.builtin.file:
+            path: /etc/oet-fleet
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Install oet-fleet-gate (the SSH forced command)
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../files/oet-fleet-gate"
+            dest: /usr/local/sbin/oet-fleet-gate
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Install oet-fleet-ctl (the only program the fleet user may run as root)
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../files/oet-fleet-ctl"
+            dest: /usr/local/sbin/oet-fleet-ctl
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Install the sudoers drop-in (exactly one command)
+          ansible.builtin.copy:
+            src: "{{ playbook_dir }}/../files/oet-fleet-sudoers"
+            dest: /etc/sudoers.d/oet-fleet
+            owner: root
+            group: root
+            mode: "0440"
+            validate: "/usr/sbin/visudo -cf %s"
+
+        - name: Record success
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': true, 'summary': 'fleet user and restricted control surface installed'} | to_json }}"
+
+      rescue:
+        - name: Record the failure
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': false, 'reason': 'bootstrap_step_failed', 'detail': 'fleet-user', 'summary': 'fleet user could not be installed'} | to_json }}"
+
+        - name: Fail the play
+          ansible.builtin.fail:
+            msg: "fleet-user failed"

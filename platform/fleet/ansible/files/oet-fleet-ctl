@@ -1,0 +1,497 @@
+#!/usr/bin/python3
+"""oet-fleet-ctl: the restricted control surface of an OET fleet helper (OET-RWP/1 section 7.4).
+
+Runs as root through `sudo -n` from oet-fleet-gate. It validates its own arguments again (defence in
+depth: the gate and this script share one verb table), never uses a shell, and can only:
+
+  * read host/agent status, run the host baseline check;
+  * log in to GHCR with a token read from STDIN into a temporary tmpfs docker config, pull the agent image BY
+    DIGEST, verify it, and log out again;
+  * write the allow-listed agent environment file, (re)create the single agent container with FIXED hardened
+    flags, stop/restart it, show its logs, prune old agent images, write the boot unit;
+  * uninstall: remove ONLY what this fleet installed (the agent container, images of the agent repository,
+    /etc/oet-fleet, the boot unit) and lock the oetfleet account. Docker itself, the firewall table, other
+    containers, other images and every volume are never touched.
+
+Output: one JSON object on stdout (logs print plain text). Exit 0 = ok, 1 = the operation failed, 2 = refused.
+No job content or secret is ever printed.
+"""
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+
+AGENT_REPO = "ghcr.io/jerryboganda/oetwebapp-fleet-agent"
+CONTAINER = "oet-fleet-agent"
+CONFIG_DIR = "/etc/oet-fleet"
+ENV_FILE = "/etc/oet-fleet/agent.env"
+DOCKER_CONFIG_DIR = "/run/oet-fleet/dockercfg"
+UNIT_PATH = "/etc/systemd/system/oet-fleet-agent.service"
+SUDOERS_PATH = "/etc/sudoers.d/oet-fleet"
+DOCKER = "/usr/bin/docker"
+SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+VERBS = {
+    "status": r"",
+    "harden-check": r"",
+    "login": r"--registry ghcr\.io",
+    "pull": r"ghcr\.io/jerryboganda/oetwebapp-fleet-agent@sha256:[0-9a-f]{64}",
+    "verify": r"sha256:[0-9a-f]{64}( sha256:[0-9a-f]{64})?",
+    "logout": r"",
+    "put-env": r"",
+    "run": r"sha256:[0-9a-f]{64}",
+    "stop": r"(--grace ([1-9]|[1-9][0-9]|1[01][0-9]|120))?",
+    "restart": r"",
+    "logs": r"--tail ([1-9]|[1-9][0-9]|1[0-9][0-9]|200)",
+    "prune": r"",
+    "wipe-scratch": r"",
+    "unit-sync": r"",
+    "uninstall": r"",
+}
+
+ENV_KEYS = (
+    "OET_API_BASE",
+    "OET_NODE_ID",
+    "OET_NODE_TOKEN",
+    "OET_AGENT_IMAGE_DIGEST",
+    "OET_BUDGET_CPU_MILLI",
+    "OET_BUDGET_MEM_MIB",
+    "OET_BUDGET_TMP_MIB",
+    "OET_LOG_LEVEL",
+)
+ENV_VALUE = re.compile(r"[A-Za-z0-9._:/@+=-]{1,200}")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+class Refused(Exception):
+    pass
+
+
+class Failed(Exception):
+    pass
+
+
+def emit(payload, code=0):
+    sys.stdout.write(json.dumps(payload) + "\n")
+    sys.stdout.flush()
+    sys.exit(code)
+
+
+def run(command, stdin_text=None, check=True, timeout=600):
+    """Runs a program with an argument LIST and a fixed PATH. Returns (returncode, stdout, stderr)."""
+    env = {"PATH": SAFE_PATH, "LC_ALL": "C.UTF-8"}
+    completed = subprocess.run(
+        command,
+        input=stdin_text,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=timeout,
+        check=False,
+    )
+    if check and completed.returncode != 0:
+        raise Failed((completed.stderr or completed.stdout or "command failed").strip()[:300])
+    return completed.returncode, completed.stdout, completed.stderr
+
+
+def docker(*args, **kwargs):
+    return run([DOCKER] + list(args), **kwargs)
+
+
+def read_stdin(limit):
+    data = sys.stdin.read(limit + 1)
+    if len(data) > limit:
+        raise Refused("stdin is too large")
+    return data
+
+
+def meminfo(key):
+    with open("/proc/meminfo", "r", encoding="ascii") as handle:
+        for line in handle:
+            if line.startswith(key + ":"):
+                return int(re.sub(r"[^0-9]", "", line))
+    return 0
+
+
+def os_pretty():
+    try:
+        with open("/etc/os-release", "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("PRETTY_NAME="):
+                    return line.split("=", 1)[1].strip().strip('"')
+    except OSError:
+        pass
+    return "unknown"
+
+
+def inspect_agent():
+    code, out, _ = docker("inspect", CONTAINER, check=False)
+    if code != 0:
+        return {"present": False}
+    try:
+        info = json.loads(out)[0]
+    except (ValueError, IndexError):
+        return {"present": False}
+    state = info.get("State", {})
+    reference = info.get("Config", {}).get("Image", "")
+    digest = reference.split("@", 1)[1] if "@" in reference else None
+    return {
+        "present": True,
+        "state": state.get("Status"),
+        "imageDigest": digest,
+        "startedAt": state.get("StartedAt"),
+        "restartCount": info.get("RestartCount", 0),
+        "oomKilled": bool(state.get("OOMKilled", False)),
+    }
+
+
+def verb_status(args):
+    docker_version = None
+    docker_running = False
+    code, out, _ = docker("version", "--format", "{{.Server.Version}}", check=False)
+    if code == 0:
+        docker_version = out.strip()
+        docker_running = True
+    sync_ok = False
+    code, out, _ = run(["/usr/bin/timedatectl", "show", "-p", "NTPSynchronized", "--value"], check=False)
+    if code == 0:
+        sync_ok = out.strip() == "yes"
+    with open("/proc/uptime", "r", encoding="ascii") as handle:
+        uptime = int(float(handle.read().split()[0]))
+    usage = shutil.disk_usage("/")
+    emit({
+        "schema": "oet-fleet-ctl.status/1",
+        "host": {
+            "os": os_pretty(),
+            "arch": os.uname().machine,
+            "cpuCores": os.cpu_count(),
+            "memTotalMiB": meminfo("MemTotal") // 1024,
+            "memAvailableMiB": meminfo("MemAvailable") // 1024,
+            "diskFreeGiB": usage.free // (1024 ** 3),
+            "uptimeSeconds": uptime,
+            "swapMiB": meminfo("SwapTotal") // 1024,
+            "timeSyncOk": sync_ok,
+        },
+        "docker": {"version": docker_version, "running": docker_running},
+        "agent": inspect_agent() if docker_running else {"present": False},
+        "ctl": {"version": 1},
+    })
+
+
+def verb_harden_check(args):
+    findings = []
+    if meminfo("SwapTotal") != 0:
+        findings.append("swap is on")
+    try:
+        with open("/proc/sys/kernel/core_pattern", "r", encoding="ascii") as handle:
+            if not handle.read().strip().startswith("|/bin/false"):
+                findings.append("core dumps are enabled")
+        with open("/proc/sys/fs/suid_dumpable", "r", encoding="ascii") as handle:
+            if handle.read().strip() != "0":
+                findings.append("suid core dumps are enabled")
+    except OSError:
+        findings.append("core dump settings unreadable")
+    if run(["/usr/sbin/nft", "list", "table", "inet", "oet_fleet"], check=False)[0] != 0:
+        findings.append("firewall table is missing")
+    if not os.path.exists("/etc/systemd/journald.conf.d/90-oet-fleet.conf"):
+        findings.append("journald is not volatile")
+    code, out, _ = run(["/usr/bin/timedatectl", "show", "-p", "NTPSynchronized", "--value"], check=False)
+    if code != 0 or out.strip() != "yes":
+        findings.append("time is not synchronised")
+    code, out, _ = docker("info", "--format", "{{.LoggingDriver}}", check=False)
+    if code != 0 or out.strip() != "local":
+        findings.append("docker log driver is not local")
+    emit({"ok": not findings, "findings": findings}, 0 if not findings else 1)
+
+
+def verb_login(args):
+    lines = read_stdin(512).split("\n")
+    user = lines[0].strip() if len(lines) > 0 else ""
+    token = lines[1].strip() if len(lines) > 1 else ""
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,64}", user) is None or re.fullmatch(r"[A-Za-z0-9_]{10,300}", token) is None:
+        raise Refused("credential shape rejected")
+    os.makedirs(DOCKER_CONFIG_DIR, mode=0o700, exist_ok=True)
+    os.chmod(DOCKER_CONFIG_DIR, 0o700)
+    docker("--config", DOCKER_CONFIG_DIR, "login", "ghcr.io", "-u", user, "--password-stdin", stdin_text=token + "\n", timeout=60)
+    emit({"ok": True})
+
+
+def config_args():
+    return ["--config", DOCKER_CONFIG_DIR] if os.path.isdir(DOCKER_CONFIG_DIR) else []
+
+
+def verb_pull(args):
+    reference = args[0]
+    docker(*(config_args() + ["pull", reference]))
+    _, out, _ = docker("image", "inspect", reference)
+    info = json.loads(out)[0]
+    emit({"ok": True, "imageId": info.get("Id"), "repoDigests": info.get("RepoDigests", [])})
+
+
+def verb_verify(args):
+    digest = args[0]
+    image_id = args[1] if len(args) > 1 else None
+    code, out, _ = docker("image", "inspect", AGENT_REPO + "@" + digest, check=False)
+    if code != 0:
+        emit({"ok": False, "error": "image is not present"}, 1)
+    info = json.loads(out)[0]
+    repo_digests = info.get("RepoDigests", [])
+    if AGENT_REPO + "@" + digest not in repo_digests:
+        emit({"ok": False, "error": "digest mismatch"}, 1)
+    if image_id is not None and info.get("Id") != image_id:
+        emit({"ok": False, "error": "image id mismatch"}, 1)
+    emit({"ok": True})
+
+
+def verb_logout(args):
+    docker("--config", DOCKER_CONFIG_DIR, "logout", "ghcr.io", check=False)
+    shutil.rmtree(DOCKER_CONFIG_DIR, ignore_errors=True)
+    emit({"ok": True})
+
+
+def parse_env_text(text):
+    values = {}
+    for line in text.split("\n"):
+        if not line.strip():
+            continue
+        if "=" not in line:
+            raise Refused("malformed env line")
+        key, value = line.split("=", 1)
+        if key not in ENV_KEYS:
+            raise Refused("env key not allowed: " + key)
+        if key in values:
+            raise Refused("duplicate env key")
+        if ENV_VALUE.fullmatch(value) is None:
+            raise Refused("env value not allowed for " + key)
+        values[key] = value
+    return values
+
+
+def write_env(values):
+    os.makedirs(CONFIG_DIR, mode=0o755, exist_ok=True)
+    temporary = ENV_FILE + ".tmp"
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+        for key in ENV_KEYS:
+            if key in values:
+                handle.write(key + "=" + values[key] + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, ENV_FILE)
+
+
+def read_env():
+    with open(ENV_FILE, "r", encoding="ascii") as handle:
+        return parse_env_text(handle.read())
+
+
+def verb_put_env(args):
+    values = parse_env_text(read_stdin(4096))
+    if "OET_API_BASE" not in values or "OET_NODE_ID" not in values or "OET_NODE_TOKEN" not in values:
+        raise Refused("OET_API_BASE, OET_NODE_ID and OET_NODE_TOKEN are required")
+    write_env(values)
+    emit({"ok": True})
+
+
+def clamp(value, low, high):
+    return max(low, min(high, value))
+
+
+def verb_run(args):
+    digest = args[0]
+    if not os.path.exists(ENV_FILE):
+        raise Failed("no env file; put-env first")
+    values = read_env()
+    values["OET_AGENT_IMAGE_DIGEST"] = digest
+    write_env(values)
+    cpu_milli = clamp(int(values.get("OET_BUDGET_CPU_MILLI", "3000")), 500, 64000)
+    mem_mib = clamp(int(values.get("OET_BUDGET_MEM_MIB", "5120")), 512, 262144)
+    tmp_mib = clamp(int(values.get("OET_BUDGET_TMP_MIB", "3072")), 64, mem_mib)
+    docker("rm", "-f", CONTAINER, check=False)
+    _, out, _ = docker(
+        "run", "-d",
+        "--name", CONTAINER,
+        "--init",
+        "--read-only",
+        "--cap-drop", "ALL",
+        "--security-opt", "no-new-privileges",
+        "--pids-limit", "512",
+        "--memory", "%dm" % mem_mib,
+        "--memory-swap", "%dm" % mem_mib,
+        "--cpus", "%.2f" % (cpu_milli / 1000.0),
+        "--user", "10001:10001",
+        "--ulimit", "core=0",
+        "--tmpfs", "/scratch:rw,noexec,nosuid,nodev,size=%dm" % tmp_mib,
+        "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=256m",
+        "--log-driver", "local",
+        "--log-opt", "max-size=5m",
+        "--log-opt", "max-file=2",
+        "--restart", "unless-stopped",
+        "--env-file", ENV_FILE,
+        "--health-interval", "30s",
+        AGENT_REPO + "@" + digest,
+    )
+    emit({"ok": True, "containerId": out.strip()[:64]})
+
+
+def verb_stop(args):
+    grace = args[1] if len(args) == 2 else "90"
+    docker("stop", "-t", grace, CONTAINER)
+    emit({"ok": True})
+
+
+def verb_restart(args):
+    docker("restart", CONTAINER)
+    emit({"ok": True})
+
+
+def verb_logs(args):
+    _, out, err = docker("logs", "--tail", args[1], CONTAINER)
+    sys.stdout.write(out + err)
+    sys.stdout.flush()
+    sys.exit(0)
+
+
+def list_agent_images():
+    code, out, _ = docker("image", "ls", AGENT_REPO, "--no-trunc", "--format", "{{.ID}}", check=False)
+    if code != 0:
+        return []
+    ids = []
+    for line in out.split("\n"):
+        line = line.strip()
+        if DIGEST.fullmatch(line) and line not in ids:
+            ids.append(line)
+    return ids
+
+
+def image_created(image_id):
+    code, out, _ = docker("image", "inspect", "--format", "{{.Created}}", image_id, check=False)
+    return out.strip() if code == 0 else ""
+
+
+def verb_prune(args):
+    running = inspect_agent().get("imageDigest")
+    keep_ids = set()
+    if running:
+        code, out, _ = docker("image", "inspect", "--format", "{{.Id}}", AGENT_REPO + "@" + running, check=False)
+        if code == 0:
+            keep_ids.add(out.strip())
+    candidates = sorted(list_agent_images(), key=image_created, reverse=True)
+    kept = 0
+    removed = 0
+    for image_id in candidates:
+        if image_id in keep_ids:
+            continue
+        if kept < 2:
+            kept += 1
+            continue
+        if docker("image", "rm", image_id, check=False)[0] == 0:
+            removed += 1
+    emit({"ok": True, "removed": removed})
+
+
+def verb_wipe_scratch(args):
+    # tmpfs mounts live inside the container and start empty on every (re)start.
+    docker("restart", CONTAINER)
+    emit({"ok": True})
+
+
+UNIT_TEXT = """[Unit]
+Description=OET fleet agent container
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker start oet-fleet-agent
+ExecStop=/usr/bin/docker stop -t 90 oet-fleet-agent
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def verb_unit_sync(args):
+    with open(UNIT_PATH, "w", encoding="ascii") as handle:
+        handle.write(UNIT_TEXT)
+    os.chmod(UNIT_PATH, 0o644)
+    run(["/usr/bin/systemctl", "daemon-reload"], check=False)
+    run(["/usr/bin/systemctl", "enable", "oet-fleet-agent.service"], check=False)
+    emit({"ok": True})
+
+
+def verb_uninstall(args):
+    warnings = []
+    docker("rm", "-f", CONTAINER, check=False)
+    for image_id in list_agent_images():
+        if docker("image", "rm", "-f", image_id, check=False)[0] != 0:
+            warnings.append("an agent image could not be removed")
+    run(["/usr/bin/systemctl", "disable", "--now", "oet-fleet-agent.service"], check=False)
+    for path in (UNIT_PATH,):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    run(["/usr/bin/systemctl", "daemon-reload"], check=False)
+    shutil.rmtree(CONFIG_DIR, ignore_errors=True)
+    shutil.rmtree("/run/oet-fleet", ignore_errors=True)
+    # The manager can no longer log in: lock the account and drop its key and the forced-command gate.
+    run(["/usr/sbin/usermod", "-L", "oetfleet"], check=False)
+    for path in ("/home/oetfleet/.ssh/authorized_keys", SUDOERS_PATH, "/usr/local/sbin/oet-fleet-gate"):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    emit({"ok": True, "warnings": warnings})
+
+
+HANDLERS = {
+    "status": verb_status,
+    "harden-check": verb_harden_check,
+    "login": verb_login,
+    "pull": verb_pull,
+    "verify": verb_verify,
+    "logout": verb_logout,
+    "put-env": verb_put_env,
+    "run": verb_run,
+    "stop": verb_stop,
+    "restart": verb_restart,
+    "logs": verb_logs,
+    "prune": verb_prune,
+    "wipe-scratch": verb_wipe_scratch,
+    "unit-sync": verb_unit_sync,
+    "uninstall": verb_uninstall,
+}
+
+
+def main(argv):
+    if len(argv) < 2:
+        emit({"ok": False, "error": "no verb"}, 2)
+    verb = argv[1]
+    args = argv[2:]
+    try:
+        if verb not in VERBS:
+            raise Refused("unknown verb")
+        if any(argument == "" or re.search(r"\s", argument) for argument in args):
+            raise Refused("malformed argument")
+        if re.fullmatch(VERBS[verb], " ".join(args)) is None:
+            raise Refused("arguments rejected")
+        # `stop --grace N` passes the pair through; handlers read the digits from args[1].
+        HANDLERS[verb](args)
+    except Refused as error:
+        emit({"ok": False, "error": str(error)}, 2)
+    except Failed as error:
+        emit({"ok": False, "error": str(error)}, 1)
+    except subprocess.TimeoutExpired:
+        emit({"ok": False, "error": "timed out"}, 1)
+    except (OSError, ValueError) as error:
+        emit({"ok": False, "error": error.__class__.__name__}, 1)
+
+
+if __name__ == "__main__":
+    main(sys.argv)

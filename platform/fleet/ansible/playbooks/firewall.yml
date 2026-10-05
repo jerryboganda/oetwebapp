@@ -1,0 +1,108 @@
+---
+# S5 firewall: default-deny inbound on the host using a dedicated nftables table (inet oet_fleet) so Docker's own
+# tables are never flushed. SSH is allowed only from the primary, from the address this very session comes from
+# (so the operator that is connected right now can never be locked out) and from fleet_ssh_allow_from if given.
+# After the change the manager opens a NEW connection from the controller; if that fails the table is removed again
+# and the step reports lockout_risk.
+- name: Host firewall (S5)
+  hosts: target
+  gather_facts: false
+  tasks:
+    - name: Firewall
+      block:
+        - name: Install nftables
+          ansible.builtin.apt:
+            name: nftables
+            state: present
+            update_cache: true
+            cache_valid_time: 3600
+
+        - name: Read the address of this SSH session
+          ansible.builtin.shell: 'echo "${SSH_CLIENT%% *}"'
+          register: fleet_session_address
+          changed_when: false
+          check_mode: false
+
+        - name: Build the list of addresses allowed to reach SSH
+          ansible.builtin.set_fact:
+            fleet_allowed_v4: >-
+              {{ ([fleet_primary_address] + [fleet_session_address.stdout | trim] + (fleet_ssh_allow_from | default([])))
+                 | select('match', '^[0-9]{1,3}(\.[0-9]{1,3}){3}$') | unique | list }}
+
+        - name: Make sure the include directory exists
+          ansible.builtin.file:
+            path: /etc/nftables.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Write the fleet table
+          ansible.builtin.copy:
+            dest: /etc/nftables.d/oet-fleet.nft
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              # Managed by the OET fleet manager (S5). Only this table is owned here; Docker's tables are untouched.
+              table inet oet_fleet
+              delete table inet oet_fleet
+              table inet oet_fleet {
+                chain input {
+                  type filter hook input priority -10; policy drop;
+                  ct state established,related accept
+                  iifname "lo" accept
+                  ip protocol icmp accept
+                  ip6 nexthdr icmpv6 accept
+                  tcp dport {{ fleet_target_port }} ip saddr { {{ fleet_allowed_v4 | join(', ') }} } accept
+                }
+              }
+          register: fleet_nft_file
+
+        - name: Load the table now
+          when: fleet_nft_file is changed
+          ansible.builtin.command: nft -f /etc/nftables.d/oet-fleet.nft
+
+        - name: Load the table at boot
+          ansible.builtin.lineinfile:
+            path: /etc/nftables.conf
+            line: 'include "/etc/nftables.d/*.nft"'
+            insertafter: EOF
+            create: false
+
+        - name: Enable nftables
+          ansible.builtin.systemd:
+            name: nftables
+            enabled: true
+
+        - name: A new connection from the manager must still be accepted
+          when: not (fleet_check_mode | bool)
+          delegate_to: localhost
+          become: false
+          check_mode: false
+          changed_when: false
+          ansible.builtin.wait_for:
+            host: "{{ fleet_target_address }}"
+            port: "{{ fleet_target_port | int }}"
+            timeout: 15
+
+        - name: Record success
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': true, 'summary': 'inbound default-deny; SSH allowed from the primary and the connecting address'} | to_json }}"
+
+      rescue:
+        - name: Remove our table so the host stays reachable
+          when: not (fleet_check_mode | default(false) | bool)
+          ansible.builtin.command: nft delete table inet oet_fleet
+          failed_when: false
+          changed_when: false
+
+        - name: Record the failure
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': false, 'reason': ('lockout_risk' if 'must still be accepted' in (ansible_failed_task.name | default('')) else 'bootstrap_step_failed'), 'detail': 'firewall', 'summary': 'the firewall step failed'} | to_json }}"
+
+        - name: Fail the play
+          ansible.builtin.fail:
+            msg: "firewall failed"
