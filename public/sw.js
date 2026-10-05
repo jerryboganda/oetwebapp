@@ -20,9 +20,11 @@
  * `activate` deletes every `oet-*` cache that is not one of the current names.
  * v6 purges the v5 page cache that held pre-rebrand HTML.
  * v7 purges cached Writing draft bodies (letter text) now that drafts bypass the SW.
+ * v8 purges the SignalR long-poll responses that v7 wrote into the API cache (one
+ * entry per poll, keyed by a unique `_=` URL) now that hub traffic bypasses the SW.
  */
 
-const CACHE_VERSION = 'oet-v7';
+const CACHE_VERSION = 'oet-v8';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 const CURRENT_CACHES = [STATIC_CACHE, API_CACHE];
@@ -61,6 +63,14 @@ const EXAM_MEDIA_API = /^\/v1\/(media\/[^/]+\/content|listening\/audio\/)/i;
 // old) could restore older text and a stale version over newer work. Unanchored
 // because the browser reaches the API through the /api/backend proxy.
 const WRITING_DRAFT_API = /\/v1\/writing\/drafts\//i;
+
+// SignalR hubs (/v1/notifications/hub, /v1/ai-assistant/hub, /hubs/writing-today, ...)
+// are long-lived and stream long-poll responses. Every poll carries a unique `_=` URL,
+// so letting networkFirstApi cache them wrote one new Cache Storage entry per poll per
+// open tab, unbounded until the next CACHE_VERSION bump, and an SSE fallback would be
+// cached as an unbounded stream. They must never be intercepted. Matched on the path
+// segment, so `/v1/.../hub` and `/hubs/...` are covered on any origin.
+const SIGNALR_HUB = /\/hubs?(\/|$)/i;
 
 // ---------- Install ----------
 self.addEventListener('install', (event) => {
@@ -108,7 +118,8 @@ self.addEventListener('fetch', (event) => {
     STREAMING_MEDIA.test(url.pathname) ||
     VIDEO_PLAYBACK_API.test(url.pathname) ||
     EXAM_MEDIA_API.test(url.pathname) ||
-    WRITING_DRAFT_API.test(url.pathname)
+    WRITING_DRAFT_API.test(url.pathname) ||
+    SIGNALR_HUB.test(url.pathname)
   ) {
     return;
   }

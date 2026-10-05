@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchOnboardingState } from '@/lib/api';
+import { registerResettable } from '@/lib/stores/registry';
 
 let cachedPromise: Promise<boolean> | null = null;
 
@@ -19,6 +20,11 @@ function loadExamDateRequired(): Promise<boolean> {
 export function resetExamDateGateCache() {
   cachedPromise = null;
 }
+
+// Sign-out clears every registered store (auth-context.signOut → resetAllStores).
+// This cache is module-level and not keyed by user, so without registering it the
+// next account on the same tab would inherit the previous account's answer.
+registerResettable(resetExamDateGateCache);
 
 /** True once we know the signed-in learner has no confirmed target exam
  * date. Fetched once per session (module-level cache) rather than once per
