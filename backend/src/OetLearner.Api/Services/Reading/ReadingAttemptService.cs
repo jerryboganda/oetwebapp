@@ -639,34 +639,7 @@ public sealed class ReadingAttemptService(
             sanitisedElapsedMs = Math.Min(e, MaxElapsedMsPerSave);
         }
 
-        // Overlapping autosaves (two tabs, a retry racing the original) used to 409: the
-        // attempt was saved as a TRACKED RowVersion++ guarded by the RowVersion read at the
-        // top of this method, so whichever save landed second failed with
-        // DbUpdateConcurrencyException AFTER its answer was already committed (and an
-        // automatic retry then re-applied the TotalElapsedMs delta). The bump is now one
-        // targeted UPDATE (RowVersion = RowVersion + 1) made BEFORE any answer write, so
-        // concurrent autosaves commute, and a concurrent timer/break writer that holds an
-        // older RowVersion is still invalidated exactly as before. It is guarded on
-        // Status = InProgress so a save can never land on an attempt that was just
-        // submitted or expired; that case fails here, before anything is written.
-        // The EF in-memory provider (unit tests) has no ExecuteUpdate, so it keeps the
-        // tracked bump at the end of the method, exactly as before.
         var relational = db.Database.IsRelational();
-        if (relational)
-        {
-            var bumped = await db.ReadingAttempts
-                .Where(a => a.Id == attemptId && a.UserId == userId && a.Status == ReadingAttemptStatus.InProgress)
-                .ExecuteUpdateAsync(s => s
-                    .SetProperty(a => a.LastActivityAt, _ => now)
-                    .SetProperty(a => a.RowVersion, a => a.RowVersion + 1),
-                    ct);
-            if (bumped == 0)
-            {
-                throw new ReadingAttemptException(
-                    "attempt_not_in_progress",
-                    "Cannot save to an attempt that is no longer in progress.");
-            }
-        }
 
         // P0-H 2026-05 hardening: TotalElapsedMs increment must be atomic at
         // DB level so two tabs autosaving the same question do not race and
@@ -783,15 +756,48 @@ public sealed class ReadingAttemptService(
             }
         }
 
-        if (!relational)
+        // Bump the attempt's RowVersion AFTER the answer is written. That order is the draft
+        // protection: a submit / grade that read the attempt (and its answers) before this
+        // answer landed carries the old RowVersion, so its own guarded save conflicts and is
+        // retried (the grader treats that as a lost race) instead of grading without the answer
+        // while this autosave reports success. Bumping before the write would open exactly that
+        // lost-update window.
+        //
+        // Overlapping autosaves (two tabs, a retry racing the original) used to 409 here: the
+        // attempt was saved as a TRACKED RowVersion++ guarded by the RowVersion read at the top
+        // of this method, so whichever save landed second failed with
+        // DbUpdateConcurrencyException AFTER its answer was already committed (and an automatic
+        // retry then re-applied the TotalElapsedMs delta). The bump is now one targeted UPDATE
+        // (RowVersion = RowVersion + 1) that does not depend on the RowVersion read earlier, so
+        // concurrent autosaves commute. It is guarded on Status = InProgress: if the attempt was
+        // submitted / expired while this save was in flight, the bump touches nothing and the
+        // save is reported as rejected (the late answer row is the same hazard the tracked bump
+        // had; it never counts, the attempt is already graded).
+        // The EF in-memory provider (unit tests) has no ExecuteUpdate, so it keeps the tracked
+        // bump, saved below, exactly as before.
+        if (relational)
         {
-            // In-memory provider only (no ExecuteUpdate): the tracked bump, saved below.
+            var bumped = await db.ReadingAttempts
+                .Where(a => a.Id == attemptId && a.UserId == userId && a.Status == ReadingAttemptStatus.InProgress)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.LastActivityAt, _ => now)
+                    .SetProperty(a => a.RowVersion, a => a.RowVersion + 1),
+                    ct);
+            if (bumped == 0)
+            {
+                throw new ReadingAttemptException(
+                    "attempt_not_in_progress",
+                    "Cannot save to an attempt that is no longer in progress.");
+            }
+        }
+        else
+        {
             attempt.LastActivityAt = now;
             attempt.RowVersion++;
         }
 
         // Wave 1 — append a changed-answer revision row when the value moved.
-        // attempt.Status is guaranteed InProgress here (asserted at entry).
+        // attempt.Status was InProgress when this save began (asserted at entry).
         // The revision rows ARE the audit trail of what the learner answered and when.
         // The per-save "ReadingAnswerSaved" AuditEvent (and the per-save COUNT that only
         // fed its detail string) is intentionally gone: owner-approved 2026-10-05, it was

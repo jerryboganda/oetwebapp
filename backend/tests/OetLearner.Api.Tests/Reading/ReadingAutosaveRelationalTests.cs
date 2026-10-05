@@ -182,14 +182,14 @@ public sealed class ReadingAutosaveRelationalTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Autosave_on_an_attempt_that_just_left_InProgress_is_rejected_before_anything_is_written()
+    public async Task Autosave_on_an_attempt_that_just_left_InProgress_is_rejected_and_never_touches_the_attempt()
     {
         await using var dbA = new LearnerDbContext(_options);
         var service = BuildService(dbA);
         await service.SaveAnswerAsync(UserId, AttemptId, Question1, "\"first\"", null, CancellationToken.None);
 
         // The attempt is submitted by another request after service A loaded it (still InProgress
-        // in A's tracker), so only the guarded UPDATE can notice.
+        // in A's tracker), so only the Status-guarded UPDATE can notice.
         await using (var dbB = new LearnerDbContext(_options))
         {
             await dbB.ReadingAttempts
@@ -197,13 +197,39 @@ public sealed class ReadingAutosaveRelationalTests : IAsyncLifetime
                 .ExecuteUpdateAsync(s => s.SetProperty(a => a.Status, ReadingAttemptStatus.Submitted));
         }
 
+        var rowVersionBefore = (await LoadAttemptAsync()).RowVersion;
         var error = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
             service.SaveAnswerAsync(UserId, AttemptId, Question2, "\"second\"", null, CancellationToken.None));
 
+        // Reported as rejected (never a silent success), and the submitted attempt is untouched.
         Assert.Equal("attempt_not_in_progress", error.Code);
-        await using var verify = new LearnerDbContext(_options);
-        Assert.False(await verify.ReadingAnswers.AnyAsync(a => a.ReadingQuestionId == Question2));
-        Assert.Equal(1, await verify.ReadingAnswers.CountAsync(a => a.ReadingAttemptId == AttemptId));
+        var after = await LoadAttemptAsync();
+        Assert.Equal(ReadingAttemptStatus.Submitted, after.Status);
+        Assert.Equal(rowVersionBefore, after.RowVersion);
+    }
+
+    [Fact]
+    public async Task A_submit_that_read_the_attempt_before_an_autosave_landed_conflicts_instead_of_grading_without_it()
+    {
+        // Draft protection. A grader / submit loaded the attempt (RowVersion N) before the
+        // answer below was saved. The autosave bumps RowVersion AFTER writing the answer, so the
+        // grader's own RowVersion-guarded save (ReadingGradingService.GradeAndPersistAsync does
+        // `attempt.RowVersion++; SaveChanges`) must conflict rather than commit a score computed
+        // without the new answer.
+        await using var graderDb = new LearnerDbContext(_options);
+        var graderView = await graderDb.ReadingAttempts.SingleAsync(a => a.Id == AttemptId);
+
+        await using (var autosaveDb = new LearnerDbContext(_options))
+        {
+            await BuildService(autosaveDb).SaveAnswerAsync(UserId, AttemptId, Question1, "\"late answer\"", null, CancellationToken.None);
+        }
+
+        graderView.Status = ReadingAttemptStatus.Submitted;
+        graderView.RowVersion++;
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => graderDb.SaveChangesAsync());
+
+        var stored = await LoadAttemptAsync();
+        Assert.Equal(ReadingAttemptStatus.InProgress, stored.Status);
     }
 
     [Fact]

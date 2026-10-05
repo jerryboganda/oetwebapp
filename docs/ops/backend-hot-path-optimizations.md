@@ -38,18 +38,23 @@ Tests: `Learner/LearnerReferenceDataCacheTests.cs`, `Readiness/ReadinessOptimiza
 | Question loaded tracked, then a second `ReadingParts` query for `PaperId` | `AsNoTracking` + `Include(Part)` only; `q.Part.PaperId` is compared directly |
 | A `COUNT` of the attempt's answers on every save, used only for an audit string | removed |
 | `JsonDocument.Parse` never disposed | `using var` |
-| Attempt saved as a tracked `RowVersion++` guarded by the RowVersion read at the top of the method: overlapping autosaves threw `DbUpdateConcurrencyException` (409) **after** the answer was committed, and an automatic retry re-applied the `TotalElapsedMs` delta | One `UPDATE ... SET RowVersion = RowVersion + 1, LastActivityAt = now WHERE Id AND UserId AND Status = InProgress`, executed **before** any answer write. Concurrent autosaves commute; a concurrent timer / break writer holding an older RowVersion is still invalidated exactly as before. 0 rows means the attempt just left `InProgress`: `attempt_not_in_progress`, nothing written |
+| Attempt saved as a tracked `RowVersion++` guarded by the RowVersion read at the top of the method: overlapping autosaves threw `DbUpdateConcurrencyException` (409) **after** the answer was committed, and an automatic retry re-applied the `TotalElapsedMs` delta | One `UPDATE ... SET RowVersion = RowVersion + 1, LastActivityAt = now WHERE Id AND UserId AND Status = InProgress`, executed **after** the answer write (that order is the draft protection, below). It no longer depends on the RowVersion read earlier, so concurrent autosaves commute; a concurrent timer / break writer holding an older RowVersion is still invalidated exactly as before. 0 rows means the attempt left `InProgress` while the save was in flight: `attempt_not_in_progress` (never a silent success; the late answer row is the hazard the old tracked save had too) |
 | `db.ChangeTracker.Clear()` in the insert-race `catch` detached the tracked attempt, so its LastActivityAt / RowVersion update was silently skipped on that race | only the failed insert is detached |
 | One `AuditEvent` (`ReadingAnswerSaved`) per save | **removed (owner-approved).** `ReadingAnswerRevision` rows (one per changed value) remain the trail of what the learner answered and when |
 
-Server-confirmed semantics are unchanged: the endpoint still answers 204 only after the answer
-is stored, and every failure before the write leaves nothing behind (so a client keeping its draft
-and retrying cannot double-count time). The EF in-memory provider (the rest of the Reading suite)
-has no `ExecuteUpdate`, so it keeps the tracked bump at the end of the method as before.
+Draft protection and server-confirmed semantics are unchanged: the endpoint still answers 204 only
+after the answer is stored **and** the attempt is bumped. The bump deliberately comes after the answer
+write: `ReadingGradingService` loads the attempt and its answers, then saves with a RowVersion guard
+(`attempt.RowVersion++`). A grade that read the answers before this answer landed carries the old
+RowVersion, so it conflicts at save (and is retried) instead of committing a score computed without an
+answer the learner was told was saved. Bumping first would open exactly that lost-update window, which
+is why the bump is not hoisted above the write. The EF in-memory provider (the rest of the Reading
+suite) has no `ExecuteUpdate`, so it keeps the tracked bump at the end of the method as before.
 
 Tests: `Reading/ReadingAutosaveRelationalTests.cs` (SQLite): a second context bumps `RowVersion`
-between two saves of the first (the old code threw here), the status guard, revisions / elapsed time,
-no audit event.
+between two saves of the first (the old code threw here), a grader that read the attempt before an
+autosave conflicts instead of grading without it, the status guard, revisions / elapsed time, no audit
+event.
 
 ## 3. Search and the learner paper list
 
@@ -78,9 +83,9 @@ reference, invalidation table and worst-case revocation latency: [`user-state-ca
 
 ## Behaviour changes (for the release notes)
 
-- Reading: no `ReadingAnswerSaved` audit rows are written any more (owner-approved). A save on an
-  attempt that was submitted / expired a moment earlier now fails with `attempt_not_in_progress` before
-  writing instead of a 409 after writing.
+- Reading: no `ReadingAnswerSaved` audit rows are written any more (owner-approved). Overlapping
+  autosaves no longer 409. A save on an attempt that was submitted / expired while it was in flight
+  now fails with `attempt_not_in_progress` (it used to surface as a 409).
 - `GET /v1/search`: `total` is `null` unless `includeTotal=true`; `hasMore` / `nextCursor` added; the order
   gained an `Id` tie-break.
 - `GET /v1/papers`: unchanged body; two response headers added; the order gained an `Id` tie-break.
