@@ -351,7 +351,7 @@ public sealed class SpeakingLiveRoomService
 
         // Live tutor rooms are audio-only (microphone publish, audio-only
         // egress), so live-video consent is not part of the join gate.
-        var currentRecordingVersion = _complianceOptions.Value.CurrentConsentVersion;
+        var currentRecordingVersion = SpeakingConsentVersions.Effective(_complianceOptions.Value.CurrentConsentVersion);
         var required = new[]
         {
             (SpeakingComplianceConsentTypes.Recording, currentRecordingVersion),
@@ -413,7 +413,7 @@ public sealed class SpeakingLiveRoomService
         room.ActualStartUtc ??= DateTimeOffset.UtcNow;
 
         // Audio-only egress: current recording consent is the requirement.
-        var recordingConsentVersion = _complianceOptions.Value.CurrentConsentVersion;
+        var recordingConsentVersion = SpeakingConsentVersions.Effective(_complianceOptions.Value.CurrentConsentVersion);
         var hasRequiredConsent = await _db.SpeakingComplianceConsents.AsNoTracking()
             .AnyAsync(c => c.UserId == learnerId
                            && c.RevokedAt == null

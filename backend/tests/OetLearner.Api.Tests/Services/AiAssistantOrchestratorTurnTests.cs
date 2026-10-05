@@ -53,11 +53,11 @@ public sealed class AiAssistantOrchestratorTurnTests : IAsyncDisposable
         // The invoker rejects the malformed args before the tool runs (no crash, no INTERNAL_ERROR).
         Assert.Empty(toolCtxCaptured);
 
-        // A tool-result message with the unparsable marker was persisted.
+        // A tool-result message carrying the parse error (not a crash) was persisted for the model to recover from.
         await using var db = new LearnerDbContext(_options);
         var toolRow = await db.AiAssistantMessages.FirstOrDefaultAsync(m => m.Role == "tool");
         Assert.NotNull(toolRow);
-        Assert.Contains("args_unparsable", toolRow!.Content);
+        Assert.Contains("\"error\"", toolRow!.Content);
 
         // Final answer persisted.
         var final = await db.AiAssistantMessages.LastAsync(m => m.Role == "assistant");
