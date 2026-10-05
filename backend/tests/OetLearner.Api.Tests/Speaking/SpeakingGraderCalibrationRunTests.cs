@@ -45,6 +45,12 @@ public sealed class SpeakingGraderCalibrationRunTests : IAsyncLifetime
             CreatedAt = Now,
             UpdatedAt = Now,
         });
+        // learner-1 accepted the calibration wording (v3) before these performances were recorded.
+        _db.SpeakingComplianceConsents.Add(new SpeakingComplianceConsent
+        {
+            Id = "consent-1", UserId = "learner-1", ConsentType = SpeakingComplianceConsentTypes.Recording,
+            ConsentVersion = "recording.v3", AcceptedAt = Now.AddDays(-1),
+        });
         AddMarkedPerformance("one", 4000);
         AddMarkedPerformance("two", 3200);
         _db.SaveChanges();

@@ -47,7 +47,8 @@ function formatMinutes(seconds: number): string {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-function StatusBadge({ status }: { status: GraderCalibrationSampleRow['status'] }) {
+function StatusBadge({ status, usable = true }: { status: GraderCalibrationSampleRow['status']; usable?: boolean }) {
+  if (!usable) return <Badge variant="muted">Unavailable</Badge>;
   if (status === 'labelled') return <Badge variant="success">Marked</Badge>;
   if (status === 'excluded') return <Badge variant="muted">Excluded</Badge>;
   return <Badge variant="warning">To mark</Badge>;
@@ -85,13 +86,31 @@ function CoveragePanel({ coverage }: { coverage: GraderCalibrationCoverage }) {
           })}
         </dl>
 
-        <dl className="grid gap-2 sm:grid-cols-2">
+        <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-admin-md border border-admin-border px-3 py-2">
             <dt className="text-xs text-admin-fg-muted">Near the pass line (320-380)</dt>
             <dd className="text-sm font-semibold text-admin-fg-strong" data-testid="coverage-near">
               {coverage.labelledNearPassLine} <span className="font-normal text-admin-fg-muted">/ {coverage.requiredNearPassLine}</span>
             </dd>
           </div>
+          {coverage.requiredEachSideOfPassLine ? (
+            <>
+              <div className="rounded-admin-md border border-admin-border px-3 py-2">
+                <dt className="text-xs text-admin-fg-muted">Just below 350 (320-340)</dt>
+                <dd className="text-sm font-semibold text-admin-fg-strong" data-testid="coverage-below">
+                  {coverage.labelledBelowPassLine ?? 0}{' '}
+                  <span className="font-normal text-admin-fg-muted">/ {coverage.requiredEachSideOfPassLine}</span>
+                </dd>
+              </div>
+              <div className="rounded-admin-md border border-admin-border px-3 py-2">
+                <dt className="text-xs text-admin-fg-muted">350 or just above (350-380)</dt>
+                <dd className="text-sm font-semibold text-admin-fg-strong" data-testid="coverage-above">
+                  {coverage.labelledAtOrAbovePassLine ?? 0}{' '}
+                  <span className="font-normal text-admin-fg-muted">/ {coverage.requiredEachSideOfPassLine}</span>
+                </dd>
+              </div>
+            </>
+          ) : null}
           <div className="rounded-admin-md border border-admin-border px-3 py-2">
             <dt className="text-xs text-admin-fg-muted">Marked performances with audio</dt>
             <dd className="text-sm font-semibold text-admin-fg-strong" data-testid="coverage-audio">
@@ -143,7 +162,7 @@ export default function SpeakingGraderCalibrationPage() {
     () => [...(overview?.samples ?? [])].sort((a, b) => Number(b.status === 'pending') - Number(a.status === 'pending')),
     [overview],
   );
-  const nextToMark = samples.find((sample) => sample.status === 'pending') ?? null;
+  const nextToMark = samples.find((sample) => sample.status === 'pending' && sample.usable !== false) ?? null;
 
   const promote = async (candidate: GraderCalibrationCandidate) => {
     const audioNote = candidate.hasAudio
@@ -229,7 +248,7 @@ export default function SpeakingGraderCalibrationPage() {
                     <td className="p-3 font-medium text-admin-fg-strong">{sample.cardTitle || '(untitled)'}</td>
                     <td className="p-3 capitalize">{sample.professionId}</td>
                     <td className="p-3">{sample.hasAudio ? 'Yes' : 'No'}</td>
-                    <td className="p-3"><StatusBadge status={sample.status} /></td>
+                    <td className="p-3"><StatusBadge status={sample.status} usable={sample.usable} /></td>
                     <td className="p-3 tabular-nums">
                       {sample.expertOverallScaled != null ? `${sample.expertOverallScaled} · ${sample.expertGrade}` : '-'}
                     </td>
@@ -251,7 +270,8 @@ export default function SpeakingGraderCalibrationPage() {
         <div className="p-6"><Skeleton className="h-48 w-full rounded-admin-lg" /></div>
       ) : candidates.length === 0 ? (
         <div className="p-8 text-center text-sm text-admin-fg-muted">
-          No finished AI role-plays are waiting to be added.
+          No eligible performances yet. Only finished AI role-plays recorded after the learner accepted the consent wording
+          that covers quality assurance and grader calibration can be added.
         </div>
       ) : (
         <div className="overflow-x-auto">

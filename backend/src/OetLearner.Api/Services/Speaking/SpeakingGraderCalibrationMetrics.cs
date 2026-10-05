@@ -44,9 +44,33 @@ public sealed record SpeakingCalibrationMapping(
     int[] Fitted,
     SpeakingCalibrationScaledStats LeaveOneOut);
 
-public sealed record SpeakingCalibrationCoverageStats(int Labelled, IReadOnlyDictionary<string, int> PerGrade, int NearPassLine, double AudioShare);
+public sealed record SpeakingCalibrationCoverageStats(
+    int Labelled, IReadOnlyDictionary<string, int> PerGrade, int NearPassLine, double AudioShare,
+    int BelowPassLine = 0, int AtOrAbovePassLine = 0);
 
 public sealed record SpeakingCalibrationVerdict(bool Passed, IReadOnlyList<string> Failures);
+
+/// <summary>One grade of one performance, set beside the expert's mark. <c>ScaledLeaveOneOut</c> is the grader's score through
+/// a map fitted without this performance; <c>ScaledError</c> is that minus the expert's overall.</summary>
+public sealed record SpeakingCalibrationGradeDetail(
+    int Repeat,
+    IReadOnlyDictionary<string, int> Scores,
+    int Raw,
+    int ScaledLeaveOneOut,
+    string Grade,
+    int ScaledError,
+    string IntelligibilitySource);
+
+/// <summary>The per-performance line of the comparison report: the expert's nine marks and overall, and every grade the
+/// grader gave it. Ids only; no learner identity.</summary>
+public sealed record SpeakingCalibrationPerformance(
+    string SampleId,
+    bool HasAudio,
+    IReadOnlyDictionary<string, int> ExpertScores,
+    int ExpertRaw,
+    int ExpertOverall,
+    string ExpertGrade,
+    IReadOnlyList<SpeakingCalibrationGradeDetail> Grades);
 
 public sealed record SpeakingCalibrationReport(
     int Performances,
@@ -61,16 +85,22 @@ public sealed record SpeakingCalibrationReport(
     SpeakingCalibrationGradeStats Grade,
     SpeakingCalibrationPassStats PassFail,
     SpeakingCalibrationRepeatability? Repeatability,
-    SpeakingCalibrationVerdict Verdict);
+    SpeakingCalibrationVerdict Verdict,
+    /// <summary>Every marked performance beside its grades (null on a report frozen before this field existed).</summary>
+    IReadOnlyList<SpeakingCalibrationPerformance>? Detail = null,
+    /// <summary>How many grades each exact grader version + model produced; a label is earned per exact version.</summary>
+    IReadOnlyDictionary<string, int>? GraderVersions = null);
 
 /// <summary>
 /// How closely the AI grader agrees with an OET expert (owner spec 4 Oct 2026). Pure functions over the expert's marks and
-/// the grader's grades: unit-tested without a database. The thresholds are PROPOSED (the owner confirms them); a report that
-/// meets all of them is what lets a grader version leave the "provisional" label.
+/// the grader's grades: unit-tested without a database. The thresholds were APPROVED by the owner on 2026-10-05: keep them
+/// strict, never relax one to make the grader pass. A report that meets all of them is what lets a grader version leave the
+/// "provisional" label (and then only with the owner's agreement).
 /// </summary>
 public static class SpeakingGraderCalibrationMetrics
 {
-    /// <summary>The proposed pass thresholds. Changing one is an owner decision, not a code tidy-up.</summary>
+    /// <summary>The approved pass thresholds (owner, 2026-10-05). Changing one is an owner decision, not a code tidy-up;
+    /// SpeakingGraderCalibrationMetricsTests pins every value.</summary>
     public static class Thresholds
     {
         public const double LinguisticMae = 0.75;
@@ -157,7 +187,27 @@ public static class SpeakingGraderCalibrationMetrics
             new SpeakingCalibrationGradeStats(Rate(gradeHits, loo.Count), Rate(gradeNear, loo.Count), confusion),
             passStats,
             Repeatability(graded, looTables),
-            new SpeakingCalibrationVerdict(false, []));
+            new SpeakingCalibrationVerdict(false, []),
+            experts.OrderBy(e => e.SampleId, StringComparer.Ordinal)
+                .Select(e => new SpeakingCalibrationPerformance(
+                    e.SampleId,
+                    e.HasAudio,
+                    e.Scores,
+                    Raw(e.Scores),
+                    e.OverallScaled,
+                    GradeLetters[Ordinal(e.OverallScaled)],
+                    loo.Where(x => x.Observation.SampleId == e.SampleId)
+                        .OrderBy(x => x.Observation.Repeat)
+                        .Select(x => new SpeakingCalibrationGradeDetail(
+                            x.Observation.Repeat,
+                            x.Observation.Scores,
+                            Raw(x.Observation.Scores),
+                            x.Scaled,
+                            GradeLetters[Ordinal(x.Scaled)],
+                            x.Scaled - e.OverallScaled,
+                            x.Observation.IntelligibilitySource))
+                        .ToList()))
+                .ToList());
 
         return report with { Verdict = Evaluate(report, experts.Count, gradedIds.Count, requireAudio) };
     }
@@ -172,7 +222,9 @@ public static class SpeakingGraderCalibrationMetrics
             experts.Count,
             perGrade,
             experts.Count(e => e.OverallScaled is >= NearPassLow and <= NearPassHigh),
-            experts.Count == 0 ? 0 : R(experts.Count(e => e.HasAudio) / (double)experts.Count));
+            experts.Count == 0 ? 0 : R(experts.Count(e => e.HasAudio) / (double)experts.Count),
+            experts.Count(e => e.OverallScaled is >= NearPassLow and < 350),
+            experts.Count(e => e.OverallScaled is >= 350 and <= NearPassHigh));
     }
 
     // ── Per-criterion agreement ──────────────────────────────────────────
@@ -339,6 +391,10 @@ public static class SpeakingGraderCalibrationMetrics
 
         if (report.Coverage.NearPassLine < SpeakingGraderCalibrationService.RequiredNearPassLine)
             failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredNearPassLine} performances the expert marked 320-380 (has {report.Coverage.NearPassLine})");
+        if (report.Coverage.BelowPassLine < SpeakingGraderCalibrationService.RequiredEachSideOfPassLine)
+            failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredEachSideOfPassLine} performances the expert marked 320-340, just below the pass line (has {report.Coverage.BelowPassLine})");
+        if (report.Coverage.AtOrAbovePassLine < SpeakingGraderCalibrationService.RequiredEachSideOfPassLine)
+            failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredEachSideOfPassLine} performances the expert marked 350-380, at or just above the pass line (has {report.Coverage.AtOrAbovePassLine})");
         if (report.Coverage.AudioShare < SpeakingGraderCalibrationService.RequiredAudioShare)
             failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredAudioShare:P0} of the performances to have audio (has {report.Coverage.AudioShare:P0})");
         if (gradedPerformances < experts)

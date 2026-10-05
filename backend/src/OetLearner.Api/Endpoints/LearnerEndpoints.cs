@@ -58,11 +58,12 @@ public static class LearnerEndpoints
             return Results.Ok(new
             {
                 consentText = o.ConsentText,
+                consentVersion = SpeakingConsentVersions.Effective(o.CurrentConsentVersion),
                 scoreDisclaimer = o.ScoreDisclaimer,
                 audioRetentionDays = o.AudioRetentionDays,
                 speakingSimulationV11RetentionDays = v11RetentionDays,
                 speakingSimulationV11RetentionNotice =
-                    $"For this AI simulation, original audio and transcript evidence are retained for up to {v11RetentionDays} days, then deleted according to the retention policy. You may request deletion sooner.",
+                    $"For this AI simulation, original audio and transcript evidence are retained for up to {v11RetentionDays} days, then deleted according to the retention policy. A recording selected as an anonymised example for quality assurance and grader calibration is kept for up to {(int)OetLearner.Api.Services.Speaking.SpeakingGraderCalibrationService.CalibrationAudioRetention.TotalDays} days. You may request deletion sooner.",
             });
         });
 

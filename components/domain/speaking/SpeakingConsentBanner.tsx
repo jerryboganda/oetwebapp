@@ -29,7 +29,7 @@ const FALLBACK_DISCLAIMER =
   'Practice estimate only. This is not an official OET score or result.';
 
 const FALLBACK_RECORDING_BODY =
-  'Your voice is processed during the session to provide AI-powered speaking practice and feedback. Audio recordings are retained for a limited period and may be reviewed to support your feedback and improve the service.';
+  'Your voice is processed during the session to provide AI-powered speaking practice and feedback. Recordings are kept for a limited period. A recording may be selected, with your identity hidden from the reviewer, as an example for quality assurance and calibration of our AI grader; selected recordings are kept for up to 365 days and may be listened to by qualified expert reviewers for that purpose only. You can delete a recording at any time, which also removes it from review.';
 
 const FALLBACK_LIVE_VIDEO_BODY =
   'By joining a live tutor session you agree to share your audio and video with the tutor in real time. The session is recorded for review and stored securely until the retention period elapses.';

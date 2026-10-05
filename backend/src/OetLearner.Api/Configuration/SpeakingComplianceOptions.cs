@@ -53,16 +53,20 @@ public sealed class SpeakingComplianceOptions
     /// </summary>
     public string ConsentText { get; set; } =
         "Your voice is processed during the session to provide AI-powered "
-        + "speaking practice and feedback. Audio recordings are retained for "
-        + "a limited period and may be reviewed to support your feedback and "
-        + "improve the service.";
+        + "speaking practice and feedback. Recordings are kept for a limited "
+        + "period. A recording may be selected, with your identity hidden from "
+        + "the reviewer, as an example for quality assurance and calibration of "
+        + "our AI grader; selected recordings are kept for up to 365 days and "
+        + "may be listened to by qualified expert reviewers for that purpose "
+        + "only. You can delete a recording at any time, which also removes it "
+        + "from review.";
 
     /// <summary>
     /// Phase 7: version code stored on every audio recording consent
     /// row. Bump when the consent body changes meaningfully so the
     /// learner can be asked to re-accept.
     /// </summary>
-    public string CurrentConsentVersion { get; set; } = "recording.v2";
+    public string CurrentConsentVersion { get; set; } = SpeakingConsentVersions.Calibration;
 
     /// <summary>
     /// Phase 7: version code stored on every live-video-with-tutor
@@ -87,4 +91,26 @@ public sealed class SpeakingComplianceOptions
     /// </summary>
     public string ScoreDisclaimerCopy { get; set; } =
         "Practice estimate only. This is not an official OET score or result.";
+}
+
+/// <summary>
+/// Versions of the recording consent copy. <c>recording.v3</c> (owner decision 2026-10-05) is the first
+/// wording that tells the learner a recording can be selected for quality assurance / grader calibration
+/// and then kept for 365 days; v1 and v2 do not say so. It is a floor: an older configured value
+/// (a stale runtime setting) is read as v3, so no deployment can keep serving the old wording.
+/// </summary>
+public static class SpeakingConsentVersions
+{
+    public const string Calibration = "recording.v3";
+
+    /// <summary>Versions whose wording does not cover calibration retention. A list so EF can translate "not one of these".</summary>
+    public static readonly string[] Legacy = ["recording.v1", "recording.v2"];
+
+    public static string Effective(string? configured)
+    {
+        var version = configured?.Trim();
+        return string.IsNullOrEmpty(version) || Legacy.Contains(version, StringComparer.OrdinalIgnoreCase)
+            ? Calibration
+            : version;
+    }
 }

@@ -6,6 +6,16 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-05 16:41 | CI triage | CI triage | 37342751926 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 04f692d20 |
+| 2026-10-05 16:34 | CI triage | CI triage | 37341895287 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 04f692d20 |
+| 2026-10-05 16:34 | Deploy production | Deploy production | 37341895606 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 04f692d20 |
+| 2026-10-05 16:30 | Speaking Module CI | Speaking Module CI | 37341299192 | secrets-scan=success migrations-check=success | SUCCESS | 04f692d20 |
+| 2026-10-05 16:30 | Build images | Build images | 37341299206 | Detect what changed=success Deployment contract guards=success Syntax gate (seconds)=success Writing grader regression (on change)=success Retag unchanged db-backup=success build-web=success Retag unchanged agent-gateway=success build-api=success build-agent-gateway=skipped build-backup=skipped Writing model-answer gate (on change)=success Publish verified release provenance=success | SUCCESS | 04f692d20 |
+| 2026-10-05 15:01 | CI triage | CI triage | 37329385724 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 7090c35a3 |
+| 2026-10-05 14:56 | Deploy production | Deploy production | 37328803813 | Resolve the build to deploy=success Roll out to the VPS=success Apply migration SQL (if the API changed)=skipped | SUCCESS | 7090c35a3 |
+| 2026-10-05 14:56 | CI triage | CI triage | 37328803967 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 7090c35a3 |
+| 2026-10-05 14:50 | Build images | Build images | 37328018484 | Detect what changed=success Deployment contract guards=success Syntax gate (seconds)=success Writing grader regression (on change)=skipped build-web=success Retag unchanged agent-gateway=success Retag unchanged api=success Retag unchanged db-backup=success build-agent-gateway=skipped build-api=skipped build-backup=skipped Writing model-answer gate (on change)=skipped Publish verified release prove | SUCCESS | 7090c35a3 |
+| 2026-10-05 10:36 | Writing Rev8 CI | Writing Rev8 CI | 37297664124 | Frontend (tsc + scoped vitest + changed-file lint)=failure Backend Writing/Rulebook tests (.NET)=failure Canonical Writing rulebooks (build + --check)=failure Backend compile gate (whole solution)=failure Jev typed software review (TypeSafe API)=skipped Live production Writing report (read-only browser)=skipped Read-only Writing failure diagnostics=skipped Read-only Writing grading diagnostics (la | FAILURE | c2c8e8b21 |
 | 2026-10-05 09:06 | CI triage | CI triage | 37287856283 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | ea19602e3 |
 | 2026-10-05 09:00 | CI triage | CI triage | 37287213444 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | ea19602e3 |
 | 2026-10-05 09:00 | Deploy production | Deploy production | 37287213255 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | ea19602e3 |

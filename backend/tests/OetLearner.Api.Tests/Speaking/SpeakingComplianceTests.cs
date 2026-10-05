@@ -49,7 +49,7 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
         {
             RetentionDaysDefault = 90,
             RetentionDaysWhenTutorReviewed = 365,
-            CurrentConsentVersion = "recording.v1",
+            CurrentConsentVersion = "recording.v4",
             CurrentLiveVideoConsentVersion = "live_video_with_tutor.v1",
         };
 
@@ -131,6 +131,35 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RetentionWorker_KeepsACalibrationRecordingForItsYear_ThenPurgesIt()
+    {
+        // Promotion into the calibration set extends RetentionExpiresAt to now + 365 days (owner decision 2026-10-05).
+        const string ownerId = "learner-retention-calibration";
+        var (_, recordingId) = await SeedSessionWithRecordingAsync(
+            ownerId,
+            retentionExpiresAt: DateTimeOffset.UtcNow + SpeakingGraderCalibrationService.CalibrationAudioRetention);
+        var key = (await _db.MediaAssets.AsNoTracking().FirstAsync(m => m.Id != null)).StoragePath;
+        _storage.AddBlob(key, [0x01, 0x02, 0x03]);
+        var worker = new SpeakingAudioRetentionWorker(
+            new SingleInstanceScopeFactory(_db, _storage, Options.Create(_options)),
+            NullLogger<SpeakingAudioRetentionWorker>.Instance);
+
+        // Well past the normal 90-day window the audio is still there...
+        await worker.SweepSpeakingRecordingsOnceAsync(CancellationToken.None);
+        var kept = await _db.SpeakingRecordings.AsNoTracking().FirstAsync(r => r.Id == recordingId);
+        Assert.False(kept.IsArchived);
+        Assert.True(await _storage.ExistsAsync(key, CancellationToken.None));
+
+        // ...and once its 365 days have elapsed the sweep purges it.
+        var tracked = await _db.SpeakingRecordings.FirstAsync(r => r.Id == recordingId);
+        tracked.RetentionExpiresAt = DateTimeOffset.UtcNow.AddDays(-1);
+        await _db.SaveChangesAsync();
+        await worker.SweepSpeakingRecordingsOnceAsync(CancellationToken.None);
+        Assert.True((await _db.SpeakingRecordings.AsNoTracking().FirstAsync(r => r.Id == recordingId)).IsArchived);
+        Assert.False(await _storage.ExistsAsync(key, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task LearnerCanDeleteOwnRecording_AndCannotDeleteOthers()
     {
         const string ownerId = "learner-owner-2";
@@ -176,6 +205,33 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
         Assert.Equal(SpeakingRecordingSource.ConversationHub.ToString(), recording.Source);
     }
 
+    [Theory]
+    [InlineData("recording.v1")]
+    [InlineData("recording.v2")]
+    [InlineData("  ")]
+    [InlineData(null)]
+    public void AConfiguredConsentVersionOlderThanTheCalibrationWording_IsReadAsV3(string? configured)
+    {
+        // A stale runtime setting must not keep serving wording that does not cover calibration retention.
+        _options.CurrentConsentVersion = configured!;
+
+        Assert.Equal("recording.v3", _svc.ResolveCurrentConsentVersion(SpeakingComplianceConsentTypes.Recording));
+        Assert.Equal("recording.v3", SpeakingConsentVersions.Effective(configured));
+        // A later version is left alone.
+        Assert.Equal("recording.v4", SpeakingConsentVersions.Effective("recording.v4"));
+    }
+
+    [Fact]
+    public void TheDefaultConsentWording_TellsTheLearnerAboutCalibrationRetention_AndTheDefaultVersionIsV3()
+    {
+        var defaults = new SpeakingComplianceOptions();
+
+        Assert.Equal("recording.v3", defaults.CurrentConsentVersion);
+        Assert.Contains("quality assurance and calibration", defaults.ConsentText);
+        Assert.Contains("365 days", defaults.ConsentText);
+        Assert.Contains("delete a recording at any time", defaults.ConsentText);
+    }
+
     [Fact]
     public async Task ConsentVersioning_StoresRevocations()
     {
@@ -189,7 +245,7 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
             CancellationToken.None);
 
         Assert.Equal("recording", consent.ConsentType);
-        Assert.Equal("recording.v1", consent.ConsentVersion);
+        Assert.Equal("recording.v4", consent.ConsentVersion);
         Assert.Null(consent.RevokedAt);
 
         var revoked = await _svc.RevokeConsentAsync(

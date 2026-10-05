@@ -124,7 +124,7 @@ services:
       Aws__SecretAccessKey: ${AWS__SECRETACCESSKEY}
       Aws__Region: ${AWS__REGION:-eu-west-2}
       Aws__Bucket: ${AWS__BUCKET}
-      SpeakingCompliance__CurrentConsentVersion: ${SPEAKINGCOMPLIANCE__CURRENTCONSENTVERSION:-recording.v2}
+      SpeakingCompliance__CurrentConsentVersion: ${SPEAKINGCOMPLIANCE__CURRENTCONSENTVERSION:-recording.v3}
       SpeakingCompliance__CurrentLiveVideoConsentVersion: ${SPEAKINGCOMPLIANCE__CURRENTLIVEVIDEOCONSENTVERSION:-live_video_with_tutor.v1}
       SpeakingCompliance__RetentionDaysDefault: '${SPEAKINGCOMPLIANCE__RETENTIONDAYSDEFAULT:-90}'
       SpeakingCompliance__RetentionDaysWhenTutorReviewed: '${SPEAKINGCOMPLIANCE__RETENTIONDAYSWHENTUTORREVIEWED:-365}'

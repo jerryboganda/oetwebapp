@@ -1,8 +1,10 @@
 # Speaking grader calibration
 
 Owner spec 4 Oct 2026: the AI Speaking grader may only lose its **Provisional** label once its scores have
-been compared with an OET expert's own marks on real performances. This document covers the expert side
-(live) and what the comparison will do with it (next increment).
+been compared with an OET expert's own marks on real performances. This document covers the expert side and
+the harness that compares the two. Owner decisions of 5 Oct 2026: the thresholds below are **approved and must
+stay strict** (never relax one to make the grader pass), and calibration audio is kept 365 days only for
+performances explicitly promoted here, under consent wording that says so.
 
 ## Why
 
@@ -16,8 +18,10 @@ progress" (see `docs/speaking/scoring.md`).
 Admin → Speaking → **Grader calibration** (`/admin/speaking/grader-calibration`).
 
 1. **Candidates** — finished AI role-plays (practice or Full Mock card) with a usable transcript that are not
-   yet in the set. No learner identity and no AI result is listed. `Audio: Yes/No` says whether a stored,
-   non-warm-up clip exists.
+   yet in the set **and whose learner had accepted the consent wording that covers calibration (`recording.v3`
+   or later) when it was recorded and has not withdrawn it**. Performances recorded under the older wording
+   (`recording.v1`/`v2`) cannot be used. No learner identity and no AI result is listed. `Audio: Yes/No` says
+   whether a stored, non-warm-up clip exists.
 2. **Add to calibration set** (promote) — pins the transcript the grader reads, records whether audio exists,
    **keeps the performance's audio for 365 days** (`SpeakingRecording.RetentionExpiresAt`, never shortened) and
    writes an `AuditEvent` (`SpeakingGraderCalibrationSamplePromoted`). This is the only learner-data write in
@@ -27,6 +31,9 @@ Admin → Speaking → **Grader calibration** (`/admin/speaking/grader-calibrati
    0–3) and his own **overall /500 in steps of 10**. The overall is stored separately from the criterion sum so
    the score mapping can later be fitted on his judgement, not on ours.
 4. **Exclude** — no speech, wrong card, broken audio: excluded with a reason, kept for audit, never reported.
+5. **Unavailable** — a sample whose audio expired (day 365) or was deleted by the learner, whose learner withdrew
+   consent, or whose transcript was erased is shown as "Unavailable". It stops counting towards coverage and is
+   never graded. Marks of a sample inside a running calibration run are frozen until the run is finalised.
 
 ### Blind by construction
 
@@ -40,13 +47,14 @@ rationale. `SpeakingGraderCalibrationService` never touches the AI assessment ta
 flag, and the expert's marks. The learner's words and audio stay in `SpeakingTranscripts` /
 `SpeakingRecordings`; nothing is copied.
 
-## Coverage a calibration report needs (proposed — the owner confirms)
+## Coverage a calibration report needs (approved by the owner, 5 Oct 2026)
 
 | Requirement | Threshold |
 | --- | --- |
 | Marked performances | ≥ 30 |
 | Per expert grade (A, B, C+, C, D, E) | ≥ 3 each |
 | Expert overall 320–380 (pass line 350) | ≥ 10 |
+| …straddling the pass line | ≥ 4 at 320–340 **and** ≥ 4 at 350–380 |
 | Marked performances with audio | ≥ 80 % |
 
 The page shows progress against each line and says in plain words what is still missing.
@@ -73,15 +81,29 @@ score within 20 points, grade and pass flips). It also shows the platform heuris
 map on the expert's own criteria; `V0EndToEnd`: what the platform shows today) and the monotone fitted map
 (`Mapping.Fitted`, isotonic regression on the expert's own raw-total to overall pairs, anchored 0→0 and 39→500, rounded to 10).
 
-**Proposed pass thresholds** (`SpeakingGraderCalibrationMetrics.Thresholds`; the owner confirms them): each linguistic criterion
+**Pass thresholds — approved by the owner on 5 Oct 2026, strict, never to be relaxed** (`SpeakingGraderCalibrationMetrics.Thresholds`;
+`SpeakingGraderCalibrationMetricsTests.TheApprovedThresholds_ArePinned…` fails the build if any value changes): each linguistic criterion
 mean error ≤ 0.75, |bias| ≤ 0.5, within one band ≥ 90 %; each clinical criterion mean error ≤ 0.5, |bias| ≤ 0.35, exact ≥ 60 %;
 audio-judged Intelligibility mean error ≤ 0.75; end-to-end score mean error ≤ 30, |bias| ≤ 15, within 40 points ≥ 80 %; grade exact
 ≥ 70 % and within one ≥ 95 %; pass/fail agreement ≥ 85 % with false passes ≤ 10 %; repeatability: criterion scores repeat ≥ 80 %,
 score within 20 points ≥ 90 %, pass flips ≤ 5 %; plus the coverage above and every performance graded at least twice.
 
+**The comparison report** (the JSON report, `grader-calibration-report.md` and the step summary of the workflow) also lists every marked
+performance beside each of its grades: the expert's nine marks, raw total and overall, then per repeat the grader's nine marks, raw total,
+leave-one-out score, grade, error and where Intelligibility was judged from; the 6×6 grade confusion matrix; the fitted map; and how many
+grades each exact grader version + model produced (the "Provisional" label is earned per exact version).
+
+**Smoke check.** `speaking-grader-calibration.yml` with `smoke: true` signs in as the admin and reads the overview and candidate counts only
+(no run, no writes): the authenticated proof that the screen's API is live.
+
 **Scope.** A marked performance is one card, so the harness calibrates the card grader. The combined Full Mock judgement uses the
 same grader core, rubric and score map but a different prompt (`speaking.score.v3-combined`), so it stays provisional until
-it is calibrated on its own (a later step: expert marks for whole two-card tests).
+it is calibrated on its own.
+
+**Next: Full Mock calibration (owner, 5 Oct 2026 — not built yet).** The combined grader must be calibrated separately on real two-card
+performances, because it makes one combined judgement rather than two single-card ones. Needed: a sample kind for a whole two-card test
+(both session ids, one combined expert overall and criterion marks), a harness path that grades with `speaking.score.v3-combined`, its own
+report and thresholds proposal, and its own entry in the calibrated-grader set. Until then every Full Mock score stays "Provisional".
 
 ## What passing does
 

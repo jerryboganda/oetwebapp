@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -28,13 +29,19 @@ public sealed partial class SpeakingGraderCalibrationService(
     /// <summary>How long a promoted performance's audio is kept (the privacy call recorded in the plan).</summary>
     public static readonly TimeSpan CalibrationAudioRetention = TimeSpan.FromDays(365);
 
-    // Coverage a calibration report needs before it means anything. Proposed thresholds — the owner confirms them.
+    // Coverage a calibration report needs before it means anything. Approved by the owner 2026-10-05:
+    // keep them strict and never relax them to make the grader pass (pinned by SpeakingGraderCalibrationMetricsTests).
     public const int RequiredLabelled = 30;
     public const int RequiredPerGrade = 3;
     public const int RequiredNearPassLine = 10;
     public const double RequiredAudioShare = 0.8;
     private const int NearPassLow = 320;
     private const int NearPassHigh = 380;
+    private const int PassLine = 350;
+
+    /// <summary>The 320-380 block must straddle the pass line: this many marked performances on each side
+    /// (320-340 below it, 350-380 at or above it). Ten scores all on one side say nothing about pass/fail.</summary>
+    public const int RequiredEachSideOfPassLine = 4;
 
     private static readonly string[] Grades = ["A", "B", "C+", "C", "D", "E"];
 
@@ -54,6 +61,14 @@ public sealed partial class SpeakingGraderCalibrationService(
 
     // ── Candidates ───────────────────────────────────────────────────────
 
+    /// <summary>Active recording consents whose wording covers quality assurance / calibration retention
+    /// (v3 or later). A performance may be promoted only if its learner held one when it was recorded.</summary>
+    private IQueryable<SpeakingComplianceConsent> CalibrationConsents()
+        => db.SpeakingComplianceConsents.AsNoTracking()
+            .Where(c => c.ConsentType == SpeakingComplianceConsentTypes.Recording
+                && c.RevokedAt == null
+                && !SpeakingConsentVersions.Legacy.Contains(c.ConsentVersion));
+
     /// <summary>Finished AI cards with a usable transcript that have not been promoted yet, newest first.
     /// No learner identity and no AI result.</summary>
     public async Task<IReadOnlyList<SpeakingGraderCalibrationCandidate>> ListCandidatesAsync(int take, CancellationToken ct)
@@ -65,8 +80,11 @@ public sealed partial class SpeakingGraderCalibrationService(
             .Where(s => s.State == SpeakingSessionState.Finished
                 && (s.Mode == SpeakingSessionMode.AiSelfPractice || s.Mode == SpeakingSessionMode.AiExam)
                 && !promoted.Contains(s.Id)
+                && CalibrationConsents().Any(c => c.UserId == s.UserId
+                    && c.AcceptedAt <= (s.RolePlayStartedAt ?? s.PrepStartedAt ?? s.UpdatedAt))
                 && db.SpeakingTranscripts.Any(t => t.SpeakingSessionId == s.Id
                     && t.IsLatest
+                    && t.SegmentsJson != "[]"
                     && t.Provider != SpeakingTranscriptionPipeline.StateFailed
                     && t.Provider != SpeakingTranscriptionPipeline.StateQueued
                     && t.Provider != SpeakingTranscriptionPipeline.StateProcessing))
@@ -122,9 +140,18 @@ public sealed partial class SpeakingGraderCalibrationService(
             throw ApiException.Conflict("speaking_calibration_already_promoted", "That performance is already in the calibration set.");
         }
 
+        var recordedAt = session.RolePlayStartedAt ?? session.PrepStartedAt ?? session.UpdatedAt;
+        if (!await CalibrationConsents().AnyAsync(c => c.UserId == session.UserId && c.AcceptedAt <= recordedAt, ct))
+        {
+            throw ApiException.Conflict("speaking_calibration_consent_missing",
+                "The learner had not accepted the consent wording that covers quality assurance and grader calibration "
+                + "when this performance was recorded, so it cannot be used.");
+        }
+
         var transcript = await db.SpeakingTranscripts.AsNoTracking()
             .Where(t => t.SpeakingSessionId == sessionId
                 && t.IsLatest
+                && t.SegmentsJson != "[]"
                 && t.Provider != SpeakingTranscriptionPipeline.StateFailed
                 && t.Provider != SpeakingTranscriptionPipeline.StateQueued
                 && t.Provider != SpeakingTranscriptionPipeline.StateProcessing)
@@ -192,17 +219,24 @@ public sealed partial class SpeakingGraderCalibrationService(
             .OrderByDescending(s => s.PromotedAt)
             .ToListAsync(ct);
         var cards = await CardsAsync(samples.Select(s => s.RolePlayCardId), ct);
+        var unusable = await UnusableSampleIdsAsync(samples, ct);
         var rows = samples
-            .Select(s => ToRow(s, cards.TryGetValue(s.RolePlayCardId, out var card) ? card.ScenarioTitle : ""))
+            .Select(s => ToRow(s, cards.TryGetValue(s.RolePlayCardId, out var card) ? card.ScenarioTitle : "", !unusable.Contains(s.Id)))
             .ToList();
-        return new SpeakingGraderCalibrationOverview(BuildCoverage(samples), rows);
+        return new SpeakingGraderCalibrationOverview(BuildCoverage(samples, unusable), rows);
     }
 
     /// <summary>Coverage of the labelled set against what a calibration report needs. Pure: unit-tested directly.</summary>
-    public static SpeakingGraderCalibrationCoverage BuildCoverage(IReadOnlyCollection<SpeakingGraderCalibrationSample> samples)
+    public static SpeakingGraderCalibrationCoverage BuildCoverage(
+        IReadOnlyCollection<SpeakingGraderCalibrationSample> samples,
+        IReadOnlySet<string>? unusable = null)
     {
+        // A performance whose audio expired, whose learner withdrew consent or whose transcript was erased
+        // can no longer be graded or replayed, so it does not count towards coverage.
         var labelled = samples
-            .Where(s => s.Status == SpeakingGraderCalibrationSampleStatus.Labelled && s.ExpertOverallScaled is not null)
+            .Where(s => s.Status == SpeakingGraderCalibrationSampleStatus.Labelled
+                && s.ExpertOverallScaled is not null
+                && unusable?.Contains(s.Id) != true)
             .ToList();
         var byGrade = Grades.ToDictionary(g => g, _ => 0, StringComparer.Ordinal);
         foreach (var sample in labelled)
@@ -211,6 +245,8 @@ public sealed partial class SpeakingGraderCalibrationService(
         }
 
         var near = labelled.Count(s => s.ExpertOverallScaled is >= NearPassLow and <= NearPassHigh);
+        var below = labelled.Count(s => s.ExpertOverallScaled is >= NearPassLow and < PassLine);
+        var atOrAbove = labelled.Count(s => s.ExpertOverallScaled is >= PassLine and <= NearPassHigh);
         var audioShare = labelled.Count == 0 ? 0 : labelled.Count(s => s.HasAudio) / (double)labelled.Count;
 
         var unmet = new List<string>();
@@ -227,6 +263,16 @@ public sealed partial class SpeakingGraderCalibrationService(
         if (near < RequiredNearPassLine)
         {
             unmet.Add($"Near the pass line ({NearPassLow}-{NearPassHigh}): {near} of {RequiredNearPassLine} marked.");
+        }
+
+        if (below < RequiredEachSideOfPassLine)
+        {
+            unmet.Add($"Just below the pass line ({NearPassLow}-{PassLine - 10}): {below} of {RequiredEachSideOfPassLine} marked.");
+        }
+
+        if (atOrAbove < RequiredEachSideOfPassLine)
+        {
+            unmet.Add($"At or just above the pass line ({PassLine}-{NearPassHigh}): {atOrAbove} of {RequiredEachSideOfPassLine} marked.");
         }
 
         if (labelled.Count > 0 && audioShare < RequiredAudioShare)
@@ -247,7 +293,10 @@ public sealed partial class SpeakingGraderCalibrationService(
             RequiredNearPassLine: RequiredNearPassLine,
             RequiredAudioShare: RequiredAudioShare,
             MeetsCoverage: unmet.Count == 0,
-            Unmet: unmet);
+            Unmet: unmet,
+            LabelledBelowPassLine: below,
+            LabelledAtOrAbovePassLine: atOrAbove,
+            RequiredEachSideOfPassLine: RequiredEachSideOfPassLine);
     }
 
     // ── Blind labelling view ─────────────────────────────────────────────
@@ -315,6 +364,7 @@ public sealed partial class SpeakingGraderCalibrationService(
         string adminId, string sampleId, SpeakingGraderCalibrationLabelRequest request, CancellationToken ct)
     {
         var scores = ValidateLabel(request);
+        await EnsureNotInActiveRunAsync(sampleId, ct);
         var sample = await FindSampleAsync(sampleId, tracked: true, ct);
         var now = clock.GetUtcNow();
 
@@ -343,6 +393,7 @@ public sealed partial class SpeakingGraderCalibrationService(
                 "Say briefly why this performance cannot be used (up to 500 characters).");
         }
 
+        await EnsureNotInActiveRunAsync(sampleId, ct);
         var sample = await FindSampleAsync(sampleId, tracked: true, ct);
         sample.Status = SpeakingGraderCalibrationSampleStatus.Excluded;
         sample.ExcludedReason = reason;
@@ -389,6 +440,96 @@ public sealed partial class SpeakingGraderCalibrationService(
 
     // ── helpers ──────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Samples that can no longer be graded or replayed: the transcript is gone, the audio the sample counted on
+    /// is archived or deleted (expiry at day 365, learner deletion), or the learner has withdrawn the consent that
+    /// covered calibration. Computed at read time, so nothing needs to be rewritten when a learner acts.
+    /// </summary>
+    public async Task<HashSet<string>> UnusableSampleIdsAsync(
+        IReadOnlyCollection<SpeakingGraderCalibrationSample> samples, CancellationToken ct)
+    {
+        var unusable = new HashSet<string>(StringComparer.Ordinal);
+        if (samples.Count == 0) return unusable;
+
+        var transcriptIds = samples.Select(s => s.TranscriptId).Distinct().ToList();
+        var sessionIds = samples.Select(s => s.SpeakingSessionId).Distinct().ToList();
+
+        var livingTranscripts = (await db.SpeakingTranscripts.AsNoTracking()
+                .Where(t => transcriptIds.Contains(t.Id) && t.SegmentsJson != "[]")
+                .Select(t => t.Id)
+                .ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+        var sessionsWithAudio = (await db.SpeakingRecordings.AsNoTracking()
+                .Where(r => sessionIds.Contains(r.SpeakingSessionId) && !r.IsArchived && !r.IsWarmup)
+                .Select(r => r.SpeakingSessionId)
+                .Distinct()
+                .ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+        var sessions = await db.SpeakingSessions.AsNoTracking()
+            .Where(s => sessionIds.Contains(s.Id))
+            .Select(s => new { s.Id, s.UserId, At = s.RolePlayStartedAt ?? s.PrepStartedAt ?? s.UpdatedAt })
+            .ToListAsync(ct);
+        var userIds = sessions.Select(s => s.UserId).Distinct().ToList();
+        var consents = (await CalibrationConsents()
+                .Where(c => userIds.Contains(c.UserId))
+                .Select(c => new { c.UserId, c.AcceptedAt })
+                .ToListAsync(ct))
+            .ToLookup(c => c.UserId, c => c.AcceptedAt, StringComparer.Ordinal);
+        var sessionById = sessions.ToDictionary(s => s.Id, StringComparer.Ordinal);
+
+        foreach (var sample in samples)
+        {
+            var covered = sessionById.TryGetValue(sample.SpeakingSessionId, out var session)
+                && consents[session.UserId].Any(acceptedAt => acceptedAt <= session.At);
+            if (!livingTranscripts.Contains(sample.TranscriptId)
+                || (sample.HasAudio && !sessionsWithAudio.Contains(sample.SpeakingSessionId))
+                || !covered)
+            {
+                unusable.Add(sample.Id);
+            }
+        }
+
+        return unusable;
+    }
+
+    /// <summary>A sample inside a running calibration run is frozen: its marks are what the run compares against.</summary>
+    private async Task EnsureNotInActiveRunAsync(string sampleId, CancellationToken ct)
+    {
+        var inActiveRun = await db.SpeakingGraderCalibrationGrades.AsNoTracking()
+            .AnyAsync(g => g.SampleId == sampleId
+                && db.SpeakingGraderCalibrationRuns.Any(r => r.Id == g.RunId
+                    && r.Status == SpeakingGraderCalibrationRunStatus.Running), ct);
+        if (inActiveRun)
+        {
+            throw ApiException.Conflict("speaking_calibration_run_active",
+                "A calibration run is using this performance. Finalise or cancel the run before changing its marks.");
+        }
+    }
+
+    /// <summary>Records that an admin streamed a learner's clip (the same audit the expert route writes), before the bytes are sent.
+    /// No learner identity is recorded: the calibration view hides it from the expert.</summary>
+    public async Task AuditClipAccessAsync(string adminId, string adminName, string sampleId, string recordingId, CancellationToken ct)
+    {
+        var sample = await FindSampleAsync(sampleId, tracked: false, ct);
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"audit-{Guid.NewGuid():N}",
+            OccurredAt = clock.GetUtcNow(),
+            ActorId = adminId,
+            ActorName = string.IsNullOrWhiteSpace(adminName) ? adminId : adminName,
+            Action = "SpeakingRecordingAccessed",
+            ResourceType = "SpeakingRecording",
+            ResourceId = recordingId,
+            Details = JsonSerializer.Serialize(new
+            {
+                sessionId = sample.SpeakingSessionId,
+                purpose = "Grader calibration (blind labelling)",
+                sampleId,
+            }),
+        });
+        await db.SaveChangesAsync(ct);
+    }
+
     private async Task<SpeakingGraderCalibrationSample> FindSampleAsync(string sampleId, bool tracked, CancellationToken ct)
     {
         var query = tracked ? db.SpeakingGraderCalibrationSamples : db.SpeakingGraderCalibrationSamples.AsNoTracking();
@@ -413,7 +554,7 @@ public sealed partial class SpeakingGraderCalibrationService(
             .Select(c => c.ScenarioTitle)
             .FirstOrDefaultAsync(ct) ?? string.Empty;
 
-    private static SpeakingGraderCalibrationSampleRow ToRow(SpeakingGraderCalibrationSample sample, string cardTitle)
+    private static SpeakingGraderCalibrationSampleRow ToRow(SpeakingGraderCalibrationSample sample, string cardTitle, bool usable = true)
         => new(
             sample.Id,
             sample.SpeakingSessionId,
@@ -424,7 +565,8 @@ public sealed partial class SpeakingGraderCalibrationService(
             sample.ExpertOverallScaled,
             sample.ExpertOverallScaled is { } overall ? OetScoring.OetGradeLetterFromScaled(overall) : null,
             sample.PromotedAt,
-            sample.LabelledAt);
+            sample.LabelledAt,
+            usable);
 
     private static string StatusCode(SpeakingGraderCalibrationSampleStatus status) => status switch
     {

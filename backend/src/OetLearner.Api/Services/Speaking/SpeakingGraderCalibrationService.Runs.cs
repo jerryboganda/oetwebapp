@@ -31,13 +31,15 @@ public sealed partial class SpeakingGraderCalibrationService
                 "A calibration run is already in progress. Finish it (or cancel it) before starting another.");
         }
 
-        var sampleIds = await db.SpeakingGraderCalibrationSamples.AsNoTracking()
+        var labelled = await db.SpeakingGraderCalibrationSamples.AsNoTracking()
             .Where(s => s.Status == SpeakingGraderCalibrationSampleStatus.Labelled
                 && s.ExpertScoresJson != null
                 && s.ExpertOverallScaled != null)
             .OrderBy(s => s.Id)
-            .Select(s => s.Id)
             .ToListAsync(ct);
+        // A performance whose audio expired, whose learner withdrew consent or whose transcript was erased is not graded.
+        var unusable = await UnusableSampleIdsAsync(labelled, ct);
+        var sampleIds = labelled.Where(s => !unusable.Contains(s.Id)).Select(s => s.Id).ToList();
         if (sampleIds.Count == 0)
         {
             throw ApiException.Conflict("speaking_calibration_nothing_to_grade",
@@ -197,6 +199,11 @@ public sealed partial class SpeakingGraderCalibrationService
         {
             if (assessor is null) throw new InvalidOperationException("The assessor is not available to the calibration harness.");
             if (run is null || sample is null) throw ApiException.NotFound("speaking_calibration_grade_orphaned", "The run or the performance no longer exists.");
+            if ((await UnusableSampleIdsAsync([sample], ct)).Count > 0)
+            {
+                throw ApiException.Conflict("speaking_calibration_sample_unavailable",
+                    "The performance's audio, transcript or consent is no longer available, so it cannot be graded.");
+            }
 
             var (outcome, audio) = await assessor.GradeForCalibrationAsync(sample.SpeakingSessionId, sample.TranscriptId, run.UseAudio, ct);
             grade.ScoresJson = JsonSerializer.Serialize(new Dictionary<string, int>
@@ -331,7 +338,13 @@ public sealed partial class SpeakingGraderCalibrationService
             .Where(g => g.Status == SpeakingGraderCalibrationGradeStatus.Done && g.ScoresJson != null)
             .Select(g => new SpeakingCalibrationObservation(g.SampleId, g.Repeat, ParseScores(g.ScoresJson), g.IntelligibilitySource ?? "transcript_only"))
             .ToList();
-        return SpeakingGraderCalibrationMetrics.Compute(experts, observations, run.UseAudio);
+        var report = SpeakingGraderCalibrationMetrics.Compute(experts, observations, run.UseAudio);
+        // The "Provisional" label is earned per exact grader version + model, so say how many grades each produced.
+        var versions = grades
+            .Where(g => g.Status == SpeakingGraderCalibrationGradeStatus.Done && !string.IsNullOrWhiteSpace(g.GraderVersion))
+            .GroupBy(g => $"{g.GraderVersion} · {g.Provider}/{g.ModelId}", StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+        return report with { GraderVersions = versions };
     }
 
     private static Dictionary<string, int> ParseScores(string? json)

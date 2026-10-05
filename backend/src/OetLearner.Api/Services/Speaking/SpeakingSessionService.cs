@@ -490,7 +490,9 @@ public sealed class SpeakingSessionService(
 
         var session = await LoadOwnedSessionAsync(userId, sessionId, ct, tracking: true);
         var now = DateTimeOffset.UtcNow;
-        session.ConsentVersion = consentVersion.Trim();
+        // The server's version is the truth (a client may still send an old literal).
+        session.ConsentVersion = compliance?.ResolveCurrentConsentVersion(SpeakingComplianceConsentTypes.Recording)
+            ?? consentVersion.Trim();
         session.ConsentAcceptedAt = now;
         session.UpdatedAt = now;
         await db.SaveChangesAsync(ct);

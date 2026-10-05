@@ -30,6 +30,9 @@ public sealed class SpeakingGraderCalibrationServiceTests : IAsyncLifetime
         await using var db = new LearnerDbContext(_options);
         await db.Database.EnsureCreatedAsync();
         DisableForeignKeys();
+        // learner-1 accepted the calibration wording (v3) before every performance these tests record.
+        AddConsent(db);
+        await db.SaveChangesAsync();
     }
 
     public async Task DisposeAsync() => await _connection.DisposeAsync();
@@ -153,6 +156,140 @@ public sealed class SpeakingGraderCalibrationServiceTests : IAsyncLifetime
 
         var missing = await Assert.ThrowsAsync<ApiException>(() => service.PromoteAsync("a", "A", "nope", CancellationToken.None));
         Assert.Equal("speaking_calibration_session_not_found", missing.ErrorCode);
+    }
+
+    // ── Consent gate (owner decision 2026-10-05: 365-day retention needs wording that covers it) ──
+
+    [Fact]
+    public async Task Promote_AndCandidates_RequireConsentWordingThatCoversCalibration_AtTheTimeOfRecording()
+    {
+        await using var db = new LearnerDbContext(_options);
+        AddCard(db, "card-1", "Asthma review");
+        // learner-2 only ever accepted the old wording (v2); learner-3 accepted v3 after the performance;
+        // learner-4 accepted v3 and later withdrew it. None of their performances may be used.
+        AddConsent(db, "learner-2", "recording.v2");
+        AddConsent(db, "learner-3", acceptedAt: Now.AddHours(2));
+        AddConsent(db, "learner-4", revokedAt: Now.AddHours(1));
+        foreach (var (id, user) in new[] { ("s_old", "learner-2"), ("s_late", "learner-3"), ("s_withdrawn", "learner-4"), ("s_noconsent", "learner-5"), ("s_ok", "learner-1") })
+        {
+            AddSession(db, id, SpeakingSessionState.Finished, userId: user);
+            AddTranscript(db, id);
+        }
+        await db.SaveChangesAsync();
+        var service = Service(db);
+
+        var candidates = await service.ListCandidatesAsync(50, CancellationToken.None);
+        Assert.Equal(new[] { "s_ok" }, candidates.Select(c => c.SessionId).ToArray());
+
+        foreach (var id in new[] { "s_old", "s_late", "s_withdrawn", "s_noconsent" })
+        {
+            var refused = await Assert.ThrowsAsync<ApiException>(() => service.PromoteAsync("a", "A", id, CancellationToken.None));
+            Assert.Equal("speaking_calibration_consent_missing", refused.ErrorCode);
+        }
+
+        await service.PromoteAsync("a", "A", "s_ok", CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task Candidates_AndPromote_SkipATranscriptThatWasAlreadyErased()
+    {
+        await using var db = new LearnerDbContext(_options);
+        AddCard(db, "card-1", "Asthma review");
+        AddSession(db, "s_erased", SpeakingSessionState.Finished);
+        AddTranscript(db, "s_erased", segmentsJson: "[]");
+        await db.SaveChangesAsync();
+        var service = Service(db);
+
+        Assert.Empty(await service.ListCandidatesAsync(50, CancellationToken.None));
+        var refused = await Assert.ThrowsAsync<ApiException>(() => service.PromoteAsync("a", "A", "s_erased", CancellationToken.None));
+        Assert.Equal("speaking_calibration_no_transcript", refused.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ASample_BecomesUnusable_WhenItsAudioIsGone_ItsConsentIsWithdrawn_OrItsTranscriptIsErased_AndStopsCounting()
+    {
+        await using var db = new LearnerDbContext(_options);
+        AddCard(db, "card-1", "Asthma review");
+        foreach (var id in new[] { "s_fine", "s_expired", "s_withdrawn", "s_erased" })
+        {
+            AddSession(db, id, SpeakingSessionState.Finished, userId: id == "s_withdrawn" ? "learner-w" : "learner-1");
+            AddTranscript(db, id);
+            AddRecording(db, id, $"rec_{id}");
+        }
+        AddConsent(db, "learner-w");
+        await db.SaveChangesAsync();
+        var service = Service(db);
+        var ids = new Dictionary<string, string>();
+        foreach (var id in new[] { "s_fine", "s_expired", "s_withdrawn", "s_erased" })
+        {
+            var row = await service.PromoteAsync("a", "A", id, CancellationToken.None);
+            ids[id] = row.Id;
+            await service.LabelAsync("a", row.Id, new SpeakingGraderCalibrationLabelRequest(FullMarks(), 350, null), CancellationToken.None);
+        }
+
+        // Day 365 / learner deletion archives the audio; withdrawal revokes consent; the retention worker erases the transcript.
+        (await db.SpeakingRecordings.SingleAsync(r => r.Id == "rec_s_expired")).IsArchived = true;
+        (await db.SpeakingComplianceConsents.SingleAsync(c => c.UserId == "learner-w")).RevokedAt = Now.AddHours(1);
+        (await db.SpeakingTranscripts.SingleAsync(t => t.SpeakingSessionId == "s_erased")).SegmentsJson = "[]";
+        await db.SaveChangesAsync();
+
+        var overview = await service.GetOverviewAsync(CancellationToken.None);
+
+        Assert.Equal(1, overview.Coverage.Labelled);
+        Assert.Equal(4, overview.Coverage.Total);
+        Assert.True(overview.Samples.Single(r => r.Id == ids["s_fine"]).Usable);
+        foreach (var gone in new[] { "s_expired", "s_withdrawn", "s_erased" })
+        {
+            Assert.False(overview.Samples.Single(r => r.Id == ids[gone]).Usable, gone);
+        }
+    }
+
+    [Fact]
+    public async Task Marks_AreFrozenWhileACalibrationRunUsesThePerformance()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var sampleId = await SeedSampleAsync(db, "s1");
+        var service = Service(db);
+        await service.LabelAsync("a", sampleId, new SpeakingGraderCalibrationLabelRequest(FullMarks(), 350, null), CancellationToken.None);
+        db.SpeakingGraderCalibrationRuns.Add(new SpeakingGraderCalibrationRun
+        {
+            Id = "spgr_1", Repeats = 2, UseAudio = true, Status = SpeakingGraderCalibrationRunStatus.Running,
+            CreatedById = "a", CreatedAt = Now,
+        });
+        db.SpeakingGraderCalibrationGrades.Add(new SpeakingGraderCalibrationGrade
+        {
+            Id = "spgg_1", RunId = "spgr_1", SampleId = sampleId, Repeat = 1,
+        });
+        await db.SaveChangesAsync();
+
+        var relabel = await Assert.ThrowsAsync<ApiException>(() => service.LabelAsync(
+            "a", sampleId, new SpeakingGraderCalibrationLabelRequest(FullMarks(5, 3), 400, null), CancellationToken.None));
+        var exclude = await Assert.ThrowsAsync<ApiException>(() => service.ExcludeAsync(
+            sampleId, new SpeakingGraderCalibrationExcludeRequest("changed my mind"), CancellationToken.None));
+        Assert.Equal("speaking_calibration_run_active", relabel.ErrorCode);
+        Assert.Equal("speaking_calibration_run_active", exclude.ErrorCode);
+
+        // Once the run is finalised the marks can be corrected again (the run's report is already frozen).
+        (await db.SpeakingGraderCalibrationRuns.SingleAsync()).Status = SpeakingGraderCalibrationRunStatus.Complete;
+        await db.SaveChangesAsync();
+        await service.LabelAsync("a", sampleId, new SpeakingGraderCalibrationLabelRequest(FullMarks(5, 3), 400, null), CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StreamingAClip_IsAudited_WithoutTheLearnersIdentity()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var sampleId = await SeedSampleAsync(db, "s1");
+        db.AuditEvents.RemoveRange(await db.AuditEvents.ToListAsync());
+        await db.SaveChangesAsync();
+
+        await Service(db).AuditClipAccessAsync("admin-1", "Dr Hesham", sampleId, "rec-1", CancellationToken.None);
+
+        var audit = await db.AuditEvents.AsNoTracking().SingleAsync();
+        Assert.Equal("SpeakingRecordingAccessed", audit.Action);
+        Assert.Equal("rec-1", audit.ResourceId);
+        Assert.Equal("admin-1", audit.ActorId);
+        Assert.DoesNotContain("learner-1", audit.Details);
     }
 
     // ── Blind labelling view ─────────────────────────────────────────────
@@ -352,6 +489,35 @@ public sealed class SpeakingGraderCalibrationServiceTests : IAsyncLifetime
         Assert.Empty(coverage.Unmet);
     }
 
+    [Fact]
+    public void Coverage_RequiresTheNearPassLineBlockToStraddleThePassLine()
+    {
+        // Ten performances at 350-380 meet the old "ten near the line" rule, but none sit just below 350.
+        var allAbove = Enumerable.Range(0, 10).Select(i => Labelled(350 + (i % 4) * 10)).ToList();
+
+        var coverage = SpeakingGraderCalibrationService.BuildCoverage(allAbove);
+
+        Assert.Equal(10, coverage.LabelledNearPassLine);
+        Assert.Equal(0, coverage.LabelledBelowPassLine);
+        Assert.Equal(10, coverage.LabelledAtOrAbovePassLine);
+        Assert.Equal(4, coverage.RequiredEachSideOfPassLine);
+        Assert.Contains(coverage.Unmet, u => u.Contains("Just below the pass line (320-340): 0 of 4"));
+        Assert.DoesNotContain(coverage.Unmet, u => u.Contains("At or just above the pass line"));
+    }
+
+    [Fact]
+    public void Coverage_DoesNotCount_APerformanceThatIsNoLongerUsable()
+    {
+        var kept = Labelled(480);
+        var gone = Labelled(470);
+
+        var coverage = SpeakingGraderCalibrationService.BuildCoverage(
+            new[] { kept, gone }, new HashSet<string> { gone.Id });
+
+        Assert.Equal(1, coverage.Labelled);
+        Assert.Equal(1, coverage.LabelledByGrade["A"]);
+    }
+
     // ── seeds ────────────────────────────────────────────────────────────
 
     private async Task<string> SeedSampleAsync(LearnerDbContext db, string sessionId)
@@ -389,17 +555,32 @@ public sealed class SpeakingGraderCalibrationServiceTests : IAsyncLifetime
 
     private static void AddSession(
         LearnerDbContext db, string id, SpeakingSessionState state,
-        SpeakingSessionMode mode = SpeakingSessionMode.AiSelfPractice)
+        SpeakingSessionMode mode = SpeakingSessionMode.AiSelfPractice,
+        string userId = "learner-1")
         => db.SpeakingSessions.Add(new SpeakingSession
         {
             Id = id,
-            UserId = "learner-1",
+            UserId = userId,
             RolePlayCardId = "card-1",
             Mode = mode,
             State = state,
             ElapsedSeconds = 290,
             CreatedAt = Now,
             UpdatedAt = Now,
+        });
+
+    /// <summary>A recording consent. The default is the calibration wording (v3) accepted the day before the performance.</summary>
+    private static void AddConsent(
+        LearnerDbContext db, string userId = "learner-1", string version = "recording.v3",
+        DateTimeOffset? acceptedAt = null, DateTimeOffset? revokedAt = null)
+        => db.SpeakingComplianceConsents.Add(new SpeakingComplianceConsent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = userId,
+            ConsentType = SpeakingComplianceConsentTypes.Recording,
+            ConsentVersion = version,
+            AcceptedAt = acceptedAt ?? Now.AddDays(-1),
+            RevokedAt = revokedAt,
         });
 
     private static void AddTranscript(

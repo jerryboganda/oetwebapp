@@ -11,10 +11,14 @@
  *
  * Usage:
  *   OET_ADMIN_EMAIL=... OET_ADMIN_PASSWORD=... node scripts/speaking/grader-calibration.mjs \\
- *     [--run <id>] [--repeats 2] [--no-audio] [--max-minutes 330] [--poll-seconds 30]
+ *     [--run <id>] [--repeats 2] [--no-audio] [--max-minutes 330] [--poll-seconds 30] [--smoke]
+ *
+ * --smoke signs in and reads the calibration overview and candidate list (counts only), then stops: the authenticated proof
+ * that the Admin > Speaking > Grader calibration screen's API is live. It starts no run and writes nothing.
  *
  * Env: OET_API_BASE (default https://api.oetwithdrhesham.co.uk), OET_ADMIN_EMAIL + OET_ADMIN_PASSWORD.
- * Output: stdout, \`grader-calibration-report.json\`, and a markdown summary in $GITHUB_STEP_SUMMARY when set.
+ * Output: stdout, \`grader-calibration-report.json\`, \`grader-calibration-report.md\` (the full per-performance comparison)
+ * and a markdown summary in $GITHUB_STEP_SUMMARY when set.
  * Exit code: 0 when the run finished or is still in progress (re-run with --run <id>); 1 on an error.
  */
 
@@ -91,6 +95,24 @@ const line = (progress) =>
 
 // ── Run ─────────────────────────────────────────────────────────────────────
 await signIn();
+
+if (flag('smoke')) {
+  const overview = await api('GET', '/');
+  const candidates = await api('GET', '/candidates?take=100');
+  if (overview.status !== 200) throw new Error(`overview -> HTTP ${overview.status} ${JSON.stringify(overview.json).slice(0, 200)}`);
+  if (candidates.status !== 200) throw new Error(`candidates -> HTTP ${candidates.status} ${JSON.stringify(candidates.json).slice(0, 200)}`);
+  const c = overview.json.coverage;
+  const smoke = [
+    'SMOKE OK: the grader calibration API answers for an admin',
+    `candidates (finished AI cards under the calibration consent): ${candidates.json.length}, with audio: ${candidates.json.filter((x) => x.hasAudio).length}`,
+    `promoted samples: ${c.total} (labelled ${c.labelled}, pending ${c.pending}, excluded ${c.excluded})`,
+    `coverage needs: ${c.requiredLabelled} marked, ${c.requiredPerGrade} per grade, ${c.requiredNearPassLine} at 320-380 with ${c.requiredEachSideOfPassLine} each side of 350, ${(c.requiredAudioShare * 100).toFixed(0)}% with audio`,
+    ...(c.unmet.length ? ['still missing:', ...c.unmet.map((u) => `  - ${u}`)] : ['coverage is complete']),
+  ];
+  console.log(smoke.join('\n'));
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Speaking grader calibration: smoke\n\n\`\`\`\n${smoke.join('\n')}\n\`\`\`\n`);
+  process.exit(0);
+}
 
 let runId = runIdArg;
 if (!runId) {
@@ -171,7 +193,34 @@ if (report.repeatability) {
   out.push(`repeatability: criterion-repeat=${pct(r.criterionRepeat)} score-within-20=${pct(r.scaledWithin20)} grade-stable=${pct(r.gradeStable)} pass-stable=${pct(r.passStable)}`);
 }
 out.push(`fitted map raw 0..39: ${m.fitted.join(',')}`);
+if (report.graderVersions) {
+  out.push('grades per exact grader version + model (the label is earned per exact version):');
+  for (const [version, count] of Object.entries(report.graderVersions)) out.push(`  ${count} x ${version}`);
+}
 console.log(out.join('\n'));
+
+// The full per-performance comparison (ids and numbers only): the expert's nine marks and overall beside every grade.
+const codes = report.criteria.map((c) => c.code);
+const md = [];
+md.push(`# Speaking grader calibration: run ${runId}`, '');
+md.push(`Grader: ${view.json.graderVersion}. Performances ${report.performances}, grades ${report.observations}, repeats ${report.repeats}. Verdict: **${report.verdict.passed ? 'PASS' : 'FAIL'}**.`, '');
+if (report.verdict.failures.length) md.push(...report.verdict.failures.map((f) => `- ${f}`), '');
+md.push('## Expert vs grader, per performance', '');
+md.push(`| Performance | Audio | Expert (${codes.map((c) => c.slice(0, 4)).join('/')}) | Expert raw | Expert /500 | Grade | Repeat | Grader criteria | Grader raw | Grader /500 (leave-one-out) | Grade | Error | Intelligibility from |`);
+md.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+for (const p of report.detail ?? []) {
+  const expert = codes.map((c) => p.expertScores[c]).join('/');
+  if (!p.grades.length) {
+    md.push(`| ${p.sampleId} | ${p.hasAudio ? 'yes' : 'no'} | ${expert} | ${p.expertRaw} | ${p.expertOverall} | ${p.expertGrade} | not graded | | | | | | |`);
+  }
+  for (const g of p.grades) {
+    md.push(`| ${p.sampleId} | ${p.hasAudio ? 'yes' : 'no'} | ${expert} | ${p.expertRaw} | ${p.expertOverall} | ${p.expertGrade} | ${g.repeat} | ${codes.map((c) => g.scores[c]).join('/')} | ${g.raw} | ${g.scaledLeaveOneOut} | ${g.grade} | ${g.scaledError > 0 ? '+' : ''}${g.scaledError} | ${g.intelligibilitySource} |`);
+  }
+}
+md.push('', '## Grade confusion (rows: expert grade A,B,C+,C,D,E; columns: grader grade)', '', '```');
+for (const row of report.grade.confusion) md.push(row.join('\t'));
+md.push('```', '', '## Summary', '', '```', ...out, '```');
+writeFileSync('grader-calibration-report.md', md.join('\n'));
 
 if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Speaking grader calibration: ${report.verdict.passed ? 'PASS' : 'FAIL'}\n\n\`\`\`\n${out.join('\n')}\n\`\`\`\n`);

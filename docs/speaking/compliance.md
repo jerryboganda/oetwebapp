@@ -15,7 +15,20 @@
 | Tutor-reviewed | `RetentionDaysWhenTutorReviewed` (365 d) | same |
 | Audit events | `AuditLogRetentionDays` (7 y) | same |
 
-`SpeakingAudioRetentionWorker` runs hourly; writes `AuditEvent` per deletion.
+`SpeakingAudioRetentionWorker` sweeps every 6 hours; writes `AuditEvent` per deletion.
+
+### Calibration retention (owner decision 2026-10-05)
+
+A performance an admin promotes into the grader-calibration set keeps its audio for **365 days**
+(`SpeakingRecording.RetentionExpiresAt` is extended, never shortened) and is purged by the normal sweep once that
+elapses. This is allowed only because the learner consent wording from `recording.v3` onwards says so:
+a recording may be selected, with the learner's identity hidden from the reviewer, for quality assurance and grader
+calibration, kept up to 365 days and listened to by qualified expert reviewers for that purpose only. Promotion
+is refused unless the learner held an active `recording.v3`-or-later consent when the performance was recorded.
+A learner deleting the recording, withdrawing consent, or day-365 expiry makes the sample unusable (it stops
+counting and is not graded); finished reports hold numbers only. Streaming a calibration clip writes a
+`SpeakingRecordingAccessed` audit event without the learner's identity. Transcript-only samples keep the transcript
+retention policy unchanged.
 
 ### Live voice (AI patient): what is stored
 

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     'The terms of service governing use of the OET with Dr Ahmed Hesham preparation platform: eligibility, billing, the Score Guarantee, AI feedback, tutor review, intellectual property, and your rights.',
 };
 
-const LAST_UPDATED = '26 April 2026';
+const LAST_UPDATED = '05 October 2026';
 const EFFECTIVE_FROM = '26 April 2026';
 
 interface LegalSection {
@@ -144,7 +144,8 @@ const sections: LegalSection[] = [
     bullets: [
       'Sensitive learner data (speaking recordings, written submissions, tutor feedback) is stored encrypted at rest and is only accessed by personnel with a need-to-know basis.',
       'You can request export or deletion of your account data at any time from Settings → Privacy or by emailing dpo@oetwithdrhesham.co.uk.',
-      'Audio retention is controlled by the configurable Pronunciation/Conversation retention windows set out in the in-app Privacy Notice; defaults are 30 days unless you change them.',
+      'Pronunciation and conversation audio retention is controlled by the configurable retention windows set out in the in-app Privacy Notice; defaults are 30 days unless you change them.',
+      'Speaking practice recordings are kept for up to 90 days by default. A recording selected, with your identity hidden from the reviewer, for quality assurance and calibration of our AI grader is kept for up to 365 days and may be listened to by qualified expert reviewers for that purpose only; you can delete a recording at any time.',
     ],
   },
   {

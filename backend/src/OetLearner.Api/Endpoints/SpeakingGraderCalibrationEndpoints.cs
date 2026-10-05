@@ -51,11 +51,14 @@ public static class SpeakingGraderCalibrationEndpoints
         group.MapGet("/samples/{id}/audio/{recordingId}", async (
                 string id,
                 string recordingId,
+                HttpContext http,
                 SpeakingGraderCalibrationService service,
                 IFileStorage storage,
                 CancellationToken ct) =>
             {
                 var (storagePath, mimeType) = await service.GetClipAsync(id, recordingId, ct);
+                // Audited before the bytes leave (a range request re-audits, as the expert route does).
+                await service.AuditClipAccessAsync(AdminId(http), AdminName(http), id, recordingId, ct);
                 var stream = await storage.OpenReadAsync(storagePath, ct);
                 return Results.File(stream, mimeType, enableRangeProcessing: true);
             })

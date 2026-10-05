@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     'How OET with Dr Ahmed Hesham collects, uses, retains, and protects your personal data, written under UK GDPR.',
 };
 
-const LAST_UPDATED = '03 September 2026';
+const LAST_UPDATED = '05 October 2026';
 const EFFECTIVE_FROM = '26 April 2026';
 
 interface LegalSection {
@@ -73,7 +73,7 @@ const sections: LegalSection[] = [
       'Performance of contract: to provide the Service you signed up for, including AI feedback, tutor review, and mock scoring.',
       'Legitimate interests: keeping the Service secure, preventing abuse, improving features, measuring product quality, and running de-identified analytics.',
       'Legal obligation: accounting, tax, fraud prevention, response to lawful requests.',
-      'Consent: optional marketing emails, product research interviews, and any non-essential cookies. You can withdraw consent at any time without affecting prior processing.',
+      'Consent: optional marketing emails, product research interviews, any non-essential cookies, and the Speaking recording consent you accept before each Speaking session (including the optional selection of a recording for quality assurance and grader calibration). You can withdraw consent at any time without affecting prior processing.',
     ],
   },
   {
@@ -81,7 +81,8 @@ const sections: LegalSection[] = [
     title: 'How long we keep it',
     bullets: [
       'Account data: while your account is active, plus up to 24 months after closure to handle re-activation, support disputes, and statutory obligations.',
-      'Speaking and conversation audio: by default 30 days, configurable in Settings → Privacy. Transcripts and scores have longer retention (1 year) for progress tracking.',
+      'Speaking practice recordings: kept for up to 90 days by default, then deleted. A recording may be selected, with your identity hidden from the reviewer, as an example for quality assurance and calibration of our AI grader. Selected recordings are kept for up to 365 days and may be listened to by qualified expert reviewers for that purpose only. You can delete a recording at any time, which also removes it from review.',
+      'Conversation and pronunciation audio: by default 30 days, configurable in Settings → Privacy. Transcripts and scores have longer retention (1 year) for progress tracking.',
       'Writing submissions and tutor feedback: retained while your account is active so you can revisit feedback over your prep journey.',
       'Billing records: 7 years (UK accounting requirement).',
       'Security logs: up to 90 days for incident investigation.',

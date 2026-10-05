@@ -210,11 +210,14 @@ warning for a quote it cannot find; the rationale is still stored.
 
 ## Calibration
 
-Nothing yet compares AI scores with expert marks. The plan: Dr Hesham marks real performances blind to the
-AI score (nine criteria plus an overall score out of 500) in an admin screen; a harness grades the same
-performances and reports per-criterion error, grade and pass/fail agreement and repeatability; a monotone
-fit of his own raw-total → overall pairs replaces `SpeakingRawToReported`. Only after that report passes
-does a grader version enter `SpeakingCalibratedGraders` and the "provisional" label come off.
+Dr Hesham marks real performances blind to the AI score (nine criteria plus an overall score out of 500) in
+Admin > Speaking > Grader calibration, and a manual harness (`speaking-grader-calibration.yml`) grades the same
+performances and reports per-criterion error, grade and pass/fail agreement and repeatability. The pass thresholds
+were approved by the owner on 2026-10-05 and are strict; see `docs/speaking/grader-calibration.md`. A monotone fit of
+his own raw-total to overall pairs replaces `SpeakingRawToReported` only after a run passes and the owner agrees.
+Until then every candidate-facing Speaking score stays "Provisional" and `SpeakingCalibratedGraders` stays empty.
+No grader version has been calibrated yet; the combined Full Mock grader needs its own calibration on two-card
+performances.
 
 ## Disclaimer
 

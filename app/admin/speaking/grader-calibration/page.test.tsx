@@ -46,6 +46,9 @@ const overview = (samples: GraderCalibrationSampleRow[]): GraderCalibrationOverv
     requiredLabelled: 30,
     requiredPerGrade: 3,
     requiredNearPassLine: 10,
+    labelledBelowPassLine: 1,
+    labelledAtOrAbovePassLine: 1,
+    requiredEachSideOfPassLine: 4,
     requiredAudioShare: 0.8,
     meetsCoverage: false,
     unmet: ['Mark 27 more performance(s): 3 of 30 marked.', 'Grade E: 0 of 3 marked.'],
@@ -80,9 +83,25 @@ describe('SpeakingGraderCalibrationPage', () => {
     expect(screen.getByText(/marking is blind: AI scores are never shown here/i)).toBeInTheDocument();
     expect(screen.getByTestId('coverage-grade-B')).toHaveTextContent('2 / 3');
     expect(screen.getByTestId('coverage-near')).toHaveTextContent('2 / 10');
+    // The 320-380 block must straddle the 350 pass line.
+    expect(screen.getByTestId('coverage-below')).toHaveTextContent('1 / 4');
+    expect(screen.getByTestId('coverage-above')).toHaveTextContent('1 / 4');
     expect(screen.getByTestId('coverage-audio')).toHaveTextContent('67%');
     expect(screen.getByTestId('coverage-unmet')).toHaveTextContent('Grade E: 0 of 3 marked.');
     expect(screen.getByText('More marking needed')).toBeInTheDocument();
+  });
+
+  it('shows a performance that can no longer be graded as unavailable and never offers it as the next one to mark', async () => {
+    mockOverview.mockResolvedValue(overview([
+      row({ id: 'spgc_gone', cardTitle: 'Expired one', usable: false }),
+      row({ id: 'spgc_todo', cardTitle: 'Waiting one' }),
+    ]));
+    renderWithRouter(<SpeakingGraderCalibrationPage />);
+
+    const rows = await screen.findAllByTestId('calibration-sample-row');
+    const gone = rows.find((r) => r.textContent?.includes('Expired one'))!;
+    expect(gone).toHaveTextContent('Unavailable');
+    expect(screen.getByRole('link', { name: 'Mark the next performance' })).toHaveAttribute('href', '/admin/speaking/grader-calibration/spgc_todo');
   });
 
   it('lists the performances still to mark first, each with a way in, and offers the next one', async () => {

@@ -22,6 +22,11 @@ on:
         required: false
         default: true
         type: boolean
+      smoke:
+        description: 'Only check that the calibration API is live for an admin (counts only; starts no run)'
+        required: false
+        default: false
+        type: boolean
       max_minutes:
         description: 'Stop waiting after this many minutes (the grades keep running; dispatch again with the run id)'
         required: false
@@ -53,8 +58,10 @@ jobs:
           REPEATS: ${{ inputs.repeats }}
           AUDIO: ${{ inputs.audio }}
           MAX_MINUTES: ${{ inputs.max_minutes }}
+          SMOKE: ${{ inputs.smoke }}
         run: |
           ARGS="--repeats ${REPEATS:-2} --max-minutes ${MAX_MINUTES:-330}"
+          if [ "$SMOKE" = "true" ]; then ARGS="$ARGS --smoke"; fi
           if [ -n "$RUN_ID" ]; then ARGS="$ARGS --run $RUN_ID"; fi
           if [ "$AUDIO" = "false" ]; then ARGS="$ARGS --no-audio"; fi
           node scripts/speaking/grader-calibration.mjs $ARGS
@@ -64,6 +71,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: speaking-grader-calibration-${{ github.run_id }}
-          path: grader-calibration-report.json
+          path: |
+            grader-calibration-report.json
+            grader-calibration-report.md
           if-no-files-found: ignore
           retention-days: 90

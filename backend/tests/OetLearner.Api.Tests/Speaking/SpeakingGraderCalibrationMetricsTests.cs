@@ -104,6 +104,19 @@ public sealed class SpeakingGraderCalibrationMetricsTests
         // Right answers sit on the diagonal of the confusion matrix (expert grade down, grader's across).
         Assert.Equal(72, Enumerable.Range(0, 6).Sum(i => report.Grade.Confusion[i][i]));
         Assert.Equal(6 * 6, report.Grade.Confusion.Sum(row => row.Length));
+
+        // The full comparison: every marked performance beside each of its grades.
+        Assert.Equal(36, report.Detail!.Count);
+        Assert.All(report.Detail, d =>
+        {
+            Assert.Equal(2, d.Grades.Count);
+            Assert.All(d.Grades, g =>
+            {
+                Assert.Equal(d.ExpertRaw, g.Raw);
+                Assert.Equal(d.ExpertGrade, g.Grade);
+                Assert.True(Math.Abs(g.ScaledError) <= 100);
+            });
+        });
     }
 
     [Fact]
@@ -122,6 +135,62 @@ public sealed class SpeakingGraderCalibrationMetricsTests
         Assert.Equal(6, coverage.PerGrade["C+"]);
         Assert.Equal(10, coverage.PerGrade["B"]);
         Assert.Equal(4, coverage.PerGrade["A"]);
+    }
+
+    // ── The approved thresholds are pinned ─────────────────────────────────────────────────
+
+    [Fact]
+    public void TheApprovedThresholds_ArePinned_SoNoneCanBeRelaxedToMakeTheGraderPass()
+    {
+        // Owner decision 2026-10-05: keep them strict. Loosening any of these must fail the build.
+        Assert.Equal(0.75, SpeakingGraderCalibrationMetrics.Thresholds.LinguisticMae);
+        Assert.Equal(0.5, SpeakingGraderCalibrationMetrics.Thresholds.LinguisticBias);
+        Assert.Equal(0.90, SpeakingGraderCalibrationMetrics.Thresholds.LinguisticAdjacent);
+        Assert.Equal(0.5, SpeakingGraderCalibrationMetrics.Thresholds.ClinicalMae);
+        Assert.Equal(0.35, SpeakingGraderCalibrationMetrics.Thresholds.ClinicalBias);
+        Assert.Equal(0.60, SpeakingGraderCalibrationMetrics.Thresholds.ClinicalExact);
+        Assert.Equal(0.75, SpeakingGraderCalibrationMetrics.Thresholds.AudioIntelligibilityMae);
+        Assert.Equal(30, SpeakingGraderCalibrationMetrics.Thresholds.ScaledMae);
+        Assert.Equal(15, SpeakingGraderCalibrationMetrics.Thresholds.ScaledBias);
+        Assert.Equal(0.80, SpeakingGraderCalibrationMetrics.Thresholds.ScaledWithin40);
+        Assert.Equal(0.70, SpeakingGraderCalibrationMetrics.Thresholds.GradeExact);
+        Assert.Equal(0.95, SpeakingGraderCalibrationMetrics.Thresholds.GradeAdjacent);
+        Assert.Equal(0.85, SpeakingGraderCalibrationMetrics.Thresholds.PassAgreement);
+        Assert.Equal(0.10, SpeakingGraderCalibrationMetrics.Thresholds.FalsePass);
+        Assert.Equal(0.80, SpeakingGraderCalibrationMetrics.Thresholds.CriterionRepeat);
+        Assert.Equal(0.90, SpeakingGraderCalibrationMetrics.Thresholds.ScaledWithin20);
+        Assert.Equal(0.95, SpeakingGraderCalibrationMetrics.Thresholds.PassStable);
+        Assert.Equal(2, SpeakingGraderCalibrationMetrics.Thresholds.MinimumRepeats);
+
+        // ...and so is the coverage a report needs.
+        Assert.Equal(30, SpeakingGraderCalibrationService.RequiredLabelled);
+        Assert.Equal(3, SpeakingGraderCalibrationService.RequiredPerGrade);
+        Assert.Equal(10, SpeakingGraderCalibrationService.RequiredNearPassLine);
+        Assert.Equal(0.8, SpeakingGraderCalibrationService.RequiredAudioShare);
+        Assert.Equal(4, SpeakingGraderCalibrationService.RequiredEachSideOfPassLine);
+    }
+
+    [Fact]
+    public void AReportWhoseNearPassLineBlockSitsOnOneSideOfTheLine_FailsCoverage()
+    {
+        // Thirty-six performances, ten of them marked 350-380 and none marked 320-340.
+        var raws = new[] { 0, 3, 6, 10, 14, 18, 20, 22, 24, 25, 26, 27, 28, 29, 30, 33, 36, 39 };
+        var experts = new List<SpeakingCalibrationExpert>();
+        foreach (var raw in raws)
+        {
+            for (var twin = 1; twin <= 2; twin++)
+            {
+                var overall = OetScoring.SpeakingRawToReported[raw];
+                if (overall is >= 320 and < 350) overall = 360; // pull the "just below" ones above the line
+                experts.Add(new SpeakingCalibrationExpert($"s{raw:00}-{twin}", true, ScoresFor(raw), overall));
+            }
+        }
+
+        var report = SpeakingGraderCalibrationMetrics.Compute(experts, Grades(experts), requireAudio: true);
+
+        Assert.Equal(0, report.Coverage.BelowPassLine);
+        Assert.False(report.Verdict.Passed);
+        Assert.Contains(report.Verdict.Failures, f => f.Contains("320-340"));
     }
 
     // ── A grader that does not ─────────────────────────────────────────────────────────────

@@ -26,11 +26,14 @@ public sealed record SpeakingGraderCalibrationSampleRow(
     int? ExpertOverallScaled,
     string? ExpertGrade,
     DateTimeOffset PromotedAt,
-    DateTimeOffset? LabelledAt);
+    DateTimeOffset? LabelledAt,
+    /// <summary>False when the performance can no longer be graded or replayed: its audio expired or was deleted,
+    /// the learner withdrew consent, or its transcript was erased. Such a sample is not counted or graded.</summary>
+    bool Usable = true);
 
 /// <summary>
 /// How much expert-labelled evidence exists, against the coverage a calibration report needs
-/// (proposed thresholds; the owner confirms them). <c>Unmet</c> is plain language, never a code.
+/// (thresholds approved by the owner 2026-10-05; never relax them). <c>Unmet</c> is plain language, never a code.
 /// </summary>
 public sealed record SpeakingGraderCalibrationCoverage(
     int Total,
@@ -48,7 +51,13 @@ public sealed record SpeakingGraderCalibrationCoverage(
     int RequiredNearPassLine,
     double RequiredAudioShare,
     bool MeetsCoverage,
-    IReadOnlyList<string> Unmet);
+    IReadOnlyList<string> Unmet,
+    /// <summary>Labelled samples with an expert overall of 320-340 (just below the 350 pass line).</summary>
+    int LabelledBelowPassLine = 0,
+    /// <summary>Labelled samples with an expert overall of 350-380 (at or just above the pass line).</summary>
+    int LabelledAtOrAbovePassLine = 0,
+    /// <summary>How many labelled samples each side of the pass line the report needs.</summary>
+    int RequiredEachSideOfPassLine = 0);
 
 public sealed record SpeakingGraderCalibrationOverview(
     SpeakingGraderCalibrationCoverage Coverage,

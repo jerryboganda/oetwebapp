@@ -500,7 +500,7 @@ public sealed class SpeakingComplianceService(
         var normalized = consentType?.Trim().ToLowerInvariant() ?? string.Empty;
         return normalized == SpeakingComplianceConsentTypes.LiveVideoWithTutor
             ? _options.CurrentLiveVideoConsentVersion
-            : _options.CurrentConsentVersion;
+            : SpeakingConsentVersions.Effective(_options.CurrentConsentVersion);
     }
 
     // ── Internals ────────────────────────────────────────────────────────

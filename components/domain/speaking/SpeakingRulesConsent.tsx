@@ -15,7 +15,7 @@ import { apiClient } from '@/lib/api';
 export const FREE_SPEAKING_SAMPLE_COPY = 'Free sample includes one full attempt. New attempts require Speaking credits.';
 
 const FALLBACK_RECORDING_NOTICE =
-  'Your voice is processed during the session to provide AI-powered speaking practice and feedback. Audio recordings are retained for a limited period and may be reviewed to support your feedback and improve the service.';
+  'Your voice is processed during the session to provide AI-powered speaking practice and feedback. Recordings are kept for a limited period. A recording may be selected, with your identity hidden from the reviewer, as an example for quality assurance and calibration of our AI grader; selected recordings are kept for up to 365 days and may be listened to by qualified expert reviewers for that purpose only. You can delete a recording at any time, which also removes it from review.';
 
 const AI_PROVIDER_DISCLOSURE =
   'For a live AI-patient role-play, short clips are captured from your microphone when speech is detected and stored for the stated retention period. The app does not make a full-session recording or directly record provider playback. Browser echo cancellation is enabled, but speaker or background audio may still be picked up by your microphone. Your microphone is also streamed in real time to the live voice provider, and your audio and transcript are sent to our AI speech-to-text and grading providers to assess your performance.';

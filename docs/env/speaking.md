@@ -132,9 +132,15 @@ row to be **active**. The "quota/budget refusals" that never fail over are the p
 
 ## Speaking Compliance
 
+> Binding note: the API's `SpeakingComplianceOptions` (consent text, consent version served by
+> `/v1/speaking/compliance`, the retention worker) bind to the `Speaking:Compliance` section
+> (`Speaking__Compliance__<Key>`), while the runtime-settings snapshot reads `SpeakingCompliance:<Key>`
+> (`SpeakingCompliance__<Key>`, plus the admin runtime-settings row). Production sets neither, so the code
+> defaults below apply. Change a retention value only after checking which of the two readers it must reach.
+
 | Key | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `SpeakingCompliance__CurrentConsentVersion` | optional | `recording.v1` | Versioned consent code stamped on every session. |
+| `SpeakingCompliance__CurrentConsentVersion` | optional | `recording.v3` | Versioned recording-consent code. `recording.v3` is the first wording that covers calibration retention (365 days); an older value (`recording.v1`/`v2`) is read as `recording.v3` (floor), so no environment can keep serving the old wording. |
 | `SpeakingCompliance__CurrentLiveVideoConsentVersion` | optional | `live_video_with_tutor.v1` | Versioned live-video consent. Not required for the audio-only live tutor rooms. |
 | `SpeakingCompliance__RetentionDaysDefault` | optional | `90` | Retention window for recordings WITHOUT tutor review. |
 | `SpeakingCompliance__RetentionDaysWhenTutorReviewed` | optional | `365` | Retention window WHEN tutor assessment exists. |

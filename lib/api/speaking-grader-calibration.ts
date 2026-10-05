@@ -31,6 +31,8 @@ export interface GraderCalibrationSampleRow {
   expertGrade: string | null;
   promotedAt: string;
   labelledAt: string | null;
+  /** False when its audio expired or was deleted, the learner withdrew consent or the transcript was erased. */
+  usable?: boolean;
 }
 
 export interface GraderCalibrationCoverage {
@@ -46,6 +48,12 @@ export interface GraderCalibrationCoverage {
   requiredLabelled: number;
   requiredPerGrade: number;
   requiredNearPassLine: number;
+  /** Labelled samples with an expert overall of 320-340 (just below the 350 pass line). */
+  labelledBelowPassLine?: number;
+  /** Labelled samples with an expert overall of 350-380. */
+  labelledAtOrAbovePassLine?: number;
+  /** How many marked performances each side of the pass line the report needs. */
+  requiredEachSideOfPassLine?: number;
   requiredAudioShare: number;
   meetsCoverage: boolean;
   /** Plain-language list of what is still missing. */
