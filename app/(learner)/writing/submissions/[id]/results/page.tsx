@@ -87,6 +87,11 @@ function priorityText(priority: string): string {
   return priority.replace(PRIORITY_RULE_LABEL, '').trim();
 }
 
+/** A card shows a short excerpt; the complete text stays in "View all corrections". */
+const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
+const CARD_WORDING_MAX = 140;
+const CARD_FIX_MAX = 220;
+
 /** Gauge fill on the value's own scale, clamped to 0–100%. */
 const gaugePercent = (value: number, max: number) => Math.min(100, Math.max(0, (value / max) * 100));
 
@@ -405,9 +410,9 @@ export default function WritingSubmissionResultsPage() {
                         ) : ai?.feedback}
                         suggestedFix={!isMock && fix ? (
                           <>
-                            {top?.candidateWording ? <span className="block text-navy">“{top.candidateWording}”</span> : null}
+                            {top?.candidateWording ? <span className="block text-navy">“{clip(top.candidateWording, CARD_WORDING_MAX)}”</span> : null}
                             <span className="font-bold">{t('writing.submissions.results.criteria.suggestedFix')}</span>{' '}
-                            <span dir="ltr">{fix}</span>
+                            <span dir="ltr">{clip(fix, CARD_FIX_MAX)}</span>
                           </>
                         ) : null}
                         meta={visibleReport && !isMock ? (

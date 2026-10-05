@@ -556,8 +556,9 @@ describe('Writing results page — concise cards for a letter with many mixed fi
   });
   const CRITERIA = ['purpose', 'content', 'conciseness_clarity', 'genre_style', 'organisation_layout', 'language'];
   // 14 findings, severity-first like the server: 3 critical, 5 major, 6 minor, several per criterion.
+  const LONG_FIX = 'Rewrite the whole closing paragraph. '.repeat(20);
   const ERRORS = [
-    finding(1, 'content', 'critical'), finding(2, 'content', 'critical'), finding(3, 'purpose', 'critical'),
+    { ...finding(1, 'content', 'critical'), correction: LONG_FIX }, finding(2, 'content', 'critical'), finding(3, 'purpose', 'critical'),
     finding(4, 'language', 'major'), finding(5, 'language', 'major'), finding(6, 'genre_style', 'major'),
     finding(7, 'conciseness_clarity', 'major'), finding(8, 'organisation_layout', 'major'),
     finding(9, 'language', 'minor'), finding(10, 'language', 'minor'), finding(11, 'content', 'minor'),
@@ -613,6 +614,9 @@ describe('Writing results page — concise cards for a letter with many mixed fi
     // Content has 3 findings: only the critical one is on the card, the rest sit behind "more".
     expect(within(cards[1]).getByText('“wording 1”')).toBeInTheDocument();
     expect(within(cards[1]).queryByText('“wording 2”')).not.toBeInTheDocument();
+    // A very long suggested fix is excerpted on the card; the full text is in the corrections list.
+    expect(cards[1].textContent).not.toContain(LONG_FIX);
+    expect(cards[1].textContent).toContain('…');
     expect(within(cards[1]).getByTestId('criterion-more')).toHaveTextContent('writing.submissions.results.criteria.moreCorrections');
   });
 

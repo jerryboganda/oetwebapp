@@ -593,6 +593,7 @@ export function reportTextProblems(text, hrefs = []) {
 export const SUMMARY_MAX_CHARS = 240;
 export const PRIORITY_MAX_CHARS = 220;
 export const CARD_MAX_CHARS = 900;
+const LEAK_SAMPLE = { ruleLabel: /^R\d{1,2}[:.]\s?\S{0,12}/, ruleId: /\([A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d[^)]{0,24}/, affects: /This affects[^.]{0,28}/, exemplar: /[Ee]xemplar/ };
 const LEAK_KINDS = { ruleLabel: /^R\d{1,2}[:.]/, ruleId: /\([A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d/, affects: /This affects/, exemplar: /[Ee]xemplar/ };
 const PRIORITY_LABEL = /^(?:AI(?:[.:][\w.-]*)?|[\w-]*[\d._-][\w.-]*):\s+/;
 const CRITERION_CODES = ['purpose', 'content', 'conciseness_clarity', 'genre_style', 'organisation_layout', 'language'];
@@ -621,6 +622,8 @@ export function reportShapeFacts(grade, report) {
     criteriaMissingSummary: CRITERION_CODES.filter((code) => errors.some((e) => e.primaryCriterionCode === code) && !summaryOf(code)).length,
     purposePriorities: (report?.topPriorities ?? []).filter((p) => errors.some((e) => e.primaryCriterionCode === 'purpose' && String(p).startsWith(`${e.ruleSource}: `))).length,
     leakKinds: Object.fromEntries(Object.entries(LEAK_KINDS).map(([kind, re]) => [kind, leakTexts.filter((t) => re.test(t)).length])),
+    // The matched fragment only (a rule id / the "This affects ..." note), at most 40 chars: never letter or case-note text.
+    leakSamples: Object.fromEntries(Object.entries(LEAK_SAMPLE).map(([kind, re]) => [kind, leakTexts.map((t) => re.exec(t)?.[0]?.slice(0, 40)).filter(Boolean).slice(0, 2)])),
     labelLeaks: leakTexts.filter((t) => Object.values(LEAK_KINDS).some((re) => re.test(t))).length,
   };
 }
