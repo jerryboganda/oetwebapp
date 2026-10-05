@@ -33,44 +33,67 @@ on:
       - 'hooks/**'
       - 'lib/**'
       - 'public/**'
+      - 'public/.well-known/**'
       - 'messages/**'
       - 'types/**'
-      # Every root-level source/config file the two builds consume: i18n.ts,
-      # next.config.ts, proxy.ts, middleware.ts, instrumentation*.ts,
-      # sentry.*.config.ts, tsconfig.json, package.json, postcss.config.mjs.
-      # Explicit extensions on purpose: brace globs are not part of the
-      # path-filter spec and would silently never match.
-      - '*.ts'
-      - '*.tsx'
-      - '*.mjs'
-      - '*.cjs'
-      - '*.json'
+      # Root files the web image copies (the Dockerfile.dockerignore allow-list), by
+      # exact name: a stray root config/test file must not start a build. Explicit
+      # names on purpose: brace globs are not part of the path-filter spec.
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'next-env.d.ts'
+      - 'next.config.ts'
+      - 'postcss.config.mjs'
+      - 'i18n.ts'
+      - 'proxy.ts'
+      - 'middleware.ts'
+      - 'instrumentation.ts'
+      - 'instrumentation-client.ts'
+      - 'sentry.client.config.ts'
+      - 'sentry.server.config.ts'
+      - 'sentry.edge.config.ts'
       - 'pnpm-lock.yaml'
       - '.npmrc'
-      - '.dockerignore'
       - 'Dockerfile'
       - 'Dockerfile.dockerignore'
       - 'backend/**'
+      # Dot-files are not matched by '**': name the ones the API build reads (compiler diagnostics).
+      - 'backend/.editorconfig'
       - 'global.json'
       - 'Directory.*.props'
       - 'Directory.*.targets'
+      - 'Directory.*.rsp'
       - 'NuGet.config'
+      - 'NuGet.Config'
+      - 'nuget.config'
       - 'rulebooks/**'
       - 'data/**'
-      - 'agent-gateway/**'
-      - 'scripts/backup/**'
+      # agent-gateway and db-backup: exactly what their Dockerfiles COPY.
+      - 'agent-gateway/Dockerfile'
+      - 'agent-gateway/.dockerignore'
+      - 'agent-gateway/pyproject.toml'
+      - 'agent-gateway/src/**'
+      - 'scripts/backup/Dockerfile'
+      - 'scripts/backup/Dockerfile.dockerignore'
+      - 'scripts/backup/*.sh'
       - 'scripts/deploy/**'
       - 'docker-compose.production.yml'
       - 'docker-compose.production.*.yml'
-      - '.env.production.example'
       - '.github/workflows/build-images.yml'
       - '.github/workflows/production-deploy.yml'
       - 'tests/writing-regression/**'
-      - '!TASKS.json'
+      # Negations come LAST (the last matching pattern wins): tests, docs and the
+      # emergency source-build compose never start a build or a rollout.
       - '!backend/tests/**'
       - '!backend/**/*.md'
-      - '!playwright*.ts'
-      - '!vitest*.ts'
+      - '!backend/*.md'
+      - '!backend/Dockerfile'
+      - '!backend/Dockerfile.dev'
+      - '!scripts/deploy/**/*.md'
+      - '!docker-compose.production.build.yml'
+      - '!**/*.test.*'
+      - '!**/*.spec.*'
+      - '!**/__tests__/**'
   # A PR run proves the workflow itself before the merge (routing, retag-reuse,
   # the contract guards). It can never deploy: production-deploy.yml only acts
   # on a Build images run whose head branch is `main`.
@@ -432,6 +455,11 @@ jobs:
       - name: Publish API on the Actions host
         run: |
           set -euo pipefail
+          # Finish the .NET first-run setup BEFORE anything runs in the background: the
+          # backgrounded tool install and `dotnet restore` otherwise race on the
+          # NuGet-Migrations mutex and fail the build (seen in about 1 of 8 runs).
+          export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+          dotnet --version >/dev/null
           dotnet tool install --tool-path "$RUNNER_TEMP/dotnet-tools" dotnet-ef --version 10.0.5 &
           ef_pid=$!
           dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo

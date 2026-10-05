@@ -628,6 +628,19 @@ export async function reportPipelineContract(repoRoot = root) {
   }
   const { scanRepo } = await import(pathToFileURL(modulePath).href);
   const failures = scanRepo(repoRoot);
+  // Smart AND fail-proof deploys (owner directive 2026-10-06): the build-input classifier, the push-path filter and the
+  // real Docker contexts must agree, so no change can reuse a stale image and no test/docs edit starts a build.
+  try {
+    const parity = await import(pathToFileURL(resolve(repoRoot, 'scripts/deploy/release-manifest.mjs')).href);
+    const files = execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+      .split(/\r?\n/).filter(Boolean);
+    failures.push(...parity.buildInputParityFailures({
+      files,
+      readFile: (relative) => readFileSync(resolve(repoRoot, relative), 'utf8'),
+    }));
+  } catch (error) {
+    failures.push(`build-input parity could not run: ${error instanceof Error ? error.message : error}`);
+  }
   for (const failure of failures) console.error(`pipeline-contract: ${failure}`);
   return failures.length === 0;
 }

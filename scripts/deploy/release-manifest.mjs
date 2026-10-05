@@ -13,6 +13,25 @@ const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const CHECKSUM = /^[a-f0-9]{64}$/;
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
+/**
+ * Which images an edit can change (owner directive 2026-10-06: SMART and FAIL-PROOF deploys: a frontend-only change
+ * rebuilds and rolls out only the web image, a backend-only change only the API, a test/docs/ledger-only change nothing).
+ *
+ * Each pattern mirrors what that image's REAL build context reads: web = Dockerfile.dockerignore allow-list minus the
+ * test files it strips; api = backend/src/OetLearner.Api + the csproj's out-of-tree inputs; db-backup / agent-gateway = the
+ * Dockerfiles' COPY sources. buildInputParityFailures() (run by the ship gate, the syntax gate and the guards job) fails the
+ * run when this classifier, the push `paths:` filter in build-images.yml and the real contexts drift apart, so a new input
+ * can never be silently reused from a stale image.
+ */
+export const TEST_FILE = /(?:^|\/)__tests__\/|\.(?:test|spec)\.[^/]+$/;
+const WEB_DIR = /^(?:app|pages|components|contexts|hooks|lib|public|messages|types)\//;
+const WEB_SHARED = /^(?:data|rulebooks)\//;
+const WEB_ROOT = /^(?:package\.json|pnpm-lock\.yaml|\.npmrc|Dockerfile|Dockerfile\.dockerignore|tsconfig\.json|next-env\.d\.ts|next\.config\.ts|postcss\.config\.mjs|i18n\.ts|proxy\.ts|middleware\.ts|instrumentation(?:-client)?\.ts|sentry\.(?:client|server|edge)\.config\.ts)$/;
+const API_INPUT = /^(?:backend\/(?!tests\/)|rulebooks\/|data\/|global\.json$|Directory\.[^/]+\.(?:props|targets|rsp)$|(?:NuGet|nuget)\.[Cc]onfig$)/;
+const API_NOT_INPUT = /(?:\.md$|^backend\/(?:Dockerfile|Dockerfile\.dev)$)/i;
+const BACKUP_INPUT = /^scripts\/backup\/(?:Dockerfile(?:\.dockerignore)?|[^/]+\.sh)$/;
+const GATEWAY_INPUT = /^agent-gateway\/(?:Dockerfile|\.dockerignore|pyproject\.toml|src\/)/;
+
 export function classifyInputs(files) {
   if (files === null) return { web: true, api: true, 'db-backup': true, 'agent-gateway': true, writing: true };
   const result = { web: false, api: false, 'db-backup': false, 'agent-gateway': false, writing: false };
@@ -20,14 +39,98 @@ export function classifyInputs(files) {
     if (/^(\.github\/workflows\/build-images\.yml|scripts\/deploy\/release-manifest\.mjs)$/.test(file)) {
       COMPONENTS.forEach((key) => { result[key] = true; });
     }
-    if (/^(app\/|pages\/|components\/|contexts\/|hooks\/|lib\/|public\/|messages\/|types\/|data\/|rulebooks\/|pnpm-lock\.yaml$|\.npmrc$|Dockerfile(?:\.dockerignore)?$|[^/]+\.(?:ts|tsx|mjs|cjs|json)$)/.test(file)
-        && !/^(TASKS\.json|global\.json|playwright[^/]*|vitest[^/]*)$/.test(file)) result.web = true;
-    if (/^(backend\/(?!tests\/)|rulebooks\/|data\/|global\.json$|Directory\.[^/]+\.(?:props|targets)$|NuGet\.config$)/i.test(file)) result.api = true;
-    if (/^scripts\/backup\//.test(file) || file === '.dockerignore') result['db-backup'] = true;
-    if (/^agent-gateway\//.test(file)) result['agent-gateway'] = true;
-    if (/^(backend\/src\/OetLearner\.Api\/(?:Services\/(?:Writing\/|Rulebook\/|Ai\/AiFeatureRouteResolver\.cs)|Configuration\/Writing)|rulebooks\/writing\/|tests\/writing-regression\/)/.test(file)) result.writing = true;
+    if (((WEB_DIR.test(file) || WEB_SHARED.test(file)) && !TEST_FILE.test(file)) || WEB_ROOT.test(file)) result.web = true;
+    if (API_INPUT.test(file) && !API_NOT_INPUT.test(file)) result.api = true;
+    if (BACKUP_INPUT.test(file)) result['db-backup'] = true;
+    if (GATEWAY_INPUT.test(file)) result['agent-gateway'] = true;
+    if (/^(backend\/src\/OetLearner\.Api\/(?:Services\/(?:Writing\/|Rulebook\/|Ai\/AiFeatureRouteResolver\.cs)|Configuration\/Writing)|rulebooks\/writing\/|tests\/writing-regression\/)/.test(file)
+        && !/\.md$/i.test(file)) result.writing = true;
   }
   return result;
+}
+
+function globToRegExp(glob) {
+  let out = '';
+  for (let i = 0; i < glob.length; i += 1) {
+    const c = glob[i];
+    if (c === '*' && glob[i + 1] === '*') {
+      if (glob[i + 2] === '/') { out += '(?:.*/)?'; i += 2; } else { out += '.*'; i += 1; }
+    } else if (c === '*') out += '[^/]*';
+    else out += c.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${out}$`);
+}
+
+function copySources(dockerfile, base) {
+  return dockerfile.split(/\r?\n/).flatMap((line) => {
+    const match = /^\s*(?:COPY|ADD)\s+(?:--\S+\s+)*(.+)$/i.exec(line);
+    if (!match || /--from=/i.test(line)) return [];
+    const parts = match[1].trim().split(/\s+/);
+    return parts.slice(0, -1).map((part) => posix.normalize(posix.join(base, part)));
+  });
+}
+
+/**
+ * Fail-proof drift guard: returns the reasons the classifier, the push-path filter and the real Docker build contexts
+ * disagree. Empty means every file an image reads both flags that image and starts a build, and test files never do.
+ * `files` is the tracked file list (git ls-files); `readFile(relative)` reads a tracked file.
+ */
+export function buildInputParityFailures({ files, readFile }) {
+  const failures = [];
+  const workflow = readFile('.github/workflows/build-images.yml');
+  const need = (component, file, why) => {
+    if (!classifyInputs([file])[component]) {
+      failures.push(`${component} reads ${file} (${why}) but classifyInputs does not flag it: a later change would reuse a stale ${component} image`);
+    }
+    if (!buildInputsChanged([file], workflow)) {
+      failures.push(`${component} reads ${file} (${why}) but the build-images.yml push paths would start no build for it`);
+    }
+  };
+
+  // web: the real context is Dockerfile.dockerignore's allow-list minus its deny patterns.
+  const lines = readFile('Dockerfile.dockerignore').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  const allow = lines.filter((l) => l.startsWith('!')).map((l) => l.slice(1));
+  const deny = lines.filter((l) => !l.startsWith('!') && l !== '**');
+  const allowed = (f) => allow.some((a) => (a.endsWith('/**') ? f.startsWith(a.slice(0, -2)) : a.endsWith('/') ? f.startsWith(a) : f === a));
+  const denied = (f) => deny.some((d) => posix.matchesGlob(f, d) || posix.matchesGlob(f, `${d}/**`));
+  for (const f of files) if (allowed(f) && !denied(f)) need('web', f, 'in the web build context');
+
+  // api: the csproj, its out-of-tree includes, and the runtime image inputs.
+  const API_FILE = /^(?:backend\/src\/OetLearner\.Api\/|backend\/(?:Directory\.[^/]+|\.editorconfig|Dockerfile\.runtime(?:\.dockerignore)?)$|backend\/scripts\/StripeProductSeeder\/catalog\.json$|(?:global\.json|NuGet\.config)$|Directory\.[^/]+\.(?:props|targets)$)/;
+  for (const f of files) {
+    if (API_FILE.test(f) && !/\.md$/i.test(f) && !/(?:^|\/)(?:bin|obj)\//.test(f)) need('api', f, 'published into the API image');
+  }
+  const csproj = readFile('backend/src/OetLearner.Api/OetLearner.Api.csproj');
+  for (const m of csproj.matchAll(/(?:Include|Update)="((?:\.\.[\\/])+[^"$]*)"/g)) {
+    const relative = posix.normalize(posix.join('backend/src/OetLearner.Api', m[1].replaceAll('\\', '/')));
+    if (relative.startsWith('backend/src/OetLearner.Api/')) continue;
+    const pattern = globToRegExp(relative);
+    for (const f of files) if (pattern.test(f)) need('api', f, `referenced by OetLearner.Api.csproj (${m[1]})`);
+  }
+
+  // db-backup and agent-gateway: exactly what their Dockerfiles COPY.
+  for (const [component, dockerfile, base] of [['db-backup', 'scripts/backup/Dockerfile', ''], ['agent-gateway', 'agent-gateway/Dockerfile', 'agent-gateway']]) {
+    const sources = copySources(readFile(dockerfile), base);
+    for (const f of files) {
+      if (f === dockerfile || f === `${dockerfile}.dockerignore` || sources.some((s) => f === s || f.startsWith(`${s}/`))) {
+        need(component, f, `copied by ${dockerfile}`);
+      }
+    }
+  }
+
+  // Each root-context image must keep its own ignore file (the root .dockerignore governs no CI image).
+  for (const ignore of ['Dockerfile.dockerignore', 'backend/Dockerfile.runtime.dockerignore', 'scripts/backup/Dockerfile.dockerignore']) {
+    if (!files.includes(ignore)) failures.push(`${ignore} is missing: that image would silently fall back to the root .dockerignore`);
+  }
+
+  // Smart: a test, docs or ledger edit must never start a build or a rollout.
+  const NEVER_BUILDS = /^(?:docs\/|SESSION_STATE\.md$|TASKS\.json$|VERIFICATION\.md$|PROGRESS\.md$)|(?:^|\/)__tests__\/|\.(?:test|spec)\.[^/]+$/;
+  for (const f of files) {
+    if (NEVER_BUILDS.test(f) && buildInputsChanged([f], workflow)) {
+      failures.push(`${f} is a test/docs/ledger file but the build-images.yml push paths would start a build and a rollout for it`);
+    }
+  }
+  return failures;
 }
 
 export function validateManifest(value, repo, expectedSha) {

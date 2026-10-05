@@ -91,6 +91,31 @@ The owner tests the live product by hand and reports bugs; the agent fixes them 
 - **Standing product rules still bind** (Max never off, the $0 Writing rule, Writing house style, scoring and rulebook
   invariants, the Speaking Provisional label ...). With no CI test enforcing them, agents follow them by reading the rules.
 
+## ⛔ SMART, FAIL-PROOF COMPONENT DEPLOYS — COMPULSORY (owner directive 2026-10-06; PERMANENT, HARD ENFORCED)
+
+Only what a change touches is rebuilt and rolled out; the rest is reused. This is already how the pipeline works - do not weaken it.
+
+- **Frontend-only change -> only the web image is built.** `api`, `db-backup` and `agent-gateway` are reused by registry retag of the verified
+  ancestor digest (`scripts/deploy/release-manifest.mjs`, `classifyInputs`); backend-only -> only the API (and its migration SQL); a
+  test/docs/ledger-only change starts **no build and no rollout**. `data/**` and `rulebooks/**` are shared inputs (web + api). An edit to
+  `build-images.yml` or `release-manifest.mjs`, a pull-request run, or a missing/unverifiable ancestor manifest rebuilds everything on
+  purpose (fail-safe). So: do not touch those two files for cosmetic reasons (even a comment rebuilds and redeploys all four images).
+- **One source of truth, mechanically enforced.** Each classifier pattern mirrors an image's REAL build context (web = the
+  `Dockerfile.dockerignore` allow-list minus the test files it strips; api = the csproj and its out-of-tree includes; db-backup /
+  agent-gateway = their Dockerfile `COPY` sources), and the push `paths:` filter in `build-images.yml` mirrors the classifier. Adding any
+  new file or directory an image reads (a web source dir, a root config, a csproj `Include`, a `COPY`) MUST update the classifier, the
+  filter and the ignore/COPY side in the same commit. `buildInputParityFailures()` (run by `ship:gate`, the `syntax-gate` job and the
+  `guards` job) fails the run when they disagree, so a stale image can never ship silently and a test file can never start a build. Never
+  loosen, skip or delete that guard to get a push through.
+- **Realistic timing, never promised away.** Components build in parallel, so reuse saves compute and risk, not wall time: expect
+  Build images ~4.5-6 min plus Deploy production ~3-6 min (push to live about 8-11 min), bounded by the web build (~4 min) and the VPS
+  pull, health gate and router cutover. Do not skip a gate to chase speed.
+- **Reused images are not auto-patched.** Run `gh workflow run build-images.yml -f rebuild_all=true` about monthly or when a base-image CVE
+  lands. Never add a `schedule:` to `build-images.yml` (the contract checker guards un-filtered build triggers).
+- **Known and accepted:** blue/green swaps web and API as a pair, so the first frontend-only release after an API change recreates the idle
+  slot's API container (same image, ~70 s; the live slot is untouched until cutover). Independent per-tier slots are a possible future
+  change, only on the owner's say-so.
+
 ## ⛔ PRODUCTION DEPLOYS GO THROUGH THE PIPELINE — COMPULSORY (owner directive 2026-10-03; HARD ENFORCED, not bypassable)
 
 - **The only path to production:** push to `main` → `Build images` (GHCR images + migration SQL artifact) →

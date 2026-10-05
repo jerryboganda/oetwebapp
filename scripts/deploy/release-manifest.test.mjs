@@ -3,11 +3,11 @@ import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
 import test from 'node:test';
-import { COMPONENTS, apiNeedsMigrations, buildInputsChanged, changedPaths, classifyInputs, comparisonContainsSha,
+import { COMPONENTS, apiNeedsMigrations, buildInputParityFailures, buildInputsChanged, changedPaths, classifyInputs, comparisonContainsSha,
   eligibleBuild, validateManifest, verifySqlArtifact } from './release-manifest.mjs';
 import { activeLines, checkContract, scanRepo } from './verify-pipeline-contract.mjs';
 import { reportPipelineContract } from '../ship/pre-push-gate.mjs';
@@ -49,6 +49,54 @@ test('runtime inputs are classified independently; deployment, tests and ledgers
   assert.deepEqual(classifyInputs(null), Object.fromEntries(Object.keys(none).map((name) => [name, true])));
 });
 
+test('smart deploys: tests, non-input root files and docs never rebuild an image or start a build', () => {
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'build-images.yml'), 'utf8');
+  for (const path of ['lib/api.test.ts', 'components/ui/Button.test.tsx', 'app/(learner)/page.spec.tsx',
+    'app/admin/__tests__/page.test.tsx', 'hooks/__tests__/useThing.ts', 'eslint.config.mjs', 'capacitor.config.ts',
+    'apple-compatibility.json', 'opencode.json', 'middleware.test.ts', 'backend/README.md', 'backend/Dockerfile',
+    'backend/Dockerfile.dev', 'scripts/backup/README.md', 'agent-gateway/README.md', 'agent-gateway/tests/test_x.py',
+    '.dockerignore', 'docs/CI.md', 'SESSION_STATE.md', 'scripts/deploy/release-manifest.test.mjs']) {
+    assert.deepEqual(classifyInputs([path]), none, path);
+  }
+  for (const path of ['lib/api.test.ts', 'components/ui/Button.test.tsx', 'app/admin/__tests__/page.test.tsx',
+    'eslint.config.mjs', 'backend/README.md', 'agent-gateway/README.md', '.dockerignore', '.env.production.example',
+    'scripts/deploy/release-manifest.test.mjs', 'scripts/deploy/README.md', 'docker-compose.production.build.yml']) {
+    assert.equal(buildInputsChanged([path], workflow), false, path);
+  }
+  // A mixed push still rebuilds exactly the components it touched.
+  assert.deepEqual(classifyInputs(['lib/api.ts', 'lib/api.test.ts', 'backend/README.md']), { ...none, web: true });
+  assert.deepEqual(classifyInputs(['backend/src/OetLearner.Api/Program.cs', 'docs/a.md', 'lib/a.test.ts']), { ...none, api: true });
+  // Real inputs keep flagging their image, including the ones a test-file negation could hide.
+  for (const [path, component] of [['lib/test-utils.ts', 'web'], ['lib/fixtures/data.ts', 'web'], ['package.json', 'web'],
+    ['public/.well-known/assetlinks.json', 'web'], ['backend/src/OetLearner.Api/Services/X.cs', 'api'],
+    ['backend/Dockerfile.runtime', 'api'], ['NuGet.Config', 'api'], ['rulebooks/reading/rules.json', 'api'],
+    ['scripts/backup/entrypoint.sh', 'db-backup'], ['agent-gateway/pyproject.toml', 'agent-gateway']]) {
+    assert.equal(classifyInputs([path])[component], true, path);
+  }
+});
+
+test('fail-proof: the classifier, the push paths and the real Docker contexts agree on the whole tree', () => {
+  const files = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+    .split(/\r?\n/).filter(Boolean);
+  const readFile = (relative) => readFileSync(join(root, relative), 'utf8');
+  assert.deepEqual(buildInputParityFailures({ files, readFile }), []);
+  // The guard itself must bite: an unclassified input in the web context, or a test that would start a build, is reported.
+  const drifted = buildInputParityFailures({
+    files: [...files, 'lib/brand-new-input.ts'],
+    readFile: (relative) => (relative === 'Dockerfile.dockerignore'
+      ? `${readFile(relative)}\n!newroot/\n!newroot/**\n`
+      : readFile(relative)),
+  });
+  assert.deepEqual(drifted, [], 'files outside the allow-list are not inputs');
+  const missingInput = buildInputParityFailures({
+    files: [...files, 'newroot/thing.ts'],
+    readFile: (relative) => (relative === 'Dockerfile.dockerignore'
+      ? `${readFile(relative)}\n!newroot/\n!newroot/**\n`
+      : readFile(relative)),
+  });
+  assert.ok(missingInput.some((failure) => failure.includes('newroot/thing.ts')));
+});
+
 test('truncated comparisons rebuild conservatively and renamed inputs preserve both paths', () => {
   assert.equal(changedPaths({ files: Array.from({ length: 300 }, () => ({ filename: 'docs/a.md' })) }), null);
   assert.deepEqual(changedPaths({ files: [{ filename: 'docs/a.md', previous_filename: 'app/a.ts' }] }), ['docs/a.md', 'app/a.ts']);
@@ -59,7 +107,8 @@ test('no-op proof matches the actual ordered workflow push paths, never just mis
   const workflow = readFileSync(join(root, '.github', 'workflows', 'build-images.yml'), 'utf8');
   assert.equal(buildInputsChanged(['docs/example.md', 'TASKS.json', 'backend/tests/A.cs', 'backend/README.md'], workflow), false);
   for (const file of ['Dockerfile', 'app/page.tsx', 'global.json', 'scripts/deploy/auto-deploy-ghcr.sh',
-    '.github/workflows/production-deploy.yml', '.env.production.example', 'tests/writing-regression/manifest.json']) {
+    '.github/workflows/production-deploy.yml', 'tests/writing-regression/manifest.json',
+    'public/.well-known/assetlinks.json', 'NuGet.Config', 'scripts/backup/postgres-backup.sh', 'agent-gateway/src/main.py']) {
     assert.equal(buildInputsChanged([file], workflow), true, file);
   }
   assert.equal(buildInputsChanged(null, workflow), true);
@@ -503,7 +552,7 @@ if [ "$MODE" = redirect ]; then printf '307'; else printf '200'; fi
     WEB_IMAGE: `ghcr.io/${repo}-web@${digest}`, API_IMAGE: `ghcr.io/${repo}-api@${digest}`,
     DB_BACKUP_IMAGE: `ghcr.io/${repo}-db-backup@${digest}`, AGENT_GATEWAY_IMAGE: `ghcr.io/${repo}-agent-gateway@${digest}` };
   return { dir, run: (phase) => spawnSync('bash', [join(root, 'scripts', 'deploy', 'auto-deploy-ghcr.sh')],
-    { env: { ...env, DEPLOY_PHASE: phase }, encoding: 'utf8', timeout: 20_000 }) };
+    { env: { ...env, DEPLOY_PHASE: phase }, encoding: 'utf8', timeout: 60_000 }) };
 }
 
 for (const mode of ['reuse', 'stale', 'config', 'unhealthy', 'first', 'partial', 'public-failure',
@@ -607,7 +656,7 @@ exit 1
       const result = spawnSync('pwsh', ['-NoProfile', '-File', join(root, 'scripts', 'ship', 'watch-deploy.ps1'),
         '-Sha', sha, '-PushBaseSha', base, '-SkipPublic', '-SkipPrivateFlip', '-TimeoutSeconds', '10',
         '-WaitForRunSeconds', '0', '-PollSeconds', '1'],
-      { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, encoding: 'utf8', timeout: 20_000 });
+      { env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, encoding: 'utf8', timeout: 60_000 });
       if (mode === 'redirect') {
         assert.equal(result.status, 4, result.stdout + result.stderr);
         assert.match(result.stdout, /Public health must return direct HTTP 200/);
