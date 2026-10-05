@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Caching;
 
 namespace OetLearner.Api.Services;
 
@@ -389,16 +390,45 @@ public partial class LearnerService
 
     private async Task EnsureLearnerMutationAllowedAsync(string userId, CancellationToken cancellationToken)
     {
-        var currentFreeze = await GetCurrentFreezeRecordAsync(userId, cancellationToken);
+        var currentFreeze = await GetCurrentFreezeRecordForGateAsync(userId, cancellationToken);
         if (currentFreeze is null)
         {
             return;
         }
 
+        // Evaluated against the live clock on every call, so a scheduled freeze starts on time
+        // even when the record itself came from the short-lived cache.
         if (IsFreezeActiveForMutation(currentFreeze))
         {
             throw ApiException.Forbidden("account_frozen", "This learner account is frozen and read-only.");
         }
+    }
+
+    private sealed record FreezeGateEntry(AccountFreezeRecord? Record);
+
+    // The write gate runs before ~40 learner mutations: its one query per write is served from
+    // the short-lived per-user cache (owner-approved 2026-10-05). ONLY this gate reads through the
+    // cache; the freeze request / confirm / cancel flows keep reading the record directly because
+    // they make decisions and writes from it. A freeze change made through this process evicts the
+    // entry immediately; a change made by another process shows within the TTL.
+    private async Task<AccountFreezeRecord?> GetCurrentFreezeRecordForGateAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (userStateCache is null || !userStateCache.IsEnabled)
+        {
+            return await GetCurrentFreezeRecordAsync(userId, cancellationToken);
+        }
+
+        var subject = UserStateCacheSubjects.Learner(userId);
+        if (userStateCache.TryGet(UserStateCacheKinds.FreezeGate, subject, string.Empty, out FreezeGateEntry? cached)
+            && cached is not null)
+        {
+            return cached.Record;
+        }
+
+        var readToken = userStateCache.BeginRead(subject);
+        var record = await GetCurrentFreezeRecordAsync(userId, cancellationToken);
+        userStateCache.Set(UserStateCacheKinds.FreezeGate, subject, string.Empty, new FreezeGateEntry(record), readToken, notAfter: null);
+        return record;
     }
 
     private async Task<AccountFreezePolicy> GetCurrentFreezePolicyAsync(CancellationToken cancellationToken)

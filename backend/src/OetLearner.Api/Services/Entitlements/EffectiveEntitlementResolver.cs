@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Caching;
 
 namespace OetLearner.Api.Services.Entitlements;
 
@@ -214,16 +215,24 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
     public const string NoPlatformAccessSubtest = "none";
     private readonly LearnerDbContext db;
     private readonly ILogger<EffectiveEntitlementResolver>? logger;
+    private readonly UserStateCache? sharedCache;
     private readonly Dictionary<string, EffectiveEntitlementSnapshot> memoizedSnapshots =
         new(StringComparer.Ordinal);
     private bool observesDbContextMutations;
 
+    // Earliest FUTURE instant at which the snapshot ResolveCoreAsync just built changes by the
+    // passage of time alone (a subscription starting or expiring, an add-on item ending, a
+    // scheduled freeze starting). It caps how long the shared cross-request cache may keep it.
+    private DateTimeOffset? nextChangeAt;
+
     public EffectiveEntitlementResolver(
         LearnerDbContext db,
-        ILogger<EffectiveEntitlementResolver>? logger = null)
+        ILogger<EffectiveEntitlementResolver>? logger = null,
+        UserStateCache? sharedCache = null)
     {
         this.db = db;
         this.logger = logger;
+        this.sharedCache = sharedCache;
     }
 
     public async Task<EffectiveEntitlementSnapshot> ResolveAsync(string? userId, CancellationToken ct)
@@ -248,6 +257,21 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             return memoized;
         }
 
+        // Cross-request cache (per process, 15 s, owner-approved 2026-10-05). Skipped while
+        // this context holds uncommitted tracked changes, like the in-request memo below.
+        var subject = UserStateCacheSubjects.Learner(userId);
+        var useSharedCache = sharedCache is not null
+            && sharedCache.IsEnabled
+            && !db.ChangeTracker.HasChanges();
+        if (useSharedCache
+            && sharedCache!.TryGet(UserStateCacheKinds.Entitlement, subject, string.Empty, out EffectiveEntitlementSnapshot? shared)
+            && shared is not null)
+        {
+            memoizedSnapshots[userId] = shared;
+            return shared;
+        }
+
+        var readToken = useSharedCache ? sharedCache!.BeginRead(subject) : default;
         var snapshot = await ResolveCoreAsync(userId, ct);
 
         // Never memoize while a caller has an uncommitted mutation. A successful
@@ -255,6 +279,10 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         if (!db.ChangeTracker.HasChanges())
         {
             memoizedSnapshots[userId] = snapshot;
+            if (useSharedCache)
+            {
+                sharedCache!.Set(UserStateCacheKinds.Entitlement, subject, string.Empty, snapshot, readToken, nextChangeAt);
+            }
         }
 
         return snapshot;
@@ -269,18 +297,42 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         }
 
         memoizedSnapshots.Remove(userId);
+        // A caller naming a user means "this user's entitlement changed behind the change
+        // tracker": the cross-request entry must go too (the null form above runs on every
+        // tracked save and must not flush other users' entries).
+        sharedCache?.InvalidateLearner(userId);
+    }
+
+    private void NoteChangeBoundary(DateTimeOffset? at, DateTimeOffset now)
+    {
+        if (at is { } instant && instant > now && (nextChangeAt is null || instant < nextChangeAt))
+        {
+            nextChangeAt = instant;
+        }
     }
 
     private async Task<EffectiveEntitlementSnapshot> ResolveCoreAsync(string userId, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
+        nextChangeAt = null;
         var trace = new List<string>();
         var subscriptions = await LoadOrderedSubscriptionsAsync(userId, ct);
+        foreach (var loaded in subscriptions)
+        {
+            NoteChangeBoundary(loaded.StartedAt, now);
+            NoteChangeBoundary(loaded.ExpiresAt, now);
+        }
+
         var courseSubscriptions = subscriptions
             .Where(s => !string.Equals(s.PlanId, Subscription.StandaloneAddonPlanId, StringComparison.OrdinalIgnoreCase))
             .ToList();
         var subscription = courseSubscriptions.Count > 0 ? courseSubscriptions[0] : null;
         var overlays = await LoadResolverOverlaysAsync(userId, ct);
+        foreach (var overlayRow in overlays)
+        {
+            NoteChangeBoundary(overlayRow.ScheduledStartAt, now);
+        }
+
         var isFrozen = ResolveIsFrozen(overlays, now);
         var (professionId, currentPlanId) = await LoadUserRoutingFieldsAsync(userId, ct);
 
@@ -1105,8 +1157,14 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                 && item.Status == SubscriptionItemStatus.Active
                 && item.StartsAt <= now
                 && (item.EndsAt == null || item.EndsAt > now))
-            .Select(item => new { item.SubscriptionId, item.ItemCode })
+            .Select(item => new { item.SubscriptionId, item.ItemCode, item.EndsAt })
             .ToListAsync(ct);
+
+        // An add-on item ending is a time-driven change of the snapshot (see nextChangeAt).
+        foreach (var itemRow in items)
+        {
+            NoteChangeBoundary(itemRow.EndsAt, now);
+        }
 
         var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
         foreach (var group in items.GroupBy(item => item.SubscriptionId, StringComparer.Ordinal))

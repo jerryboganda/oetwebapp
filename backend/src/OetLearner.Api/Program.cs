@@ -21,6 +21,7 @@ using OetLearner.Api.Hubs;
 using OetLearner.Api.Middleware;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Caching;
 using OetLearner.Api.Services.Otp;
 using OetLearner.Api.Services.LiveClasses;
 using OetLearner.Api.Services.OwnerAgent;
@@ -123,12 +124,24 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = storageOptions.MaxUploadBytes > 0 ? storageOptions.MaxUploadBytes : 25L * 1024 * 1024;
 });
 
+// Per-process, short-lived (15 s) cache of per-user state read on every request (JWT account
+// liveness, entitlement snapshot, freeze state). Owner-approved 2026-10-05. The interceptor
+// evicts a user's entries after every committed EF save that changes what they derive from, so
+// in-process writes are visible immediately; other processes and bulk SQL are bounded by the TTL.
+// Kill switches: Performance:UserStateCache:Enabled=false (restart) or the `user_state_cache`
+// feature flag set to disabled (runtime, ~30 s). See docs/ops/user-state-cache.md.
+builder.Services.Configure<UserStateCacheOptions>(builder.Configuration.GetSection(UserStateCacheOptions.SectionName));
+builder.Services.AddSingleton<UserStateCache>();
+builder.Services.AddSingleton<UserStateInvalidationInterceptor>();
+builder.Services.AddHostedService<UserStateCacheSwitchWorker>();
+
 builder.Services.AddDbContext<LearnerDbContext>((serviceProvider, options) =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
     var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
     var resolvedConnectionString = DatabaseConfiguration.ResolveConnectionString(configuration, environment.IsDevelopment());
     DatabaseConfiguration.ConfigureDbContext(options, resolvedConnectionString);
+    options.AddInterceptors(serviceProvider.GetRequiredService<UserStateInvalidationInterceptor>());
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -740,33 +753,80 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                 ? parsedFamilyId
                 : (Guid?)null;
 
-            var accountState = await db.ApplicationUserAccounts
-                .AsNoTracking()
-                .Where(account => account.Id == authAccountId)
-                .Select(account => new
+            // Owner-approved (2026-10-05): a per-process 15 s cache of this liveness row, so a
+            // busy learner stops paying one database round trip per request. Only an ACCEPTED
+            // state is ever stored (a denial is always re-read), the learner access expiry is
+            // compared against the live clock on every request and also caps the entry, and
+            // every in-process change to the account / learner / expert / refresh-token rows
+            // evicts it (UserStateInvalidationInterceptor). Revocation made by ANOTHER process
+            // is visible after at most the TTL. See docs/ops/user-state-cache.md.
+            var userStateCache = scope.ServiceProvider.GetRequiredService<UserStateCache>();
+            var cacheSubject = UserStateCacheSubjects.AuthAccount(authAccountId);
+            var cacheVariant = sessionFamilyId?.ToString("N") ?? "-";
+            var cacheReadToken = default(UserStateReadToken);
+            JwtAccountState? accountState = null;
+            var cacheable = false;
+            if (userStateCache.TryGet(UserStateCacheKinds.JwtAccount, cacheSubject, cacheVariant, out JwtAccountState? cachedState)
+                && cachedState is not null)
+            {
+                accountState = cachedState;
+            }
+            else
+            {
+                cacheable = userStateCache.IsEnabled;
+                cacheReadToken = userStateCache.BeginRead(cacheSubject);
+                var loadedState = await db.ApplicationUserAccounts
+                    .AsNoTracking()
+                    .Where(account => account.Id == authAccountId)
+                    .Select(account => new
+                    {
+                        account.DeletedAt,
+                        account.Role,
+                        LearnerIsActive = account.Role != ApplicationUserRoles.Learner
+                            || db.Users.Any(learner =>
+                                learner.AuthAccountId == account.Id
+                                && learner.AccountStatus.ToLower() == "active"),
+                        LearnerAccessExpiresAt = account.Role == ApplicationUserRoles.Learner
+                            ? db.Users
+                                .Where(learner => learner.AuthAccountId == account.Id)
+                                .Select(learner => learner.AccessExpiresAt)
+                                .SingleOrDefault()
+                            : null,
+                        ExpertIsActive = account.Role != ApplicationUserRoles.Expert
+                            || db.ExpertUsers.Any(expert =>
+                                expert.AuthAccountId == account.Id
+                                && expert.IsActive),
+                        SessionFamilyAlive = sessionFamilyId == null || db.RefreshTokenRecords.Any(token =>
+                            token.FamilyId == sessionFamilyId.Value
+                            && token.RevokedAt == null
+                            && token.ExpiresAt > now)
+                    })
+                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+                accountState = loadedState is null
+                    ? null
+                    : new JwtAccountState(
+                        loadedState.DeletedAt,
+                        loadedState.Role,
+                        loadedState.LearnerIsActive,
+                        loadedState.LearnerAccessExpiresAt,
+                        loadedState.ExpertIsActive,
+                        loadedState.SessionFamilyAlive);
+            }
+
+            // Called only on the two paths where the token is accepted.
+            void RememberAcceptedState(JwtAccountState accepted)
+            {
+                if (cacheable)
                 {
-                    account.DeletedAt,
-                    account.Role,
-                    LearnerIsActive = account.Role != ApplicationUserRoles.Learner
-                        || db.Users.Any(learner =>
-                            learner.AuthAccountId == account.Id
-                            && learner.AccountStatus.ToLower() == "active"),
-                    LearnerAccessExpiresAt = account.Role == ApplicationUserRoles.Learner
-                        ? db.Users
-                            .Where(learner => learner.AuthAccountId == account.Id)
-                            .Select(learner => learner.AccessExpiresAt)
-                            .SingleOrDefault()
-                        : null,
-                    ExpertIsActive = account.Role != ApplicationUserRoles.Expert
-                        || db.ExpertUsers.Any(expert =>
-                            expert.AuthAccountId == account.Id
-                            && expert.IsActive),
-                    SessionFamilyAlive = sessionFamilyId == null || db.RefreshTokenRecords.Any(token =>
-                        token.FamilyId == sessionFamilyId.Value
-                        && token.RevokedAt == null
-                        && token.ExpiresAt > now)
-                })
-                .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+                    userStateCache.Set(
+                        UserStateCacheKinds.JwtAccount,
+                        cacheSubject,
+                        cacheVariant,
+                        accepted,
+                        cacheReadToken,
+                        accepted.LearnerAccessExpiresAt);
+                }
+            }
 
             if (accountState is null)
             {
@@ -827,8 +887,10 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                         details: new { reason = "subscription_expired" },
                         cancellationToken: context.HttpContext.RequestAborted);
                     context.Fail("subscription_expired");
+                    return;
                 }
 
+                RememberAcceptedState(accountState);
                 return;
             }
 
@@ -842,7 +904,10 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                     details: new { reason = "account_suspended" },
                     cancellationToken: context.HttpContext.RequestAborted);
                 context.Fail("account_suspended");
+                return;
             }
+
+            RememberAcceptedState(accountState);
         }
     };
 }
@@ -3002,6 +3067,7 @@ app.MapAiOperationsAdminEndpoints();
 app.MapAiEscalationAdminEndpoints();
 app.MapAiToolsAdminEndpoints();
 app.MapTypeSafeAdminEndpoints();
+app.MapUserStateCacheAdminEndpoints();
 app.MapCompanionKnowledgeAdminEndpoints();
 app.MapCompanionAccessAdminEndpoints();
 app.MapCompanionLearnerEndpoints();

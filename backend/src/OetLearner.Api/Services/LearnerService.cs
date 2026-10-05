@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -14,6 +15,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services.Caching;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Reading;
@@ -52,7 +54,9 @@ public partial class LearnerService(
     IPaymentGatewayCatalog? paymentGatewayCatalog = null,
     global::OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettings = null,
     OetLearner.Api.Services.Billing.BillingReconciliationWorker? billingReconciliation = null,
-    IFreeTierContentResolver? freeTierContentResolver = null)
+    IFreeTierContentResolver? freeTierContentResolver = null,
+    IMemoryCache? memoryCache = null,
+    UserStateCache? userStateCache = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
 
@@ -293,7 +297,34 @@ public partial class LearnerService(
         return new LearnerProfileState(loaded.User, goal, settings, wallet);
     }
 
+    // The freeze-status DTO is shown on /me, bootstrap and the dashboard, which the web app
+    // loads together on every page load: one cached copy per learner serves all three for a
+    // few seconds (owner-approved 2026-10-05, UserStateCache). A freeze request / approval /
+    // cancellation / policy edit made through this process evicts it immediately; a change
+    // made by another process (the scheduled-start sweep) shows within the TTL.
     private async Task<object> GetFreezeStatusForLoadedUserAsync(
+        LearnerUser user,
+        CancellationToken cancellationToken)
+    {
+        if (userStateCache is null || !userStateCache.IsEnabled)
+        {
+            return await LoadFreezeStatusForLoadedUserAsync(user, cancellationToken);
+        }
+
+        var subject = UserStateCacheSubjects.Learner(user.Id);
+        if (userStateCache.TryGet(UserStateCacheKinds.FreezeStatus, subject, string.Empty, out object? cached)
+            && cached is not null)
+        {
+            return cached;
+        }
+
+        var readToken = userStateCache.BeginRead(subject);
+        var loaded = await LoadFreezeStatusForLoadedUserAsync(user, cancellationToken);
+        userStateCache.Set(UserStateCacheKinds.FreezeStatus, subject, string.Empty, loaded, readToken, notAfter: null);
+        return loaded;
+    }
+
+    private async Task<object> LoadFreezeStatusForLoadedUserAsync(
         LearnerUser user,
         CancellationToken cancellationToken)
     {

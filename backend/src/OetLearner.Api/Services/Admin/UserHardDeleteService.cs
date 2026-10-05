@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Caching;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Admin;
@@ -25,7 +26,8 @@ namespace OetLearner.Api.Services.Admin;
 public sealed class UserHardDeleteService(
     LearnerDbContext db,
     ILogger<UserHardDeleteService> logger,
-    IFileStorage? fileStorage = null)
+    IFileStorage? fileStorage = null,
+    UserStateCache? userStateCache = null)
 {
     // Column-name suffixes (lower-cased) that denote a reference to a user/account.
     private static readonly string[] UserRefSuffixes =
@@ -182,6 +184,19 @@ public sealed class UserHardDeleteService(
         {
             if (tx is not null) await tx.RollbackAsync(ct);
             throw;
+        }
+
+        // The purge above is bulk SQL (ExecuteDelete), which the EF save interceptor behind the
+        // short-lived user-state cache cannot see: evict the purged identities explicitly so a
+        // cached "account alive" JWT state does not outlive the deletion in this process.
+        if (userStateCache is not null)
+        {
+            userStateCache.InvalidateAuthAccount(authAccountId);
+            userStateCache.InvalidateLearner(userId);
+            foreach (var learnerId in learnerIds)
+            {
+                userStateCache.InvalidateLearner(learnerId);
+            }
         }
 
         logger.LogWarning(
