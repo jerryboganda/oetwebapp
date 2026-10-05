@@ -27,7 +27,8 @@ public sealed class SpeakingComplianceService(
     IFileStorage storage,
     IOptions<SpeakingComplianceOptions> options,
     ILogger<SpeakingComplianceService> logger,
-    TimeProvider clock)
+    TimeProvider clock,
+    IRemoteSpeakingJoin? remoteJoin = null)
 {
     private readonly SpeakingComplianceOptions _options = options.Value;
 
@@ -219,6 +220,13 @@ public sealed class SpeakingComplianceService(
         logger.LogInformation(
             "SpeakingRecording deleted by owner user={UserId} recording={RecordingId} blobDeleted={BlobDeleted}",
             userId, recordingId, blobDeleted);
+
+        // An erased clip leaves no derivative behind: the remote Speaking audio join of its session goes with it (best effort,
+        // a no-op unless the remote-worker boundary is registered).
+        if (remoteJoin is not null)
+        {
+            await remoteJoin.DeleteForSessionsAsync([session.Id], ct);
+        }
 
         return new RecordingDeletionResponse(recordingId, blobDeleted, now);
     }
