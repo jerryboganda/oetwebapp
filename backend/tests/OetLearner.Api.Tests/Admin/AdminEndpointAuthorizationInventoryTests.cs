@@ -68,6 +68,7 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [InlineData("/v1/admin/private-speaking/tutors", "GET", "AdminReviewOps")]
     [InlineData("/v1/admin/private-speaking/bookings", "GET", "AdminReviewOps")]
     [InlineData("/v1/admin/alerts", "GET", "AdminSystemAdmin")]
+    [InlineData("/v1/admin/system/user-state-cache", "GET", "AdminSystemAdmin")]
     [InlineData("/v1/admin/launch-readiness/settings", "GET", "AdminSystemAdmin")]
     [InlineData("/v1/admin/flags", "GET", "AdminFeatureFlags")]
     [InlineData("/v1/admin/audit-logs", "GET", "AdminAuditLogs")]

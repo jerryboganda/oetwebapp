@@ -16,7 +16,8 @@ public static class UserStateCacheAdminEndpoints
             .RequireAuthorization("AdminOnly")
             .RequireRateLimiting("PerUser");
 
-        group.MapGet("", (UserStateCache cache) => Results.Ok(cache.Snapshot()));
+        group.MapGet("", (UserStateCache cache) => Results.Ok(cache.Snapshot()))
+            .WithAdminRead("AdminSystemAdmin");
 
         return app;
     }
