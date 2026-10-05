@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from '@/contexts/auth-context';
 import { getQueryClient } from '@/components/providers/query-provider';
+import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
 import type { AuthSession } from '@/lib/types/auth';
 
@@ -137,6 +138,33 @@ describe('AuthProvider', () => {
     await waitFor(() => {
       expect(screen.getByTestId('role')).toHaveTextContent('anonymous');
     });
+  });
+
+  it('sends queued (batched) analytics before the session ends', async () => {
+    authClientMock.restoreSession.mockResolvedValue(createSession());
+    authClientMock.signOut.mockResolvedValue(undefined);
+    const flush = vi.spyOn(analytics, 'flush');
+
+    render(
+      <AuthProvider>
+        <AuthConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('email')).toHaveTextContent('learner@oet-prep.dev');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('role')).toHaveTextContent('anonymous');
+    });
+
+    expect(flush).toHaveBeenCalledTimes(1);
+    // Flushed while the token is still valid, i.e. before the backend sign-out call.
+    expect(flush.mock.invocationCallOrder[0]).toBeLessThan(authClientMock.signOut.mock.invocationCallOrder[0]);
+    flush.mockRestore();
   });
 
   it('clears the query cache and persisted Zustand stores on sign-out (FE-001)', async () => {

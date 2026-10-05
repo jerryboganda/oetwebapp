@@ -525,3 +525,12 @@ export const analytics = new AnalyticsService();
 export function initializeAnalyticsTransport() {
   analytics.initializeBrowserTransport();
 }
+
+/**
+ * Sends whatever analytics is still queued. Called at sign-out while the session is still valid:
+ * events are batched for a few seconds, and once the session is gone there is no token to send
+ * them with. Never rejects.
+ */
+export function flushAnalytics(): Promise<void> {
+  return analytics.flush();
+}

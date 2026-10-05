@@ -30,7 +30,7 @@ import type {
   SignInResult,
   UserRole,
 } from '@/lib/types/auth';
-import { initializeAnalyticsTransport } from '@/lib/analytics';
+import { flushAnalytics, initializeAnalyticsTransport } from '@/lib/analytics';
 import { resetAllStores } from '@/lib/stores/registry';
 import { clearOfflineEncryptionKey, setOfflineEncryptionKey } from '@/lib/mobile/offline-sync';
 import { getQueryClient } from '@/components/providers/query-provider';
@@ -226,6 +226,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     async signOut() {
       setState((current) => ({ ...current, loading: true, error: null }));
+
+      // Analytics is batched; send what is queued while the session can still authenticate it.
+      void flushAnalytics();
 
       try {
         await signOutFromBackend();
