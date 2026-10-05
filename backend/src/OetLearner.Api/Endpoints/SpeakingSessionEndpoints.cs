@@ -61,7 +61,7 @@ public static class SpeakingSessionEndpoints
             .Produces(StatusCodes.Status409Conflict);
 
         learner.MapPost("/{id}/finish-warmup", FinishWarmupAsync)
-            .WithSummary("Transition warm-up → prep. The only authorised exit from warm-up.")
+            .WithSummary("Transition warm-up → prep. The only authorised exit from warm-up. While the live AI session cap is full the session stays in warmup, nothing is held or timed, and the response carries `admission` (position, estimated wait): repeat the call.")
             .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);

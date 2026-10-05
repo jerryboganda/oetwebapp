@@ -31,6 +31,10 @@ namespace OetLearner.Api.Services.Speaking;
 /// refunded if the exam ends without a result (see
 /// <see cref="SpeakingCreditSettlement"/>). Live-tutor exams cost no credits
 /// (pay-per-session via the Stripe booking) and are human-marked.
+///
+/// Live AI capacity (owner decision 5 Oct 2026): an AI exam takes ONE slot of the live-session cap at
+/// <see cref="FinishIntroAsync"/>, before any credit hold or clock (see <see cref="SpeakingLiveAdmissionService"/>);
+/// while the cap is full the exam stays in Intro and its detail carries <c>Admission</c>.
 /// </summary>
 public sealed class SpeakingExamService(
     LearnerDbContext db,
@@ -42,7 +46,8 @@ public sealed class SpeakingExamService(
     ISpeakingCanonicalAssessmentService? canonical = null,
     SpeakingComplianceService? compliance = null,
     LiveVoiceProviderProbeState? liveVoiceProbe = null,
-    IOptions<LiveVoiceOptions>? liveVoiceOptions = null)
+    IOptions<LiveVoiceOptions>? liveVoiceOptions = null,
+    SpeakingLiveAdmissionService? admission = null)
 {
     private const int DefaultPrepSeconds = 180;
 
@@ -337,7 +342,9 @@ public sealed class SpeakingExamService(
 
     /// <summary>Finish the unscored Intro (Part 1) and reveal Card A. Holds credit A
     /// (AI mode) first, then creates child Session A: a refused hold (402) leaves the
-    /// exam in Intro with nothing persisted.</summary>
+    /// exam in Intro with nothing persisted. An AI exam first passes the live-session
+    /// admission gate: while the cap is full the exam stays in Intro, nothing is held or
+    /// timed, and the detail carries <c>Admission</c> (the page repeats this call).</summary>
     public async Task<SpeakingExamDetail> FinishIntroAsync(string userId, string examId, CancellationToken ct)
     {
         var exam = await LoadOwnedAsync(userId, examId, ct, tracking: true);
@@ -363,6 +370,27 @@ public sealed class SpeakingExamService(
                 && await IsCoveredByMockAttemptAsync(exam.UserId, exam.MockAttemptId, ct);
             await EnsureCardsFundableAsync(exam.UserId, coveredByMockAttempt, ct);
         }
+
+        // Live AI capacity gate (owner decision 5 Oct 2026): AFTER the read-only fundability check (an
+        // unfunded learner never queues) and BEFORE the credit hold and the clock, so a learner who has to
+        // wait has paid nothing and started nothing. Nothing on the exam or its child is touched here; a
+        // waiting exam stays in Intro and the page repeats this call until a place is free. The exam keeps
+        // its slot for both cards (Card B's reveal is not gated). With no healthy live provider the learner
+        // uses the recorder fallback and the gate does not apply.
+        if (exam.Mode == SpeakingExamMode.Ai && admission is not null)
+        {
+            var gate = await admission.AdmitOrQueueAsync(
+                exam.UserId,
+                SpeakingLiveAdmissionKinds.Exam,
+                exam.Id,
+                liveVoiceProbe?.IsLiveVoiceAvailable(liveVoiceOptions?.Value) == true,
+                ct);
+            if (gate.MustWait)
+            {
+                return await ProjectAsync(exam, DateTimeOffset.UtcNow, ct, gate.Waiting);
+            }
+        }
+
         await DebitCardAsync(exam, "a", ct);
 
         var now = DateTimeOffset.UtcNow;
@@ -1300,8 +1328,23 @@ public sealed class SpeakingExamService(
         return exam;
     }
 
-    private async Task<SpeakingExamDetail> ProjectAsync(SpeakingExamSession exam, DateTimeOffset now, CancellationToken ct)
+    private async Task<SpeakingExamDetail> ProjectAsync(
+        SpeakingExamSession exam,
+        DateTimeOffset now,
+        CancellationToken ct,
+        SpeakingLiveAdmissionView? waitingView = null)
     {
+        // The line a waiting AI exam is in (state stays intro). Passed in by the finish-intro call that has just
+        // decided it; on a plain read it is looked up. Null whenever the exam is not waiting.
+        var admissionView = waitingView;
+        if (admissionView is null
+            && admission is not null
+            && exam.State == SpeakingExamState.Intro
+            && exam.Mode == SpeakingExamMode.Ai)
+        {
+            admissionView = await admission.GetWaitingViewAsync(SpeakingLiveAdmissionKinds.Exam, exam.Id, ct);
+        }
+
         var (prepA, discA) = await TimingAsync(exam.CardAId, ct);
         var (prepB, discB) = await TimingAsync(exam.CardBId, ct);
 
@@ -1388,6 +1431,7 @@ public sealed class SpeakingExamService(
             [
                 new SpeakingExamCardSession(1, exam.SessionAId),
                 new SpeakingExamCardSession(2, exam.SessionBId),
-            ]);
+            ],
+            Admission: admissionView);
     }
 }

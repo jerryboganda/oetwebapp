@@ -176,6 +176,7 @@ builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<OetLearner.Api.Configuration.DeviceAttestationOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.DeviceAttestationOptions.SectionName));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.Configure<SpeakingGradingOptions>(builder.Configuration.GetSection(SpeakingGradingOptions.SectionName));
+builder.Services.Configure<SpeakingLiveAdmissionOptions>(builder.Configuration.GetSection(SpeakingLiveAdmissionOptions.SectionName));
 builder.Services.Configure<SpeakingAudioAssessmentOptions>(builder.Configuration.GetSection(SpeakingAudioAssessmentOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveVoiceOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveVoiceOptions.SectionName));
@@ -1205,6 +1206,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ILiveVoiceProviderSe
 // $0 full-corpus Speaking compatibility harness (admin, rolled back, canned grader).
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingCorpusCompatibilityService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryWorker>();
+// Live AI Speaking admission control (owner decision 5 Oct 2026): DB-backed FIFO gate in front of the
+// credit hold and the clock at exam finish-intro and practice finish-warmup.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingLiveAdmissionService>();
 // Speaking module rebuild (2026-06-11) — two-card exam orchestrator.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingLiveTutorService>();

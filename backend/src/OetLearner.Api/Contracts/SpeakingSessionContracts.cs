@@ -41,7 +41,9 @@ public record CreateSpeakingSessionResponse(
 /// prep without a separate API call. <c>RolePlayEndsAt</c> is the server's
 /// deadline for the role-play (start plus the card's capped time), null until
 /// the role-play has started; clients should count down to it rather than to
-/// the raw card seconds.</summary>
+/// the raw card seconds. <c>Admission</c> is non-null only while the live AI session cap is full
+/// and this practice card is waiting in the line (state stays <c>warmup</c>; nothing is timed and no
+/// credit is held); see <see cref="SpeakingLiveAdmissionView"/>.</summary>
 public record SpeakingSessionDetail(
     string SessionId,
     string Mode,
@@ -60,7 +62,8 @@ public record SpeakingSessionDetail(
     bool IsFreeSample = false,
     bool ConsentAccepted = false,
     bool LiveVoiceAvailable = false,
-    DateTimeOffset? RolePlayEndsAt = null);
+    DateTimeOffset? RolePlayEndsAt = null,
+    SpeakingLiveAdmissionView? Admission = null);
 
 /// <summary>One criterion in the AI assessment per-criterion drawer.
 /// `Score`/`MaxScore` matches the canonical 0–6 linguistic / 0–3 clinical

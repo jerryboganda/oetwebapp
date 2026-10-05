@@ -36,7 +36,8 @@ public sealed class SpeakingSessionService(
     ISpeakingCanonicalAssessmentService? canonical = null,
     SpeakingComplianceService? compliance = null,
     LiveVoiceProviderProbeState? liveVoiceProbe = null,
-    IOptions<LiveVoiceOptions>? liveVoiceOptions = null)
+    IOptions<LiveVoiceOptions>? liveVoiceOptions = null,
+    SpeakingLiveAdmissionService? admission = null)
 {
     private const string DefaultConsentVersion = "recording.v1";
 
@@ -214,6 +215,9 @@ public sealed class SpeakingSessionService(
     /// the only authorised path out of warm-up — clients cannot skip
     /// straight to <c>Active</c>. Stamps both the warm-up end and the
     /// prep start so the analytics layer can measure warm-up duration.
+    /// An AI practice card first passes the live-session admission gate: while the
+    /// cap is full the session stays in <c>warmup</c>, nothing is held or timed, and
+    /// the detail carries <c>Admission</c> (the page repeats this call).
     /// </summary>
     public async Task<SpeakingSessionDetail> FinishWarmupAsync(
         string userId,
@@ -242,6 +246,26 @@ public sealed class SpeakingSessionService(
                 throw ApiException.Forbidden(
                     "speaking_practice_not_included",
                     "Speaking practice cards are not included in your current plan.");
+            }
+        }
+
+        // Live AI capacity gate (owner decision 5 Oct 2026): AFTER the plan check (a learner whose plan
+        // excludes practice never queues) and BEFORE the credit hold and the prep clock, so a learner who has
+        // to wait has paid nothing and started nothing. The session is untouched while waiting (still
+        // warm-up); the page repeats this call until a place is free. A free-sample card uses live voice too,
+        // so it is gated like any other. With no healthy live provider the learner uses the recorder
+        // fallback and the gate does not apply.
+        if (session.Mode == SpeakingSessionMode.AiSelfPractice && admission is not null)
+        {
+            var gate = await admission.AdmitOrQueueAsync(
+                userId,
+                SpeakingLiveAdmissionKinds.Practice,
+                session.Id,
+                IsLiveVoiceAvailable(),
+                ct);
+            if (gate.MustWait)
+            {
+                return await GetSessionForLearnerAsync(userId, sessionId, ct, waitingView: gate.Waiting);
             }
         }
 
@@ -291,13 +315,25 @@ public sealed class SpeakingSessionService(
         string userId,
         string sessionId,
         CancellationToken ct,
-        string? feedbackMessage = null)
+        string? feedbackMessage = null,
+        SpeakingLiveAdmissionView? waitingView = null)
     {
         var session = await LoadOwnedSessionAsync(userId, sessionId, ct);
         var card = await db.RolePlayCards.AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == session.RolePlayCardId, ct)
             ?? throw ApiException.NotFound("role_play_card_not_found",
                 "That role-play card does not exist.");
+
+        // The line a waiting AI practice card is in (state stays warmup). Passed in by the finish-warmup call
+        // that has just decided it; on a plain read it is looked up. Null whenever the card is not waiting.
+        var admissionView = waitingView;
+        if (admissionView is null
+            && admission is not null
+            && session.State == SpeakingSessionState.WarmUp
+            && session.Mode == SpeakingSessionMode.AiSelfPractice)
+        {
+            admissionView = await admission.GetWaitingViewAsync(SpeakingLiveAdmissionKinds.Practice, session.Id, ct);
+        }
 
         return new SpeakingSessionDetail(
             SessionId: session.Id,
@@ -318,7 +354,8 @@ public sealed class SpeakingSessionService(
             ConsentAccepted: session.ConsentAcceptedAt is not null,
             LiveVoiceAvailable: IsLiveVoiceAvailable(),
             RolePlayEndsAt: session.RolePlayStartedAt?.AddSeconds(
-                SpeakingRolePlayLimits.EffectiveSeconds(card.RolePlayTimeSeconds, liveVoiceOptions?.Value)));
+                SpeakingRolePlayLimits.EffectiveSeconds(card.RolePlayTimeSeconds, liveVoiceOptions?.Value)),
+            Admission: admissionView);
     }
 
     private bool IsLiveVoiceAvailable()

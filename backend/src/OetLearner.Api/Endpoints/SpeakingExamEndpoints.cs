@@ -16,7 +16,8 @@ namespace OetLearner.Api.Endpoints;
 ///   * GET    /{id}                     current state + server clock + current card
 ///   * GET    /{id}/clock              authoritative phase clock only
 ///   * POST   /{id}/consent            record recording/AI consent at the intro (before any timer)
-///   * POST   /{id}/finish-intro       intro → prep_a (reveals Card A, holds 2 AI credits)
+///   * POST   /{id}/finish-intro       intro → prep_a (reveals Card A, holds 2 AI credits); while the live AI session
+///                                     cap is full it answers 200 with state intro + `admission` and holds nothing
 ///   * POST   /{id}/start-card         prep → active for the current card
 ///   * POST   /{id}/cancel             abandon the exam
 ///   * POST   /{id}/technical-issue    flag a technical issue (never affects scoring)
@@ -61,7 +62,7 @@ public static class SpeakingExamEndpoints
             .Produces(StatusCodes.Status409Conflict);
 
         learner.MapPost("/{id}/finish-intro", FinishIntroAsync)
-            .WithSummary("Finish the unscored Intro and reveal Card A (holds 2 AI credits; an exam costs 4 AI credits, 2 per card, charged only when graded).")
+            .WithSummary("Finish the unscored Intro and reveal Card A (holds 2 AI credits; an exam costs 4 AI credits, 2 per card, charged only when graded). While the live AI session cap is full the exam stays in intro, nothing is held or timed, and the response carries `admission` (position, estimated wait): repeat the call.")
             .Produces<SpeakingExamDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status402PaymentRequired)
             .Produces(StatusCodes.Status404NotFound)

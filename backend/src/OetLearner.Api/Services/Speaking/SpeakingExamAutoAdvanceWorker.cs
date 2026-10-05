@@ -131,7 +131,27 @@ public sealed class SpeakingExamAutoAdvanceWorker(
         {
             logger.LogError(ex, "Speaking role-play provider hang-up sweep failed");
         }
+
+        // Housekeeping of the live-session admission table: expires abandoned waiters, purges old rows. Not
+        // load-bearing (every admission decision expires stale rows itself), so it runs last and on its own.
+        try
+        {
+            await SweepAdmissionsAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Speaking live admission housekeeping failed");
+        }
         return changed;
+    }
+
+    /// <summary>Expires abandoned waiters and purges ended rows of the live-session admission table. A host
+    /// without the admission service registered (a test) does nothing. Returns the rows changed. Exposed for tests.</summary>
+    public async Task<int> SweepAdmissionsAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var admission = scope.ServiceProvider.GetService<SpeakingLiveAdmissionService>();
+        return admission is null ? 0 : await admission.SweepAsync(ct);
     }
 
     private async Task<int> SweepExamsAsync(DateTimeOffset now, CancellationToken ct)
