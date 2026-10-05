@@ -50,11 +50,14 @@ public sealed record LiveVoiceProviderHealth(
     long Failures,
     IReadOnlyDictionary<string, long> FailuresByClass);
 
-/// <summary>Admin view of live voice health: never keys, URLs, tokens or provider messages.</summary>
+/// <summary>Admin view of live voice health: never keys, URLs, tokens or provider messages.
+/// <c>Admission</c> is the DB-derived live-session gate (cap, admitted, waiting), added by the admin endpoint;
+/// it is null in the per-process <see cref="LiveVoiceProviderProbeState.Snapshot"/>.</summary>
 public sealed record LiveVoiceHealthSnapshot(
     DateTimeOffset GeneratedAt,
     IReadOnlyList<string> CandidateOrder,
-    IReadOnlyList<LiveVoiceProviderHealth> Providers);
+    IReadOnlyList<LiveVoiceProviderHealth> Providers,
+    OetLearner.Api.Contracts.SpeakingLiveAdmissionCounts? Admission = null);
 
 /// <summary>
 /// Per-process live voice provider health. Two independent signals per provider:

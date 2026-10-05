@@ -1209,6 +1209,8 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceAdvi
 // Live AI Speaking admission control (owner decision 5 Oct 2026): DB-backed FIFO gate in front of the
 // credit hold and the clock at exam finish-intro and practice finish-warmup.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingLiveAdmissionService>();
+// Read-only admin load snapshot (job queue depth, DB connections by application name, admission counts).
+builder.Services.AddScoped<OetLearner.Api.Services.Admin.AdminOpsSnapshotService>();
 // Speaking module rebuild (2026-06-11) — two-card exam orchestrator.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingLiveTutorService>();
@@ -3071,6 +3073,7 @@ app.MapAdminCampaignEndpoints();
 app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();
 app.MapAiOperationsAdminEndpoints();
+app.MapAdminOpsSnapshotEndpoints();
 app.MapAiEscalationAdminEndpoints();
 app.MapAiToolsAdminEndpoints();
 app.MapTypeSafeAdminEndpoints();

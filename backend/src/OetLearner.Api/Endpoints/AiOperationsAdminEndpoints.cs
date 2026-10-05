@@ -38,7 +38,10 @@ public static class AiOperationsAdminEndpoints
         group.MapPost("/budgets/override", CreateBudgetOverrideAsync);
         group.MapGet("/circuits", ListCircuitsAsync);
         group.MapPost("/circuits/{key}/reset", ResetCircuitAsync);
-        group.MapGet("/live-voice/health", GetLiveVoiceHealth);
+        group.MapGet("/live-voice/health", GetLiveVoiceHealthAsync);
+        group.MapGet("/live-voice/admission", GetLiveVoiceAdmissionAsync);
+        group.MapPut("/live-voice/admission", UpdateLiveVoiceAdmissionAsync)
+            .RequireRateLimiting("PerUserWrite");
         group.MapPost("/live-voice/{provider}/reset", ResetLiveVoiceProviderAsync);
         group.MapGet("/live-voice/voices", (LiveVoicePreviewService service) => Results.Ok(service.List()));
         group.MapPost("/live-voice/voices/preview-offer", CreateLiveVoicePreviewOfferAsync)
@@ -49,12 +52,65 @@ public static class AiOperationsAdminEndpoints
 
     /// <summary>
     /// Live voice provider health: per provider the catalog probe, the breaker fed by real session
-    /// creations, the last failure class and counters. Never keys, URLs, tokens or provider messages.
+    /// creations, the last failure class and counters, plus the live-session admission gate (cap, admitted
+    /// and queued, derived from the database so it covers every API slot and the worker). Never keys, URLs,
+    /// tokens or provider messages. The provider view never depends on the admission tables: if they cannot
+    /// be read, <c>admission</c> is null.
     /// </summary>
-    private static IResult GetLiveVoiceHealth(
+    private static async Task<IResult> GetLiveVoiceHealthAsync(
         LiveVoiceProviderProbeState state,
-        IOptions<LiveVoiceOptions> options)
-        => Results.Ok(state.Snapshot(options.Value));
+        IOptions<LiveVoiceOptions> options,
+        SpeakingLiveAdmissionService admission,
+        CancellationToken ct)
+    {
+        var snapshot = state.Snapshot(options.Value);
+        SpeakingLiveAdmissionCounts? counts = null;
+        try
+        {
+            counts = await admission.GetCountsAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Left null on purpose (see above).
+        }
+        return Results.Ok(snapshot with { Admission = counts });
+    }
+
+    /// <summary>The live-session admission gate: effective cap, kill switch, and what is in it now.</summary>
+    private static async Task<IResult> GetLiveVoiceAdmissionAsync(
+        SpeakingLiveAdmissionService admission,
+        CancellationToken ct)
+        => Results.Ok(await admission.GetCountsAsync(ct));
+
+    /// <summary>Sets the live-session cap (1..10000) and/or the kill switch (<c>enabled=false</c> lets everyone
+    /// through, today's behaviour). Takes effect on the next admission decision, no restart. Audited.</summary>
+    private static async Task<IResult> UpdateLiveVoiceAdmissionAsync(
+        UpdateSpeakingLiveAdmissionRequest request,
+        SpeakingLiveAdmissionService admission,
+        LearnerDbContext db,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (request is null || (request.Enabled is null && request.MaxConcurrent is null))
+        {
+            return new ApiErrorResult(400, "speaking_live_admission_empty", "Send enabled and/or maxConcurrent.");
+        }
+
+        var actorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+        // Saved together with the setting by UpdateSettingsAsync: a rejected value leaves no audit row.
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = actorId,
+            ActorName = http.User.FindFirstValue(ClaimTypes.Name) ?? actorId,
+            Action = "SpeakingLiveAdmissionSettingsUpdated",
+            ResourceType = "SpeakingLiveAdmission",
+            ResourceId = SpeakingLiveAdmissionService.SettingsId,
+            Details = JsonSerializer.Serialize(new { enabled = request.Enabled, maxConcurrent = request.MaxConcurrent }),
+        });
+        return Results.Ok(await admission.UpdateSettingsAsync(request.Enabled, request.MaxConcurrent, actorId, ct));
+    }
 
     /// <summary>Relays an admin browser's WebRTC offer to a short GPT-Live preview session for one of the four voices.
     /// The provider key never leaves the server; the session is audited, not billed against any learner.</summary>
