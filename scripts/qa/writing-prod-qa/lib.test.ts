@@ -363,8 +363,8 @@ describe('realistic letters (suite=letters)', () => {
     expect(runs.map((r: any) => r.profession.profession)).toEqual(['nursing']);
     expect(runs[0].letters.map((m: any) => m.task.scenarioId.toLowerCase())).toEqual(letters.filter((l) => l.profession === 'nursing').map((l) => l.scenarioId));
     expect(blocked.map((b: any) => b.letter.profession).sort()).toEqual(['dentistry', 'pharmacy', 'physiotherapy', 'radiography']);
-    expect(blocked.find((b: any) => b.letter.profession === 'pharmacy').reason).toMatch(/not an eligible task/);
-    expect(blocked.find((b: any) => b.letter.profession === 'dentistry').reason).toMatch(/not enabled/);
+    expect(blocked.find((b: any) => b.letter.profession === 'pharmacy')?.reason).toMatch(/not an eligible task/);
+    expect(blocked.find((b: any) => b.letter.profession === 'dentistry')?.reason).toMatch(/not enabled/);
   });
 });
 
