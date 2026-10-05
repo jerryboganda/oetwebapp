@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -7,19 +8,48 @@ namespace OetLearner.Api.Services;
 /// <summary>
 /// Phase 9 — Full-text-like search, filtered discovery, and rule-based recommendations.
 /// </summary>
-public class ContentSearchService(LearnerDbContext db)
+/// <remarks>
+/// The cache is optional (null in unit tests that construct the service without it); when
+/// present it holds the facet counts for <see cref="FacetsCacheTtl"/>.
+/// </remarks>
+public class ContentSearchService(LearnerDbContext db, IMemoryCache? cache = null)
 {
     private const int MaxPageSize = 100;
     private const int MaxRecommendationCount = 100;
 
+    /// <summary>The six facet aggregates scan every published item; the counts barely move.</summary>
+    public static readonly TimeSpan FacetsCacheTtl = TimeSpan.FromSeconds(60);
+    internal const string FacetsCacheKey = "content-search:facets:v1";
+
+    // One recompute at a time when the facet entry expires, so a busy minute does not turn
+    // into a thundering herd of 6-query scans. ponytail: process-wide, not per key (one key).
+    private static readonly SemaphoreSlim FacetsGate = new(1, 1);
+
     /// <summary>
     /// Search content items with multiple filter dimensions.
     /// </summary>
+    /// <remarks>
+    /// Paging is keyset (size + 1 rows, no OFFSET): pass the previous response's
+    /// <c>nextCursor</c> as <see cref="ContentSearchQuery.Cursor"/> to continue. The legacy
+    /// <c>page</c> parameter still works when no cursor is sent (it is an OFFSET, so it is
+    /// only cheap for the first pages). <c>total</c> is only counted when
+    /// <see cref="ContentSearchQuery.IncludeTotal"/> is set (otherwise null): the COUNT
+    /// re-ran the whole leading-wildcard ILIKE scan on every request.
+    /// </remarks>
     public async Task<object> SearchContentAsync(ContentSearchQuery query, CancellationToken ct)
     {
         var page = Math.Max(query.Page, 1);
         var pageSize = Math.Clamp(query.PageSize, 1, MaxPageSize);
-        var offset = (int)Math.Min((long)(page - 1) * pageSize, int.MaxValue);
+
+        var hasCursor = !string.IsNullOrWhiteSpace(query.Cursor);
+        CursorPagination.RankedCursor cursor = default;
+        if (hasCursor && !CursorPagination.TryDecodeRanked(query.Cursor, out cursor))
+        {
+            throw ApiException.Validation(
+                "search_cursor_invalid",
+                "The search cursor is not valid.",
+                [new ApiFieldError("cursor", "invalid", "The search cursor is not valid.")]);
+        }
 
         var q = db.ContentItems
             .AsNoTracking()
@@ -65,11 +95,37 @@ public class ContentSearchService(LearnerDbContext db)
         if (query.PreviewEligibleOnly)
             q = q.Where(c => c.IsPreviewEligible);
 
-        var total = await q.CountAsync(ct);
+        // Opt-in: the COUNT re-ran the whole filtered scan on every page request.
+        int? total = null;
+        if (query.IncludeTotal)
+        {
+            total = await q.CountAsync(ct);
+        }
 
-        var items = await q
-            .OrderByDescending(c => c.QualityScore).ThenBy(c => c.Title)
-            .Skip(offset).Take(pageSize)
+        // Keyset seek for `QualityScore DESC, Title ASC, Id ASC` (Id makes the order total so a
+        // page boundary can never repeat or skip a row that shares a title).
+        var seek = q;
+        if (hasCursor)
+        {
+            var cursorRank = cursor.Rank;
+            var cursorTitle = cursor.Title;
+            var cursorId = cursor.Id;
+            seek = seek.Where(c => c.QualityScore < cursorRank
+                || (c.QualityScore == cursorRank && c.Title.CompareTo(cursorTitle) > 0)
+                || (c.QualityScore == cursorRank && c.Title == cursorTitle && c.Id.CompareTo(cursorId) > 0));
+        }
+
+        IQueryable<ContentItem> ordered = seek
+            .OrderByDescending(c => c.QualityScore).ThenBy(c => c.Title).ThenBy(c => c.Id);
+        if (!hasCursor && page > 1)
+        {
+            // Legacy page=N (no cursor): an OFFSET, clamped so (page - 1) * pageSize cannot overflow.
+            ordered = ordered.Skip((int)Math.Min((long)(page - 1) * pageSize, int.MaxValue));
+        }
+
+        // size + 1 rows: the extra row only proves another page exists.
+        var rows = await ordered
+            .Take(pageSize + 1)
             .Select(c => new
             {
                 c.Id, c.Title, c.SubtestCode, c.ContentType, c.ProfessionId,
@@ -80,13 +136,53 @@ public class ContentSearchService(LearnerDbContext db)
             })
             .ToListAsync(ct);
 
-        return new { items, total, page, pageSize };
+        var hasMore = rows.Count > pageSize;
+        var items = hasMore ? rows.Take(pageSize).ToList() : rows;
+        string? nextCursor = null;
+        if (hasMore)
+        {
+            var last = items[items.Count - 1];
+            nextCursor = CursorPagination.EncodeRanked(last.QualityScore, last.Title, last.Id);
+        }
+
+        return new { items, total, page, pageSize, hasMore, nextCursor };
     }
 
     /// <summary>
     /// Get filter facets (counts per dimension) for the search UI.
     /// </summary>
     public async Task<object> GetSearchFacetsAsync(CancellationToken ct)
+    {
+        if (cache is null)
+        {
+            return await ComputeSearchFacetsAsync(ct);
+        }
+
+        if (cache.TryGetValue(FacetsCacheKey, out object? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        await FacetsGate.WaitAsync(ct);
+        try
+        {
+            // Another request may have refilled the entry while this one waited.
+            if (cache.TryGetValue(FacetsCacheKey, out cached) && cached is not null)
+            {
+                return cached;
+            }
+
+            var facets = await ComputeSearchFacetsAsync(ct);
+            cache.Set(FacetsCacheKey, facets, FacetsCacheTtl);
+            return facets;
+        }
+        finally
+        {
+            FacetsGate.Release();
+        }
+    }
+
+    private async Task<object> ComputeSearchFacetsAsync(CancellationToken ct)
     {
         var published = db.ContentItems
             .AsNoTracking()
@@ -222,4 +318,10 @@ public class ContentSearchQuery
     public bool PreviewEligibleOnly { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
+
+    /// <summary>Opaque keyset cursor from a previous response's <c>nextCursor</c>; wins over <see cref="Page"/>.</summary>
+    public string? Cursor { get; set; }
+
+    /// <summary>Also return <c>total</c> (an extra COUNT over the same filters). Off by default.</summary>
+    public bool IncludeTotal { get; set; }
 }

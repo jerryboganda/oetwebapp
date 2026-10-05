@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Endpoints;
@@ -26,7 +27,7 @@ public static class ContentPapersLearnerEndpoints
         group.MapGet("", async (
             LearnerDbContext db, HttpContext http, CancellationToken ct,
             string? subtest, string? cardType, string? letterType,
-            string? search, int? page, int? pageSize) =>
+            string? search, int? page, int? pageSize, string? cursor) =>
         {
             var profession = http.User.FindFirstValue("prof") ?? http.User.FindFirstValue("profession");
             if (string.IsNullOrWhiteSpace(profession))
@@ -68,13 +69,44 @@ public static class ContentPapersLearnerEndpoints
                 q = q.Where(p => p.Title.ToLower().Contains(s));
             }
 
+            // Keyset paging (`Priority DESC, Title ASC, Id ASC`), size + 1 rows. The body stays a
+            // bare array so existing callers are unaffected; the continuation travels in the
+            // X-Has-More / X-Next-Cursor response headers. Pass X-Next-Cursor back as `cursor`.
+            // `page` still works when no cursor is sent (an OFFSET).
             var p2 = Math.Max(1, page ?? 1);
             var s2 = Math.Clamp(pageSize ?? 50, 1, 100);
-            var rows = await q
+            var hasCursor = !string.IsNullOrWhiteSpace(cursor);
+            var seekCursor = default(CursorPagination.RankedCursor);
+            if (hasCursor && !CursorPagination.TryDecodeRanked(cursor, out seekCursor))
+            {
+                throw ApiException.Validation(
+                    "papers_cursor_invalid",
+                    "The papers cursor is not valid.",
+                    [new ApiFieldError("cursor", "invalid", "The papers cursor is not valid.")]);
+            }
+
+            if (hasCursor)
+            {
+                var cursorPriority = seekCursor.Rank;
+                var cursorTitle = seekCursor.Title;
+                var cursorId = seekCursor.Id;
+                q = q.Where(p => p.Priority < cursorPriority
+                    || (p.Priority == cursorPriority && p.Title.CompareTo(cursorTitle) > 0)
+                    || (p.Priority == cursorPriority && p.Title == cursorTitle && p.Id.CompareTo(cursorId) > 0));
+            }
+
+            IQueryable<ContentPaper> ordered = q
                 .OrderByDescending(p => p.Priority)
                 .ThenBy(p => p.Title)
-                .Skip((p2 - 1) * s2)
-                .Take(s2)
+                .ThenBy(p => p.Id);
+            if (!hasCursor && p2 > 1)
+            {
+                // (p2 - 1) * s2 overflowed int for a large `page` (negative OFFSET -> 500).
+                ordered = ordered.Skip((int)Math.Min((long)(p2 - 1) * s2, int.MaxValue));
+            }
+
+            var fetched = await ordered
+                .Take(s2 + 1)
                 .Select(p => new
                 {
                     p.Id, p.SubtestCode, p.Title, p.Slug,
@@ -84,6 +116,16 @@ public static class ContentPapersLearnerEndpoints
                     p.PublishedAt,
                 })
                 .ToListAsync(ct);
+
+            var hasMore = fetched.Count > s2;
+            var rows = hasMore ? fetched.Take(s2).ToList() : fetched;
+            http.Response.Headers["X-Has-More"] = hasMore ? "true" : "false";
+            if (hasMore)
+            {
+                var last = rows[rows.Count - 1];
+                http.Response.Headers["X-Next-Cursor"] = CursorPagination.EncodeRanked(last.Priority, last.Title, last.Id);
+            }
+
             return Results.Ok(rows);
         });
 

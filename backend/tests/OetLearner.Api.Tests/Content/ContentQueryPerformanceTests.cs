@@ -359,7 +359,9 @@ public sealed class ContentQueryPerformanceTests : IAsyncLifetime
                 "IsDiagnosticEligible", "CreatedAt"
             },
             detailItem.EnumerateObject().Select(property => property.Name));
-        Assert.Equal(2, _sql.Commands.Count);
+        // Keyset paging: one page query (size + 1 rows). The COUNT is opt-in (includeTotal) now;
+        // it re-ran the whole leading-wildcard scan on every request.
+        Assert.Equal(1, _sql.Commands.Count);
         Assert.DoesNotContain(_sql.Commands, command =>
             command.Contains("lower(", StringComparison.OrdinalIgnoreCase));
 
@@ -385,14 +387,27 @@ public sealed class ContentQueryPerformanceTests : IAsyncLifetime
 
         var result = JsonSerializer.SerializeToElement(await new ContentSearchService(db)
             .SearchContentAsync(
-                new ContentSearchQuery { Page = int.MinValue, PageSize = int.MaxValue },
+                new ContentSearchQuery { Page = int.MinValue, PageSize = int.MaxValue, IncludeTotal = true },
                 CancellationToken.None));
 
         Assert.Equal(105, result.GetProperty("total").GetInt32());
         Assert.Equal(100, result.GetProperty("items").GetArrayLength());
         Assert.Equal(1, result.GetProperty("page").GetInt32());
         Assert.Equal(100, result.GetProperty("pageSize").GetInt32());
+        Assert.True(result.GetProperty("hasMore").GetBoolean());
+        Assert.NotEqual(JsonValueKind.Null, result.GetProperty("nextCursor").ValueKind);
+        // COUNT (opt-in) + one size + 1 page query.
         Assert.Equal(2, _sql.Commands.Count);
+
+        _sql.Commands.Clear();
+        var withoutTotal = JsonSerializer.SerializeToElement(await new ContentSearchService(db)
+            .SearchContentAsync(
+                new ContentSearchQuery { Page = int.MinValue, PageSize = int.MaxValue },
+                CancellationToken.None));
+
+        Assert.Equal(JsonValueKind.Null, withoutTotal.GetProperty("total").ValueKind);
+        Assert.Equal(100, withoutTotal.GetProperty("items").GetArrayLength());
+        Assert.Equal(1, _sql.Commands.Count);
     }
 
     [Fact]
