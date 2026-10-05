@@ -11,6 +11,11 @@ run-name: Fleet ${{ github.sha }}${{ inputs.sync && ' (sync)' || '' }}
 # up --no-build, no build/test/install on the box, asserted by platform/fleet/scripts/verify-fleet-workflow.sh), connects with a
 # PINNED host key (StrictHostKeyChecking=yes, never accept-new) and sends the job-scoped registry token and the release record
 # over SSH STDIN, never argv or env. No helper is ever reached from here: helpers receive images only through the manager.
+#
+# MERGE ORDER: the hardened pipeline contract (scripts/deploy/verify-pipeline-contract.mjs, owner-fleet governance PR) allow-lists the
+# workflows that may hold a production SSH credential in PROD_SSH_WORKFLOWS. The opt-in sync job below holds one, so whichever of the
+# governance PR and this one lands second must add 'fleet.yml' to that list in the same merge (its Owner Fleet exception in AGENTS.md
+# already authorises it). Merging this file onto a main that has the hardened contract without that one-line edit fails every build.
 
 on:
   push:
@@ -81,6 +86,9 @@ jobs:
           fi
       - name: Assert the pipeline contract (the production rules are not relaxed by this workflow)
         run: node scripts/deploy/verify-pipeline-contract.mjs
+      # Neither ship:gate nor build-images runs the pull-only marker-block check for a platform-only push, so this workflow runs it itself.
+      - name: Pull-only rollout contract (generalised marker-block check)
+        run: bash scripts/deploy/verify-compute-offload.sh
       - name: Syntax gate
         run: node scripts/ship/pre-push-gate.mjs --ci
       - name: Fleet static contract (rollout markers, pull-only, pinned host key, secret scan)

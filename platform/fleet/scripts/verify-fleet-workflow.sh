@@ -55,7 +55,7 @@ printf '%s\n' "$remote" | grep -q -- '--password-stdin' || fail "the registry to
 
 # ---- 2. the workflow as a whole -------------------------------------------------------------------------------
 if printf '%s\n' "$active" | grep -Eq 'accept-new'; then
-  fail "fleet.yml must never use StrictHostKeyChecking=accept-new (pin the host key)"
+  fail "fleet.yml must never use accept-new host key handling (pin the host key)"
 fi
 printf '%s\n' "$active" | grep -Eq 'StrictHostKeyChecking=yes' || fail "fleet.yml must connect with StrictHostKeyChecking=yes"
 printf '%s\n' "$active" | grep -Eq 'UserKnownHostsFile' || fail "fleet.yml must use a pinned known_hosts file"

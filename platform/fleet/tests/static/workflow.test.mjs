@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -88,6 +88,47 @@ test('the checker rejects a secret-shaped string under the scan root', () => {
   assert.equal(result.status, 1);
   assert.match(result.stderr, /secret-shaped strings/);
   assert.doesNotMatch(result.stderr, /orw1_a{16}_/, 'the value itself must never be printed');
+});
+
+// The tokens the hardened production pipeline contract (scripts/deploy/verify-pipeline-contract.mjs, FLEET_REQUIRED on the
+// governance branch) demands of fleet.yml. Neither ship:gate nor build-images runs the pull-only check for a platform-only push,
+// so a missing token here means the first merge of the governance contract turns every production build red.
+test('fleet.yml keeps every token the hardened pipeline contract requires of it', () => {
+  const active = original.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+  for (const token of [
+    'name: Fleet (build + rollout)',
+    'group: fleet',
+    'cancel-in-progress: false',
+    "github.ref == 'refs/heads/main'",
+    'environment: production',
+    'node scripts/deploy/verify-pipeline-contract.mjs',
+    'bash scripts/deploy/verify-compute-offload.sh',
+  ]) {
+    assert.ok(active.includes(token), `fleet.yml is missing ${token}`);
+  }
+});
+
+// platformSourceFailures() of the same contract scans every non-test, non-markdown file under platform/fleet line by line
+// (comments and failure messages included) for weakened SSH host-key trust. This mirrors its pattern.
+test('no fleet source line weakens SSH host-key trust (not even in a message)', () => {
+  const weak =
+    /StrictHostKeyChecking[=\s"']+(?:accept-new|no|off)\b|UserKnownHostsFile[=\s"']+\/dev\/null|host_key_checking[=:\s"']+(?:false|no|0)\b/i;
+  const skipDirs = new Set(['node_modules', '.git', 'bin', 'obj', 'publish', 'dist', 'TestResults']);
+  const offenders = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!skipDirs.has(entry.name) && !/^tests?$/i.test(entry.name) && !/\.tests?$/i.test(entry.name)) walk(path);
+      } else if (entry.isFile() && !/\.(?:md|png|jpe?g|gif|ico|pdf|dll|zip|gz)$/i.test(entry.name)) {
+        readFileSync(path, 'utf8').split(/\r?\n/).forEach((line, index) => {
+          if (weak.test(line) && !/secret-scan:allow/.test(line)) offenders.push(`${path}:${index + 1}`);
+        });
+      }
+    }
+  };
+  walk(resolve(repo, 'platform/fleet'));
+  assert.deepEqual(offenders, []);
 });
 
 test('fleet.yml is a separate pipeline: its own concurrency group, dispatch-only VPS access, builds by digest, no deploy script', () => {
