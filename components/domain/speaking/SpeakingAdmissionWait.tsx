@@ -47,8 +47,11 @@ export function SpeakingAdmissionWait({ admission, subject, onAttempt, onLeave, 
     let inFlight = false;
     let timer: number | undefined;
 
-    const delayMs = () =>
-      document.visibilityState === 'hidden' ? HIDDEN_RETRY_MS : Math.max(2, pollSecondsRef.current) * 1_000;
+    // The server lengthens the interval for a very long line; a hidden tab never polls faster than that either.
+    const delayMs = () => {
+      const visibleMs = Math.max(2, pollSecondsRef.current) * 1_000;
+      return document.visibilityState === 'hidden' ? Math.max(HIDDEN_RETRY_MS, visibleMs) : visibleMs;
+    };
 
     const schedule = () => {
       if (cancelled) return;

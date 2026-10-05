@@ -596,8 +596,11 @@ and is started when a place frees. Source: `SpeakingLiveAdmissionService`, table
   `GET /v1/speaking/exams/{id}` or `GET /v1/speaking/sessions/{id}` shows the same `admission` (read-only: it never refreshes the
   heartbeat). An admitted learner gets the normal next state and **no** `admission`.
 - **How a waiter is admitted.** The learner page (`SpeakingAdmissionWait`) repeats the same finish call every
-  `pollAfterSeconds` (4 s) while the tab is visible, every 20 s while hidden, and at once when the tab becomes visible. That call
-  is also the heartbeat. The call that finds a free place **holds the credit and starts the clock in that same request**:
+  `pollAfterSeconds` while the tab is visible (4 s, growing by 1 s per 25 waiters up to 20 s for a very long line), every 20 s
+  while hidden, and at once when the tab becomes visible. That call is also the heartbeat. A poll of a learner who is already
+  waiting and still cannot be admitted takes **no lock**: it refreshes its own heartbeat and reports its place (about six small
+  indexed queries). Only an enqueue, an admission or an expiry takes the advisory lock, and only that path can admit, so a long
+  line polling never queues on the lock. The call that finds a free place **holds the credit and starts the clock in that same request**:
   admission is atomic with the start.
 - **Atomic and FIFO.** Every decision runs under one Postgres advisory lock inside a short transaction (cross-process: both API
   slots and the ai-worker). A waiter holds a strictly increasing ticket; a caller is admitted only when its rank among live

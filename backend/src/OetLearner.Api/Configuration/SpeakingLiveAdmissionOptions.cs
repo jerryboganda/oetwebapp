@@ -17,7 +17,9 @@ public sealed class SpeakingLiveAdmissionOptions
     /// <summary>Hard environment kill switch, on top of the admin one. False = the gate never queues.</summary>
     public bool Enabled { get; set; } = true;
 
-    /// <summary>Concurrent live AI Speaking sessions when no admin setting exists (owner target: 100).</summary>
+    /// <summary>Concurrent live AI Speaking sessions when no admin setting exists (owner target: 100). A value
+    /// below 1 is a misconfiguration and falls back to 100 (never to 1, which would throttle everyone); a value
+    /// above 10000 is capped. To switch the gate off use <see cref="Enabled"/> or the admin kill switch.</summary>
     public int DefaultMaxConcurrent { get; set; } = 100;
 
     /// <summary>A waiter that has not polled for this long has left the line (clamped 15..600 s). The
@@ -53,7 +55,8 @@ public sealed class SpeakingLiveAdmissionOptions
     /// <summary>Days an ended admission row is kept before the sweeper purges it (clamped 1..90).</summary>
     public int RetentionDays { get; set; } = 7;
 
-    public int DefaultMaxConcurrentResolved() => Math.Clamp(DefaultMaxConcurrent, MinConcurrent, MaxConcurrent);
+    public int DefaultMaxConcurrentResolved()
+        => DefaultMaxConcurrent < MinConcurrent ? OwnerTargetConcurrent : Math.Min(DefaultMaxConcurrent, MaxConcurrent);
     public TimeSpan WaiterHeartbeat() => TimeSpan.FromSeconds(Math.Clamp(WaiterHeartbeatSeconds, 15, 600));
     public TimeSpan MaxWait() => TimeSpan.FromSeconds(Math.Clamp(MaxWaitSeconds, 60, 7200));
     public int MaxQueueLengthResolved() => Math.Clamp(MaxQueueLength, 1, 100000);
@@ -67,4 +70,7 @@ public sealed class SpeakingLiveAdmissionOptions
     /// <summary>Bounds of the admin-editable cap.</summary>
     public const int MinConcurrent = 1;
     public const int MaxConcurrent = 10000;
+
+    /// <summary>The owner target (decision 5 Oct 2026): 100 concurrent live AI sessions.</summary>
+    public const int OwnerTargetConcurrent = 100;
 }

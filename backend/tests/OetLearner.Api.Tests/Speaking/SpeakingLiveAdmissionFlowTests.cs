@@ -287,10 +287,10 @@ public sealed class SpeakingLiveAdmissionFlowTests : IAsyncLifetime
     {
         var name = $"live-admission-sweep-{Guid.NewGuid():N}";
         var opts = new SpeakingLiveAdmissionOptions { DefaultMaxConcurrent = 1, WaiterHeartbeatSeconds = 60 };
-        var with = BuildSweeperServices(name, opts, withAdmission: true);
-        var without = BuildSweeperServices(name, opts, withAdmission: false);
+        var gated = BuildSweeperServices(name, opts, withAdmission: true);
+        var ungated = BuildSweeperServices(name, opts, withAdmission: false);
 
-        await using (var scope = with.CreateAsyncScope())
+        await using (var scope = gated.CreateAsyncScope())
         {
             var gate = scope.ServiceProvider.GetRequiredService<SpeakingLiveAdmissionService>();
             await gate.AdmitOrQueueAsync("u-a", SpeakingLiveAdmissionKinds.Exam, "exam-a", true, default);
@@ -298,10 +298,10 @@ public sealed class SpeakingLiveAdmissionFlowTests : IAsyncLifetime
         }
 
         _clock.Advance(TimeSpan.FromSeconds(61));
-        Assert.Equal(0, await NewWorker(without).SweepAdmissionsAsync(default));
-        Assert.Equal(1, await NewWorker(with).SweepAdmissionsAsync(default));
+        Assert.Equal(0, await NewWorker(ungated).SweepAdmissionsAsync(default));
+        Assert.Equal(1, await NewWorker(gated).SweepAdmissionsAsync(default));
 
-        await using var read = with.CreateAsyncScope();
+        await using var read = gated.CreateAsyncScope();
         var db = read.ServiceProvider.GetRequiredService<LearnerDbContext>();
         Assert.Equal(SpeakingLiveAdmissionState.Expired,
             (await db.SpeakingLiveAdmissions.SingleAsync(a => a.SubjectId == "exam-b")).State);

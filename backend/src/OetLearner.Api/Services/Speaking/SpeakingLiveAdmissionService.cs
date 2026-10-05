@@ -53,6 +53,10 @@ internal readonly record struct EffectiveAdmissionSettings(bool Enabled, int Max
 /// (<see cref="SpeakingLiveAdmission.Seq"/>); a caller is admitted only when its rank among live waiters is below
 /// the number of free slots, so a newcomer can never overtake an earlier waiter even while that waiter's page has
 /// not polled yet. A waiter silent for the heartbeat window has left the line (its ticket stops counting).
+/// A learner already waiting who still cannot be admitted (the common poll of a long line) takes a lock-free path
+/// that only refreshes its own heartbeat (<see cref="TryKeepWaitingAsync"/>); only an enqueue, an admission or an
+/// expiry takes the lock, so a long line polling every few seconds never queues on it. That path never admits, so
+/// a stale read there can at worst delay an admission by one poll.
 ///
 /// WHAT counts as a held slot (<see cref="CountHoldingAsync"/>): an Admitted row that is inside its safety TTL AND
 /// either was admitted within the claim window (it is about to start) or whose subject is running (exam
@@ -118,6 +122,12 @@ public sealed class SpeakingLiveAdmissionService(
 
         try
         {
+            var settled = await TryKeepWaitingAsync(kind, subjectId, ct);
+            if (settled is not null)
+            {
+                return settled;
+            }
+
             return await WithLockAsync(() => AdmitOrQueueLockedAsync(userId, kind, subjectId, ct), ct);
         }
         catch (OperationCanceledException)
@@ -136,6 +146,89 @@ public sealed class SpeakingLiveAdmissionService(
                 "Live Speaking admission failed for {Kind} {SubjectId}; letting the learner through without a capacity check.",
                 kind, subjectId);
             return Bypassed(SpeakingLiveAdmissionBypassReasons.AdmissionUnavailable);
+        }
+    }
+
+    /// <summary>
+    /// The lock-free path of a subject that is already in the system: an admitted one is admitted again (idempotent), and a
+    /// waiting one that cannot be admitted yet only has its own heartbeat refreshed and its place reported. Returns null
+    /// whenever the locked decision is needed: not queued yet, expired or abandoned, the kill switch is off (the locked
+    /// path releases the waiter), or a place may be free for it. Reads are untracked and the heartbeat is a single-row
+    /// update that never touches the caller's change tracker. It never admits a waiting subject, so a stale read here
+    /// can only delay an admission by one poll, never exceed the cap.
+    /// </summary>
+    private async Task<SpeakingLiveAdmissionResult?> TryKeepWaitingAsync(string kind, string subjectId, CancellationToken ct)
+    {
+        var opt = options.Value;
+        var settings = await ResolveSettingsAsync(ct);
+        if (!settings.Enabled)
+        {
+            return null;
+        }
+
+        var now = time.GetUtcNow();
+        var heartbeatCutoff = now - opt.WaiterHeartbeat();
+        var maxWaitCutoff = now - opt.MaxWait();
+        var id = RowId(kind, subjectId);
+        var row = await db.SpeakingLiveAdmissions.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct);
+        if (row is null)
+        {
+            return null;
+        }
+
+        if (row.State == SpeakingLiveAdmissionState.Admitted && row.ExpiresAt > now)
+        {
+            return new SpeakingLiveAdmissionResult(SpeakingLiveAdmissionOutcome.Admitted);
+        }
+
+        if (row.State != SpeakingLiveAdmissionState.Waiting
+            || row.LastSeenAt < heartbeatCutoff
+            || row.EnqueuedAt < maxWaitCutoff)
+        {
+            return null;
+        }
+
+        var mySeq = row.Seq;
+        var held = await CountHoldingAsync(now, ct);
+        var rank = await db.SpeakingLiveAdmissions.AsNoTracking()
+            .CountAsync(a => a.State == SpeakingLiveAdmissionState.Waiting
+                && a.Seq < mySeq
+                && a.LastSeenAt >= heartbeatCutoff, ct);
+        if (rank < Math.Max(0, settings.MaxConcurrent - held))
+        {
+            return null;
+        }
+
+        await TouchWaitingAsync(id, now, ct);
+        var queueLength = await db.SpeakingLiveAdmissions.AsNoTracking()
+            .CountAsync(a => a.State == SpeakingLiveAdmissionState.Waiting && a.LastSeenAt >= heartbeatCutoff, ct);
+        return new SpeakingLiveAdmissionResult(
+            SpeakingLiveAdmissionOutcome.Waiting,
+            Waiting: BuildView(rank, queueLength, settings.MaxConcurrent));
+    }
+
+    /// <summary>Refreshes a waiting row's heartbeat: one UPDATE that does not touch the change tracker on PostgreSQL
+    /// (production). The in-memory and SQLite providers do not reliably translate a chained bulk update (see
+    /// <c>BillingCouponRedemptionAtomic.TryReserveAsync</c>), so they use a tracked save, where nothing else is pending.</summary>
+    private async Task TouchWaitingAsync(string id, DateTimeOffset now, CancellationToken ct)
+    {
+        if (db.Database.IsNpgsql())
+        {
+            await db.SpeakingLiveAdmissions
+                .Where(a => a.Id == id && a.State == SpeakingLiveAdmissionState.Waiting)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(a => a.LastSeenAt, now)
+                    .SetProperty(a => a.UpdatedAt, now), ct);
+            return;
+        }
+
+        var tracked = await db.SpeakingLiveAdmissions
+            .FirstOrDefaultAsync(a => a.Id == id && a.State == SpeakingLiveAdmissionState.Waiting, ct);
+        if (tracked is not null)
+        {
+            tracked.LastSeenAt = now;
+            tracked.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
         }
     }
 
@@ -386,12 +479,16 @@ public sealed class SpeakingLiveAdmissionService(
         var opt = options.Value;
         // Slots free at cap per average session length, so the (rank + 1)-th place opens in about this long.
         var estimate = (int)Math.Ceiling((rank + 1.0) * opt.AverageSessionSecondsResolved() / Math.Max(1, cap));
+        // The page repeats the start call at this interval: a long line backs off (+1 s per 25 waiters, at most 20 s,
+        // always inside the heartbeat window) so the waiters' own polling never becomes the load it is meant to cap.
+        var basePoll = opt.PollAfterSecondsResolved();
+        var poll = Math.Clamp(basePoll + queueLength / 25, basePoll, Math.Max(basePoll, 20));
         return new SpeakingLiveAdmissionView(
             Status: SpeakingLiveAdmissionView.WaitingStatus,
             Position: rank + 1,
             QueueLength: Math.Max(queueLength, rank + 1),
             EstimatedWaitSeconds: Math.Clamp(estimate, 5, 7200),
-            PollAfterSeconds: opt.PollAfterSecondsResolved());
+            PollAfterSeconds: poll);
     }
 
     private async Task<EffectiveAdmissionSettings> ResolveSettingsAsync(CancellationToken ct)

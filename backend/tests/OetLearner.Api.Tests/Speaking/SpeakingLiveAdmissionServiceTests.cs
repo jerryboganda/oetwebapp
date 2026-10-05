@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
@@ -249,8 +250,8 @@ public sealed class SpeakingLiveAdmissionServiceTests : IDisposable
         Assert.True(cAfterBLeft.MustWait);
         Assert.Equal(1, cAfterBLeft.Waiting!.Position);
         Assert.Equal(1, cAfterBLeft.Waiting.QueueLength);
-        var abandoned = await RowAsync(SpeakingLiveAdmissionKinds.Practice, "practice-b");
-        Assert.Equal(SpeakingLiveAdmissionState.Expired, abandoned.State);
+        // B no longer counts as waiting for anyone (its row is expired by the next locked decision or the sweeper).
+        Assert.Null(await Svc(options).GetWaitingViewAsync(SpeakingLiveAdmissionKinds.Practice, "practice-b", CancellationToken.None));
 
         // B comes back: a fresh ticket at the back of the line, never its old place.
         var bBack = await PracticeAsync(Svc(options), "b");
@@ -387,6 +388,45 @@ public sealed class SpeakingLiveAdmissionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task APollOfAWaitingLearnerWhoCannotBeAdmitted_RefreshesItsHeartbeatAndKeepsItsTicket()
+    {
+        await ExamAsync(Svc(), "a");
+        await ExamAsync(Svc(), "b");
+        var before = await RowAsync(SpeakingLiveAdmissionKinds.Exam, "exam-b");
+
+        _clock.Advance(TimeSpan.FromSeconds(10));
+        var again = await ExamAsync(Svc(), "b");
+        var after = await RowAsync(SpeakingLiveAdmissionKinds.Exam, "exam-b");
+
+        // The lock-free path: still waiting, the same ticket and enqueue time, only the heartbeat moved.
+        Assert.True(again.MustWait);
+        Assert.Equal(before.Seq, after.Seq);
+        Assert.Equal(before.EnqueuedAt, after.EnqueuedAt);
+        Assert.Equal(T0.AddSeconds(10), after.LastSeenAt);
+        Assert.Equal(SpeakingLiveAdmissionState.Waiting, after.State);
+    }
+
+    [Fact]
+    public async Task ALongLine_BacksOffItsPolling_ButNeverBelowTheConfiguredInterval()
+    {
+        await ExamAsync(Svc(), "a");
+        SpeakingLiveAdmissionView? last = null;
+        for (var i = 0; i < 60; i++)
+        {
+            last = (await ExamAsync(Svc(), $"w{i}")).Waiting;
+        }
+
+        // 4 s base + 1 s per 25 waiters: 60 in line is 6 s.
+        Assert.Equal(60, last!.QueueLength);
+        Assert.Equal(6, last.PollAfterSeconds);
+
+        var slower = Opts();
+        slower.PollAfterSeconds = 30;
+        var view = (await ExamAsync(Svc(slower), "late")).Waiting!;
+        Assert.Equal(30, view.PollAfterSeconds);
+    }
+
+    [Fact]
     public async Task TheWaitingView_IsReadOnly_AndNullWhenNotWaiting()
     {
         await ExamAsync(Svc(), "a");
@@ -460,6 +500,20 @@ public sealed class SpeakingLiveAdmissionServiceTests : IDisposable
 
         Assert.Equal(100, counts.MaxConcurrent);
         Assert.True(counts.Enabled);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-5)]
+    public async Task ANonsenseConfiguredDefault_FallsBackToTheOwnerTarget_NeverToOne(int configured)
+    {
+        var counts = await new SpeakingLiveAdmissionService(
+            NewDb(),
+            Options.Create(new SpeakingLiveAdmissionOptions { DefaultMaxConcurrent = configured }),
+            _clock).GetCountsAsync(CancellationToken.None);
+
+        // A cap of one would throttle every learner to a single live session: never the reading of a typo.
+        Assert.Equal(100, counts.MaxConcurrent);
     }
 
     [Fact]
