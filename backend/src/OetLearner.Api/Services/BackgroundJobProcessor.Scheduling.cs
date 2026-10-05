@@ -98,9 +98,29 @@ public partial class BackgroundJobProcessor
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task RunSpeakingTranscriptionQueueAsync(IServiceProvider services, CancellationToken cancellationToken)
+    /// <summary>
+    /// One poll of the Speaking transcription queue (called from
+    /// <see cref="RunSpeakingTranscriptionLoopAsync"/>): at most once a minute put
+    /// rows orphaned in <c>__processing__</c> back in the queue, then work up to 5
+    /// queued rows. Each claim is atomic, so every process can run this.
+    /// </summary>
+    internal async Task RunSpeakingTranscriptionQueueAsync(IServiceProvider services, DateTimeOffset now, CancellationToken cancellationToken)
     {
         var pipeline = services.GetRequiredService<OetLearner.Api.Services.Speaking.SpeakingTranscriptionPipeline>();
+        if (now - _lastSpeakingTranscriptionRecoveryAt >= SpeakingTranscriptionRecoveryInterval)
+        {
+            _lastSpeakingTranscriptionRecoveryAt = now;
+            try
+            {
+                await pipeline.RequeueStaleProcessingAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Recovery is a sweep for rare orphans; it must never stop the queue itself.
+                logger.LogWarning(ex, "Speaking transcription stale-row recovery failed; continuing with the queue.");
+            }
+        }
+
         for (var processed = 0; processed < 5; processed += 1)
         {
             if (!await pipeline.ProcessNextAsync(cancellationToken))
