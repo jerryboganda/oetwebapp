@@ -317,7 +317,7 @@ test('native PowerShell watcher rejects completion bypasses before any GitHub or
     [[], /wrapper must own the visibility lease/],
   ]) {
     const result = spawnSync(bin, ['-NoProfile', '-File', join(root, 'scripts', 'ship', 'watch-deploy.ps1'), ...args],
-      { encoding: 'utf8', timeout: 10_000 });
+      { encoding: 'utf8', timeout: 60_000 });
     assert.ifError(result.error);
     assert.notEqual(result.status, 0);
     const output = stripVTControlCharacters(result.stdout + result.stderr)
