@@ -127,6 +127,16 @@
   </ItemGroup>
 
   <!--
+    Known-answer canary for the remote-worker boundary (OET-RWP/1 section 6.5): a tiny plain-text PDF a helper
+    must extract identically to the in-process PdfPig oracle before it may become Active. No learner or content data.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="Services\RemoteJobs\Canary\pdf-canary-v1.pdf">
+      <LogicalName>OetRemoteCanary.pdf-canary-v1.pdf</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!--
     Recalls Content Pack v1 (2026-05-05). Versioned vocabulary JSON files loaded
     by RecallsContentSeeder at boot. Copied to publish output so the seeder finds
     them in containerised deploys.

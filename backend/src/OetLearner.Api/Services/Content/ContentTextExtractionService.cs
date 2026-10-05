@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.RemoteJobs;
 
 namespace OetLearner.Api.Services.Content;
 
@@ -505,6 +506,18 @@ public sealed class ContentTextExtractionWorker(
                 // to save must not leave its dirty entity behind to fail the
                 // next paper's SaveChanges too.
                 using var paperScope = scopeFactory.CreateScope();
+
+                // Optional remote producer (registered only on PostgreSQL, scoped, so it shares this paper's
+                // DbContext). Absent, flag off, no healthy node or any doubt = Local: the in-process pass below,
+                // exactly as before. The id cursor in NextBatchAsync is what rotates the window, so a paper that
+                // remote jobs own is simply revisited on the next lap; nothing is touched to make it rotate.
+                var remoteProducer = paperScope.ServiceProvider.GetService<IRemotePdfExtractionProducer>();
+                if (remoteProducer is not null
+                    && await remoteProducer.HandlePaperAsync(id, ct) != RemoteExtractionDecision.Local)
+                {
+                    continue;
+                }
+
                 var svc = paperScope.ServiceProvider.GetRequiredService<IContentTextExtractionService>();
                 total += await svc.ExtractForPaperAsync(id, ct);
             }

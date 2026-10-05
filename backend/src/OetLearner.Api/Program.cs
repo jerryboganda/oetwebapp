@@ -29,6 +29,9 @@ using OetLearner.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 var oetRunModeIsWorker = OetLearner.Api.Services.Ai.AiRunMode.IsWorker(builder.Configuration);
+// Remote-worker boundary (OET-RWP/1): PostgreSQL-only (FOR UPDATE SKIP LOCKED + database clock). Decided once, here, from the
+// same connection string the DbContext uses; on SQLite/InMemory none of it is registered and no route is mapped.
+var remoteJobsPostgres = OetLearner.Api.Data.DatabaseConfiguration.IsPostgres(builder.Configuration, builder.Environment.IsDevelopment());
 var enableAiCostBearingWorkers = OetLearner.Api.Services.Ai.AiRunMode.EnableCostBearingHostedWorkers(
     builder.Configuration, builder.Environment);
 // H10: wire Sentry early so host-level startup exceptions are captured. No-op unless Sentry:Dsn is set.
@@ -717,6 +720,15 @@ void ConfigureJwtBearer(JwtBearerOptions options)
     {
         OnMessageReceived = context =>
         {
+            // Remote-worker node tokens (orw1_...) and the fleet-service credential (ofs1_...) are NOT JWTs (they carry no dot).
+            // Never let the learner JWT pipeline parse them: it would log a failure per request, and nothing here may reach
+            // OnTokenValidated's account-liveness query for them. Their own schemes authenticate them.
+            if (OetLearner.Api.Services.RemoteJobs.RemoteTokenFormat.LooksLikeRemoteToken(context.Request.Headers.Authorization.ToString()))
+            {
+                context.NoResult();
+                return Task.CompletedTask;
+            }
+
             var accessToken = context.Request.Query["access_token"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(accessToken)
                 && (context.HttpContext.Request.Path.StartsWithSegments("/v1/notifications/hub")
@@ -943,6 +955,16 @@ else
     authBuilder.AddJwtBearer(ConfigureJwtBearer);
 }
 
+// Remote-worker boundary: two dedicated bearer schemes (per-node token, fleet-service credential), selected EXPLICITLY by the
+// RemoteWorkerOnly / FleetServiceOnly policies. Registered only where the routes exist (PostgreSQL, not the ai-worker).
+if (remoteJobsPostgres && !oetRunModeIsWorker)
+{
+    authBuilder.AddScheme<AuthenticationSchemeOptions, RemoteWorkerAuthenticationHandler>(
+        OetLearner.Api.Services.RemoteJobs.RemoteWorkerAuth.NodeScheme, _ => { });
+    authBuilder.AddScheme<AuthenticationSchemeOptions, FleetServiceAuthenticationHandler>(
+        OetLearner.Api.Services.RemoteJobs.RemoteWorkerAuth.FleetScheme, _ => { });
+}
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("LearnerOnly", policy => policy
@@ -1096,6 +1118,8 @@ builder.Services.AddAuthorization(options =>
     // (owner + X-Owner-Agent-Unlock). Owner = admin + email_verified + system_admin +
     // auth_account_id in the env-only OwnerAgent:OwnerAccountIds allow-list.
     options.AddOwnerAgentPolicies();
+    // Remote workers: RemoteWorkerOnly (node token) and FleetServiceOnly (fleet-service credential), each on its own scheme.
+    options.AddRemoteWorkerPolicies();
 });
 
 builder.Services.AddScoped<LearnerService>();
@@ -2454,6 +2478,14 @@ OetLearner.Api.Services.Ai.AiCostBearingHostedServiceRegistration.Add(
     enableAiCostBearingWorkers,
     oetRunModeIsWorker);
 
+// Remote-worker boundary (OET-RWP/1): options always bound; services, producers, appliers, the reaper and the hosted workers
+// only on PostgreSQL. Everything is OFF until the remote_jobs_* feature flags are enabled (see docs/ops/REMOTE-WORKER.md).
+OetLearner.Api.Services.RemoteJobs.RemoteJobsServiceCollectionExtensions.AddRemoteJobs(
+    builder.Services,
+    builder.Configuration,
+    remoteJobsPostgres,
+    oetRunModeIsWorker);
+
 var app = builder.Build();
 
 // ── Dev-only one-off: emit the full EF model CREATE script and exit. ──
@@ -2863,6 +2895,12 @@ if (corsOrigins.Length > 0)
     app.UseCors("Frontend");
 }
 
+if (remoteJobsPostgres && !oetRunModeIsWorker)
+{
+    // X-Remote-Protocol / -Min and Cache-Control: no-store on EVERY response of the remote planes (401/429/5xx included).
+    OetLearner.Api.Services.RemoteJobs.RemoteWorkerMiddlewareExtensions.UseRemoteWorkerProtocolHeaders(app);
+}
+
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
@@ -3242,6 +3280,16 @@ app.MapHub<OetLearner.Api.Hubs.OwnerAgentHub>("/v1/owner-agent/hub", options =>
     })
     .RequireAuthorization(OwnerAgentPolicies.Unlocked)
     .RequireRateLimiting(OwnerAgentPolicies.HubRateLimit);
+
+// ── Remote-worker boundary (OET-RWP/1) ──────────────────────────────────────
+// Job plane (per-node token), service plane (fleet credential) and owner break-glass. Mapped only on PostgreSQL and never on the
+// ai-worker, so a SQLite host has no route and the claim/CAS SQL has nowhere to run.
+if (remoteJobsPostgres)
+{
+    app.MapRemoteWorkerEndpoints();
+    app.MapRemoteFleetEndpoints();
+    app.MapRemoteWorkerAdminEndpoints();
+}
 }
 
 await using (var scope = app.Services.CreateAsyncScope())
