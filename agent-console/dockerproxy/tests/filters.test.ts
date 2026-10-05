@@ -60,6 +60,24 @@ describe('list filters', () => {
     expect(filterVolumeList(doc)).toEqual({ Volumes: [{ Name: 'oetwebsite_oet_postgres_data' }], Warnings: null });
   });
 
+  it('hides the Owner Fleet manager from every list (containers, networks, volumes, attached containers)', () => {
+    const containers = [
+      { Id: '1', Names: ['/oet-api-blue'] },
+      { Id: '2', Names: ['/oet-fleet-manager'] },
+    ];
+    expect((filterContainerList(containers) as Array<{ Id: string }>).map((c) => c.Id)).toEqual(['1']);
+    expect(filterNetworkList([{ Name: 'oetwebsite_internal' }, { Name: 'oet-fleet_default' }])).toEqual([{ Name: 'oetwebsite_internal' }]);
+    expect(
+      filterVolumeList({
+        Volumes: [{ Name: 'oetwebsite_oet_postgres_data' }, { Name: 'oet-fleet_fleet_data' }],
+        Warnings: null,
+      }),
+    ).toEqual({ Volumes: [{ Name: 'oetwebsite_oet_postgres_data' }], Warnings: null });
+    expect(
+      filterNetworkInspect({ Name: 'oetwebsite_internal', Containers: { a: { Name: 'oet-postgres' }, b: { Name: 'oet-fleet-manager' } } }),
+    ).toEqual({ Name: 'oetwebsite_internal', Containers: { a: { Name: 'oet-postgres' } } });
+  });
+
   it('passes non-array bodies through untouched', () => {
     expect(filterContainerList({ message: 'x' })).toEqual({ message: 'x' });
     expect(filterImageList('x')).toBe('x');
@@ -86,7 +104,11 @@ describe('events', () => {
   it.each([
     [{ Type: 'container', Actor: { ID: '1', Attributes: { name: 'oet-api-blue' } } }, true],
     [{ Type: 'container', Actor: { ID: '1', Attributes: { name: 'oet-agent-console' } } }, false],
+    [{ Type: 'container', Actor: { ID: '1', Attributes: { name: 'oet-fleet-manager' } } }, false],
     [{ Type: 'container', Actor: { ID: '1', Attributes: { name: 'ubag-vps-gateway-1' } } }, false],
+    [{ Type: 'network', Actor: { ID: 'n', Attributes: { name: 'oet-fleet_default', container: 'abc' } } }, false],
+    [{ Type: 'network', Actor: { ID: 'n', Attributes: { name: 'oetwebsite_internal', container: 'oet-fleet-manager' } } }, false],
+    [{ Type: 'volume', Actor: { ID: 'oet-fleet_fleet_data', Attributes: {} } }, false],
     [{ Type: 'network', Actor: { ID: 'n', Attributes: { name: 'oetwebsite_internal', container: 'abc' } } }, true],
     [{ Type: 'network', Actor: { ID: 'n', Attributes: { name: 'oet_agent_net', container: 'abc' } } }, false],
     [{ Type: 'volume', Actor: { ID: 'oetwebsite_oet_db_backups', Attributes: {} } }, true],

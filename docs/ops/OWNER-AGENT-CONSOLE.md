@@ -48,7 +48,7 @@ by prompts:
 |---|---|
 | Codebase read/write | Per-session git worktree on an `agent/<yyyymmdd>-<slug>` branch |
 | Production DB DDL + DML | Postgres role `oet_owner_agent` (`NOSUPERUSER`, inherits the app role's object privileges, cannot `SET ROLE` to it) via `oet-agent-dbproxy` |
-| Docker on the VPS | Only through `oet-agent-dockerproxy` (policy table; `oet-*` / `oetwebsite*` free or gated, co-tenants gated, proxies denied) |
+| Docker on the VPS | Only through `oet-agent-dockerproxy` (policy table; `oet-*` / `oetwebsite*` free or gated, co-tenants gated, proxies and the `oet-fleet*` Owner Fleet manager denied outright) |
 | Logs / health | `docker logs` on `oet-*` via the proxy; public health endpoints |
 | Deploy root | `/opt/oetwebapp` mounted **read-only**; `.env*` changes only through the Guard-approved `oet-env-edit` helper |
 | GitHub | Agent PAT (branches, PRs, workflow dispatch); merges and visibility flips only through the Ship executor (Ship PAT) |

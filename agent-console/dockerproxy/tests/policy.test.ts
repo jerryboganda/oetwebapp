@@ -1,6 +1,17 @@
 // Policy table for CONTRACT.md §6 "Docker policy" — first match wins.
 import { describe, expect, it } from 'vitest';
-import { evaluate, isExecApprovalContainer, isOetImageRef, referencedContainers, type PolicyInput } from '../src/policy.js';
+import {
+  PROTECTED_DATA_VOLUMES,
+  evaluate,
+  isExecApprovalContainer,
+  isFleetName,
+  isOetImageRef,
+  isVisibleContainerName,
+  isVisibleNetworkName,
+  isVisibleVolumeName,
+  referencedContainers,
+  type PolicyInput,
+} from '../src/policy.js';
 
 interface Row {
   name: string;
@@ -48,6 +59,36 @@ const rows: Row[] = [
   { name: 'create sharing the egress network namespace', method: 'POST', path: '/containers/create', body: { Image: 'alpine', HostConfig: { NetworkMode: 'container:oet-agent-egress' } }, decision: 'deny', rule: 1 },
   { name: 'create by id resolving to the console', method: 'POST', path: '/containers/create', body: { Image: 'alpine', HostConfig: { PidMode: 'container:cccc' } }, resolved: { names: { cccc: '/oet-agent-console' } }, decision: 'deny', rule: 1 },
   { name: 'create attached to the agent network', method: 'POST', path: '/containers/create', body: { Image: 'alpine', NetworkingConfig: { EndpointsConfig: { oet_agent_net: {} } } }, decision: 'deny', rule: 1 },
+
+  // ── Rule 1: the Owner Fleet manager (oet-fleet*) is untouchable too. Without these rows an
+  //    oet-fleet-* container would match OET_NAME and fall through to rules 2/3 (inspect, logs,
+  //    stop/restart/kill allowed for free). ──
+  { name: 'inspect the fleet manager', method: 'GET', path: '/containers/oet-fleet-manager/json', decision: 'deny', rule: 1 },
+  { name: 'fleet manager logs', method: 'GET', path: '/containers/oet-fleet-manager/logs?tail=50', decision: 'deny', rule: 1 },
+  { name: 'stop the fleet manager', method: 'POST', path: '/v1.47/containers/oet-fleet-manager/stop', decision: 'deny', rule: 1 },
+  { name: 'restart the fleet manager', method: 'POST', path: '/containers/oet-fleet-manager/restart', decision: 'deny', rule: 1 },
+  { name: 'kill the fleet manager', method: 'POST', path: '/containers/oet-fleet-manager/kill?signal=KILL', decision: 'deny', rule: 1 },
+  { name: 'exec into the fleet manager', method: 'POST', path: '/containers/oet-fleet-manager/exec', body: { Cmd: ['sh'] }, decision: 'deny', rule: 1 },
+  { name: 'remove the fleet manager', method: 'DELETE', path: '/containers/oet-fleet-manager?force=1', decision: 'deny', rule: 1 },
+  { name: 'id prefix resolving to the fleet manager', method: 'GET', path: '/containers/ffff/json', resolved: { containerName: '/oet-fleet-manager' }, decision: 'deny', rule: 1 },
+  { name: 'percent-encoded fleet name', method: 'GET', path: '/containers/oet%2Dfleet%2Dmanager/json', decision: 'deny', rule: 1 },
+  { name: 'exec start whose container is the fleet manager', method: 'POST', path: `/exec/${EXEC}/start`, resolved: { containerName: 'oet-fleet-manager' }, execPreApproved: true, decision: 'deny', rule: 1 },
+  { name: 'exec inspect whose container is the fleet manager', method: 'GET', path: `/exec/${EXEC}/json`, resolved: { containerName: 'oet-fleet-manager' }, decision: 'deny', rule: 1 },
+  { name: 'inspect the fleet volume', method: 'GET', path: '/volumes/oet-fleet_fleet_data', decision: 'deny', rule: 1 },
+  { name: 'remove the fleet volume', method: 'DELETE', path: '/volumes/oet-fleet_fleet_data', decision: 'deny', rule: 1 },
+  { name: 'inspect the fleet network', method: 'GET', path: '/networks/oet-fleet_default', decision: 'deny', rule: 1 },
+  { name: 'remove the fleet network', method: 'DELETE', path: '/networks/oet-fleet_default', decision: 'deny', rule: 1 },
+  { name: 'connect a container to the fleet network', method: 'POST', path: '/networks/oet-fleet_default/connect', body: { Container: 'oet-web-blue' }, decision: 'deny', rule: 1 },
+  { name: 'connect the fleet manager to another network', method: 'POST', path: '/networks/oetwebsite_internal/connect', body: { Container: 'oet-fleet-manager' }, decision: 'deny', rule: 1 },
+  { name: 'create a network with a fleet name', method: 'POST', path: '/networks/create', body: { Name: 'oet-fleet_shadow' }, decision: 'deny', rule: 1 },
+  { name: 'create impersonating the fleet manager', method: 'POST', path: '/containers/create?name=oet-fleet-manager2', body: { Image: 'alpine' }, decision: 'deny', rule: 1 },
+  { name: 'create mounting the fleet volume', method: 'POST', path: '/containers/create', body: { Image: 'alpine', HostConfig: { Mounts: [{ Type: 'volume', Source: 'oet-fleet_fleet_data', Target: '/f' }] } }, decision: 'deny', rule: 1 },
+  { name: 'create binding the fleet volume by name', method: 'POST', path: '/containers/create', body: { Image: 'alpine', HostConfig: { Binds: ['oet-fleet_fleet_data:/f'] } }, decision: 'deny', rule: 1 },
+  { name: 'create with volumes-from the fleet manager', method: 'POST', path: '/containers/create', body: { Image: 'alpine', HostConfig: { VolumesFrom: ['oet-fleet-manager:ro'] } }, decision: 'deny', rule: 1 },
+  { name: 'create sharing the fleet manager network namespace', method: 'POST', path: '/containers/create', body: { Image: 'alpine', HostConfig: { NetworkMode: 'container:oet-fleet-manager' } }, decision: 'deny', rule: 1 },
+  { name: 'create by id resolving to the fleet manager', method: 'POST', path: '/containers/create', body: { Image: 'alpine', HostConfig: { PidMode: 'container:ffff' } }, resolved: { names: { ffff: '/oet-fleet-manager' } }, decision: 'deny', rule: 1 },
+  { name: 'create attached to the fleet network', method: 'POST', path: '/containers/create', body: { Image: 'alpine', NetworkingConfig: { EndpointsConfig: { 'oet-fleet_default': {} } } }, decision: 'deny', rule: 1 },
+  { name: 'create with the fleet network as network mode', method: 'POST', path: '/containers/create', body: { Image: 'alpine', HostConfig: { NetworkMode: 'oet-fleet_default' } }, decision: 'deny', rule: 1 },
 
   // ── Rule 2: reads of OET-named objects ──
   { name: 'ping', method: 'GET', path: '/_ping', decision: 'allow', rule: 2 },
@@ -211,6 +252,59 @@ describe('approval details', () => {
     ] as const) {
       expect(evaluate({ method, path, body: { Image: 'alpine', Name: 'n' } }).grantKey).toBeUndefined();
     }
+  });
+});
+
+describe('Owner Fleet isolation', () => {
+  it('denies with a fleet reason and never raises an approval card', () => {
+    const result = evaluate({ method: 'POST', path: '/containers/oet-fleet-manager/stop' });
+    expect(result.decision).toBe('deny');
+    expect(result.rule).toBe(1);
+    expect(result.reasons).toEqual(['oet-fleet-manager belongs to the Owner Fleet manager']);
+    expect(result.grantKey).toBeUndefined();
+  });
+
+  it('explains which fleet resource a create touches', () => {
+    const result = evaluate({
+      method: 'POST',
+      path: '/containers/create?name=oet-fleet-manager2',
+      body: {
+        Image: 'alpine',
+        HostConfig: { Mounts: [{ Type: 'volume', Source: 'oet-fleet_fleet_data', Target: '/f' }], NetworkMode: 'oet-fleet_default' },
+      },
+    });
+    expect(result.decision).toBe('deny');
+    expect(result.reasons).toEqual(
+      expect.arrayContaining([
+        'container name oet-fleet-manager2 impersonates the Owner Fleet manager',
+        'mounts Owner Fleet volume oet-fleet_fleet_data',
+        'attaches to Owner Fleet network oet-fleet_default',
+      ]),
+    );
+  });
+
+  it('keeps the fleet volume in the protected production data set', () => {
+    expect(PROTECTED_DATA_VOLUMES.has('oet-fleet_fleet_data')).toBe(true);
+  });
+
+  it.each([
+    ['oet-fleet-manager', true],
+    ['/oet-fleet-manager', true],
+    ['oet-fleet_fleet_data', true],
+    ['oet-fleet_default', true],
+    ['oet-fleetx', true],
+    ['oet-api-blue', false],
+    ['oet-agent-console', false],
+    ['myoet-fleet', false],
+  ])('isFleetName(%s) === %s', (name, expected) => {
+    expect(isFleetName(name)).toBe(expected);
+  });
+
+  it('never lists fleet containers, volumes or networks as visible', () => {
+    expect(isVisibleContainerName('/oet-fleet-manager')).toBe(false);
+    expect(isVisibleVolumeName('oet-fleet_fleet_data')).toBe(false);
+    expect(isVisibleNetworkName('oet-fleet_default')).toBe(false);
+    expect(isVisibleContainerName('/oet-api-blue')).toBe(true);
   });
 });
 

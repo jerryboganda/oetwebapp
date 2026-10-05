@@ -29,6 +29,7 @@ const CONTAINERS: FakeContainer[] = [
   { Id: 'b'.repeat(64), Name: '/oet-postgres', Config: { Env: ['POSTGRES_PASSWORD=pw-value'] } },
   { Id: 'c'.repeat(64), Name: '/oet-agent-console', Config: { Env: [] } },
   { Id: 'd'.repeat(64), Name: '/ubag-vps-gateway-1', Config: { Env: [] } },
+  { Id: 'f'.repeat(64), Name: '/oet-fleet-manager', Config: { Env: ['FLEET_SECRET=never-visible'] } },
 ];
 
 function findContainer(ref: string): FakeContainer | undefined {
@@ -299,6 +300,24 @@ describe('dockerproxy server', () => {
     expect(byPrefix.status).toBe(403);
     expect(h.approvals).toHaveLength(0);
     expect(h.seen.some((s) => s.url.includes('/stop'))).toBe(false);
+  });
+
+  it('denies the Owner Fleet manager without asking, even by id prefix, and never lists it', async () => {
+    const h = await startHarness();
+    const stop = await call(h.port, 'POST', '/containers/oet-fleet-manager/stop', agent);
+    expect(stop.status).toBe(403);
+    expect((stop.json as { message: string }).message).toMatch(/^blocked by oet-agent-dockerproxy: /);
+    const logs = await call(h.port, 'GET', '/containers/oet-fleet-manager/logs', agent);
+    expect(logs.status).toBe(403);
+    const byPrefix = await call(h.port, 'GET', '/containers/ffffffff/json', agent);
+    expect(byPrefix.status).toBe(403);
+    expect(byPrefix.body).not.toContain('never-visible');
+    const exec = await call(h.port, 'POST', '/containers/oet-fleet-manager/exec', agent, { Cmd: ['sh'] });
+    expect(exec.status).toBe(403);
+    const listed = await call(h.port, 'GET', '/containers/json?all=1', agent);
+    expect((listed.json as Array<{ Names: string[] }>).map((c) => c.Names[0])).not.toContain('/oet-fleet-manager');
+    expect(h.approvals).toHaveLength(0);
+    expect(h.seen.some((s) => s.url.includes('/stop') || s.url.includes('/logs') || s.url.endsWith('/exec'))).toBe(false);
   });
 
   it('relays daemon 404s for unknown containers without an approval card', async () => {
