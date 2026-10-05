@@ -7,6 +7,7 @@ using Fleet.Core.Validation;
 using Fleet.Manager.Api;
 using Fleet.Manager.Auth;
 using Fleet.Manager.Configuration;
+using Fleet.Manager.Dashboard;
 using Fleet.Manager.Infrastructure;
 using Fleet.Manager.Monitoring;
 using Fleet.Manager.Operations;
@@ -124,6 +125,10 @@ public static class ServiceRegistration
 
         services.AddSingleton<MetricsService>();
         services.AddSingleton<HealthReporter>();
+
+        // The owner console's read side and its two credential actions (the Razor Pages in Pages/ call these and the services above).
+        services.AddSingleton<DashboardService>();
+        services.AddSingleton<CredentialService>();
         services.AddSingleton<LoginThrottle>();
         services.AddSingleton<OwnerAccountService>();
 
