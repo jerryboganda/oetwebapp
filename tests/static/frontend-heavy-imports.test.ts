@@ -76,6 +76,30 @@ describe('frontend heavy import boundaries', () => {
     expect(workspaceProviders).toContain('@/components/system/LearnerPasteGuard');
   });
 
+  it('loads the PayPal and Whop SDKs only when their checkout is about to be shown', () => {
+    const pages = [
+      source('app/checkout/review/page.tsx'),
+      source('app/(learner)/private-speaking/page.tsx'),
+    ];
+    const lazyPayPal = source('components/billing/lazy-paypal-expanded-checkout.tsx');
+    const lazyWhop = source('components/checkout/lazy-whop-embedded-checkout.tsx');
+    const whopIds = source('lib/billing/whop-ids.ts');
+
+    for (const page of pages) {
+      expect(page).not.toContain("from '@/components/billing/paypal-expanded-checkout'");
+      expect(page).not.toContain("from '@/components/checkout/whop-embedded-checkout'");
+      expect(page).not.toMatch(/from\s+['"]@paypal\/react-paypal-js['"]/);
+      expect(page).not.toMatch(/from\s+['"]@whop\//);
+    }
+
+    expect(lazyPayPal).toContain("import('./paypal-expanded-checkout')");
+    expect(lazyPayPal).toContain('ssr: false');
+    expect(lazyWhop).toContain("import('./whop-embedded-checkout')");
+    expect(lazyWhop).toContain('ssr: false');
+    // The Whop id checks the page needs live apart from the SDK-bearing component.
+    expect(whopIds).not.toContain('@whop/');
+  });
+
   it('keeps native shell and settings-only startup code behind runtime boundaries', () => {
     const coreProviders = source('app/providers.tsx');
     const mobileGate = source('components/mobile/mobile-runtime-gate.tsx');

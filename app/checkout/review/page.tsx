@@ -8,10 +8,11 @@ import { AlertTriangle, ArrowLeft, CreditCard, ShieldCheck, ShoppingBag, Wallet 
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
+import { LazyPayPalExpandedCheckout } from '@/components/billing/lazy-paypal-expanded-checkout';
 import { SendProofOnWhatsAppButton } from '@/components/billing/send-proof-whatsapp-button';
 import { CheckoutPayRegion, type PayRegion } from '@/components/checkout/checkout-pay-region';
-import { isWhopPlanId, WhopEmbeddedCheckout } from '@/components/checkout/whop-embedded-checkout';
+import { LazyWhopEmbeddedCheckout } from '@/components/checkout/lazy-whop-embedded-checkout';
+import { isWhopPlanId } from '@/lib/billing/whop-ids';
 import { detectBillingRegion } from '@/lib/api/billing-region';
 import { useAuth } from '@/contexts/auth-context';
 import {
@@ -604,7 +605,7 @@ function CheckoutReviewContent() {
 
                     {selectedGateway === 'paypal' && selectedMode === 'embedded' && !paypalUnavailable ? (
                       <div className="mt-4">
-                        <PayPalExpandedCheckout
+                        <LazyPayPalExpandedCheckout
                           createOrder={createPaypalOrder}
                           onCaptured={handlePaypalCaptured}
                           onError={(msg) => setError(msg)}
@@ -617,7 +618,7 @@ function CheckoutReviewContent() {
                         </p>
                       </div>
                     ) : selectedGateway === 'whop' && whopCheckout ? (
-                      <WhopEmbeddedCheckout
+                      <LazyWhopEmbeddedCheckout
                         planId={whopCheckout.planId}
                         checkoutUrl={whopCheckout.checkoutUrl}
                         sessionId={whopCheckout.checkoutSessionId}

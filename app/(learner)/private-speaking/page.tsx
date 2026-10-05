@@ -31,7 +31,7 @@ import {
   isApiError,
   type PaymentCaptureResult,
 } from '@/lib/api';
-import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
+import { LazyPayPalExpandedCheckout } from '@/components/billing/lazy-paypal-expanded-checkout';
 import { createSpeakingExamFromBooking } from '@/lib/api/speaking-exams';
 import { analytics } from '@/lib/analytics';
 import { useAuth } from '@/contexts/auth-context';
@@ -940,7 +940,7 @@ export default function PrivateSpeakingPage() {
                   Cancel
                 </Button>
               </div>
-              <PayPalExpandedCheckout
+              <LazyPayPalExpandedCheckout
                 createOrder={() => Promise.resolve(paypalOrderId ?? '')}
                 onCaptured={handlePaypalBookingCaptured}
                 onError={(message) => setError(message)}
