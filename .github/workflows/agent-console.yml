@@ -1,8 +1,8 @@
 name: Owner Agent Console (build + deploy)
 
 # Owner Agent Console (owner directive 2026-09-27; agent-console/CONTRACT.md).
-# Tests and builds the sidecar + its egress / Docker policy proxies on GitHub
-# Actions, pushes three images to GHCR, then rolls them out on the VPS
+# Builds the sidecar + its egress / Docker policy proxies on GitHub
+# Actions (no automated tests: owner directive 2026-10-06), pushes three images to GHCR, then rolls them out on the VPS
 # PULL-ONLY (no build/test/install on the box — AGENTS.md compute directive;
 # asserted by scripts/deploy/verify-compute-offload.sh).
 #
@@ -41,60 +41,6 @@ env:
   AGENT_DOCKERPROXY_IMAGE: ghcr.io/${{ github.repository }}-agent-console-dockerproxy:${{ github.sha }}
 
 jobs:
-  test:
-    name: Unit tests (${{ matrix.package }})
-    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [agent-console, agent-console/egress, agent-console/dockerproxy]
-    defaults:
-      run:
-        working-directory: ${{ matrix.package }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install dependencies
-        # Install in an empty directory (the same context as the Dockerfiles'
-        # WORKDIR) and link node_modules back: installing inside the repo
-        # checkout crashed npm's tree builder ("reading 'edgesOut'"). Tests
-        # still run from the checkout because some read repo-relative docs.
-        run: |
-          set -euo pipefail
-          deps="$RUNNER_TEMP/deps-$(printf '%s' '${{ matrix.package }}' | tr '/' '-')"
-          mkdir -p "$deps"
-          cp package.json package-lock.json .npmrc "$deps/"
-          cd "$deps"
-          npm ci --no-audit --no-fund
-          cd - >/dev/null
-          rm -rf node_modules
-          ln -s "$deps/node_modules" node_modules
-      - name: npm debug log (on install failure)
-        if: failure()
-        run: tail -n 80 "$(ls -t "$HOME"/.npm/_logs/*-debug-0.log | head -n 1)" || true
-      - name: Typecheck
-        run: npm run --if-present typecheck
-      - name: Vitest
-        run: npx --no-install vitest run
-      - name: Codex execpolicy check (etc/oet.rules)
-        # Loading the rules validates every match/not_match example in the file;
-        # then spot-check one forbidden and one unmatched command.
-        if: matrix.package == 'agent-console'
-        run: |
-          set -euo pipefail
-          forbidden="$(npx --no-install codex execpolicy check --rules etc/oet.rules -- git push --force origin agent/ci-check)"
-          printf '%s\n' "$forbidden"
-          printf '%s' "$forbidden" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"forbidden"' \
-            || { echo "::error::etc/oet.rules no longer forbids a force push"; exit 1; }
-          allowed="$(npx --no-install codex execpolicy check --rules etc/oet.rules -- git status)"
-          printf '%s\n' "$allowed"
-          if printf '%s' "$allowed" | grep -Eq '"decision"[[:space:]]*:[[:space:]]*"forbidden"'; then
-            echo "::error::etc/oet.rules forbids 'git status'"; exit 1
-          fi
-
   guards:
     name: Static rollout guards
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
@@ -110,7 +56,7 @@ jobs:
 
   build:
     name: Build & push ${{ matrix.image }}
-    needs: [test, guards]
+    needs: [guards]
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 45
     strategy:

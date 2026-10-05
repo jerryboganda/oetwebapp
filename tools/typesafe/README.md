@@ -33,7 +33,7 @@ gh run watch
   paste at the prompt). The job fails fast with a clear error when it is empty.
 - Exit codes (both scripts): `0` pass, `1` any check failed or the API errored,
   `2` key missing. The run summary shows only pass/fail and the check counts.
-- The job honours `vars.CI_RUNS_ON` like `qa-smoke.yml`; GitHub-hosted runners
+- The job honours `vars.CI_RUNS_ON` like the other workflows; GitHub-hosted runners
   need the repo to be in its public-when-working window (see `AGENTS.md`).
 - This run is the gate for every flag flip: green `jev-calibrate.yml` first,
   then flip. Record the run id.
@@ -196,7 +196,7 @@ Saves coding-agent quota in the Ship-It fix-loop: instead of reading a 200 KB
 classifies; the coding agent still reads the logs and fixes the cause.
 
 - **Workflow:** `.github/workflows/ci-triage.yml` fires on `workflow_run`
-  (completed) for `Build images`, `Deploy production`, `QA Smoke` and `Jev integration`,
+  (completed) for `Build images` and `Deploy production`,
   only when the run failed and its head repository is this repository (never
   forks). It checks out the default branch only, never the failed PR/head code,
   and is fail-soft: a missing `TYPESAFE_API_KEY` secret logs a notice and skips.

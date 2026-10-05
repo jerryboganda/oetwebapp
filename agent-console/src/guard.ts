@@ -1022,7 +1022,7 @@ function analyzeCommand(words: readonly Word[], io: Io, ctx: ShellCtx): void {
       f.cat('read');
       return;
     }
-    f.forbid(`${name} — heavy compute runs on GitHub Actions only (gh workflow run qa-smoke.yml)`);
+    f.forbid(`${name} — compute is not available here and CI runs no automated QA (the owner tests manually and reports bugs)`);
     f.cat('compute');
     return;
   }

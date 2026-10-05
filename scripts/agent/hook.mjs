@@ -395,7 +395,7 @@ export function forbiddenLocalCompute(command) {
 
 const GUARD_HELP = [
   'Allowed locally: `pnpm run ship`, `pnpm run ship:gate`, `pnpm run ax:*`, `pnpm run pipeline:check`, git and gh.',
-  'Everything else that compiles, tests, lints, serves or installs belongs to the pipeline: push the branch (`pnpm run ship`), or dispatch the lane — `gh workflow run qa-smoke.yml --ref <branch>` (frontend unit + the 6 backend shards).',
+  'Everything else that compiles, tests, lints, serves or installs is not run on this machine: ship with `pnpm run ship` (the build compiles in Build images). There is no automated QA anywhere (owner directive 2026-10-06): the owner tests manually and reports bugs.',
   'Cite the Actions run id as evidence (`pnpm run ax:record`); a local pass is not evidence (AGENTS.md, Continuity Protocol).',
 ].join('\n');
 
@@ -620,7 +620,7 @@ export function selfTest() {
       'pnpm run pipeline:check',
       'git commit -m "drop pnpm test from the docs"',
       'git status --short',
-      'gh workflow run qa-smoke.yml --ref main',
+      'gh workflow run production-deploy.yml -f sha=abc123',
       'gh run view 37132337363 --log-failed',
       'pnpm add zod',
     ]) {

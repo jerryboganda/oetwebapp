@@ -116,12 +116,32 @@ test('required SQL fails closed for empty bytes, wrong SHA/run/tool/checksum or 
 test('the complete checkout preserves its mechanical pipeline contract', () => {
   assert.deepEqual(scanRepo(root), []);
   const failures = checkContract({
-    listWorkflows: () => ['build-images.yml', 'production-deploy.yml', 'qa-smoke.yml'],
+    listWorkflows: () => ['build-images.yml', 'production-deploy.yml'],
     readWorkflow: (file) => readFileSync(join(root, '.github', 'workflows', file), 'utf8')
       + (file === 'build-images.yml' ? '\n      - run: bash scripts/deploy/auto-deploy-ghcr.sh\n' : ''),
     readFile: (file) => readFileSync(join(root, file), 'utf8'),
   });
   assert.ok(failures.some((failure) => failure.includes('production rollout must live in exactly')));
+});
+
+test('CI never runs automated QA: a test runner in any workflow but the build gates fails the contract', () => {
+  const contractWith = (extraName, extraSource) => checkContract({
+    listWorkflows: () => ['build-images.yml', 'production-deploy.yml', extraName],
+    readWorkflow: (file) => (file === extraName ? extraSource : readFileSync(join(root, '.github', 'workflows', file), 'utf8')),
+    readFile: (file) => readFileSync(join(root, file), 'utf8'),
+  });
+  const workflowRunning = (command) =>
+    `name: x\non:\n  push:\n    branches: [main]\njobs:\n  t:\n    steps:\n      - run: ${command}\n`;
+  for (const command of ['pnpm exec vitest run', 'dotnet test backend/x.csproj', 'pnpm exec playwright test',
+    'pytest tests', 'node --test x.test.mjs', 'cargo test', 'pnpm test', 'k6 run load.js']) {
+    assert.ok(contractWith('extra.yml', workflowRunning(command)).some((failure) => failure.includes('automated QA')), command);
+  }
+  // A comment cannot trip it, and a plain build or deploy workflow is fine.
+  assert.ok(!contractWith('extra.yml', '# vitest is not run here\nname: x\non:\n  push:\njobs:\n  b:\n    steps:\n      - run: echo build\n')
+    .some((failure) => failure.includes('automated QA')));
+  // The deleted QA Smoke workflow must not come back, whatever it contains.
+  assert.ok(contractWith('qa-smoke.yml', 'name: QA Smoke\non:\n  workflow_dispatch:\njobs:\n  a:\n    steps:\n      - run: echo hi\n')
+    .some((failure) => failure.includes('qa-smoke.yml must stay deleted')));
 });
 
 test('pipeline comments cannot satisfy a contract; quoted hashes remain literal', () => {
@@ -138,7 +158,7 @@ function mutatedContract(relative, mutate) {
     return changed;
   };
   return checkContract({
-    listWorkflows: () => ['build-images.yml', 'production-deploy.yml', 'qa-smoke.yml'],
+    listWorkflows: () => ['build-images.yml', 'production-deploy.yml'],
     readWorkflow: (file) => read(`.github/workflows/${file}`),
     readFile: read,
   });
@@ -324,7 +344,6 @@ test('deployment Writing compilation is opt-in and Actions checks the default an
   assert.match(workflow, /dotnet test "\$test_project"[^\n]*-p:DeploymentWritingGateOnly=true/);
   assert.match(workflow, /FullyQualifiedName~WritingRev8ModelAnswerGateTests/);
   assert.match(workflow, /int\(c\.attrib\["executed"\]\) > 0 and int\(c\.attrib\["failed"\]\) == 0/);
-  assert.doesNotMatch(readFileSync(join(root, '.github', 'workflows', 'qa-smoke.yml'), 'utf8'), /DeploymentWritingGateOnly/);
 });
 
 test('API runtime separates stable dependencies without omitting published bytes', () => {

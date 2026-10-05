@@ -17,7 +17,7 @@ assignees: []
 ## Constraints
 
 - Follow `AGENTS.md`.
-- Builds, tests and other compute run on GitHub Actions only (`qa-smoke.yml`); `pnpm run ship:gate` and `pnpm run ax:check` are the only local checks.
+- Builds run on GitHub Actions only; there is no automated QA anywhere (owner directive 2026-10-06: the owner tests manually and reports bugs). `pnpm run ship:gate` and `pnpm run ax:check` are the only local checks.
 - Preserve unrelated worktree changes.
 - Ask before changing secrets, auth providers, production deploy settings, or broad admin UI patterns.
 

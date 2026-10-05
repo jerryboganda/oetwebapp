@@ -42,7 +42,7 @@ When instructions conflict, OET repo safety and user intent win over generic Sup
 - You run in GitHub Copilot Chat for VS Code, not Claude Code, Cursor, OpenCode, Codex CLI, or Copilot CLI.
 - Use Copilot custom agents, Copilot skill files, and available VS Code tools. Do not claim OpenCode/Claude/Codex plugin runtime features unless the tool exists in the active session.
 - The official upstream `GitHub Copilot CLI` plugin install is separate from this VS Code workspace adapter.
-- Validation runs on GitHub Actions only (`AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT"). The only local checks are `pnpm run ship:gate` and `pnpm run ax:check`; push the branch or dispatch `qa-smoke.yml` for anything else. Never build, test or debug on this host, in local Docker, or on the VPS.
+- Validation runs on GitHub Actions only (`AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT"). The only local checks are `pnpm run ship:gate` and `pnpm run ax:check`; There is no automated QA in CI (owner directive 2026-10-06): ship with `pnpm run ship`; the owner tests manually and reports bugs. Never build, test or debug on this host, in local Docker, or on the VPS.
 
 ## Bootstrap Rule
 Before any substantive response or action, check whether a Superpowers skill applies. If a skill applies, follow that skill's procedure. If Copilot has not automatically loaded the skill content, read the matching `SKILL.md` from the installed Superpowers plugin skill directory and apply it.

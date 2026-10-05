@@ -74,25 +74,8 @@ env:
   NODE_VERSION: '22'
 
 jobs:
-  conformance:
-    name: Bridge conformance gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: desktopBridge contract conformance (types/desktop.d.ts parity)
-        run: pnpm vitest run src-tauri/__tests__/desktop-bridge-conformance.test.ts
-
   build:
     name: ${{ matrix.platform.name }}
-    needs: conformance
     strategy:
       fail-fast: false
       matrix:

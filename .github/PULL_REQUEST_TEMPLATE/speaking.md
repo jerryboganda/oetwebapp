@@ -45,12 +45,10 @@
 
 ## Test plan
 
-<!-- Compute runs on GitHub Actions only (AGENTS.md). Link each run. -->
+<!-- There is no automated QA in CI (AGENTS.md, owner directive 2026-10-06): the owner tests manually and reports bugs. -->
 
-- [ ] `qa-smoke.yml` green: `backend-tests` (incl. Speaking classes) and `frontend-unit` (vitest, lint, tsc, build)
 - [ ] `speaking-ci.yml` `migrations-check` green
-- [ ] Playwright (if E2E-relevant): `speaking-e2e.yml` dispatched
-- [ ] Axe (if UI-touching): `speaking-a11y.yml` dispatched
+- [ ] Not tested by CI: say what the owner should try by hand
 
 ## Screenshots / recordings
 

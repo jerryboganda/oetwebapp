@@ -28,7 +28,7 @@ manual) override it for console sessions.
 | Logs | `docker logs --tail 200 --timestamps oet-api-blue` (also `oet-api-green`, `oet-ai-worker`, `oet-web-blue`/`-green`, `oet-api`, `oet-web`, `oet-db-backup`) |
 | Health | `curl -fsS https://app.oetwithdrhesham.co.uk/api/health`, `https://api.oetwithdrhesham.co.uk/health/ready`, `/health/live` |
 | Deploy root | `/opt/oetwebapp` is **read-only** here; `.env.production` changes only via `oet-env-edit` (§5) |
-| Heavy compute | GitHub Actions only: `gh workflow run qa-smoke.yml --ref <pushed ref>`, then `gh run watch <id>` |
+| Heavy compute | Not available here. There is no automated QA in CI (owner directive 2026-10-06): the owner tests manually and reports bugs. Watch builds with `gh run watch <id>` |
 
 - **Forbidden here:** `pnpm`/`npm`/`yarn` install/build/test, `dotnet`, `docker build`,
   `docker compose up`, benchmarks, dev servers. The allowed local check is
@@ -90,9 +90,8 @@ manual) override it for console sessions.
  Your branch is pushed only then. When your change is ready, stop and say so;
   if a fix is needed after a deploy, make it on a new commit in your session and let the owner
   ship again.
-- `qa-smoke.yml` can only run on refs that exist on GitHub (`main`, or a branch already
-  shipped). Never claim something built or passed without a real GitHub Actions run (quote the
-  workflow, run, job and step); say plainly what was not run.
+- There is no automated QA in CI (owner directive 2026-10-06). Never claim a test, lint or typecheck passed; claim a
+  build only with a real GitHub Actions run (quote the workflow, run, job and step), and say plainly what was not tested.
 
 ## 7. Approvals, modes and untrusted content
 

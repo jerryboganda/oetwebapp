@@ -27,21 +27,17 @@ pnpm run ax:verify          # re-check recorded run ids against GitHub (uses gh)
 `ax:check` is static, like `ship:gate`. `ax:record` and `ax:verify` make read-only `gh` calls;
 like `ship:watch` they are local tooling, not compute. See `scripts/agent/README.md`.
 
-## CI (push the branch or `gh workflow run qa-smoke.yml --ref <branch>`)
+## CI (no automated QA - owner directive 2026-10-06)
+
+The owner tests the live product by hand and reports bugs; the agent fixes them on demand. No workflow runs unit, integration, e2e, smoke, accessibility, visual, performance, load or conformance checks, and the contract checker (`pnpm run pipeline:check`, run by `ship:gate` and the `guards` job) fails if one is added. Never claim a test, lint or typecheck passed.
 
 | Check | Workflow / job |
 | --- | --- |
-| `pnpm exec tsc --noEmit`, `pnpm run check:encoding` (report-only), `pnpm run lint`, `vitest run`, `pnpm run build` | `qa-smoke.yml` / `frontend-unit` |
-| `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached) — **path-filtered**: runs only when `backend/**`, `data/**`, `rulebooks/**`, `global.json`, NuGet props/config or `qa-smoke.yml` itself changed; force with `gh workflow run qa-smoke.yml -f backend=always` | `qa-smoke.yml` / `backend-tests` |
-| Placement entry contracts | `qa-smoke.yml` / `placement-entry` |
-| ~~Playwright/e2e~~ | **Removed by owner directive 2026-10-03 (hard rule).** No e2e job runs on any trigger; `tests/e2e/**` is a manual tool. Bugs are reported by the owner and fixed on demand. |
 | Pending EF model changes, gitleaks (path-filtered) | `speaking-ci.yml` / `migrations-check`, `secrets-scan` |
 | Immutable images → GHCR. Filtered main build/deployment inputs; compare a successful ancestor manifest, compile only changed components and reuse verified digests. API publish generates SQL/references without a second compile | `build-images.yml` |
 | Deployment protocol regressions, shell syntax, PowerShell parser and single-pipeline/compute contracts | `build-images.yml` / `guards` |
 | Guarded cold-cache build measurement (`benchmark=true`, `rebuild_all=true`): no image push or deploy. Force real required Writing tests with `writing_gate=true` | `build-images.yml` / manual dispatch |
 | Verify original-source SQL artifact, apply when API is not proven deployed, then bound prepare/promote with durable router reload/public serving proof. Only successful descendant main builds supersede; dispatch a proven deployed `sha` for rollback | `production-deploy.yml` |
-| Android / iOS builds | `mobile-ci.yml` |
-| Tauri desktop (fmt, clippy, cargo test) | `tauri-ci.yml` |
 
 Ship-it default is `pnpm run ship` (which runs `ship:gate` internally). Never treat "pushed" as done.
 A release cannot skip the watcher, physical serving proof, evidence or guarded
@@ -58,9 +54,8 @@ remain visible; never declare the 300-second target met from an unverified healt
 
 ## Scope & safety
 
-- Choose validation by risk: docs-only changes need no CI run; behavior changes need the matching
-  CI job to be green; broad refactors warrant the full `qa-smoke.yml` run.
-- Never claim a check passed without a GitHub Actions run behind it. Report the workflow, run, job
+- There is no CI validation to choose: the build compiles, the owner tests manually and reports bugs.
+- Never claim a test, lint or typecheck passed (none run anywhere); claim a build only with a GitHub Actions run behind it. Report the workflow, run, job
   and step, what did not run, and any remaining risk.
 - Never record a gate as `PASS` without evidence. `SESSION_STATE.md` accepts a run id, a workflow
   file, or `local:<command>`; `pnpm run ax:check` fails anything else. A check that was genuinely

@@ -52,14 +52,14 @@ Ask only when a missing decision blocks correctness or safety.
 
 For every Actions run (deploy/CI/smoke/rerun): make `jerryboganda/oetwebapp` **public** first, start the run, then set it **private** again when the **needed** run finishes. Never leave it public. Never start Actions while it is private. Several agents may be shipping at once: only flip private when no other session holds a ship lease and no run is queued/in progress (`node scripts/ship/ship.mjs --may-flip-private` exits 0); `pnpm run ship` enforces this automatically.
 
-After every `main` push: ship with `pnpm run ship` (lock → rebase → `ship:gate` → visibility lease → push → supersede-aware watch of **Deploy production** → `ax:record`); it must end with this SHA green and live health green. On failure, dump logs, fix, push again — do not wait for the owner. Do not stop at "deploy initiated". Ignore QA Smoke. There is **no automated e2e in CI** (owner directive 2026-10-03, hard rule): the Playwright specs are manual tools, bugs are reported by the owner and fixed on demand. Private flip only under the lease rule above.
+After every `main` push: ship with `pnpm run ship` (lock → rebase → `ship:gate` → visibility lease → push → supersede-aware watch of **Deploy production** → `ax:record`); it must end with this SHA green and live health green. On failure, dump logs, fix, push again — do not wait for the owner. Do not stop at "deploy initiated". There is **no automated QA anywhere** (owner directive 2026-10-06, permanent, hard rule - see `AGENTS.md` "NO AUTOMATED QA ANYWHERE"): the owner tests manually and reports bugs, you fix them on demand; never add, restore or dispatch QA workflows and never claim a test passed. Private flip only under the lease rule above.
 
 ## Execution Locality
 
 Compute runs only on GitHub Actions (see `AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE
-ENVIRONMENT"). The only local pre-push check is `pnpm run ship:gate`. For tsc/lint/vitest/build and
-`dotnet test`, push the branch or dispatch `.github/workflows/qa-smoke.yml`. Never build, test or debug
-on the production VPS. See `.github/instructions/validation.instructions.md`.
+ENVIRONMENT"). The only local pre-push check is `pnpm run ship:gate`. There is no CI test, lint or
+typecheck run (owner directive 2026-10-06): compilation happens in `Build images`, everything else is the
+owner's manual QA. Never build, test or debug on the production VPS. See `.github/instructions/validation.instructions.md`.
 
 ## Prompt Defense
 

@@ -184,8 +184,7 @@ watchdog cannot strand another ship's Actions by forcing private.
    Public release/slot headers and physical image proof precede `DEPLOY_LIVE`;
    the previous slot stays warm and optional cleanup is bounded.
 
-This path does not wait for `qa-smoke.yml` or `sbom-sca.yml`; run those
-separately when a change needs them. Operator checklist, forbidden commands and
+This path does not wait for `sbom-sca.yml`; there is no QA workflow (owner directive 2026-10-06). Operator checklist, forbidden commands and
 topology: [`DEPLOY-MANUAL.md`](DEPLOY-MANUAL.md). Compute boundary:
 [`docs/ops/production-compute-offload.md`](docs/ops/production-compute-offload.md).
 

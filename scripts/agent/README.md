@@ -203,5 +203,5 @@ never test. `hook.mjs` enforces the same policy on agent shell commands through 
 `pre-tool-use` guard (above), because the prose rule alone was not holding: agents kept
 reaching for `pnpm test` / `dotnet test` to shorten their own feedback loop.
 `record` and `verify` are the only networked commands and are never reachable
-from CI. If you need a build, a test or a typecheck, push the branch or dispatch
-`.github/workflows/qa-smoke.yml` — see `.github/instructions/validation.instructions.md`.
+from CI. There is no CI test, lint or typecheck run (owner directive 2026-10-06): the build compiles in
+`Build images` and the owner tests manually — see `.github/instructions/validation.instructions.md`.

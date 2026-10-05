@@ -11,7 +11,11 @@
  *      empty — a stale GitHub registration shadows a same-named file);
  *   2. no workflow that runs Playwright may have a push / pull_request /
  *      schedule trigger (the "no automated e2e" hard rule);
- *   3. qa-smoke.yml stays unit + backend only;
+ *   3. NO AUTOMATED QA IN CI (owner directive 2026-10-06, permanent): no workflow may run a
+ *      test / QA runner (vitest, dotnet test, Playwright, pytest, cargo test, node --test, k6 ...)
+ *      except build-images.yml, which carries the deployment-only Writing content gates and the
+ *      release-manifest self-test; qa-smoke.yml must stay deleted. The owner QAs manually and
+ *      reports bugs; the agent fixes them on demand;
  *   4. build-images.yml stays path-filtered to build inputs (a push touching
  *      none of them must start no build and no rollout);
  *   5. production-deploy.yml keeps its identity, its serialized concurrency
@@ -32,6 +36,16 @@ const workflowDir = join(root, '.github', 'workflows');
 
 export const PLAYWRIGHT_COMMAND =
   /(pnpm exec playwright|npx playwright|playwright install|playwright test|merge-reports|playwright@)/;
+
+/**
+ * Test / QA runners. Owner directive 2026-10-06 (permanent): CI never runs automated QA - the owner
+ * tests the product by hand and reports bugs, and the agent fixes them on demand.
+ */
+export const QA_COMMAND =
+  /(\bvitest\b|\bjest\b|\bpytest\b|playwright|dotnet\s+test\b|cargo\s+(?:test|clippy)\b|\b(?:npm|pnpm|yarn)\s+(?:run\s+|exec\s+)?test\b|node\s+--test\b|\bk6\s+run\b|xunit)/i;
+
+/** The only workflow that may run a test: the deployment-only Writing gates and the release-manifest self-test. */
+export const QA_ALLOWED_WORKFLOWS = new Set(['build-images.yml']);
 
 /** Comment-free source: a rule must be judged on what the file DOES. */
 export function activeLines(source) {
@@ -131,10 +145,19 @@ export function checkContract({ readWorkflow, listWorkflows, readFile }) {
     );
   }
 
-  // 3. QA Smoke is unit + backend only.
-  const smoke = activeLines(readWorkflow('qa-smoke.yml'));
-  if (/(e2e-smoke|e2e-prepare|merge-reports|exec playwright|playwright install)/i.test(smoke)) {
-    failures.push('qa-smoke.yml must stay unit + backend only (no e2e jobs, no Playwright)');
+  // 3. No automated QA in CI (owner directive 2026-10-06, permanent).
+  if (files.includes('qa-smoke.yml')) {
+    failures.push('qa-smoke.yml must stay deleted: CI never runs automated QA (owner directive 2026-10-06)');
+  }
+  for (const file of files) {
+    if (QA_ALLOWED_WORKFLOWS.has(file)) continue;
+    const hit = QA_COMMAND.exec(activeLines(readWorkflow(file)));
+    if (hit) {
+      failures.push(
+        `${file}: runs a test/QA runner (${hit[0]}) - CI never runs automated QA (owner directive 2026-10-06); `
+        + 'the owner tests manually and reports bugs, the agent fixes them on demand',
+      );
+    }
   }
 
   // 4. build-images is path-filtered to build inputs.

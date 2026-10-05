@@ -45,7 +45,7 @@ Standing owner directive for **every** development/debugging task. Overrides any
 **One command (multi-agent safe, owner directive 2026-10-03): `pnpm run ship`** — ship lock (shared by every worktree) → rebase on `origin/main` → `ship:gate` → visibility lease + public flip (before the push) → `git push origin HEAD:main` with rebase-retry → supersede-aware watch of `Deploy production` → `ax:record`. Diagnostics: `--dry-run`, `--no-push`, `--status`; verified recovery: `--sha <sha>`. No release-completion bypasses; a live ship lock cannot be overridden.
 
 1. Do the task properly (correctness/root-cause still matter).
-2. Run `pnpm run ship`. `ship:gate` (seconds) is the required pre-push check inside it. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. QA Smoke does not gate production; browser lanes are manual-dispatch only. Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.
+2. Run `pnpm run ship`. `ship:gate` (seconds) is the required pre-push check inside it. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. There is no CI QA at all (see "NO AUTOMATED QA ANYWHERE" below): the owner tests manually and reports bugs. Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.
 3. Stage explicit paths only. Never `git add -A`. Never commit secrets, `.env*`, or `.impeccable/`. Commit before shipping; the wrapper never stages for you. See "GitHub Actions on a public-when-working repo" below — the public-before-push order is HARD ENFORCED, no bargains, no mistakes.
 4. **Parallel agents:** the wrapper owns every visibility flip under a cross-session lease. Never flip public/private by hand while another session is shipping. A push may be **superseded** before its deploy runs (GitHub keeps one pending run; the newest push contains it) — the watcher follows the newer run and prints `SHIP-WATCH_SUPERSEDED_BY`. The same rule applies after the rollout: if the router slot ends up carrying a **descendant** of this SHA, the watcher prints `SHIP-WATCH_SUPERSEDED_BY_LIVE <sha>` and succeeds (production moved forward). Only a slot carrying neither this SHA nor a descendant is the real `LIVE_SHA_MISMATCH` failure.
 5. If the deploy fails: the watcher dumps `--log-failed`; fix the compile/parse error, `pnpm run ship` again. **Do this without waiting for the owner to ask.** Cap automatic fix-loops at 3; if still red, say exactly what is still failing.
@@ -59,26 +59,37 @@ API SQL is generated with `--no-build` from the same publish and consumed as a v
 `production-deploy.yml` stands down only for a successful descendant main build, immediately and again between
 bound preparation and promotion, or when this SHA has no images. A push that legitimately ships nothing ends the watcher
 with `SHIP-WATCH_NOTHING_TO_DEPLOY` and exit 0 — that is success, not a missing run.
-`qa-smoke.yml`'s 6-way backend matrix is **path-filtered** for the same reason: it runs only when a backend input
-(`backend/**`, `data/**`, `rulebooks/**`, `global.json`, NuGet props/config, or the workflow) changed, so a
-frontend-only push does not pay ~40 minutes of shards it cannot affect. `-f backend=always` forces it.
 
 Rollback: `gh workflow run production-deploy.yml -f sha=<previous-sha>` — images are already in GHCR, no rebuild.
 
 Only skip the auto-push if the user explicitly says "don't push" for that task. Never skip the watch after a push you did make.
 
-## ⛔ NO AUTOMATED E2E IN CI — COMPULSORY (owner directive 2026-10-03; HARD PROJECT RULE)
+## ⛔ NO AUTOMATED QA ANYWHERE — THE OWNER QAs MANUALLY — COMPULSORY (owner directive 2026-10-06; PERMANENT, HARD ENFORCED; supersedes the 2026-10-03 "no automated e2e" rule)
 
-- **No Playwright job runs on `push`, `pull_request` or a `schedule`** anywhere in
-  `.github/workflows/`. `qa-smoke.yml` is unit + backend evidence only. Every browser lane is
-  `workflow_dispatch` only - no exceptions.
-- The specs under `tests/e2e/**`, `tests/performance/**` and the Playwright configs stay in the
-  repo as **manual tools**. Every Playwright-based workflow (`speaking-e2e`, `speaking-a11y`,
-  `visual-qa`, `ubag-integration-e2e`, `performance`, `writing-rev8-render-verify`,
-  `macos-video-acceptance`) is `workflow_dispatch`-only.
-- **Bugs are reported by the owner and fixed on demand**: read the report, reproduce with the
-  manual spec when useful, fix, ship. Do not re-add e2e shards, e2e-only images, nightly e2e
-  crons or PR triggers for these workflows, and do not "restore" them as an improvement.
+The owner tests the live product by hand and reports bugs; the agent fixes them on demand. CI/CD never runs QA.
+
+- **No automated QA of any kind runs in CI, on any trigger** (`push`, `pull_request`, `schedule`, `workflow_dispatch`,
+  `workflow_run`): no unit, integration, backend `dotnet test` shard, frontend vitest/lint/tsc gate, e2e, smoke,
+  accessibility, visual, performance, load, conformance, compatibility or benchmark lane. `qa-smoke.yml` (frontend unit +
+  the six backend shards) and every other QA workflow were **deleted on 2026-10-06**. Never re-add, "restore", dispatch or
+  re-propose them as an improvement, and do not add test jobs to other workflows.
+- **Do not ask the owner for QA evidence, and never claim a test, lint or typecheck passed.** A change is verified by
+  (1) compiling in `Build images` (`dotnet publish`, `next build`), (2) the post-deploy health and serving-image proof the
+  ship watcher prints, and (3) the owner's own testing. Say plainly "not tested - owner QA" and ship.
+- **Bug loop:** the owner reports a bug -> read the report and the code, find the root cause, fix it, `pnpm run ship`.
+  Writing a new regression test is optional and is never required to ship.
+- **Enforced mechanically**, like the pipeline rules: `scripts/deploy/verify-pipeline-contract.mjs` (rule 3, run by the
+  `guards` job of `build-images.yml` and by `pnpm run ship:gate`) fails on any workflow other than `build-images.yml` that
+  invokes a test/QA runner (vitest, jest, pytest, Playwright, `dotnet test`, `cargo test`, `node --test`, `npm|pnpm test`,
+  k6 ...) and on any return of `qa-smoke.yml`. Deleting the checker is not a bypass: the `guards` job fails.
+- **What stays, and why it is not QA:** the deployment-only Writing content gates and the release-manifest self-test inside
+  `build-images.yml` (the owner's Writing model-answer protection; remove them only on the owner's explicit say-so), the
+  static guards (`syntax-gate`, pipeline contract, compute-offload), secret scanning, the EF pending-model-changes check, the
+  ledger tooling check, and the manual product-measurement tools (Speaking grader calibration harness, audio probe, Jev
+  calibrate, Listening content verification). Test source files (`backend/tests/**`, `**/*.test.*`, `tests/**`,
+  `scripts/qa/**`) remain in git as inert manual tools: no CI runs them and agents never run them locally.
+- **Standing product rules still bind** (Max never off, the $0 Writing rule, Writing house style, scoring and rulebook
+  invariants, the Speaking Provisional label ...). With no CI test enforcing them, agents follow them by reading the rules.
 
 ## ⛔ PRODUCTION DEPLOYS GO THROUGH THE PIPELINE — COMPULSORY (owner directive 2026-10-03; HARD ENFORCED, not bypassable)
 
@@ -91,8 +102,8 @@ Only skip the auto-push if the user explicitly says "don't push" for that task. 
   **and** the owner's explicit say-so in the current conversation.
 - **Enforced mechanically in three places, so it cannot be quietly bypassed:**
   1. `scripts/deploy/verify-pipeline-contract.mjs` (`pnpm run pipeline:check`) runs in the always-executing
-     `guards` job of `build-images.yml` — a second rollout path, a browser lane on an automatic trigger, an e2e
-     job back in `qa-smoke`, an un-filtered build trigger or a lost rollout gate fails the run *before* any
+     `guards` job of `build-images.yml` — a second rollout path, a browser lane on an automatic trigger, automated
+     QA in any workflow, an un-filtered build trigger or a lost rollout gate fails the run *before* any
      image is produced;
   2. `scripts/deploy/verify-compute-offload.sh` + `verify-image-only-rollout.sh` assert the pull-only rollout
      contract on every build;
@@ -120,7 +131,7 @@ Externalized working memory. Three layers, exclusive ownership — no file has t
 
 - Non-trivial work: `pnpm run ax:status`, then read `SESSION_STATE.md`, `TASKS.json` and `PROGRESS.md`. Continue from `SESSION_STATE.md` only when its Goal matches the newest request; otherwise re-goal it with `pnpm run ax:init`.
 - Loop: PLAN (`Mode: plan`, objective, acceptance, tasks) → EXECUTE (`ax:next`, one task at a time) → VERIFY (Actions run ids via `ax:record`) → RECORD (`SESSION_STATE.md` decisions, touched files, next action) → CHECK GIT (scoped `git status`, `ax:check`) → NEXT. Move `TASKS.json` statuses as tasks start and finish.
-- Never tick a verification gate without evidence. A `PASS` row needs an Actions run id (checked against GitHub by `ax:verify`) or `local:ship:gate` for the static gate; builds and tests can only be claimed with a run id. `pnpm run ax:check` rejects anything else.
+- Never tick a verification gate without evidence. A `PASS` row needs an Actions run id (checked against GitHub by `ax:verify`) or `local:ship:gate` for the static gate; builds can only be claimed with a run id, and no test, lint or typecheck run exists to claim (owner directive 2026-10-06). `pnpm run ax:check` rejects anything else.
 - After the deploy for this SHA is green: `pnpm run ax:record` writes the real run ids into `VERIFICATION.md` and the raw logs into the gitignored `.github/agent-state.local.md`; `pnpm run ax:verify` re-checks them against GitHub. `VERIFICATION.md` is machine-written — never hand-edit a result.
 - `PROGRESS.md` is the compact durable ledger only. History lives in `docs/PROGRESS-ARCHIVE-2026.md` and git.
 - Before handoff: `pnpm run ax:check` must pass and `SESSION_STATE.md` "Next action" must name the next concrete step. A run id typed into a gate row is checked against GitHub by `pnpm run ax:verify`.
@@ -133,7 +144,7 @@ Externalized working memory. Three layers, exclusive ownership — no file has t
 file, in any skill, in any tool default, and in any framework recommendation.**
 
 - **Local dev machine = READ + INSPECT + EDIT + COMMIT + PUSH only.**
-- **GitHub Actions = BUILD + RUN + TEST + LINT + TYPECHECK + ANALYZE + GENERATE + VERIFY + PACKAGE.**
+- **GitHub Actions = BUILD + GENERATE + PACKAGE + DEPLOY GATES. It runs NO automated QA** (see "NO AUTOMATED QA ANYWHERE").
 - **Production VPS = DEPLOY + SERVE PRODUCTION ONLY.**
 
 Do **not** execute any computational workload on the local development computer or on the production
@@ -171,9 +182,9 @@ use it only when explicitly told to keep the repo private for that task. Either 
 run as Actions (logs, statuses, artifacts); do not run builds/tests directly in that distro or on
 the workstation outside a workflow.
 
-**Never claim** something compiled, built, passed tests, passed lint, passed typecheck or passed E2E
-unless a real GitHub Actions run supports it. Quote the workflow, run, job and step. Fabricated CI
-results are a defect. If the policy blocks a step, **report the blocker** rather than violate it.
+**Never claim** something compiled or built unless a real GitHub Actions run supports it (quote the workflow, run,
+job and step). Tests, lint, typecheck and E2E are not run anywhere (owner directive 2026-10-06), so none may ever be
+claimed as passed: say "not tested - owner QA". Fabricated CI results are a defect. If the policy blocks a step, **report the blocker** rather than violate it.
 
 The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 
@@ -181,11 +192,10 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 
 | Purpose | Workflow |
 | --- | --- |
-| Frontend unit (vitest + lint + tsc + build), backend `dotnet test` (6 shards, Postgres/pgvector, NuGet-cached; **path-filtered** to backend inputs — skipped otherwise, `qa-gate` accepts the skip, `-f backend=always` forces it), placement-entry. **No e2e** (owner directive 2026-10-03) | `.github/workflows/qa-smoke.yml` |
 | Build/reuse four immutable components → GHCR. API publish also generates its SQL and reference artifacts. Parallel per SHA; guarded dispatch supports cold benchmarks without image pushes/deploys and real Writing-gate evidence | `.github/workflows/build-images.yml` (filtered `main` push + dispatch) |
 | Validate the successful release manifest and original API SQL artifact, apply SQL when not proven deployed, then bound preparation and durable health-gated blue/green promotion. Serialized by `production-deploy`; `workflow_dispatch -f sha=<previous-deployed-sha>` is rollback | `.github/workflows/production-deploy.yml` |
-| Mobile/Android build | `.github/workflows/mobile-ci.yml` |
-| Owner Agent Console sidecar + proxy images (unit tests, build → GHCR → pull-only VPS rollout of `docker-compose.agent-console.yml`) | `.github/workflows/agent-console.yml` (`workflow_dispatch`, `apply=true` to recreate) |
+| Mobile/Android release build (manual) | `.github/workflows/mobile-release.yml` |
+| Owner Agent Console sidecar + proxy images (build → GHCR → pull-only VPS rollout of `docker-compose.agent-console.yml`) | `.github/workflows/agent-console.yml` (`workflow_dispatch`, `apply=true` to recreate) |
 
 ## Owner Agent Console exception (owner directive 2026-09-27)
 
@@ -202,7 +212,7 @@ host or user. Runbook: `docs/ops/OWNER-AGENT-CONSOLE.md` · wire contract: `agen
 - **(c) `.env*` edits** only through the Guard-approved `oet-env-edit` helper; values are never echoed, logged or committed.
 - **(d) Allowed:** `git`, `gh`, `psql "$OET_AGENT_DATABASE_URL"`, `docker` (via the policy proxy) on `oet-*` /
   `oetwebsite*` only (never co-tenants), `node scripts/ship/pre-push-gate.mjs`. **Forbidden:** `pnpm`/`npm`
-  install/build/test, `dotnet`, `docker build` — dispatch `gh workflow run qa-smoke.yml` instead.
+  install/build/test, `dotnet`, `docker build` — there is no CI QA to dispatch (owner directive 2026-10-06).
 - **(e)** Watch deploys with `gh run watch` (not `ship:watch` / `watch-deploy.ps1`).
 - **(f)** Carve-out from "one `AiUsageRecord` per physical provider call": owner-console engines are not
   product `AiProvider`s and their turns write no `AiUsageRecord`; evidence = `AuditEvent` (`OwnerAgent`) + session transcripts.
@@ -280,8 +290,8 @@ to fix Billing & plans — it means flip the repo public yourself, right now, no
 1. `gh repo edit jerryboganda/oetwebapp --visibility public --accept-visibility-change-consequences`
 2. Push / dispatch / rerun the workflow. Hosted runners pick it up immediately — no `CI_RUNS_ON`
    needed; if it's set, `gh variable delete CI_RUNS_ON` first so jobs don't try the private runner.
-3. Let the run finish. A full QA Smoke (13 e2e shards + backend + frontend, parallel on hosted
-   infra) takes roughly an hour — do not flip back private before it completes.
+3. Let the run finish (Build images + Deploy production take roughly ten minutes; there is no QA
+   run) — do not flip back private before it completes.
 4. Once the work that needed the repo public is verified done (deploy confirmed live, or the PR you
    pushed for is merged/closed), **flip back to PRIVATE**:
    `gh repo edit jerryboganda/oetwebapp --visibility private --accept-visibility-change-consequences`.
@@ -359,19 +369,12 @@ Load the named docs before editing these surfaces.
 
 For `app/admin/**`, `components/domain/admin/**`, or `components/admin/**`, load `.github/instructions/admin-hallmark.instructions.md` and preserve the admin design discipline. Do not apply generic landing-page treatment to admin tools.
 
-## Validation Ladder
+## Validation
 
-These are the checks **CI runs** — never run them locally (see the GitHub Actions compute rule above).
-The only local pre-push check is `pnpm run ship:gate`. To get them for a branch, push it or
-`gh workflow run qa-smoke.yml --ref <branch>`:
-
-| Check | `qa-smoke.yml` job |
-| --- | --- |
-| `pnpm exec tsc --noEmit`, `pnpm run check:encoding` (report-only), `pnpm run lint`, `vitest run`, `pnpm run build` | `frontend-unit` |
-| `dotnet test` (sharded, Postgres/pgvector) | `backend-tests` |
-| Playwright smoke (one job per project) | `e2e-smoke` |
-
-Report exactly which workflow run, job and step passed, what did not run, and any remaining risk.
+There is no CI validation ladder (owner directive 2026-10-06; see "NO AUTOMATED QA ANYWHERE"). The only automated
+correctness check on a change is compilation inside `Build images` (`dotnet publish`, `next build`) plus the static
+guards; everything else is the owner's manual QA. The only local pre-push check is `pnpm run ship:gate`. Report plainly
+what was **not** tested and any remaining risk.
 
 ## Map Of AI-Direction Files
 

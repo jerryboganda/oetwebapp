@@ -50,4 +50,4 @@ Stack: Next.js 16 (App Router), React 19, TypeScript (strict), Tailwind CSS v4, 
 - Tests: prefer React Testing Library + `@testing-library/user-event`; avoid ambiguous regex selectors.
   See `testing.instructions.md`.
 
-Validation runs on GitHub Actions only (`qa-smoke.yml` `frontend-unit`) — see `validation.instructions.md`.
+Validation: the web app compiles in `Build images` (`next build`); no lint, typecheck or unit test runs anywhere (owner directive 2026-10-06, the owner QAs manually) — see `validation.instructions.md`.

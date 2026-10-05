@@ -52,16 +52,12 @@ Frameworks: Vitest + React Testing Library (frontend unit), Playwright (E2E/desk
 - Reuse `Infrastructure/` before writing a private fake: `TestWebApplicationFactory` (and
   `FirstPartyAuthTestWebApplicationFactory`, `BunnyMockedWebApplicationFactory`),
   `NotificationTestDoubles`, `[PostgreSqlFact]` + `PostgreSqlTestDatabase` (needs
-  `OET_TEST_POSTGRES_CONNECTION`, set in `qa-smoke.yml`). Put a double shared by several classes in
+  `OET_TEST_POSTGRES_CONNECTION`). Put a double shared by several classes in
   `Infrastructure/`; never declare top-level helper types inside a `*Tests.cs` file.
 - Gate live-provider tests with a `Skip` attribute, never an early `return` that reports a pass.
   No permanent `Skip`: delete the test or fix it.
-- When moving or renaming a test class, update the CI filters that name it:
-  `writing-rev8-ci.yml` `DOTNET_FILTER`, `ai-control-plane-tests.yml` `paths` and `--filter`,
-  `rulebook-conformance.yml` `--filter`, `build-images.yml` `writing-model-answer-gate` filter, the `--filter` of
-  `ubag-integration-e2e.yml`, `ai-provider-benchmark.yml` and
-  `elevenlabs-realtime-stt-live-smoke.yml`, and the pinned classes in `qa-smoke.yml`
-  (`PlacementEndpointsTests`, `AuthFlowsTests`).
+- Test source files are inert manual tools (owner directive 2026-10-06): no CI runs them, so moving or renaming a test
+  class needs no CI filter change.
 
 ## When to add tests
 
@@ -70,7 +66,6 @@ Frameworks: Vitest + React Testing Library (frontend unit), Playwright (E2E/desk
 
 ## Running tests (GitHub Actions only)
 
-Tests never run on the local machine — see `AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED
-COMPUTE ENVIRONMENT". Push the branch or `gh workflow run qa-smoke.yml --ref <branch>`; that runs
-tsc, lint, vitest, build, the sharded `dotnet test` and the Playwright smoke. See
-`validation.instructions.md` for which job runs which check.
+Tests never run on the local machine - see `AGENTS.md` "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT" -
+and they do not run in CI either (owner directive 2026-10-06, "NO AUTOMATED QA ANYWHERE"): the owner tests manually and
+reports bugs. Writing a test with a fix is optional and never required to ship.

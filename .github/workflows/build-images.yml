@@ -308,7 +308,7 @@ jobs:
       # Owner directive 2026-10-03: the CI/CD rules are mechanical, not prose.
       # This fails the run (and therefore the rollout) on ANY drift: a second
       # rollout path, a browser lane with an automatic trigger, an e2e job back
-      # in qa-smoke, an un-filtered build trigger, a lost rollout gate.
+      # in any workflow, an un-filtered build trigger, a lost rollout gate.
       - name: Assert the pipeline contract
         run: |
           node scripts/deploy/verify-pipeline-contract.mjs

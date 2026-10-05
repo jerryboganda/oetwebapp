@@ -23,7 +23,7 @@ Validation is not done here or on the VPS — it runs only on GitHub Actions (se
 - Keep production, staging, and local compose files distinct. Do not point local work at production
   data, secrets, or the VPS.
 - Secrets come from environment / runtime settings, never hardcoded in images, compose, or workflows.
-- CI/CD changes must keep the required build/Writing/guard gates before migration application and promotion. QA Smoke remains separate from the live path; do not remove a required gate to improve timing.
+- CI/CD changes must keep the required build/Writing/guard gates before migration application and promotion. There is no QA workflow (owner directive 2026-10-06); do not remove a required build/Writing/guard gate to improve timing.
 
 ## Desktop / mobile
 
@@ -60,7 +60,7 @@ that had already been superseded on live Play Console and had to be reverted.
  local state blocks, lock creation is exclusive, and inactive locks require exact-file
  recovery rather than unsafe automatic unlink/recreate.
 - `pnpm run ship:gate` alone stays the seconds-long pre-push check inside that flow (conflict markers, leftover rebase splices, brace imbalance). Not a full `pnpm build` / `dotnet test`.
-- **Parallel agents (owner directive 2026-10-03):** never flip visibility by hand while another session is shipping — the wrapper owns the flips under a cross-session lease. A push may be SUPERSEDED by a successful descendant main build; the watcher follows actual promotion, not a successful stand-down. QA Smoke does not gate production; browser lanes are manual-dispatch only.
+- **Parallel agents (owner directive 2026-10-03):** never flip visibility by hand while another session is shipping — the wrapper owns the flips under a cross-session lease. A push may be SUPERSEDED by a successful descendant main build; the watcher follows actual promotion, not a successful stand-down. There is no automated QA in CI at all (owner directive 2026-10-06).
 - Once live health is green, the wrapper records with `ax:record`; `pnpm run ax:verify`
  (or wrapper `--verify`) re-checks the recorded run ids against GitHub.
 - `build-images.yml` `syntax-gate` job must stay first (`needs` of every image build). Do not remove it to "save a minute".
