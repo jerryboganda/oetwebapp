@@ -207,6 +207,7 @@ public sealed class WritingReportDigestTests
     [InlineData("R4 medication reconciliation is missing (OA4-01, OW-023).", "medication reconciliation is missing.")]
     [InlineData("The action is missing. This affects Purpose and Content (Addendum Five R1: a required action is absent).", "The action is missing.")]
     [InlineData("Wording is informal (PRD-OT-08). Language criterion. Next sentence stays.", "Wording is informal. Next sentence stays.")]
+    [InlineData("Detail is excess (OW-027, advisory only) for this reader.", "Detail is excess for this reader.")]
     public void Clean_removes_internal_labels_rule_ids_and_criterion_tails(string raw, string expected)
         => Assert.Equal(expected, WritingReportDigest.Clean(raw));
 
