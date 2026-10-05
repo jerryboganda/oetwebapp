@@ -16,6 +16,53 @@ public class AnalyticsIngestionService(LearnerDbContext db, TimeProvider timePro
 
     public async Task RecordAsync(string userId, AnalyticsTrackRequest request, CancellationToken ct)
     {
+        db.AnalyticsEvents.Add(BuildRecord(userId, request));
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Records a batch of events in one database round trip. Product telemetry is best effort, so an
+    /// entry that fails the single-event validation (blank or over-long name) is skipped instead of
+    /// failing the batch: one bad event must not cost the rest. Returns how many were stored.
+    /// </summary>
+    public async Task<int> RecordBatchAsync(
+        string userId,
+        IReadOnlyList<AnalyticsTrackRequest?> requests,
+        CancellationToken ct)
+    {
+        var accepted = 0;
+        foreach (var request in requests)
+        {
+            if (request is null)
+            {
+                continue;
+            }
+
+            AnalyticsEventRecord record;
+            try
+            {
+                record = BuildRecord(userId, request);
+            }
+            catch (ApiException)
+            {
+                continue;
+            }
+
+            db.AnalyticsEvents.Add(record);
+            accepted++;
+        }
+
+        if (accepted > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+
+        return accepted;
+    }
+
+    private AnalyticsEventRecord BuildRecord(string userId, AnalyticsTrackRequest request)
+    {
         if (string.IsNullOrWhiteSpace(request.EventName))
         {
             throw ApiException.Validation(
@@ -33,16 +80,14 @@ public class AnalyticsIngestionService(LearnerDbContext db, TimeProvider timePro
                 [new ApiFieldError("eventName", "max_length", $"Must be {MaxEventNameLength} characters or fewer.")]);
         }
 
-        db.AnalyticsEvents.Add(new AnalyticsEventRecord
+        return new AnalyticsEventRecord
         {
             Id = $"AN-{Guid.NewGuid():N}",
             UserId = userId,
             EventName = normalizedEventName,
             PayloadJson = JsonSupport.Serialize(SanitizeProperties(request.Properties)),
             OccurredAt = timeProvider.GetUtcNow()
-        });
-
-        await db.SaveChangesAsync(ct);
+        };
     }
 
     private static Dictionary<string, object?> SanitizeProperties(Dictionary<string, object?>? properties)

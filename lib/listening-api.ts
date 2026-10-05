@@ -1,6 +1,7 @@
-import { apiClient } from './api';
+import { apiClient, isApiError } from './api';
 import { FREE_SAMPLE_FEEDBACK } from './free-sample';
 import type { ReadingPaperAnnotationDto, ReadingPaperAnnotationKind } from './reading-authoring-api';
+import { createEventBatcher, type EventBatcher } from './telemetry/event-batcher';
 
 export interface ListeningHomePaperDto {
   id: string;
@@ -674,11 +675,11 @@ export type ListeningIntegrityEventType =
 // never use the client's default retry-on-5xx/409 with fixed 1 s / 3 s delays: on
 // 30 Sep 2026 a burst of conflicts was replayed in synchronised waves and used up
 // every database connection. A dropped event is fine; a retry storm is not.
-export const recordListeningIntegrityEvent = (
+const postListeningIntegrityEvent = (
   attemptId: string,
-  eventType: ListeningIntegrityEventType,
-  details?: string,
-  occurredAt = new Date().toISOString(),
+  eventType: string,
+  details: string | undefined,
+  occurredAt: string,
 ) =>
   apiClient.request<void>(
     `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/integrity-events`,
@@ -688,6 +689,132 @@ export const recordListeningIntegrityEvent = (
     },
     { maxRetries: 0 },
   );
+
+/**
+ * Attempt events that only RECORD what the learner did. Server side each one stores an audit row
+ * (with its own `occurredAt`) and touches the attempt's last-activity time, and nothing else, so
+ * sending them a moment later in a group changes nothing the learner or the grader can see. They
+ * are the high-volume ones: one per answer change, highlight or strikethrough, plus buffering.
+ *
+ * Everything else is still sent immediately and individually, exactly as before: the integrity-lock
+ * signals (blur, focus, fullscreen, blocked actions), `audio_error` (raises the admin-review hold),
+ * `audio_started` / `audio_progress` / `audio_ended` (release that hold and append to the audio cue
+ * timeline, where order matters), `section_transition` and `auto_submit`.
+ */
+const BATCHED_ATTEMPT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'answer_changed',
+  'highlight',
+  'strikethrough',
+  'audio_buffering_start',
+  'audio_buffering_end',
+  'audio_stalled',
+  'reading_time_started',
+  'reading_time_ended',
+]);
+
+interface QueuedAttemptEvent {
+  attemptId: string;
+  eventType: string;
+  details: string | undefined;
+  occurredAt: string;
+}
+
+/** Set once the API answers the batch route with "no such route": this page load then sends singly. */
+let attemptEventBatchRouteUnavailable = false;
+
+function isMissingRoute(error: unknown): boolean {
+  // An unmatched route has no JSON body, so the client labels it 'unknown_error'; a real
+  // "attempt not found" carries its own code and is a legitimate answer, not a missing route.
+  return isApiError(error)
+    && ((error.status === 404 && error.code === 'unknown_error') || error.status === 405 || error.status === 501);
+}
+
+async function sendAttemptEventsForOneAttempt(
+  attemptId: string,
+  events: QueuedAttemptEvent[],
+  keepalive: boolean,
+): Promise<void> {
+  const sendEachSingly = async () => {
+    for (const event of events) {
+      await postListeningIntegrityEvent(attemptId, event.eventType, event.details, event.occurredAt).catch(() => undefined);
+    }
+  };
+
+  if (events.length === 1 || attemptEventBatchRouteUnavailable) {
+    await sendEachSingly();
+    return;
+  }
+
+  try {
+    await apiClient.request<void>(
+      `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/integrity-events/batch`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          events: events.map(({ eventType, details, occurredAt }) => ({ eventType, details, occurredAt })),
+        }),
+        // Lets the request outlive the page when the queue is flushed on hide / unload.
+        ...(keepalive ? { keepalive: true } : {}),
+      },
+      { maxRetries: 0 },
+    );
+  } catch (error) {
+    if (isMissingRoute(error)) {
+      // An API without the batch route (older deploy): stop batching and send what we have singly.
+      attemptEventBatchRouteUnavailable = true;
+      await sendEachSingly();
+    }
+    // Any other failure drops the batch: telemetry is never retried.
+  }
+}
+
+async function sendAttemptEventBatch(items: QueuedAttemptEvent[], context: { keepalive: boolean }): Promise<void> {
+  // One request per attempt, keeping the order in which the events happened.
+  const byAttempt = new Map<string, QueuedAttemptEvent[]>();
+  for (const item of items) {
+    const group = byAttempt.get(item.attemptId);
+    if (group) group.push(item);
+    else byAttempt.set(item.attemptId, [item]);
+  }
+
+  await Promise.all(
+    Array.from(byAttempt, ([attemptId, events]) => sendAttemptEventsForOneAttempt(attemptId, events, context.keepalive)),
+  );
+}
+
+let attemptEventBatcher: EventBatcher<QueuedAttemptEvent> | null = null;
+
+/**
+ * Created on first use so importing this module on the server never registers page listeners.
+ */
+function getAttemptEventBatcher(): EventBatcher<QueuedAttemptEvent> {
+  attemptEventBatcher ??= createEventBatcher<QueuedAttemptEvent>({
+    send: sendAttemptEventBatch,
+    maxBatchSize: 20,
+    flushIntervalMs: 1500,
+  });
+  return attemptEventBatcher;
+}
+
+/** Sends any queued attempt events now (also done automatically on a timer and when the page is hidden). */
+export const flushListeningAttemptEvents = (): Promise<void> =>
+  attemptEventBatcher ? attemptEventBatcher.flush() : Promise.resolve();
+
+export const recordListeningIntegrityEvent = (
+  attemptId: string,
+  eventType: ListeningIntegrityEventType,
+  details?: string,
+  occurredAt = new Date().toISOString(),
+): Promise<void> => {
+  if (!BATCHED_ATTEMPT_EVENT_TYPES.has(eventType)) {
+    return postListeningIntegrityEvent(attemptId, eventType, details, occurredAt);
+  }
+
+  // Queued: it is sent with its neighbours within a couple of seconds. Callers treat this as
+  // fire-and-forget (they `.catch(() => undefined)`), and a dropped event is acceptable here.
+  getAttemptEventBatcher().enqueue({ attemptId, eventType, details, occurredAt });
+  return Promise.resolve();
+};
 
 export const submitListeningAttempt = (attemptId: string, answers?: Record<string, string | null>) =>
   api<ListeningReviewDto>(`/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/submit`, {

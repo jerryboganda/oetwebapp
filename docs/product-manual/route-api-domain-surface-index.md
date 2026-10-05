@@ -278,7 +278,11 @@ Notification surfaces include user feed/read/preference APIs, push subscription/
 
 Learner AI self-service surfaces live under `/v1/me/ai`: credentials, usage, preferences, and credits. They are user-derived from JWT identity, include BYOK credential custody and validation throttling, support per-feature preference overrides and platform fallback behavior, and expose quota/credit visibility.
 
-Analytics ingestion uses `POST /v1/analytics/events`: authenticated, write-rate-limited, tolerant of empty invalid bodies as `204`, and stores accepted non-empty event names with properties JSON and user identity.
+Analytics ingestion uses `POST /v1/analytics/events`: authenticated, write-rate-limited, tolerant of empty invalid bodies as `204`, and stores accepted non-empty event names with properties JSON and user identity. `POST /v1/analytics/events/batch` takes `{ events: [...] }` (at most 50 events, 64 KiB) with the same tolerance; an invalid entry is skipped without costing the others. The web client sends events in batches and uses the single-event route for a lone event.
+
+Learner release gates are read with `GET /v1/features/{key}` (one gate) or `GET /v1/features?keys=a,b,c` (several, at most 16 distinct keys, answered as `{ flags: [{ key, enabled }] }`; a key not exposed to learners is absent, which clients read as disabled).
+
+Listening attempt events: `POST /v1/listening-papers/attempts/{id}/integrity-events` (one event) and `.../integrity-events/batch` (`{ events: [...] }`, at most 50, applied in order through the same service call). The client batches only the record-only events (answer changes, highlights, strikethroughs, buffering, reading time); integrity-lock signals and anything that changes the audio hold or cue timeline still go one at a time.
 
 Device pairing is an H13 scaffold: authenticated `/v1/device-pairing/initiate`, anonymous `/v1/device-pairing/redeem`, 6-character 90-second single-use codes, and an in-memory broker that is not a multi-replica or restart-durable pairing store.
 
