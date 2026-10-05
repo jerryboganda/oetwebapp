@@ -22,7 +22,11 @@ Not changed, with the reason:
   advisory lock in `LockLearnerProfileCreationAsync`. Turning it into a single-statement
   `INSERT ... ON CONFLICT` needs a unique index on `Goals/Settings/Wallets.UserId`, and production
   already holds duplicate rows (`docs/ops/DUPLICATE-LEARNER-ROWS.md`), so that is a separate,
-  data-cleanup-first migration.
+  data-cleanup-first migration. **This item of the optimization brief is therefore deferred, not
+  done, and needs the owner's go-ahead:** the dedupe in `DUPLICATE-LEARNER-ROWS.md` section 2 is
+  explicitly "for owner approval, not executed" (Wallets hold money), then the unique-index migration
+  (section 3), then the create paths become `INSERT ... ON CONFLICT DO NOTHING` + re-read. Until then
+  behaviour is unchanged and safe: the advisory lock still serializes creation per learner.
 - **Request-level memo of profile + freeze.** There is nothing to memoize inside one request (each of
   me / bootstrap / dashboard reads them once); the cross-request freeze cache above is the real fix.
 - **Readiness 24 h TTL** and the daily rollover (capped at 100 users) are unchanged.
@@ -63,7 +67,7 @@ event.
 | `GET /v1/search`: keyset paging, size + 1 rows | Order is now the total order `QualityScore DESC, Title ASC, Id ASC`. New query parameter `cursor` (opaque, from the previous response's `nextCursor`); response gains `hasMore` and `nextCursor`. `page` still works when no cursor is sent (an OFFSET, now overflow-safe). An undecodable cursor is a 400 `search_cursor_invalid` (never a silent first page, which would loop a client). |
 | `total` is opt-in | `total` is `null` unless `includeTotal=true`. The `COUNT` re-ran the whole leading-wildcard `ILIKE '%x%'` scan on every page. The only in-repo client (`components/layout/global-search.tsx`) reads `items` only. `lib/api/content-discovery.ts` does not send `cursor` / `includeTotal` yet: add them when a paged search UI is built. |
 | Facets cached 60 s | The 5 `GROUP BY` queries plus the published `COUNT`; one recompute at a time on expiry. Content publish / unpublish shows in the facets within 60 s. |
-| `GET /v1/papers`: keyset paging and the int overflow fixed | `(page - 1) * pageSize` overflowed `int` for a large `page` (negative OFFSET, 500). The body stays a **bare array**; the continuation is in the `X-Has-More` and `X-Next-Cursor` response headers, `cursor` is the new query parameter. No in-repo client calls this list endpoint. Order is `Priority DESC, Title ASC, Id ASC`. |
+| `GET /v1/papers`: keyset paging and the int overflow fixed | `(page - 1) * pageSize` overflowed `int` for a large `page` (negative OFFSET, 500). The body stays a **bare array**; the continuation is in the `X-Has-More` and `X-Next-Cursor` response headers, `cursor` is the new query parameter. No in-repo client calls this list endpoint; both headers are listed in the `Frontend` CORS policy's exposed headers so a cross-origin browser can read them. Order is `Priority DESC, Title ASC, Id ASC`. |
 | Substring and escape semantics | Unchanged: the `ILIKE ... ESCAPE '\'` pattern and `ToContainsPattern`, and the `ToLower().Contains()` of the papers list, are untouched. |
 | Cursor shape | `CursorPagination.EncodeRanked / TryDecodeRanked` (`rank`, `title`, `key`). A ranked cursor can never decode as the existing `(timestamp, id)` cursor and vice versa. |
 

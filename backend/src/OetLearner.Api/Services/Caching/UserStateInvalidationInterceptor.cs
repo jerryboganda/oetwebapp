@@ -92,6 +92,12 @@ public sealed class UserStateInvalidationInterceptor(UserStateCache cache) : Sav
 
         try
         {
+            // ponytail: one Entries() pass = one DetectChanges plus one EntityEntry per tracked
+            // entity, paid on every save. Deliberately NOT Entries<T>() per watched type: each of
+            // those calls DetectChanges again (EF docs), so ~12 typed passes cost more than this
+            // single one. If a bulk context (admin import, seeder) is ever measured as slow here,
+            // call DetectChanges() once, set AutoDetectChangesEnabled = false in a try/finally and
+            // then use the typed passes.
             foreach (var entry in context.ChangeTracker.Entries())
             {
                 if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))

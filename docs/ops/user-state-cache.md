@@ -26,7 +26,7 @@ uncommitted tracked changes (entitlement), and the "account not found" result.
 
 1. **TTL 15 s** (`Performance:UserStateCache:TtlSeconds`, clamped to 1..30). A hit is never older.
 2. **End times cap the entry.** The entitlement entry stops at the earliest future subscription
-   start / expiry, add-on item end or scheduled freeze start (`EffectiveEntitlementResolver.nextChangeAt`);
+   start / expiry, add-on item start / end or scheduled freeze start (`EffectiveEntitlementResolver.nextChangeAt`);
    a JWT entry stops at the learner access expiry. The access expiry is additionally compared with
    the live clock on every request, so a cached acceptance can never outlive it.
 3. **Read-before-write token.** `BeginRead` is taken before the database read; `Set` refuses to
@@ -43,7 +43,9 @@ uncommitted tracked changes (entitlement), and the "account not found" result.
 lambda in `Program.cs`). It collects the affected subjects in `SavingChanges` and applies them in
 `SavedChanges`, i.e. **after a successful EF save**; a failed save evicts nothing. So every code
 path in this process that changes the rows below is covered without each call site remembering to
-evict:
+evict. Cost: one `ChangeTracker.Entries()` pass (one `DetectChanges`) per save; per-type `Entries<T>()`
+passes would each re-run `DetectChanges`, so they are not cheaper (see the `ponytail:` note in the
+interceptor for the upgrade path if a bulk context is ever measured slow):
 
 | Change (committed through EF in this process) | Entity / property that triggers it | Evicts |
 | --- | --- | --- |
@@ -115,7 +117,7 @@ so the JWT check stays a single database command. A failed read keeps the last v
 
 ## Counters
 
-- `GET /v1/admin/system/user-state-cache` (AdminOnly): per-kind hits / misses / sets / rejected sets,
+- `GET /v1/admin/system/user-state-cache` (policy `AdminSystemAdmin`, the same as `/v1/admin/alerts`): per-kind hits / misses / sets / rejected sets,
   entry count, invalidations, TTL, config switch and runtime switch. Per process (it describes the
   slot that answered).
 - `System.Diagnostics.Metrics` meter `OetLearner.UserStateCache`: counters
