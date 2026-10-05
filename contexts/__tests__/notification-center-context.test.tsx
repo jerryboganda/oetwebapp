@@ -137,6 +137,8 @@ describe('NotificationCenterProvider', () => {
         result.current.ensureSettingsLoaded();
         result.current.ensureSettingsLoaded();
       });
+      // Let the effects it triggered (and their resolved fetches) settle.
+      await act(async () => {});
 
       expect(mocks.fetchNotificationPreferences).toHaveBeenCalledTimes(1);
       expect(mocks.fetchPushConfiguration).toHaveBeenCalledTimes(1);
@@ -164,6 +166,7 @@ describe('NotificationCenterProvider', () => {
       await act(async () => {
         resolvePreferences({ timezone: 'UTC', eventPreferences: {}, legacyLearnerSettings: {} });
       });
+      await act(async () => {});
       expect(result.current.isPreferencesLoading).toBe(false);
       expect(result.current.preferences).not.toBeNull();
     });
