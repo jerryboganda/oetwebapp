@@ -76,6 +76,31 @@ only retry.
 
 ---
 
+## Sev3: Learners waiting in the live Speaking queue ("You're in the queue")
+
+Added 2026-10-05 with the live session admission gate; details in
+[live-voice.md](live-voice.md#admission-control-live-session-cap-and-wait-queue).
+
+**Detection**: learners report the queue screen; `GET /v1/admin/ai/live-voice/admission` (or `admission` in
+`/v1/admin/ai/live-voice/health` and `/v1/admin/ops/snapshot`) shows `waiting > 0` with `free = 0`. This is the designed
+behaviour above the cap (default 100 concurrent live AI sessions), not an outage: waiting learners hold **no credit** and run
+**no clock**, and a place is taken by the same call that holds the credit.
+
+**Immediate action**:
+1. Read `admitted`, `waiting`, `oldestWaitSeconds`. A long `oldestWaitSeconds` with `admitted` far below the real number of
+   live sessions means places are not freeing: exam or practice rows stuck in progress hold a place until they end or hit the
+   safety TTL (exam 45 min, practice 20 min). Check the role-play sweep (`SpeakingExamAutoAdvanceWorker`, ai-worker) first.
+2. Capacity is available (provider and VPS healthy) and the cap is the only limit: raise it,
+   `PUT /v1/admin/ai/live-voice/admission {"maxConcurrent":150}` (no restart, audited, takes effect on the next decision).
+3. The gate itself is suspect (learners cannot start although nothing is running, errors in
+   `Live Speaking admission failed`): switch it off, `PUT /v1/admin/ai/live-voice/admission {"enabled":false}`. Waiters are
+   let through on their next poll and nothing is counted until it is switched back on. A running session is never cut off by
+   any of these changes. The gate already fails open on its own errors.
+4. Do not touch `SpeakingLiveAdmissions` rows by hand: every decision expires stale rows itself, and the sweeper purges old
+   ones.
+
+---
+
 ## Sev2: Role-plays not ending / OpenAI sessions still billing
 
 Added 2026-09-30 (hard duration cap; pending production verification).
