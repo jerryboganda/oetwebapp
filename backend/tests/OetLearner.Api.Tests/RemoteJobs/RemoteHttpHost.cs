@@ -21,8 +21,9 @@ namespace OetLearner.Api.Tests.RemoteJobs;
 
 /// <summary>
 /// A real ASP.NET Core pipeline (TestServer) carrying exactly the remote-worker pieces of <c>Program.cs</c>: the two bearer schemes,
-/// the two policies, the protocol-header middleware and the job/service-plane endpoints, over the InMemory provider. Nothing here
-/// reaches PostgreSQL, so it exercises authentication, protocol negotiation, rate limits and error mapping only.
+/// the two policies, the protocol-header middleware and the job/service-plane endpoints. <see cref="StartAsync"/> runs over the InMemory
+/// provider (nothing reaches PostgreSQL: authentication, protocol negotiation, rate limits and error mapping only);
+/// <see cref="StartOnPostgresAsync"/> runs the same pipeline over a real PostgreSQL schema so whole requests execute the real SQL.
 /// </summary>
 internal sealed class RemoteHttpHost : IAsyncDisposable
 {
@@ -44,13 +45,41 @@ internal sealed class RemoteHttpHost : IAsyncDisposable
 
     public IServiceProvider Services => _host.Services;
 
-    public static async Task<RemoteHttpHost> StartAsync(
+    public static Task<RemoteHttpHost> StartAsync(
         IReadOnlyDictionary<string, string?>? config = null,
         params string[] enabledFlags)
+        => StartCoreAsync(
+            config,
+            enabledFlags,
+            new MutableClock(new DateTimeOffset(2026, 10, 5, 12, 0, 10, TimeSpan.Zero)),
+            new InMemoryFileStorage(),
+            options => options.UseInMemoryDatabase("remote-http-" + Guid.NewGuid().ToString("N")));
+
+    /// <summary>
+    /// The same pipeline over the harness's real PostgreSQL schema and the given storage, so a whole request (authentication, the
+    /// lease guard, the streaming input, the fenced completion and its applier) runs against the real SQL. The clock starts at the
+    /// real time so credentials seeded with the database clock are valid for the pipeline's own expiry checks.
+    /// </summary>
+    public static Task<RemoteHttpHost> StartOnPostgresAsync(
+        RemotePgHarness harness,
+        IFileStorage storage,
+        IReadOnlyDictionary<string, string?>? config = null,
+        params string[] enabledFlags)
+        => StartCoreAsync(
+            config,
+            enabledFlags,
+            new MutableClock(DateTimeOffset.UtcNow),
+            storage,
+            options => options.UseNpgsql(harness.Database.SchemaConnectionString, npgsql => npgsql.UseVector()));
+
+    private static async Task<RemoteHttpHost> StartCoreAsync(
+        IReadOnlyDictionary<string, string?>? config,
+        string[] enabledFlags,
+        MutableClock clock,
+        IFileStorage storage,
+        Action<DbContextOptionsBuilder> configureDatabase)
     {
-        var clock = new MutableClock(new DateTimeOffset(2026, 10, 5, 12, 0, 10, TimeSpan.Zero));
         var flags = new FixedRemoteFlags(enabledFlags);
-        var dbName = "remote-http-" + Guid.NewGuid().ToString("N");
         var values = (config ?? new Dictionary<string, string?>()).ToDictionary(pair => pair.Key, pair => pair.Value);
 
         var host = await new HostBuilder()
@@ -64,9 +93,9 @@ internal sealed class RemoteHttpHost : IAsyncDisposable
                     services.AddRouting();
                     services.AddSingleton<TimeProvider>(clock);
                     services.AddSingleton<IRemoteJobFlags>(flags);
-                    services.AddSingleton<IFileStorage>(new InMemoryFileStorage());
+                    services.AddSingleton(storage);
                     services.AddSingleton<IRuntimeSettingsProvider>(new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base()));
-                    services.AddDbContext<LearnerDbContext>(options => options.UseInMemoryDatabase(dbName));
+                    services.AddDbContext<LearnerDbContext>(configureDatabase);
                     services.AddAuthentication()
                         .AddScheme<AuthenticationSchemeOptions, RemoteWorkerAuthenticationHandler>(RemoteWorkerAuth.NodeScheme, _ => { })
                         .AddScheme<AuthenticationSchemeOptions, FleetServiceAuthenticationHandler>(RemoteWorkerAuth.FleetScheme, _ => { });
@@ -172,9 +201,15 @@ internal sealed class RemoteHttpHost : IAsyncDisposable
         string? bearer = null,
         string? protocol = "1",
         string? json = null,
-        string? authorizationOverride = null)
+        string? authorizationOverride = null,
+        IReadOnlyDictionary<string, string>? headers = null)
     {
         var request = new HttpRequestMessage(method, path);
+        if (headers is not null)
+        {
+            foreach (var (name, value) in headers) request.Headers.TryAddWithoutValidation(name, value);
+        }
+
         if (authorizationOverride is not null)
         {
             request.Headers.TryAddWithoutValidation("Authorization", authorizationOverride);

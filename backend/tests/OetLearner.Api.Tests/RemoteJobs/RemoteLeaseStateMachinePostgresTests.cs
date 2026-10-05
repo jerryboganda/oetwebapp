@@ -276,6 +276,62 @@ public sealed class RemoteLeaseStateMachinePostgresTests
         Assert.Equal(1, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobs" WHERE "State" = 'Queued';"""));
     }
 
+    // ── fair-share placement gate (section 3.8): the database half ───────────
+
+    [PostgreSqlFact]
+    public async Task FairShare_AFullerNodeIsDeclinedTwice_ThenServed_SoNobodyStarves()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        h.Options.FairShareGate = true;
+        var busy = await h.AddNodeAsync();
+        await h.AddNodeAsync(); // an idle, eligible peer with two free slots
+        await h.InsertLeasedJobAsync(busy, RemoteJobKinds.PdfExtract); // weight 1 of 2: norm 0.5 against the peer's 0
+        var queued = await h.EnqueueAsync();
+
+        var first = await h.ClaimAsync(busy);
+        var second = await h.ClaimAsync(busy);
+
+        Assert.Null(first.Leased);
+        Assert.Equal("fair_share", first.NoContentReason);
+        Assert.Null(second.Leased);
+        Assert.Equal("fair_share", second.NoContentReason);
+        Assert.Equal("Queued", await h.StateOfAsync(queued.JobId));
+        Assert.Equal(2, (await h.NodeAsync(busy)).DeclinedInARow);
+
+        // Declined twice in a row: the third claim is served whatever the peer's load (nobody starves).
+        var third = await h.ClaimAsync(busy);
+
+        Assert.NotNull(third.Leased);
+        Assert.Equal(queued.JobId, third.Leased!.Job.Id);
+        Assert.Equal(0, (await h.NodeAsync(busy)).DeclinedInARow);
+    }
+
+    [PostgreSqlFact]
+    public async Task FairShare_TheEmptierNodeIsServedAtOnce_AndTheGateIsInertWhileOff()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        h.Options.FairShareGate = true;
+        var busy = await h.AddNodeAsync();
+        var idle = await h.AddNodeAsync();
+        await h.InsertLeasedJobAsync(busy, RemoteJobKinds.PdfExtract);
+        await h.EnqueueAsync();
+
+        var served = await h.ClaimAsync(idle);
+
+        Assert.NotNull(served.Leased);
+
+        // The same situation with the gate off: the fuller node is simply served.
+        await using var off = await RemotePgHarness.CreateAsync();
+        var fuller = await off.AddNodeAsync();
+        await off.AddNodeAsync();
+        await off.InsertLeasedJobAsync(fuller, RemoteJobKinds.PdfExtract);
+        await off.EnqueueAsync();
+
+        var plain = await off.ClaimAsync(fuller);
+
+        Assert.NotNull(plain.Leased);
+    }
+
     // ── job heartbeat ────────────────────────────────────────────────────────
 
     private static async Task<RemoteHeartbeatResult> BeatAsync(RemotePgHarness h, string nodeId, string jobId, long fence)
