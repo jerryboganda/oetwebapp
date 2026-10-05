@@ -117,9 +117,12 @@ export function useAiAssistant(
   userRole?: UserRole | null,
 ): UseAiAssistantReturn {
   // Handle both call signatures for backward compatibility
-  const token = typeof tokenOrOptions === 'object' && tokenOrOptions !== null
-    ? tokenOrOptions.token
-    : (tokenOrOptions ?? null);
+  const options = typeof tokenOrOptions === 'object' && tokenOrOptions !== null ? tokenOrOptions : null;
+  const token = options ? options.token : (typeof tokenOrOptions === 'string' ? tokenOrOptions : null);
+  // The hub is a long-polling connection per learner. Callers that only need
+  // it once the learner actually opens the assistant pass `autoConnect: false`
+  // until then; every other caller keeps the original connect-on-token default.
+  const autoConnect = options?.autoConnect ?? true;
   const resolvedRole = userRole ?? 'learner';
 
   const [connectionState, setConnectionState] = useState<AssistantConnectionState>('disconnected');
@@ -328,7 +331,7 @@ export function useAiAssistant(
   // ─── Auto-connect on token change ──────────────────────────────────────
 
   useEffect(() => {
-    if (token) {
+    if (token && autoConnect) {
       void connect();
     } else {
       disconnect();
@@ -337,7 +340,7 @@ export function useAiAssistant(
       disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, autoConnect]);
 
   // ─── Load threads on connect ────────────────────────────────────────────
 

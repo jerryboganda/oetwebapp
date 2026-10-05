@@ -33,6 +33,7 @@ const contextValue = {
   modelGroups: [] as Array<{ provider: string; label: string; models: string[] }>,
   modelsLoading: false,
   setThreadModel: vi.fn(),
+  activate: vi.fn(),
 };
 
 vi.mock('@/contexts/ai-assistant-context', () => ({
@@ -88,6 +89,7 @@ function resetContext(overrides: Partial<typeof contextValue> = {}) {
     modelGroups: [],
     modelsLoading: false,
     setThreadModel: vi.fn(),
+    activate: vi.fn(),
     ...overrides,
   });
 }
@@ -98,6 +100,11 @@ describe('AiAssistantPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetContext();
+  });
+
+  it('asks the provider to open the assistant hub once it is shown (lazy connect)', () => {
+    render(<AiAssistantPanel onClose={onClose} />);
+    expect(contextValue.activate).toHaveBeenCalledTimes(1);
   });
 
   it('renders as a dialog with proper aria label', () => {
