@@ -8,8 +8,10 @@ using Fleet.Manager.Hosting;
 using Fleet.Manager.Monitoring;
 using Fleet.Manager.Tests.Infrastructure;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.Logging;
 
 namespace Fleet.Manager.Tests.Web;
 

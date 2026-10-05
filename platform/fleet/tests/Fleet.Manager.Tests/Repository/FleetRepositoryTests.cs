@@ -13,7 +13,7 @@ public sealed class FleetRepositoryTests
     private static string Root => RepoPaths.FleetRoot();
 
     /// <summary>File text with line endings normalised, so the checks mean the same on a Windows checkout and on the Linux runner.</summary>
-    private static string Text(string path) => Text(path).Replace("\r\n", "\n", StringComparison.Ordinal);
+    private static string Text(string path) => File.ReadAllText(path).Replace("\r\n", "\n", StringComparison.Ordinal);
 
     private static string Read(params string[] relative) => Text(Path.Combine(new[] { Root }.Concat(relative).ToArray()));
 
