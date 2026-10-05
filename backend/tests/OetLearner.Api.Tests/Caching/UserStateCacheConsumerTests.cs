@@ -174,7 +174,7 @@ public sealed class UserStateCacheConsumerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task The_parameterless_Invalidate_used_by_the_tracker_hooks_leaves_other_users_cached()
+    public async Task The_parameterless_Invalidate_used_by_the_tracker_hooks_does_not_flush_the_shared_cache()
     {
         await SeedSubscriptionAsync("user-ent-5");
         await ResolveInNewRequestAsync("user-ent-5");
