@@ -157,10 +157,28 @@ public sealed class CorpusParityTests
             using (var stream = new MemoryStream(bytes)) expectedFlat = await oracle.ExtractAsync(stream, CancellationToken.None);
             var textSha = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(expectedFlat))).ToLowerInvariant();
 
+            // A text that cannot be carried in a valid UTF-8 JSON result (an unpaired surrogate) or that exceeds a protocol bound is
+            // refused by the agent on purpose (RW-109); the API's local path then takes over. The agent must refuse exactly those.
+            var expectRefusal = false;
+            try
+            {
+                PdfExtractCore.Evaluate(PdfExtractCore.HasPdfMagic(bytes), expectedPages, "flat", 1);
+            }
+            catch (UnrepresentableResultException)
+            {
+                expectRefusal = true;
+            }
+
             var run = new ChildRun(JobKinds.PdfExtract, input, output,
                 new ChildParams { Mode = "flat", MinTextLength = 1, IncludePages = true, EngineVersion = EngineVersions.Pdf, InputSha256 = TestIds.Sha(bytes), TimeoutSeconds = 300 },
                 4096, TimeSpan.FromMinutes(5));
             var outcome = await runner.RunAsync(run, null, CancellationToken.None);
+            if (expectRefusal)
+            {
+                if (outcome.ExitCode != ChildExit.Unrepresentable) mismatches.Add(Path.GetFileName(file) + ": expected a refusal, child exit " + outcome.ExitCode);
+                continue;
+            }
+
             if (outcome.ExitCode != ChildExit.Ok)
             {
                 mismatches.Add(Path.GetFileName(file) + ": child exit " + outcome.ExitCode);
