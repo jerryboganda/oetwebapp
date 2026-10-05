@@ -44,8 +44,16 @@ function isAuthBootstrapRequest(request: Request): boolean {
  * `owner-agent` (Owner Agent Console) is additionally gated by the backend
  * `OwnerAgent` policy: owner account allow-list + system_admin + a valid
  * `X-Owner-Agent-Unlock` ticket re-checked on every forwarded batch.
+ *
+ * `speaking/live-rooms` (the tutor-room cue hub, mapped as
+ * `/v1/speaking/live-rooms/hub`) has two path segments before `hub`, which the
+ * single-segment hubs above never had. It is exempt on the same grounds: the hub
+ * is `RequireAuthorization()` and its negotiate POST carries only the bearer token.
+ * Without the exemption, a browser holding the `oet_rt` cookie (Path=/, so every
+ * proxied request) failed validateProxyCsrf on negotiate, because SignalR sends no
+ * x-csrf-token header, and the cue channel never connected.
  */
-const SIGNALR_HUB_PATH_PATTERN = /^\/?api\/backend\/v1\/(notifications|conversations|ai-assistant|owner-agent)\/hub(\/|$|\?)/i;
+const SIGNALR_HUB_PATH_PATTERN = /^\/?api\/backend\/v1\/(?:notifications|conversations|ai-assistant|owner-agent|speaking\/live-rooms)\/hub(\/|$|\?)/i;
 
 function isSignalRHubRequest(request: Request): boolean {
   try {
@@ -252,6 +260,31 @@ export function sanitizeProxyHeaders(headers: Headers): Headers {
   }
 
   return sanitizedHeaders;
+}
+
+/**
+ * Request bodies with a declared length above this are streamed to the API instead of
+ * being buffered whole in the web container (1 GB per blue/green slot). That is what
+ * speaking recordings, 8 MB admin upload chunks and whole ZIP imports used to cost in
+ * memory, per request. Smaller bodies, and bodies of unknown length, are buffered
+ * exactly as before, so every ordinary JSON call is unchanged.
+ */
+export const STREAM_BODY_THRESHOLD_BYTES = 1024 * 1024;
+
+/**
+ * The declared length of a request body that should be streamed, or null when it
+ * should be buffered. Setting `BFF_STREAM_REQUEST_BODIES=0` on the web container
+ * switches streaming off without a code change (read per request).
+ */
+export function streamedBodyLength(request: Request): number | null {
+  if (process.env.BFF_STREAM_REQUEST_BODIES === '0') return null;
+  if (!request.body) return null;
+
+  const declared = request.headers.get('content-length');
+  if (!declared || !/^\d+$/.test(declared)) return null;
+
+  const length = Number(declared);
+  return Number.isSafeInteger(length) && length > STREAM_BODY_THRESHOLD_BYTES ? length : null;
 }
 
 export function sanitizeProxyResponseHeaders(headers: Headers): Headers {
