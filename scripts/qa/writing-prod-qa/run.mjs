@@ -444,7 +444,7 @@ async function lettersSuite(ctx, plan) {
     for (const [i, { letter, task }] of letters.entries()) {
       const attempt = () => runTest(ctx, rows[i], ['editor', 'grading', 'results', 'postSubmissions'], async (t) => {
         const opened = await openAndType(ctx, session, learner, task, letter.text, t, { readingWindow: ctx.inputs.readingWindow });
-        const done = await submitAndVerify(ctx, session, learner, task, letter.text, t, { ...opened, kind: 'paid', ui: { desktop: false, mobile: false } });
+        const done = await submitAndVerify(ctx, session, learner, task, letter.text, t, { kind: 'paid', ...opened, ui: { desktop: false, mobile: false } });
         t.partials.push(...(done.facts?.severityMix ?? []));
       });
       let result = await attempt();

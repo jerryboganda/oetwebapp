@@ -19,7 +19,7 @@ public sealed class WritingReportDigestTests
         ["purpose", "content", "conciseness_clarity", "genre_style", "organisation_layout", "language"];
 
     private static readonly Regex Leaks = new(
-        @"^R\d{1,2}[:.]|\([A-Z]{1,4}(?:-[A-Z]{1,3})?-\d|This affects|[Ee]xemplar", RegexOptions.CultureInvariant);
+        @"^R\d{1,2}[:.\s]|\([A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d|This affects|[Ee]xemplar", RegexOptions.CultureInvariant);
 
     private static string FindRepoRoot()
     {
@@ -150,6 +150,12 @@ public sealed class WritingReportDigestTests
         built.Report.TopPrioritiesJson = JsonSerializer.Serialize(new[] { "OA-01: dup", "DH-W-016: dup", "OW-008: dup" });
         var response = WritingAssessmentV11ResultService.Map(built.Report, null);
 
+        // The full corrections list is tidied too: no rule labels, rule-id lists or "This affects" tails.
+        Assert.All(response.Errors, e =>
+        {
+            Assert.DoesNotMatch(Leaks, e.WhyItMatters);
+            Assert.DoesNotMatch(Leaks, e.Correction);
+        });
         Assert.True(response.TopPriorities.Count <= 3);
         Assert.NotEqual("OA-01: dup", response.TopPriorities.First());
         Assert.Equal(1, response.TopPriorities.Count(p => p.StartsWith("OA-01: ") || p.StartsWith("DH-W-016: ")));
@@ -198,6 +204,9 @@ public sealed class WritingReportDigestTests
     [InlineData("The wording changes meaning (OW-005, DH-W-016, OW-016). Content criterion.", "The wording changes meaning.")]
     [InlineData("Compare with the exemplar letter.", "Compare with the model answer letter.")]
     [InlineData("  Spaced \n out   text.  ", "Spaced out text.")]
+    [InlineData("R4 medication reconciliation is missing (OA4-01, OW-023).", "medication reconciliation is missing.")]
+    [InlineData("The action is missing. This affects Purpose and Content (Addendum Five R1: a required action is absent).", "The action is missing.")]
+    [InlineData("Wording is informal (PRD-OT-08). Language criterion. Next sentence stays.", "Wording is informal. Next sentence stays.")]
     public void Clean_removes_internal_labels_rule_ids_and_criterion_tails(string raw, string expected)
         => Assert.Equal(expected, WritingReportDigest.Clean(raw));
 

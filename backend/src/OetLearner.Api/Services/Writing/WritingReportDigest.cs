@@ -29,14 +29,15 @@ public static class WritingReportDigest
     private const string CriterionNames =
         "Purpose|Content|Conciseness(?: (?:and|&) Clarity)?|Clarity|Genre(?: (?:and|&) Style)?|Style|Organisation(?: (?:and|&) Layout)?|Layout|Language(?: Accuracy)?";
 
-    private static readonly Regex LeadingRuleLabel = new(@"^\s*R\d{1,2}(?:\.\d+)?\s*[:.\-–]\s*", RegexOptions.Compiled);
+    // "R4 medication ..." / "R1: ..." at the start; ids such as OWN-W-034, OA4-01, PRD-OT-08, R12.4.
+    private const string RuleId = @"(?:[A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d{1,3}|R\d{1,2}(?:\.\d+)?)";
+    private static readonly Regex LeadingRuleLabel = new(@"^\s*R\d{1,2}(?:\.\d+)?(?:\s*[:.\-–]\s*|\s+(?=[a-z]))", RegexOptions.Compiled);
     private static readonly Regex RuleIdParenthetical = new(
-        @"\s*\((?:[A-Z]{1,4}(?:-[A-Z]{1,3})?-\d{1,3}|R\d{1,2}(?:\.\d+)?)(?:\s*[,;/&]\s*(?:[A-Z]{1,4}(?:-[A-Z]{1,3})?-\d{1,3}|R\d{1,2}(?:\.\d+)?))*\)",
-        RegexOptions.Compiled);
+        $@"\s*\({RuleId}(?:\s*[,;/&]\s*{RuleId})*\)", RegexOptions.Compiled);
     // A whole sentence naming the criteria a finding touches ("This affects Purpose and
     // Content." / "Content criterion."), wherever it sits in the message.
     private static readonly Regex AffectsSentence = new(
-        $@"(?:(?<=[.!?])\s+|^\s*)(?:This affects (?:{CriterionNames})(?:(?:,|\s+and|\s+&)\s*(?:{CriterionNames}))*|(?:{CriterionNames}) criterion)\.(?=\s|$)",
+        $@"(?:(?<=[.!?])\s+|^\s*)(?:This affects (?:{CriterionNames})(?:(?:,|\s+and|\s+&)\s*(?:{CriterionNames}))*(?:\s*\([^)]*\))?|(?:{CriterionNames}) criterion)\.(?=\s|$)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex AffectsPurpose = new(@"This affects[^.]*\bPurpose\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ExemplarWord = new(@"\bexemplar(s)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -57,6 +58,13 @@ public static class WritingReportDigest
         text = LeadingRuleLabel.Replace(text, string.Empty);
         text = RuleIdParenthetical.Replace(text, string.Empty);
         return AffectsSentence.Replace(text, string.Empty).Trim();
+    }
+
+    /// <summary><see cref="Clean"/> for a full correction row: the cleaned text, or the original when nothing is left of it.</summary>
+    public static string Tidy(string? text)
+    {
+        var cleaned = Clean(text);
+        return cleaned.Length > 0 ? cleaned : text ?? string.Empty;
     }
 
     /// <summary>Whole sentences of <paramref name="message"/> up to <paramref name="maxChars"/>; the first sentence is word-clipped if it alone is too long.</summary>
