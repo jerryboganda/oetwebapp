@@ -43,15 +43,25 @@ public partial class ConversationHub
 {
     private const string SpeakingRoleplayGroupPrefix = "speaking-session:";
 
+    // DEAD STATE, NOT A CAPACITY CONTROL (verified 5 Oct 2026). Every entry point in this file that could add to
+    // the two static dictionaries below (StartSpeakingRoleplay, the silence prompt, the turn handler and
+    // StartRolePlayTimer) calls RejectLegacySpeakingVoicePathAsync first, which ALWAYS answers
+    // LIVE_VOICE_REQUIRED and returns true, so for a real learner both dictionaries stay empty and the
+    // V11 turn limiter (SpeakingSimulationV11TurnTelemetryService.ActiveTurnCount) is never reached.
+    // They are process-local and never bounded the number of live AI Speaking sessions; that limit is the
+    // database-backed SpeakingLiveAdmissionService. Do not read their sizes as load, and do not extend them.
+
     /// <summary>
     /// Tracks active time-up countdowns so a learner cannot accidentally
     /// double-schedule by re-invoking <see cref="StartRolePlayTimer"/>.
     /// Keyed by session id — the value is a cancellation token source
     /// the hub uses to abort if the learner ends the session early.
+    /// Dead for typed sessions (see the note above): always empty.
     /// </summary>
     private static readonly ConcurrentDictionary<string, CancellationTokenSource> ActiveRolePlayTimers =
         new(StringComparer.Ordinal);
 
+    /// <summary>Dead for typed sessions (see the note above): always empty.</summary>
     private static readonly ConcurrentDictionary<string, DateTimeOffset> LastSilencePromptAt =
         new(StringComparer.Ordinal);
 
