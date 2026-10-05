@@ -1,0 +1,576 @@
+name: Fleet (build + rollout)
+run-name: Fleet ${{ github.sha }}${{ inputs.sync && ' (sync)' || '' }}
+
+# OET fleet (owner directive 2026-10-05; platform/fleet, platform/fleet/ansible/README.md). Builds, tests and packages the helper agent and
+# the fleet manager on GitHub Actions, proves byte parity of the agent's pdf.extract against the in-process
+# PdfPigPdfTextExtractor, and pushes both images to GHCR BY DIGEST. It is a separate pipeline on purpose: nothing here is part
+# of the production release graph (build-images.yml / production-deploy.yml), and `pnpm run ship` classifies a
+# platform-only push as "nothing to deploy".
+#
+# The ONLY step that touches the VPS is the opt-in `sync` job (workflow_dispatch with sync=true). It is pull-only (compose pull,
+# up --no-build, no build/test/install on the box, asserted by platform/fleet/scripts/verify-fleet-workflow.sh), connects with a
+# PINNED host key (StrictHostKeyChecking=yes, never accept-new) and sends the job-scoped registry token and the release record
+# over SSH STDIN, never argv or env. No helper is ever reached from here: helpers receive images only through the manager.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'platform/fleet/**'
+      - 'docker-compose.fleet.yml'
+      # Shared sources the agent link-compiles (or pins) from the API: a change to any of them must rebuild and re-prove the
+      # agent, otherwise it would silently drift from the in-process oracle.
+      - 'backend/src/OetLearner.Api/Services/Content/PdfPigPdfTextExtractor.cs'
+      - 'backend/src/OetLearner.Api/Services/Content/PdfTextEngine.cs'
+      - 'backend/src/OetLearner.Api/Services/Speaking/PcmJoiner.cs'
+      - 'backend/src/OetLearner.Api/Services/Companion/CompanionChunker.cs'
+      - 'backend/src/OetLearner.Api/OetLearner.Api.csproj'
+      - 'global.json'
+      - 'backend/Directory.Build.props'
+      - '.github/workflows/fleet.yml'
+  workflow_dispatch:
+    inputs:
+      sync:
+        description: 'Roll out the fleet manager on the VPS (pull-only) and hand it the release record plus a job-scoped registry token (main only)'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: fleet
+  cancel-in-progress: false
+
+env:
+  AGENT_IMAGE: ghcr.io/${{ github.repository }}-fleet-agent
+  MANAGER_IMAGE: ghcr.io/${{ github.repository }}-fleet-manager
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  guards:
+    name: Guards
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    outputs:
+      manager: ${{ steps.plan.outputs.manager }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # A toolcache Python (not the distribution's externally-managed one) so pip may install ansible-core below.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Plan (which components exist in this commit)
+        id: plan
+        run: |
+          set -euo pipefail
+          test -f platform/fleet/src/Fleet.Agent/Fleet.Agent.csproj
+          if [ -f platform/fleet/src/Fleet.Manager/Fleet.Manager.csproj ] && [ -f platform/fleet/src/Fleet.Manager/Dockerfile ]; then
+            echo "manager=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "manager=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::platform/fleet/src/Fleet.Manager is not complete in this commit; only the agent is built."
+          fi
+      - name: Assert the pipeline contract (the production rules are not relaxed by this workflow)
+        run: node scripts/deploy/verify-pipeline-contract.mjs
+      - name: Syntax gate
+        run: node scripts/ship/pre-push-gate.mjs --ci
+      - name: Fleet static contract (rollout markers, pull-only, pinned host key, secret scan)
+        run: bash platform/fleet/scripts/verify-fleet-workflow.sh
+      - name: Static tests (helper scripts, playbooks, workflow)
+        run: node --test platform/fleet/tests/static/*.test.mjs
+      - name: Shell syntax and lint of the helper-side scripts
+        run: |
+          set -euo pipefail
+          bash -n platform/fleet/ansible/roles/fleet_user/files/oet-fleet-gate
+          bash -n platform/fleet/ansible/roles/fleet_user/files/oet-fleet-ctl
+          bash -n platform/fleet/scripts/verify-fleet-workflow.sh
+          shellcheck --severity=error platform/fleet/ansible/roles/fleet_user/files/oet-fleet-gate platform/fleet/ansible/roles/fleet_user/files/oet-fleet-ctl platform/fleet/scripts/verify-fleet-workflow.sh
+      - name: Ansible syntax check with the pinned collections
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet 'ansible-core>=2.18.1,<2.21'
+          cd platform/fleet/ansible
+          ansible-galaxy collection install -r requirements.yml --force-with-deps
+          for playbook in preflight bootstrap agent drain repair remove; do
+            ansible-playbook --syntax-check -i localhost, "$playbook.yml"
+          done
+
+  test:
+    name: Unit and protocol tests (agent, manager)
+    needs: [guards]
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-fleet-${{ runner.os }}-${{ hashFiles('platform/fleet/**/*.csproj', 'backend/src/OetLearner.Api/OetLearner.Api.csproj', 'global.json') }}
+          restore-keys: nuget-fleet-${{ runner.os }}-
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Test every fleet test project
+        run: |
+          set -euo pipefail
+          projects="$(find platform/fleet/tests -name '*.Tests.csproj' | sort)"
+          test -n "$projects"
+          for project in $projects; do
+            echo "== $project"
+            dotnet test "$project" --configuration Release --nologo \
+              --logger "trx;LogFileName=$(basename "$project" .csproj).trx" --results-directory "$RUNNER_TEMP/trx"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fleet-test-results-${{ github.sha }}
+          path: ${{ runner.temp }}/trx
+          if-no-files-found: ignore
+          retention-days: 14
+
+  build-agent:
+    name: Build agent image
+    needs: [guards, test]
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      ffmpeg: ${{ steps.facts.outputs.ffmpeg }}
+      version: ${{ steps.facts.outputs.version }}
+      engine: ${{ steps.facts.outputs.engine }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-fleet-${{ runner.os }}-${{ hashFiles('platform/fleet/**/*.csproj', 'backend/src/OetLearner.Api/OetLearner.Api.csproj', 'global.json') }}
+          restore-keys: nuget-fleet-${{ runner.os }}-
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish the agent on the Actions host
+        run: |
+          set -euo pipefail
+          rm -rf platform/fleet/publish/agent
+          dotnet publish platform/fleet/src/Fleet.Agent/Fleet.Agent.csproj \
+            --configuration Release --output platform/fleet/publish/agent \
+            /p:UseAppHost=false /p:DebugType=None /p:DebugSymbols=false
+          test -f platform/fleet/publish/agent/Fleet.Agent.dll
+          test -f platform/fleet/publish/agent/Fleet.Agent.runtimeconfig.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fleet-agent-publish-${{ github.sha }}
+          path: platform/fleet/publish/agent
+          if-no-files-found: error
+          retention-days: 7
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the agent image locally (for the image facts and the hardened-runtime smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./platform/fleet/src/Fleet.Agent/Dockerfile
+          platforms: linux/amd64
+          load: true
+          push: false
+          provenance: false
+          tags: fleet-agent:ci
+          cache-from: type=gha,scope=fleet-agent
+      - name: Image facts (parity with the API image, protocol 6.1.4 item 4)
+        id: facts
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect fleet-agent:ci --format '{{.Os}}/{{.Architecture}}')" = "linux/amd64"
+          test "$(docker image inspect fleet-agent:ci --format '{{.Config.User}}')" = "10001:10001"
+          env_dump="$(docker run --rm --entrypoint /bin/sh fleet-agent:ci -c env)"
+          for forbidden in DOTNET_SYSTEM_GLOBALIZATION_INVARIANT LANG LC_ALL; do
+            if printf '%s\n' "$env_dump" | grep -q "^${forbidden}="; then
+              echo "::error::${forbidden} must not be set in the agent image (the API image does not set it)"
+              exit 1
+            fi
+          done
+          ffmpeg_line="$(docker run --rm --entrypoint ffmpeg fleet-agent:ci -version | head -n 1)"
+          version="$(docker run --rm --entrypoint dotnet fleet-agent:ci Fleet.Agent.dll --version | sed -n 1p)"
+          engine="$(docker run --rm --entrypoint dotnet fleet-agent:ci Fleet.Agent.dll --version | sed -n 2p)"
+          echo "ffmpeg=$ffmpeg_line" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "engine=$engine" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Fleet agent image"
+            echo "- agent version: \`$version\`"
+            echo "- pdf engine: \`$engine\`"
+            echo "- ffmpeg: \`$ffmpeg_line\` (set RemoteJobs:Kinds:<media kind>:EngineVersion to the matching ffmpeg:<version>/... string)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Smoke test under the exact production flags (read-only root, tmpfs scratch, no capabilities, no network)
+        run: |
+          set -euo pipefail
+          part_a="$(printf 'a%.0s' $(seq 1 16))"
+          part_b="$(printf 'B%.0s' $(seq 1 43))"
+          zeros="$(printf '0%.0s' $(seq 1 64))"
+          docker run -d --name agent-smoke --network none \
+            --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 512 \
+            --memory 2g --memory-swap 2g --cpus 2 --user 10001:10001 --ulimit core=0 \
+            --tmpfs /scratch:rw,noexec,nosuid,nodev,size=512m --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
+            --env HOME=/tmp \
+            --env OET_API_BASE=https://api.invalid \
+            --env OET_NODE_ID=rw_00000000000000000000000000 \
+            --env "OET_NODE_TOKEN=orw1_${part_a}_${part_b}" \
+            --env "OET_AGENT_IMAGE_DIGEST=sha256:${zeros}" \
+            fleet-agent:ci >/dev/null
+          ok=false
+          for _ in $(seq 1 60); do
+            if docker logs agent-smoke 2>&1 | grep -q 'self-check pdf=True'; then ok=true; break; fi
+            sleep 2
+          done
+          docker logs agent-smoke 2>&1 | tail -n 40
+          if [ "$ok" != true ]; then echo "::error::the agent self-check did not pass inside the hardened container"; exit 1; fi
+          if docker logs agent-smoke 2>&1 | grep -q "orw1_${part_a}"; then echo "::error::the node token leaked into the agent log"; exit 1; fi
+          docker stop -t 60 agent-smoke >/dev/null
+          test "$(docker inspect -f '{{.State.ExitCode}}' agent-smoke)" = "0"
+          docker rm -f agent-smoke >/dev/null
+      - uses: docker/login-action@v3
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push the agent image (main only)
+        id: push
+        if: ${{ github.ref == 'refs/heads/main' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./platform/fleet/src/Fleet.Agent/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/${{ github.repository }}-fleet-agent:${{ github.sha }}
+          cache-from: type=gha,scope=fleet-agent
+          cache-to: type=gha,mode=max,scope=fleet-agent
+
+  build-manager:
+    name: Build manager image
+    needs: [guards, test]
+    if: needs.guards.outputs.manager == 'true'
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-fleet-${{ runner.os }}-${{ hashFiles('platform/fleet/**/*.csproj', 'global.json') }}
+          restore-keys: nuget-fleet-${{ runner.os }}-
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish the manager on the Actions host
+        run: |
+          set -euo pipefail
+          rm -rf platform/fleet/publish/manager
+          dotnet publish platform/fleet/src/Fleet.Manager/Fleet.Manager.csproj \
+            --configuration Release --output platform/fleet/publish/manager /p:UseAppHost=false
+          test -n "$(find platform/fleet/publish/manager -mindepth 1 -maxdepth 1 -print -quit)"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: ${{ github.ref == 'refs/heads/main' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build (and on main push) the manager image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./platform/fleet/src/Fleet.Manager/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.ref == 'refs/heads/main' }}
+          provenance: false
+          tags: ghcr.io/${{ github.repository }}-fleet-manager:${{ github.sha }}
+          cache-from: type=gha,scope=fleet-manager
+          cache-to: type=gha,mode=max,scope=fleet-manager
+
+  parity:
+    name: PDF parity (agent vs in-process extractor)
+    needs: [guards, build-agent]
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-fleet-${{ runner.os }}-${{ hashFiles('platform/fleet/**/*.csproj', 'backend/src/OetLearner.Api/OetLearner.Api.csproj', 'global.json') }}
+          restore-keys: nuget-fleet-${{ runner.os }}-
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: fleet-agent-publish-${{ github.sha }}
+          path: ${{ runner.temp }}/agent
+      - name: Build the API assembly that holds the in-process oracle (PdfPigPdfTextExtractor)
+        run: |
+          set -euo pipefail
+          dotnet build backend/src/OetLearner.Api/OetLearner.Api.csproj --configuration Release \
+            --output "$RUNNER_TEMP/api-oracle" /p:UseAppHost=false /p:RunAnalyzers=false
+          test -f "$RUNNER_TEMP/api-oracle/OetLearner.Api.dll"
+      - name: Run the corpus parity gate over every tracked PDF
+        run: |
+          set -euo pipefail
+          git -c core.quotepath=off ls-files '*.pdf' | sed "s|^|$GITHUB_WORKSPACE/|" > "$RUNNER_TEMP/pdfs.txt"
+          echo "tracked PDFs: $(wc -l < "$RUNNER_TEMP/pdfs.txt")"
+          test -s "$RUNNER_TEMP/pdfs.txt"
+          export FLEET_PARITY_LIST="$RUNNER_TEMP/pdfs.txt"
+          export FLEET_ORACLE_API_DLL="$RUNNER_TEMP/api-oracle/OetLearner.Api.dll"
+          export FLEET_AGENT_DLL="$RUNNER_TEMP/agent/Fleet.Agent.dll"
+          dotnet test platform/fleet/tests/Fleet.Agent.Tests/Fleet.Agent.Tests.csproj --configuration Release --nologo \
+            --filter "FullyQualifiedName~CorpusParityTests|FullyQualifiedName~ProcessTests|FullyQualifiedName~ExtractorContractTests" \
+            --logger "console;verbosity=normal" | tee "$RUNNER_TEMP/parity.log"
+          # A skipped gate proves nothing: the corpus test and the real child-process tests must have PASSED.
+          grep -E 'Passed .*RW100_agent_output_is_byte_equal' "$RUNNER_TEMP/parity.log"
+          grep -E 'Passed .*the_real_child_process_extracts_the_canary' "$RUNNER_TEMP/parity.log"
+
+  record:
+    name: Release record
+    needs: [guards, test, build-agent, build-manager, parity]
+    if: ${{ always() && github.ref == 'refs/heads/main' && needs.guards.result == 'success' && needs.test.result == 'success' && needs.build-agent.result == 'success' && needs.parity.result == 'success' && (needs.build-manager.result == 'success' || needs.build-manager.result == 'skipped') && needs.build-agent.outputs.digest != '' }}
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    steps:
+      - name: Write fleet-release.json (digests only; the manager approves a digest before any helper may run it)
+        env:
+          AGENT_DIGEST: ${{ needs.build-agent.outputs.digest }}
+          MANAGER_DIGEST: ${{ needs.build-manager.outputs.digest }}
+          FFMPEG: ${{ needs.build-agent.outputs.ffmpeg }}
+          AGENT_VERSION: ${{ needs.build-agent.outputs.version }}
+          PDF_ENGINE: ${{ needs.build-agent.outputs.engine }}
+        run: |
+          set -euo pipefail
+          echo "$AGENT_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          if [ -n "$MANAGER_DIGEST" ]; then echo "$MANAGER_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'; fi
+          jq -n --arg sha "$GITHUB_SHA" --argjson run "$GITHUB_RUN_ID" \
+            --arg recordedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg agentRepository "$AGENT_IMAGE" --arg agentDigest "$AGENT_DIGEST" \
+            --arg agentVersion "$AGENT_VERSION" --arg pdfEngine "$PDF_ENGINE" --arg ffmpeg "$FFMPEG" \
+            --arg managerRepository "$MANAGER_IMAGE" --arg managerDigest "$MANAGER_DIGEST" \
+            '{schema:"fleet-release/1", sha:$sha, runId:$run, recordedAt:$recordedAt,
+              agentRepository:$agentRepository, agentDigest:$agentDigest, agentImageId:null,
+              agentVersion:$agentVersion, pdfEngineVersion:$pdfEngine, ffmpeg:$ffmpeg,
+              managerRepository:$managerRepository, managerDigest:(if $managerDigest == "" then null else $managerDigest end)}' \
+            > fleet-release.json
+          cat fleet-release.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fleet-release
+          path: fleet-release.json
+          if-no-files-found: error
+          retention-days: 90
+
+  sync:
+    name: Roll out the manager on the VPS (pull-only, opt-in)
+    needs: [record]
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.sync }}
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: fleet-release
+          path: ${{ runner.temp }}/release
+      - name: Roll out over SSH (pinned host key; token and release record on stdin)
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.PROD_SSH_KNOWN_HOSTS }}
+          VPS_HOST: "185.252.233.186"
+          VPS_USER: "root"
+          VPS_PORT: "22"
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INGEST_COMMAND: ${{ vars.FLEET_MANAGER_INGEST_COMMAND || '/app/ingest-release' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SSH_KNOWN_HOSTS:-}" ]; then
+            echo "::error::secret PROD_SSH_KNOWN_HOSTS (the pinned SSH host key line of the VPS) is missing; refusing to connect without host key verification"
+            exit 1
+          fi
+          printf '%s' "$INGEST_COMMAND" | grep -Eq '^/[A-Za-z0-9._/-]{1,120}$'
+          RECORD_FILE="$RUNNER_TEMP/release/fleet-release.json"
+          jq -e '.schema == "fleet-release/1" and (.managerDigest != null)' "$RECORD_FILE" >/dev/null \
+            || { echo "::error::the release record carries no manager digest (the manager image was not built in this run)"; exit 1; }
+          MANAGER_REPOSITORY="$(jq -r .managerRepository "$RECORD_FILE")"
+          MANAGER_DIGEST="$(jq -r .managerDigest "$RECORD_FILE")"
+          AGENT_REPOSITORY="$(jq -r .agentRepository "$RECORD_FILE")"
+          AGENT_DIGEST="$(jq -r .agentDigest "$RECORD_FILE")"
+          # Values go into a remote command line inside single quotes: validate their shape first.
+          printf '%s' "$MANAGER_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          printf '%s' "$AGENT_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          printf '%s' "$MANAGER_REPOSITORY" | grep -Eq '^ghcr\.io/[a-z0-9._/-]+-fleet-manager$'
+          printf '%s' "$AGENT_REPOSITORY" | grep -Eq '^ghcr\.io/[a-z0-9._/-]+-fleet-agent$'
+          printf '%s' "$GHCR_USER" | grep -Eq '^[A-Za-z0-9-]{1,39}$'
+          PORT="${VPS_PORT:-22}"
+          REMOTE_DIR="/tmp/oet-fleet-rollout-${GITHUB_RUN_ID}"
+          LOCAL_SCRIPT="$RUNNER_TEMP/fleet-rollout.sh"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts_pinned
+          chmod 600 ~/.ssh/known_hosts_pinned
+          ssh_opts=(
+            -i ~/.ssh/deploy_key -p "$PORT"
+            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey
+            -o PasswordAuthentication=no -o BatchMode=yes
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts_pinned"
+            -o HashKnownHosts=no -o VerifyHostKeyDNS=no
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=20
+          )
+          cleanup() {
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "rm -rf '$REMOTE_DIR'" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # The remote rollout script. verify-fleet-workflow.sh extracts the block between the BEGIN/END markers and fails CI
+          # if it ever gains a build/test/install command, a source sync, a mutable tag, or an `up` without --no-build.
+          cat > "$LOCAL_SCRIPT" <<'REMOTE_ROLLOUT'
+          # BEGIN REMOTE FLEET ROLLOUT
+          set -euo pipefail
+          umask 077
+          APP_DIR=/opt/oetwebapp
+          DEPLOY_DIR="$APP_DIR/.deploy"
+          ENV_FILE="$APP_DIR/.env.production"
+          FLEET_ENV="$DEPLOY_DIR/fleet.env"
+          COMPOSE_FILE="$APP_DIR/docker-compose.fleet.yml"
+          PROJECT=oet-fleet
+          MANAGER=oet-fleet-manager
+          : "${FLEET_MANAGER_REPOSITORY:?}" "${FLEET_MANAGER_DIGEST:?}" "${FLEET_AGENT_REPOSITORY:?}" "${FLEET_AGENT_DIGEST:?}" "${ROLLOUT_DIR:?}" "${INGEST_COMMAND:?}"
+          GHCR_TOKEN=""
+          IFS= read -r GHCR_TOKEN || true
+          RELEASE_RECORD="$(cat)"
+
+          log() { printf '[fleet] %s\n' "$*"; }
+          fail() { printf '::error::fleet rollout: %s\n' "$*"; exit 1; }
+
+          read_env_value() {
+            local key="$1" line value
+            line=$(grep -E "^${key}=" "$ENV_FILE" | tail -n 1 || true)
+            [ -n "$line" ] || return 1
+            value="${line#*=}"
+            value="${value%\"}"; value="${value#\"}"
+            value="${value%\'}"; value="${value#\'}"
+            printf '%s' "$value"
+          }
+          printf '%s' "$FLEET_MANAGER_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || fail "manager digest is malformed"
+          printf '%s' "$FLEET_AGENT_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || fail "agent digest is malformed"
+          printf '%s' "$FLEET_MANAGER_REPOSITORY" | grep -Eq '^ghcr\.io/[a-z0-9._/-]+-fleet-manager$' || fail "manager repository is unexpected"
+          printf '%s' "$FLEET_AGENT_REPOSITORY" | grep -Eq '^ghcr\.io/[a-z0-9._/-]+-fleet-agent$' || fail "agent repository is unexpected"
+          printf '%s' "$INGEST_COMMAND" | grep -Eq '^/[A-Za-z0-9._/-]{1,120}$' || fail "ingest command is unexpected"
+          [ -n "$GHCR_TOKEN" ] || fail "no registry token on stdin"
+          [ -f "$ENV_FILE" ] || fail "missing $ENV_FILE"
+
+          enabled="$(read_env_value FLEET_MANAGER_ENABLED || true)"
+          if [ "$(printf '%s' "$enabled" | tr '[:upper:]' '[:lower:]')" != "true" ]; then
+            printf '::notice::FLEET_MANAGER_ENABLED is not true in .env.production; images exist in GHCR but the manager was not rolled out.\n'
+            exit 0
+          fi
+          [ -f "$ROLLOUT_DIR/docker-compose.fleet.yml" ] || fail "docker-compose.fleet.yml is not part of this commit"
+          grep -q 'FLEET_MANAGER_IMAGE' "$ROLLOUT_DIR/docker-compose.fleet.yml" || fail "the compose file must reference FLEET_MANAGER_IMAGE"
+          if grep -Eq '^[[:space:]]+build:' "$ROLLOUT_DIR/docker-compose.fleet.yml"; then fail "the fleet compose file must not declare build: sections"; fi
+
+          # --- registry credential: temporary docker config, removed on exit ---
+          install -d -m 0700 -o root -g root "$DEPLOY_DIR"
+          export DOCKER_CONFIG
+          DOCKER_CONFIG="$(mktemp -d)"
+          trap 'docker logout ghcr.io >/dev/null 2>&1 || true; rm -rf "$DOCKER_CONFIG"' EXIT
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github-actions}" --password-stdin >/dev/null
+
+          # --- compose-time environment (images by digest only; no mutable tags) ---
+          tmp_env="$(mktemp "$DEPLOY_DIR/.fleet.env.XXXXXX")"
+          {
+            printf '# Generated by .github/workflows/fleet.yml on every rollout; do not edit.\n'
+            printf 'FLEET_MANAGER_IMAGE=%s@%s\n' "$FLEET_MANAGER_REPOSITORY" "$FLEET_MANAGER_DIGEST"
+            printf 'FLEET_AGENT_IMAGE=%s@%s\n' "$FLEET_AGENT_REPOSITORY" "$FLEET_AGENT_DIGEST"
+          } > "$tmp_env"
+          chmod 600 "$tmp_env"
+          mv -f "$tmp_env" "$FLEET_ENV"
+          install -m 0644 -o root -g root "$ROLLOUT_DIR/docker-compose.fleet.yml" "$COMPOSE_FILE"
+
+          # --- host data protection (adds the fleet volume to the protected list) ---
+          if [ -f "$ROLLOUT_DIR/protect-production-data.sh" ]; then
+            install -D -m 0755 -o root -g root "$ROLLOUT_DIR/protect-production-data.sh" "$APP_DIR/scripts/deploy/protect-production-data.sh"
+            bash "$APP_DIR/scripts/deploy/protect-production-data.sh"
+          fi
+
+          # --- pull (images come from GHCR; nothing is compiled here) ---
+          compose() { docker compose --project-name "$PROJECT" --env-file "$FLEET_ENV" -f "$COMPOSE_FILE" "$@"; }
+          pulled=false
+          delay=5
+          for attempt in 1 2 3 4 5; do
+            if compose pull --quiet; then pulled=true; break; fi
+            log "pull attempt $attempt failed; retrying in ${delay}s"
+            sleep "$delay"
+            delay=$(( delay < 30 ? delay * 2 : 30 ))
+          done
+          [ "$pulled" = true ] || fail "could not pull the fleet images from GHCR"
+
+          compose up -d --no-build --wait --wait-timeout 300
+
+          # --- the manager must stay loopback-only (no public ingress) ---
+          [ "$(docker inspect -f '{{.State.Running}}' "$MANAGER" 2>/dev/null || echo missing)" = "true" ] || fail "$MANAGER is not running"
+          published="$(docker port "$MANAGER" 2>/dev/null || true)"
+          if [ -n "$published" ] && printf '%s\n' "$published" | grep -v -e '-> 127\.0\.0\.1:' | grep -q .; then
+            fail "$MANAGER publishes a port beyond loopback; the manager must not be reachable from the network"
+          fi
+          running_image="$(docker inspect -f '{{.Config.Image}}' "$MANAGER")"
+          [ "$running_image" = "$FLEET_MANAGER_REPOSITORY@$FLEET_MANAGER_DIGEST" ] || fail "the running manager is not the rolled-out digest"
+
+          # --- hand the release record and the job-scoped registry token to the manager (stdin only, memory only) ---
+          printf '%s\n%s\n' "$GHCR_TOKEN" "$RELEASE_RECORD" | docker exec -i "$MANAGER" "$INGEST_COMMAND" \
+            || fail "the manager did not accept the release record (is the manager image new enough?)"
+          log "manager is live on $FLEET_MANAGER_REPOSITORY@$FLEET_MANAGER_DIGEST; agent digest $FLEET_AGENT_DIGEST awaits owner approval"
+          # END REMOTE FLEET ROLLOUT
+          REMOTE_ROLLOUT
+
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; mkdir -p '$REMOTE_DIR'; cat > '$REMOTE_DIR/rollout.sh'; chmod 700 '$REMOTE_DIR/rollout.sh'" \
+            < "$LOCAL_SCRIPT"
+          # The compose project of the manager lives next to the fleet sources or, like the agent console's, at the repo root.
+          COMPOSE_SRC=""
+          for candidate in platform/fleet/docker-compose.fleet.yml docker-compose.fleet.yml; do
+            if [ -f "$candidate" ]; then COMPOSE_SRC="$candidate"; break; fi
+          done
+          if [ -n "$COMPOSE_SRC" ]; then
+            ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+              "umask 077; cat > '$REMOTE_DIR/docker-compose.fleet.yml'" \
+              < "$COMPOSE_SRC"
+          fi
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; cat > '$REMOTE_DIR/protect-production-data.sh'" \
+            < scripts/deploy/protect-production-data.sh
+          # Token first line, release record after it: both on stdin, never in argv or the environment of the remote script.
+          { printf '%s\n' "$GHCR_TOKEN"; cat "$RECORD_FILE"; } | ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "FLEET_MANAGER_REPOSITORY='$MANAGER_REPOSITORY' FLEET_MANAGER_DIGEST='$MANAGER_DIGEST' \
+             FLEET_AGENT_REPOSITORY='$AGENT_REPOSITORY' FLEET_AGENT_DIGEST='$AGENT_DIGEST' \
+             GHCR_USER='$GHCR_USER' INGEST_COMMAND='$INGEST_COMMAND' ROLLOUT_DIR='$REMOTE_DIR' \
+             bash '$REMOTE_DIR/rollout.sh'"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Fleet manager rollout"
+            echo "- release record: artifact \`fleet-release\`"
+            echo "- result: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
