@@ -1,0 +1,9 @@
+{
+  "comment": "Append-only. One entry per PdfTextEngine.LayoutRevision: the SHA-256 (LF-normalised) of backend/src/OetLearner.Api/Services/Content/PdfPigPdfTextExtractor.cs at that revision. Changing the extractor requires BOTH a LayoutRevision bump and a new entry here; never edit an existing entry.",
+  "history": [
+    {
+      "layoutRevision": 1,
+      "sha256": "6e290e380a13ab92b587c5d425359e25616282e6ac46bbcf404fc6df589f4858"
+    }
+  ]
+}
