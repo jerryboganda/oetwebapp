@@ -13,7 +13,7 @@ namespace OetLearner.Api.Services.Mocks;
 ///   - At least the last 2 eligible completed mocks reach scaled overall
 ///     &gt;= 350. Reports containing governed Reading/Listening sections are
 ///     excluded until their owner conversion evidence is available.
-///   - Two consecutive Grade-B+ overalls = exam-ready signal.
+///   - Two consecutive overalls at or above the pass line = exam-ready signal.
 ///   - Anything mixed = remediation before booking.
 ///
 /// This service is intentionally read-only and side-effect free. The endpoint

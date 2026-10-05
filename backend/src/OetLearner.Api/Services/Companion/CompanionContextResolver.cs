@@ -101,7 +101,7 @@ public sealed class CompanionContextResolver(
             ExamTypeCode = goal?.ExamTypeCode ?? user?.ActiveExamTypeCode,
             ExamDate = examDate,
             DaysUntilExam = daysUntilExam,
-            TargetGrade = goal?.OverallGoal,
+            TargetGrade = DropLegacyBPlus(goal?.OverallGoal),
             TargetCountry = goal?.TargetCountry,
             Tier = snapshot.Tier,
             EntitlementScopes = BuildScopes(snapshot),
@@ -249,6 +249,10 @@ public sealed class CompanionContextResolver(
             ? parsed
             : ExamProfession.Medicine;
     }
+
+    // OET has no "B+" grade; a free-text goal that is exactly "B+" / "Grade B+" is read as "B".
+    private static string? DropLegacyBPlus(string? goal)
+        => goal?.Trim().ToUpperInvariant() is "B+" or "GRADE B+" ? "B" : goal;
 
     private static string NormaliseLocale(string? locale) =>
         string.IsNullOrWhiteSpace(locale) ? "en" : locale.Split('-')[0].ToLowerInvariant();

@@ -27,7 +27,7 @@ describe('writing-pathway-api', () => {
 
     const request = {
       profession: 'medicine',
-      targetBand: 'B+',
+      targetBand: 'B',
       examDate: null,
       daysPerWeek: 5,
       minutesPerDay: 45,

@@ -546,9 +546,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         // scaled score, never a linear conversion of the raw /38 total (the
         // brief's own §5 explicitly forbids this) — OetScoring.OetGradeLetterFromScaled
         // is the same A/450+ B/350+ C+/300+ C/200+ D/100+ E ladder used
-        // everywhere else in the app. OetBandLabel's raw-total ladder (which
-        // includes a non-OET "B+" band) stays only for the legacy 0-38
-        // RawTotal/EstimatedBand analytics columns below, never for BandLabel.
+        // everywhere else in the app. (There is no non-OET "B+" band.)
         var bandLabel = OetScoring.OetGradeLetterFromScaled(rubric.EstimatedScaledScore);
         var grade = new WritingGrade
         {

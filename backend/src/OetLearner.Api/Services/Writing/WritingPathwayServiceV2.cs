@@ -183,7 +183,8 @@ public sealed class WritingPathwayServiceV2(
         var bandsTarget = profile.TargetBand switch
         {
             "A" => 38,
-            "B+" => 34,
+            "C+" => 24,
+            "C" => 18,
             _ => 30,
         };
 

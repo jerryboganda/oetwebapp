@@ -397,7 +397,7 @@ export default function AdminWritingCalibrationPage() {
                   onChange={(e) => setForm({ ...form, bandLabel: e.target.value })}
                   className="mt-1 block w-full rounded border border-border bg-background p-2 text-sm"
                 >
-                  {['A', 'B+', 'B', 'C+', 'C', 'D', 'E'].map((b) => <option key={b} value={b}>{b}</option>)}
+                  {['A', 'B', 'C+', 'C', 'D', 'E'].map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
               </label>
               <label className="block text-xs font-bold uppercase tracking-wider text-muted md:col-span-2">

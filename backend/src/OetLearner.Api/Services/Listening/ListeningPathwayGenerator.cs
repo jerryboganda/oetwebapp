@@ -47,7 +47,7 @@ public interface IListeningPathwayGenerator
 
 /// <summary>Snapshot of the inputs the generator needs. All time-sensitive
 /// fields (<paramref name="Now"/>) are passed in by the caller for testability.</summary>
-/// <param name="TargetBand">Learner's target OET band: "B" | "B+" | "A".
+/// <param name="TargetBand">Learner's target OET band: "A" | "B" | "C+" | "C" (OET has no "B+").
 /// Currently informational — phase widths are exam-date driven.</param>
 /// <param name="ExamDate">Optional exam date. When null, defaults to a 12-week plan.</param>
 /// <param name="HoursPerWeek">Onboarding-declared weekly study budget; drives DailyMinutes.</param>

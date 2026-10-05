@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
 import { readWizardState, writeWizardState, type WritingProfileWizardState } from '../wizard-state';
 import { StepperNav } from '../StepperNav';
 
-const TARGET_BANDS = ['A', 'B+', 'B', 'C+', 'C'] as const;
+const TARGET_BANDS = ['A', 'B', 'C+', 'C'] as const;
 const COUNTRIES: Array<[string, string]> = [
   ['GB', 'United Kingdom'],
   ['IE', 'Ireland'],

@@ -118,7 +118,7 @@ public class MockBundleSection
     ///   "immediate"     — visible the moment the attempt completes.
     ///   "after-attempt" — visible after the learner submits this section.
     ///   "after-marked"  — visible after expert marking concludes (default).
-    ///   "after-passed"  — visible only once the learner reaches Grade B+.
+    ///   "after-passed"  — visible only once the learner reaches the pass grade (B, 350+).
     /// </summary>
     [MaxLength(32)]
     public string ModelAnswerReleasePolicy { get; set; } = MockModelAnswerReleasePolicies.AfterMarked;

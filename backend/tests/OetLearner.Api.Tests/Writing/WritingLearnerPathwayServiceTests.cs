@@ -22,6 +22,31 @@ public class WritingLearnerPathwayServiceTests
         return (db, new WritingLearnerPathwayService(db, clock, new RulebookLoader()), clock);
     }
 
+    [Theory]
+    [InlineData("A", "A")]
+    [InlineData("B", "B")]
+    [InlineData("C+", "C+")]
+    [InlineData("C", "C")]
+    [InlineData("B+", "B")] // OET has no B+: a legacy value is stored as "B"
+    [InlineData("zzz", "B")]
+    public async Task SaveOnboarding_StoresOnlyOfficialTargetBands(string requested, string stored)
+    {
+        var (db, service, _) = Build();
+
+        var profile = await service.SaveOnboardingAsync(DefaultUser, new WritingStartOnboardingRequest(
+            "Medicine",
+            requested,
+            new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
+            5,
+            45,
+            "uk",
+            ["routine_referral"]), CancellationToken.None);
+
+        Assert.Equal(stored, profile.TargetBand);
+
+        await db.DisposeAsync();
+    }
+
     [Fact]
     public async Task SaveOnboarding_CreatesProfileAndPathwayWithoutDuplicatingWritingCoreTables()
     {
@@ -29,7 +54,7 @@ public class WritingLearnerPathwayServiceTests
 
         var profile = await service.SaveOnboardingAsync(DefaultUser, new WritingStartOnboardingRequest(
             "Medicine",
-            "B+",
+            "B+", // legacy label: OET has no B+, so it is stored as "B"
             new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
             5,
             45,
@@ -38,7 +63,7 @@ public class WritingLearnerPathwayServiceTests
 
         Assert.Equal("foundation", profile.CurrentStage);
         Assert.Equal("medicine", profile.Profession);
-        Assert.Equal("B+", profile.TargetBand);
+        Assert.Equal("B", profile.TargetBand);
         Assert.Equal("GB", profile.TargetCountry);
         Assert.Contains("LT-RR", profile.LetterTypeFocus);
         Assert.Contains("LT-DG", profile.LetterTypeFocus);

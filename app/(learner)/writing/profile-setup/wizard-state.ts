@@ -14,7 +14,7 @@ export interface WritingProfileWizardState {
   profession: WritingProfession;
   subDiscipline: string;
   yearsExperience: number | null;
-  targetBand: 'A' | 'B+' | 'B' | 'C+' | 'C';
+  targetBand: 'A' | 'B' | 'C+' | 'C';
   examDate: string | null;
   daysPerWeek: number;
   minutesPerDay: number;
@@ -46,6 +46,8 @@ export function readWizardState(): WritingProfileWizardState {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_WIZARD_STATE;
     const parsed = JSON.parse(raw) as Partial<WritingProfileWizardState>;
+    // OET has no "B+" grade; a draft saved before it was removed becomes "B".
+    if ((parsed.targetBand as string | undefined) === 'B+') parsed.targetBand = 'B';
     return { ...DEFAULT_WIZARD_STATE, ...parsed };
   } catch {
     return DEFAULT_WIZARD_STATE;

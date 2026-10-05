@@ -47,8 +47,8 @@ test.describe('Writing V2 onboarding @writing-v2 @smoke', () => {
     await expect(
       page.getByRole('heading', { name: /set your target and your weekly budget/i }),
     ).toBeVisible();
-    // Target band buttons render text "A", "B+", "B", "C+", "C"; use exact
-    // match so we don't accidentally hit B+.
+    // Target band buttons render text "A", "B", "C+", "C"; use exact match so
+    // "B" does not collide with another button name.
     await page.getByRole('button', { name: 'B', exact: true }).click();
     // Days per week
     await page.getByLabel(/days per week/i).fill('5');

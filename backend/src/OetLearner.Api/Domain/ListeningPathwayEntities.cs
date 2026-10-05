@@ -23,7 +23,7 @@ public class LearnerListeningProfile
 {
     public Guid Id { get; set; }
     [MaxLength(64)] public string UserId { get; set; } = default!;
-    [MaxLength(8)] public string TargetBand { get; set; } = default!;   // "B" | "B+" | "A"
+    [MaxLength(8)] public string TargetBand { get; set; } = default!;   // "A" | "B" | "C+" | "C" (OET has no "B+")
     public DateTimeOffset? ExamDate { get; set; }
     public int HoursPerWeek { get; set; }
     [MaxLength(64)] public string Profession { get; set; } = default!;

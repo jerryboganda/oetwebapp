@@ -598,7 +598,8 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
         => string.IsNullOrWhiteSpace(value) ? "medicine" : value.Trim().ToLowerInvariant().Replace('-', '_');
 
     private static string NormalizeTargetBand(string value)
-        => value.Trim().ToUpperInvariant() switch { "A" => "A", "B+" => "B+", _ => "B" };
+        // OET has no "B+" grade; a legacy "B+" (and anything unknown) is "B".
+        => value.Trim().ToUpperInvariant() switch { "A" => "A", "C+" => "C+", "C" => "C", _ => "B" };
 
     private static string NormalizeWritingTargetCountry(string? value)
         => OetScoring.NormalizeWritingCountry(value)

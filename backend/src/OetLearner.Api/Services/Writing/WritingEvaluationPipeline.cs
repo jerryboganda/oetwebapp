@@ -257,9 +257,9 @@ public sealed class WritingEvaluationPipeline(
         // 6. Build score, grade, and per-criterion contract.
         var scaled = ClampScaled(aiResponse.EstimatedScaledScore ?? OetScoring.ScaledPassGradeB);
         var scoreRange = $"{ClampScaled(scaled - 10)}-{ClampScaled(scaled + 10)}";
-        var grade = !string.IsNullOrWhiteSpace(aiResponse.EstimatedGrade)
-            ? aiResponse.EstimatedGrade!
-            : OetScoring.OetGradeLetterFromScaled(scaled);
+        // The letter is always derived from the scaled score (A/B/C+/C/D/E); the model's own
+        // free-text grade string is never shown, so a non-OET label such as "B+" cannot reach a candidate.
+        var grade = OetScoring.OetGradeLetterFromScaled(scaled);
 
         var scoredCriteriaCount = aiResponse.CriteriaScores?.ScoredCount ?? 0;
         var confidence = scoredCriteriaCount switch

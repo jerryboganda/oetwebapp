@@ -488,7 +488,7 @@ public class StudyPlanGenerator(
         var max = scores.Where(s => s.HasValue).Select(s => s!.Value).DefaultIfEmpty(0).Max();
         return max switch
         {
-            >= 400 => "A",
+            >= 450 => "A",
             >= 350 => "B",
             >= 300 => "C+",
             > 0 => "C",

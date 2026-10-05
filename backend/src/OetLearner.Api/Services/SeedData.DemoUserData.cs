@@ -311,7 +311,7 @@ public static partial class SeedData
                 SubtestCode = "writing",
                 State = AsyncState.Completed,
                 ScoreRange = "330-360",
-                GradeRange = "B-B+",
+                GradeRange = "C+-B",
                 ConfidenceBand = ConfidenceBand.Medium,
                 StrengthsJson = JsonSupport.Serialize(new[] { "Clinical information was selected accurately", "Follow-up actions are mostly clear" }),
                 IssuesJson = JsonSupport.Serialize(new[] { "Some details remain more extensive than the GP needs", "Proofreading should be more systematic" }),

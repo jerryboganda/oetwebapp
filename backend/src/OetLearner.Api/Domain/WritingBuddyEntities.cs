@@ -34,7 +34,7 @@ public class WritingBuddyPair
     public string Profession { get; set; } = "medicine";
 
     /// <summary>
-    /// Band string captured at the moment of matching (e.g. "B", "B+").
+    /// Band string captured at the moment of matching (e.g. "A", "B", "C+").
     /// Used so both learners see the level they were paired at, even if
     /// their bands diverge over time.
     /// </summary>

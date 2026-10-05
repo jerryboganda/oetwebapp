@@ -405,8 +405,9 @@ public sealed class WritingBuddyService(
     private static (string a, string b) OrderUsers(string left, string right)
         => string.CompareOrdinal(left, right) <= 0 ? (left, right) : (right, left);
 
-    // ±1 band — `bandLabel` is a short ladder ("A", "B+", "B", "C+", "C", "D", "E").
-    private static readonly string[] BandLadder = ["A", "B+", "B", "C+", "C", "D", "E"];
+    // ±1 band — `bandLabel` is the official OET ladder ("A", "B", "C+", "C", "D", "E"; no "B+").
+    // A legacy "B+" row is normalised to "B" by migration 20270109090000 and below.
+    private static readonly string[] BandLadder = ["A", "B", "C+", "C", "D", "E"];
 
     private static IReadOnlyList<string> BandsWithinOne(string targetBand)
     {
@@ -419,6 +420,8 @@ public sealed class WritingBuddyService(
         var bands = new List<string>(3) { BandLadder[idx] };
         if (idx > 0) bands.Add(BandLadder[idx - 1]);
         if (idx < BandLadder.Length - 1) bands.Add(BandLadder[idx + 1]);
+        // A row written by a pre-removal slot during blue/green overlap may still say "B+" (= "B").
+        if (bands.Contains("B")) bands.Add("B+");
         return bands;
     }
 

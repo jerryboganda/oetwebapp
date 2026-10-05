@@ -148,8 +148,13 @@ public class WritingWave5ServiceTests
         await db.DisposeAsync();
     }
 
-    [Fact]
-    public async Task GetBandsAsync_ReturnsRawTargetForChartAxis()
+    [Theory]
+    [InlineData("A", 38)]
+    [InlineData("B", 30)]
+    [InlineData("C+", 24)]
+    [InlineData("C", 18)]
+    [InlineData("B+", null)] // legacy label is not a band: migration turns it into "B"
+    public async Task GetBandsAsync_ReturnsRawTargetForChartAxis(string targetBand, int? expected)
     {
         var db = BuildDb();
         var clock = new FixedClock();
@@ -158,7 +163,7 @@ public class WritingWave5ServiceTests
         {
             Id = Guid.NewGuid(),
             UserId = UserId,
-            TargetBand = "B+",
+            TargetBand = targetBand,
             UpdatedAt = clock.GetUtcNow(),
         });
         db.WritingScenarios.Add(Scenario(scenarioId, "LT-RR"));
@@ -170,7 +175,7 @@ public class WritingWave5ServiceTests
 
         var result = await service.GetBandsAsync(UserId, CancellationToken.None);
 
-        Assert.Equal(34, result.TargetBand);
+        Assert.Equal(expected, result.TargetBand);
 
         await db.DisposeAsync();
     }

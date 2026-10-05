@@ -314,8 +314,9 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
         int? targetBand = profile?.TargetBand switch
         {
             "A" => 38,
-            "B+" => 34,
             "B" => 30,
+            "C+" => 24,
+            "C" => 18,
             _ => null,
         };
         var points = rows.Select(r => new WritingBandHistoryPointResponse(
@@ -332,7 +333,7 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
     {
         var radar = await GetCriteriaRadarAsync(userId, ct);
         var profile = await db.LearnerWritingProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId, ct);
-        var targetMax = profile?.TargetBand == "A" ? 7.0 : profile?.TargetBand == "B+" ? 6.0 : 5.0;
+        var targetMax = profile?.TargetBand == "A" ? 7.0 : 5.0;
         return new WritingStatsCriteriaResponse(
             Current: new WritingCriteriaScoresResponse(radar.C1, radar.C2, radar.C3, radar.C4, radar.C5, radar.C6),
             Target: new WritingCriteriaScoresResponse(3, targetMax, targetMax, targetMax, targetMax, targetMax));

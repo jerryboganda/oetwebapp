@@ -229,7 +229,9 @@ public sealed class WritingOnboardingService(
         => (value ?? string.Empty).Trim().ToUpperInvariant() switch
         {
             "A" => "A",
-            "B+" => "B+",
+            "C+" => "C+",
+            "C" => "C",
+            // OET has no "B+" grade; a legacy "B+" (and anything unknown) is "B".
             _ => "B",
         };
 

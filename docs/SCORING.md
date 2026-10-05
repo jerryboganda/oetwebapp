@@ -72,6 +72,10 @@ Projection anchors (piecewise linear between anchors):
 | D     | 100 – 199    | Limited        |
 | E     |   0 –  99    | Minimal        |
 
+There is **no "B+" grade**. Candidate-facing grades are only A / B / C+ / C / D / E. A higher
+target inside Grade B is expressed as a numeric target score (the 0–500 target on Goals, e.g. 400),
+never as a grade label. A legacy stored "B+" is read as "B" (migration `20270109090000`).
+
 ---
 
 ## 3. Canonical helpers (use these — never re-implement)

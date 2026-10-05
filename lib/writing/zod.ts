@@ -27,7 +27,7 @@ export const writingProfileSchema = z.object({
   profession: writingProfessionEnum,
   subDiscipline: z.string().max(120).nullable().optional(),
   yearsExperience: z.number().int().min(0).max(60).nullable().optional(),
-  targetBand: z.enum(['A', 'B', 'B+', 'C+', 'C']),
+  targetBand: z.enum(['A', 'B', 'C+', 'C']),
   examDate: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
