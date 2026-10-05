@@ -36,7 +36,10 @@ export interface EventBatcherOptions<T> {
 export interface EventBatcher<T> {
   /** Queues an item. `flushNow` sends it (and everything queued before it) immediately. */
   enqueue(item: T, options?: { flushNow?: boolean }): void;
-  /** Sends everything queued now and resolves once the queue is empty. Never rejects. */
+  /**
+   * Sends everything queued now and resolves once all of it has been sent, including when a batch
+   * is already in flight (it waits for that one, then for the items queued behind it). Never rejects.
+   */
   flush(options?: { keepalive?: boolean }): Promise<void>;
   /** Items waiting to be sent. */
   readonly size: number;
@@ -91,27 +94,30 @@ export function createEventBatcher<T>(options: EventBatcherOptions<T>): EventBat
    */
   const pump = (): Promise<void> => {
     if (inFlight) {
-      // A flush was asked for while a run is sending: go again as soon as it ends.
+      // A flush was asked for while a run is sending: the run goes around again before it ends,
+      // so the promise handed back settles only after what is queued now has been sent too.
       sendAgain = true;
       return inFlight;
     }
     if (queue.length === 0) return Promise.resolve();
 
-    let toSend = queue.length;
     const run = (async () => {
       // Yield once so `inFlight` is assigned before this can finish and clear it.
       await Promise.resolve();
       try {
-        while (toSend > 0 && queue.length > 0) {
-          const batch = queue.splice(0, Math.min(maxBatchSize, toSend));
-          toSend -= batch.length;
-          await sendBatch(batch, false);
-        }
+        do {
+          sendAgain = false;
+          let toSend = queue.length;
+          while (toSend > 0 && queue.length > 0) {
+            const batch = queue.splice(0, Math.min(maxBatchSize, toSend));
+            toSend -= batch.length;
+            await sendBatch(batch, false);
+          }
+        } while (sendAgain && queue.length > 0);
       } finally {
         inFlight = null;
-        const again = sendAgain || queue.length >= maxBatchSize;
         sendAgain = false;
-        if (again && queue.length > 0) {
+        if (queue.length >= maxBatchSize) {
           void pump();
         } else if (queue.length > 0) {
           armTimer();

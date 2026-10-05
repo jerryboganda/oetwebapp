@@ -529,8 +529,19 @@ export function initializeAnalyticsTransport() {
 /**
  * Sends whatever analytics is still queued. Called at sign-out while the session is still valid:
  * events are batched for a few seconds, and once the session is gone there is no token to send
- * them with. Never rejects.
+ * them with. Never rejects. `maxWaitMs` bounds how long the caller waits for the send to finish
+ * (the send itself carries on); without it the promise settles when everything queued is sent.
  */
-export function flushAnalytics(): Promise<void> {
-  return analytics.flush();
+export function flushAnalytics(maxWaitMs?: number): Promise<void> {
+  const flushed = Promise.resolve(analytics.flush());
+  if (maxWaitMs === undefined) return flushed;
+
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, maxWaitMs);
+    const finish = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    void flushed.then(finish, finish);
+  });
 }

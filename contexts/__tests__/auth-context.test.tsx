@@ -167,6 +167,44 @@ describe('AuthProvider', () => {
     flush.mockRestore();
   });
 
+  it('waits for the analytics send to finish before it signs out of the backend', async () => {
+    authClientMock.restoreSession.mockResolvedValue(createSession());
+    authClientMock.signOut.mockResolvedValue(undefined);
+    let finishFlush: () => void = () => undefined;
+    const flush = vi.spyOn(analytics, 'flush').mockImplementation(
+      () => new Promise<void>((resolve) => {
+        finishFlush = resolve;
+      }),
+    );
+
+    try {
+      render(
+        <AuthProvider>
+          <AuthConsumer />
+        </AuthProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('email')).toHaveTextContent('learner@oet-prep.dev');
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+      await waitFor(() => expect(flush).toHaveBeenCalledTimes(1));
+      // The batch is still going out, so the session is not ended underneath it.
+      expect(authClientMock.signOut).not.toHaveBeenCalled();
+
+      finishFlush();
+
+      await waitFor(() => expect(authClientMock.signOut).toHaveBeenCalledTimes(1));
+      await waitFor(() => {
+        expect(screen.getByTestId('role')).toHaveTextContent('anonymous');
+      });
+    } finally {
+      flush.mockRestore();
+    }
+  });
+
   it('clears the query cache and persisted Zustand stores on sign-out (FE-001)', async () => {
     authClientMock.restoreSession.mockResolvedValue(createSession());
     authClientMock.signOut.mockResolvedValue(undefined);

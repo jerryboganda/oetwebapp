@@ -188,4 +188,39 @@ describe('analytics transport', () => {
 
     expect((vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).keepalive).toBe(true);
   });
+
+  it('flushAnalytics returns once everything is sent, without waiting out its bound', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(noContent());
+    const { analytics, initializeAnalyticsTransport, flushAnalytics } = await import('../analytics');
+    initializeAnalyticsTransport();
+
+    analytics.track('page_viewed', { path: '/a' });
+    await flushAnalytics(60_000);
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('flushAnalytics gives up waiting after its bound when the send hangs', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(() => new Promise<Response>(() => undefined));
+    const { analytics, initializeAnalyticsTransport, flushAnalytics } = await import('../analytics');
+    vi.useFakeTimers();
+    try {
+      initializeAnalyticsTransport();
+      analytics.track('page_viewed', { path: '/a' });
+
+      let returned = false;
+      const waiting = flushAnalytics(1500).then(() => {
+        returned = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(1499);
+      expect(returned).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await waiting;
+      expect(returned).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

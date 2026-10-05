@@ -112,6 +112,34 @@ describe('createEventBatcher', () => {
     expect(send).toHaveBeenLastCalledWith([2], { keepalive: false });
   });
 
+  it('flush asked for during an in-flight send resolves only after the items queued behind it were sent', async () => {
+    const { send, releases } = holdingSend();
+    batcher = createEventBatcher<number>({ send, flushIntervalMs: 60_000 });
+
+    batcher.enqueue(1, { flushNow: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    batcher.enqueue(2);
+    batcher.enqueue(3);
+    let flushed = false;
+    const flushing = batcher.flush().then(() => {
+      flushed = true;
+    });
+
+    releases[0]();
+    await vi.advanceTimersByTimeAsync(0);
+    // The first send is done, but the flush is not: the queued items are only now going out.
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith([2, 3], { keepalive: false });
+    expect(flushed).toBe(false);
+
+    releases[1]();
+    await flushing;
+    expect(flushed).toBe(true);
+    expect(batcher.size).toBe(0);
+  });
+
   it('drops a failed batch and carries on: telemetry is never retried', async () => {
     const send = vi.fn()
       .mockRejectedValueOnce(new Error('server down'))
