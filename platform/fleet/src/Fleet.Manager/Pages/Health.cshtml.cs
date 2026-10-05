@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace Fleet.Manager.Pages;
 
-/// <summary>The only screen of this track besides sign-in: what the manager itself knows about its own health. The dashboard is built on top of the JSON API later.</summary>
+/// <summary>What the manager itself knows about its own health (the console's startup and integrity checks).</summary>
 public sealed class HealthModel : PageModel
 {
     private readonly HealthReporter _health;

@@ -1,0 +1,182 @@
+@page
+@model Fleet.Manager.Pages.Operations.IndexModel
+@{
+    ViewData["Title"] = "Operations";
+}
+<div class="page-head">
+    <h1>Operations</h1>
+</div>
+@await Html.PartialAsync("_Messages", Model)
+<nav class="tabs" aria-label="Operations views">
+    <a href="/Operations" aria-current="@(Model.Tab == "operations" ? "page" : null)">History</a>
+    <a href="/Operations?view=releases" aria-current="@(Model.Tab == "releases" ? "page" : null)">Releases and rollouts</a>
+    <a href="/Operations?view=audit" aria-current="@(Model.Tab == "audit" ? "page" : null)">Audit trail</a>
+</nav>
+
+@if (Model.Tab == "releases" && Model.ReleasesData is not null)
+{
+    var data = Model.ReleasesData;
+    <section class="panel" aria-labelledby="rel-h">
+        <h2 id="rel-h">Agent image releases</h2>
+        <p class="muted">Helpers only run an agent image that you have approved. CI records each release; you approve it here, which pushes the approved-image window (the current image and the previous two, for rollback) to every helper. Then roll it out, one helper at a time.</p>
+        <dl class="kv">
+            <dt>Registry pull token</dt>
+            <dd><span class="badge @(data.PullTokenHeld ? "ok" : "muted")">@(data.PullTokenHeld ? "held in memory" : "not held")</span> <span class="sub">supplied by the CI sync job, kept for one hour at most, never written to disk</span></dd>
+            <dt>Helpers waiting for a sync</dt>
+            <dd>@data.AwaitingSync</dd>
+            <dt>Helpers a rollout would update</dt>
+            <dd>@data.RolloutHosts</dd>
+            <dt>Rollout in progress</dt>
+            <dd>
+                @if (data.OpenRollout is null)
+                {
+                    <span class="muted">none</span>
+                }
+                else
+                {
+                    <a href="@("/Operations/Detail/" + Uri.EscapeDataString(data.OpenRollout.Id))">@Fmt.StateLabel(data.OpenRollout.State)</a>
+                }
+            </dd>
+        </dl>
+        @if (data.Releases.Count == 0)
+        {
+            <p class="empty">No release has been recorded yet. The fleet sync job in CI records one after each agent build.</p>
+        }
+        else
+        {
+            <div class="table-wrap" role="region" aria-label="Releases" tabindex="0">
+                <table class="data">
+                    <caption class="sr-only">Agent image releases, newest first</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">Commit</th>
+                        <th scope="col">Image digest</th>
+                        <th scope="col">Recorded</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Action</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @for (var i = 0; i < data.Releases.Count; i++)
+                    {
+                        var line = data.Releases[i];
+                        var release = line.Release;
+                        <tr>
+                            <th scope="row"><code>@(release.Sha[..Math.Min(12, release.Sha.Length)])</code> <span class="sub">run @release.RunId</span></th>
+                            <td><code>@Fmt.ShortDigest(release.AgentDigest)</code></td>
+                            <td>@Fmt.Ago(release.RecordedAt, data.Now)</td>
+                            <td>
+                                <span class="badge @(release.Approved ? "ok" : "warn")">@(release.Approved ? "Approved" : "Not approved")</span>
+                                @if (line.IsCurrent)
+                                {
+                                    <span class="badge info">Current</span>
+                                }
+                                @if (release.Approved && line.InWindow)
+                                {
+                                    <span class="badge muted">In the rollback window</span>
+                                }
+                                @if (release.ApprovedBy is not null)
+                                {
+                                    <span class="sub">by @Fmt.Untrusted(release.ApprovedBy, 40) @Fmt.Ago(release.ApprovedAt, data.Now)</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!release.Approved)
+                                {
+                                    <form method="post" action="/Operations?handler=Approve" asp-antiforgery="true" class="code-form" autocomplete="off">
+                                        <input type="hidden" name="releaseId" value="@release.Id" />
+                                        @await Html.PartialAsync("_StepUpInline", "approve-" + i)
+                                        <button type="submit" class="btn primary">Approve</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <form method="post" action="/Operations?handler=Rollout" asp-antiforgery="true" class="code-form" autocomplete="off">
+                                        <input type="hidden" name="digest" value="@release.AgentDigest" />
+                                        @await Html.PartialAsync("_StepUpInline", "rollout-" + i)
+                                        <button type="submit" class="btn">Roll out</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <p class="hint">Approving makes a digest acceptable to the nodes. Rolling out replaces the agent on each active helper in turn: drain, wait for its jobs, pull, start, verify, self-test, resume. A failure stops the rollout and leaves the remaining helpers untouched. To roll back, roll out an older approved release.</p>
+        }
+    </section>
+}
+else if (Model.Tab == "audit" && Model.AuditData is not null)
+{
+    var data = Model.AuditData;
+    <section class="panel" aria-labelledby="aud-h">
+        <div class="panel-head">
+            <h2 id="aud-h">Audit trail</h2>
+            <a href="/Operations?view=audit&amp;verify=true">Verify the hash chain</a>
+        </div>
+        <p class="muted">Every action is recorded in a hash chain: each row's hash covers the one before it, so an edited, deleted or reordered row breaks every later link. The chain is also verified when the console starts.</p>
+        @if (data.ChainIntact is { } intact)
+        {
+            <p class="notice @(intact ? "ok" : "bad")" role="status">@(intact ? "The audit chain is intact (" + data.ChainChecked + " rows checked)." : "The audit chain is BROKEN: " + (data.ChainProblem ?? "unknown problem"))</p>
+        }
+        <div class="table-wrap" role="region" aria-label="Audit trail" tabindex="0">
+            <table class="data compact">
+                <caption class="sr-only">The 200 newest audit records</caption>
+                <thead>
+                <tr>
+                    <th scope="col">When</th>
+                    <th scope="col">Who</th>
+                    <th scope="col">What</th>
+                    <th scope="col">About</th>
+                    <th scope="col">Details</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var entry in data.Lines)
+                {
+                    <tr>
+                        <td>@Fmt.Timestamp(entry.At)</td>
+                        <td>@entry.Actor</td>
+                        <td><code>@entry.Action</code></td>
+                        <td>@Fmt.OrDash(entry.Target)</td>
+                        <td class="sub break">@entry.Details</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+}
+else if (Model.OperationsData is not null)
+{
+    var data = Model.OperationsData;
+    <section class="panel" aria-labelledby="ops-h">
+        <h2 id="ops-h">History</h2>
+        <form method="get" action="/Operations" class="filters">
+            <div class="field narrow">
+                <label for="f-kind">Kind</label>
+                <select id="f-kind" name="kind">
+                    <option value="">All kinds</option>
+                    @foreach (var kind in data.Kinds)
+                    {
+                        <option value="@kind" selected="@(data.KindFilter == kind)">@Fmt.KindLabel(kind)</option>
+                    }
+                </select>
+            </div>
+            <div class="field narrow">
+                <label for="f-state">State</label>
+                <select id="f-state" name="state">
+                    <option value="">All</option>
+                    <option value="open" selected="@(data.StateFilter == "open")">Running or waiting</option>
+                    <option value="failed" selected="@(data.StateFilter == "failed")">Failed</option>
+                    <option value="done" selected="@(data.StateFilter == "done")">Finished</option>
+                </select>
+            </div>
+            <button type="submit" class="btn">Filter</button>
+        </form>
+        <div id="ops-live" data-live-url="@("/Operations?handler=Fragment&kind=" + Uri.EscapeDataString(data.KindFilter ?? string.Empty) + "&state=" + Uri.EscapeDataString(data.StateFilter ?? string.Empty))" data-live-events="operation.updated,host.updated" data-live-every="10" data-reload-on-change="false">
+            @await Html.PartialAsync("_OperationsTable", data)
+        </div>
+    </section>
+}

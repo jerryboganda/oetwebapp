@@ -131,7 +131,7 @@ public sealed class WebAuthTests : IAsyncLifetime
     // ---- sign-in ---------------------------------------------------------------------------
 
     [Fact]
-    public async Task A_correct_password_and_code_signs_the_owner_in_with_a_session_only_cookie_and_opens_the_health_page()
+    public async Task A_correct_password_and_code_signs_the_owner_in_with_a_session_only_cookie_and_opens_the_overview_and_the_health_page()
     {
         var secret = await _factory.CreateOwnerAsync();
         using var client = _factory.CreateHttps();
@@ -139,7 +139,7 @@ public sealed class WebAuthTests : IAsyncLifetime
         var response = await FleetWebFactory.PostLoginAsync(client, FleetWebFactory.Password, _factory.Code(secret));
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        Assert.EndsWith("/Health", response.Headers.Location!.ToString());
+        Assert.Equal("/", response.Headers.Location!.ToString());
         var session = SetCookies(response).Single(cookie => cookie.StartsWith("fleet.session=", StringComparison.Ordinal)).ToLowerInvariant();
         Assert.Contains("httponly", session);
         Assert.Contains("secure", session);
@@ -147,6 +147,10 @@ public sealed class WebAuthTests : IAsyncLifetime
         Assert.Contains("path=/", session);
         Assert.DoesNotContain("expires=", session);
         Assert.DoesNotContain("max-age=", session);
+
+        var overview = await client.GetAsync("/");
+        Assert.Equal(HttpStatusCode.OK, overview.StatusCode);
+        Assert.Contains("Fleet overview", await overview.Content.ReadAsStringAsync());
 
         var health = await client.GetAsync("/Health");
         Assert.Equal(HttpStatusCode.OK, health.StatusCode);

@@ -1,23 +1,17 @@
 @page
 @model HealthModel
 @{
-    Layout = null;
+    ViewData["Title"] = "Manager health";
     var report = Model.Report;
 }
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex, nofollow" />
-    <title>Fleet health</title>
-    <link rel="stylesheet" href="/css/site.css" />
-</head>
-<body>
-<main class="card wide">
-    <h1>OET Fleet Manager</h1>
-    <p class="@(report.Ok ? "ok" : "error")" role="status">@(report.Ok ? "All startup and integrity checks passed." : "Attention needed: see the details below.")</p>
-    <table>
+<div class="page-head">
+    <h1>Manager health</h1>
+</div>
+<p class="notice @(report.Ok ? "ok" : "bad")" role="status">@(report.Ok ? "All startup and integrity checks passed." : "Attention needed: see the details below.")</p>
+<section class="panel" aria-labelledby="health-h">
+    <h2 id="health-h">Checks</h2>
+    <table class="data kv-table">
+        <caption class="sr-only">The manager's startup and integrity checks</caption>
         <tbody>
         <tr><th scope="row">Version</th><td>@report.Version</td></tr>
         <tr><th scope="row">Database</th><td>@(report.Database ? "reachable" : "unreachable")</td></tr>
@@ -34,9 +28,4 @@
         <tr><th scope="row">Open operations</th><td>@report.OpenOperations</td></tr>
         </tbody>
     </table>
-    <form method="post" asp-page="/Logout" asp-antiforgery="true">
-        <button type="submit" class="secondary">Sign out</button>
-    </form>
-</main>
-</body>
-</html>
+</section>

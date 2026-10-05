@@ -1,0 +1,20 @@
+@model Fleet.Manager.Pages.FleetPageModel
+@if (Model.Notice is not null)
+{
+    <p class="notice ok" role="status">@Model.Notice</p>
+}
+@if (Model.Error is not null)
+{
+    <div class="notice bad" role="alert" id="form-error" tabindex="-1">
+        <p><strong>@Model.Error</strong></p>
+        @if (Model.Issues.Count > 0)
+        {
+            <ul>
+                @foreach (var issue in Model.Issues)
+                {
+                    <li><code>@issue.Field</code> @issue.Message</li>
+                }
+            </ul>
+        }
+    </div>
+}

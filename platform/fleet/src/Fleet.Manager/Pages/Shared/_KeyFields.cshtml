@@ -1,0 +1,24 @@
+@model KeyFieldsModel
+<fieldset class="fieldset">
+    <legend>Temporary SSH key</legend>
+    <p class="hint">A private key that can log in to the helper as root (or as a user with sudo). It is encrypted the moment you submit it, used only to prepare the server, and erased when that is done, when you cancel, or after 60 minutes. It is never shown again.</p>
+    <div class="field narrow">
+        <label for="@("SshUser-" + Model.IdSuffix)">SSH user</label>
+        <input id="@("SshUser-" + Model.IdSuffix)" name="SshUser" type="text" value="@(Model.User ?? "root")" maxlength="32" pattern="[a-z_][a-z0-9_\-]{0,31}" autocomplete="off" autocapitalize="off" spellcheck="false" required />
+    </div>
+    <div class="field">
+        <label for="@("PrivateKey-" + Model.IdSuffix)">Private key</label>
+        <textarea id="@("PrivateKey-" + Model.IdSuffix)" name="PrivateKey" class="mono" rows="7" autocomplete="off" autocapitalize="off" spellcheck="false" data-secret="true" aria-describedby="@("PrivateKey-hint-" + Model.IdSuffix)"></textarea>
+        <p class="hint" id="@("PrivateKey-hint-" + Model.IdSuffix)">Paste the whole key, including the BEGIN and END lines.</p>
+    </div>
+    <div class="field">
+        <label for="@("KeyFile-" + Model.IdSuffix)">Or choose the key file</label>
+        <input id="@("KeyFile-" + Model.IdSuffix)" type="file" data-fill-target="@("PrivateKey-" + Model.IdSuffix)" aria-describedby="@("KeyFile-hint-" + Model.IdSuffix)" />
+        <p class="hint" id="@("KeyFile-hint-" + Model.IdSuffix)">The file is read in your browser and placed in the box above; nothing is uploaded on its own. Needs JavaScript.</p>
+    </div>
+    <div class="field narrow">
+        <label for="@("Passphrase-" + Model.IdSuffix)">Key passphrase (only if the key has one)</label>
+        <input id="@("Passphrase-" + Model.IdSuffix)" name="Passphrase" type="password" maxlength="256" autocomplete="new-password" autocapitalize="off" spellcheck="false" data-secret="true" aria-describedby="@("Passphrase-hint-" + Model.IdSuffix)" />
+        <p class="hint" id="@("Passphrase-hint-" + Model.IdSuffix)">Used once to open a copy of the key, then dropped. It is never stored.</p>
+    </div>
+</fieldset>

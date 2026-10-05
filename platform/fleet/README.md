@@ -34,8 +34,49 @@ platform/fleet/
 | Placement and policy | `Fleet.Core/Placement`, `Operations/PolicyService` | Capacity reservation, per-kind caps, resource budgets, drain/pause, least-normalised-load choice, fallback to the primary only with headroom (or after the 60-minute hard wait), pressure hysteresis (reduce after 15 s, restore after 120 s). Policy is validated against the 7.3 ranges and pushed with optimistic `expectedRevision`. |
 | Maintenance | `HostService`, `StepExecutor.Maintenance` | drain, disable, enable, remove (only fleet-owned components), token rotation (14 days), repair, rolling image update (one host at a time, halts on the first failure). |
 | Audit | `Fleet.Core/Audit`, `Persistence/AuditService` | Hash-chained audit and operations logs; verified at startup (a broken chain stops the process unless `Fleet:Audit:AllowBrokenChain=true`). |
-| Owner access | `Auth/*`, `Endpoints/*`, `Pages/*` | Cookie auth, PBKDF2-SHA512 (>= 220k) password, TOTP with a replay guard on login AND on every privileged action, lockout (5 failures / 15 min), 20-minute idle and 60-minute absolute sessions, antiforgery on every state change, strict CSP. Only a login page and a health page exist; the dashboard is built on the JSON API later. |
+| Owner access | `Auth/*`, `Endpoints/*`, `Pages/*` | Cookie auth, PBKDF2-SHA512 (>= 220k) password, TOTP with a replay guard on login AND on every privileged action, lockout (5 failures / 15 min), 20-minute idle and 60-minute absolute sessions, antiforgery on every state change, strict CSP. The owner console (Razor Pages, below) is built on the same services as the JSON API. |
 | Telemetry | `GET /api/v1/events` (SSE), `GET /metrics` | Counts and ages only, never an address, token or key. |
+
+## The owner console (dashboard)
+
+Server-rendered Razor Pages (`src/Fleet.Manager/Pages`) over the same application services the JSON API uses, plus one small script
+(`wwwroot/js/console.js`) for live updates. Reached through the SSH tunnel only, behind the sign-in (password + TOTP). Dense, operational,
+keyboard-friendly (skip link, labelled controls, captioned tables, visible focus, light/dark, responsive); no marketing styling.
+
+| Screen | Route | What it shows and does |
+| --- | --- | --- |
+| Fleet overview | `/` | The primary (host-wide CPU, memory pressure and headroom) and every helper: state, API health, heartbeat age, load, slots in use, capacity, SSH-status latency, agent, the open operation; totals, utilisation, offline helpers and a "needs your attention" list. Refreshes live; **Refresh now** polls the API at once. |
+| Add helper | `/Hosts/Add` | IP or host name, optional name, SSH user (default `root`), port (default 22), region and provider, and the temporary SSH key (paste, or choose a file that is read in the browser) with its optional passphrase. Everything is validated before the authenticator code is used. |
+| Enrollment progress | `/Operations/Detail/{id}` | The live, durable progress of any operation: steps, failure reason with plain-words guidance, the host-key check (type the first 8 characters), the key prompt (save in advance, use now, replace), retry and cancel. Survives closing the browser: the work is on the server. |
+| Server detail | `/Hosts/Detail/{id}` | Summary, pinned host key, hardware, installed components (Docker, agent container, image, fleet-owned list), assigned workloads and limits, health history, operations and audit trail of that helper, credential hints; actions: drain, resume, disable, repair, rotate token, change limits (per-helper override), re-pin a changed host key, remove from the fleet (drain first, typed confirmation, only fleet-owned components). |
+| Workloads | `/Workloads` | Per job kind: project, queue depth, active jobs, outcomes, completion rate, eligible helpers and where the next job would go with the reason (the placement engine run as a what-if, nothing reserved). |
+| Policies | `/Policies` | The global policy (allocation, concurrency, budgets, pressure, polling) with a step-up save that is pushed to every helper, the fixed priority and fallback rules in words, and which helpers have limits of their own. |
+| Operations | `/Operations` | History of provisioning, repair, maintenance and rollouts (filters), agent releases with approve and rollout, and the audit trail with hash-chain verification. |
+| Credentials | `/Credentials` | Write-only: temporary owner keys (add, replace, erase early), node tokens (rotate), manager SSH keys, the presence of the service secret files, the vault key id, the in-memory registry token (discard). Only fingerprint hints and dates are ever shown. |
+| Projects | `/Projects` | The primary's pressure, the OET integration status (API reachable, credential, protocol, kinds, helpers, releases, sync endpoint) and what the console cannot see. |
+
+How it is kept safe:
+
+* **Auth and CSRF.** Every page and fragment needs the owner session (the fallback policy; only `/Login` is open). Every POST needs the
+  antiforgery token (Razor Pages validate it; each form carries `asp-antiforgery`). A privileged action also needs a fresh authenticator
+  code, checked by the SAME replay-guarded step-up as the JSON API; the form is validated first, so a typo never burns a code. Pressing Enter
+  in the code box cannot run an action nobody picked (one radio choice and one button on the host page; one button per mini form elsewhere).
+* **No inline script, no nonce needed.** The CSP stays `script-src 'self'; style-src 'self'`: all script and CSS are files, there is no inline
+  `<script>`, `style=` or event handler anywhere (a repository test scans for them), and the markup never uses a raw-HTML escape hatch.
+* **Helper text is untrusted.** Everything a helper, the OET API or a child process says goes through `Fmt.Untrusted` (decode the manager's own
+  storage encoding once, strip ANSI and control characters, redact credential shapes, cap) and then Razor's encoder.
+* **Secrets are write-only.** A key or passphrase is moved out of the bound property at once, never echoed (a refused form comes back
+  without it), never audited, never logged, cleared from the browser when the page is left, and shown afterwards only as an 8-character
+  fingerprint hint of the public key. Service secrets are files: the console says present or absent, never reads one out.
+* **Live updates.** The script re-fetches server-rendered fragments (`?handler=Fragment`) when the manager's SSE stream (`/api/v1/events`)
+  says something changed, and on a timer as a fallback. Fragments never contain a form, so what you are typing is never replaced; a change
+  of state that alters what you can do reloads the page unless something is typed in it. A session that ends shows a sign-in link.
+* **Notices are fixed text.** A redirect carries a code from a table in `FleetPageModel`, never request text.
+
+A key can be saved in advance (`StageOwnerCredentialAsync`): it is the same encrypted, 60-minute vault credential, but it is only used after
+the host key is pinned, at which point confirming the key continues the enrollment with it. A key protected by a passphrase is opened once with
+`ssh-keygen -p` on a copy in the tmpfs run directory (OpenSSH has no stdin or environment route for the old passphrase, so it is an argument of
+that one 15-second call inside the container); only the unprotected key continues, the passphrase is kept nowhere.
 
 ## Security model (short)
 
@@ -145,6 +186,7 @@ OET API, helpers, registry), so a 180-second verification window or a 60-minute 
 | `Monitoring` | API-authoritative health, lifecycle adoption after two polls, quarantine and changed-key alerts, 14-day rotation, pressure governor, placement service, metrics format |
 | `Provisioning`, `Repository` | Ansible/ssh argument lists (no shell, `-e @file`, strict options), error mapping, the API client, secret files, host-key parsing, the helper `gate`/`ctl` (real python3 when present, refusal paths only), and static guarantees on the compose file, Dockerfile, playbooks and source |
 | `Web` | login, lockout, one-use TOTP codes, step-up, antiforgery, sessions, headers, rate limit, the JSON API, SSE, metrics, the CI sync endpoint, startup refusals, the operator CLI |
+| `ConsoleViews`, `Web/Console*` | the owner console: every page and fragment (authz, antiforgery, step-up, validation errors, encoding of helper text, no secret in any response), the read models, the formatting and parsing helpers, the passphrase and saved-key enrollment path, static rules on the markup and the script |
 
 ## Deviations from the spec and open points
 
@@ -163,3 +205,14 @@ OET API, helpers, registry), so a 180-second verification window or a 60-minute 
 * The operator CLI prints only its result on stdout; informational logs are suppressed and warnings go to stderr, so the
   one-time TOTP secret of `owner-init` is never interleaved with log lines.
 * A ctl-level failure reports the helper's own sanitised error sentence as the failure detail (not its raw JSON).
+* Console: "latency" is the round trip of the restricted SSH status call (recorded by the node monitor every 5 minutes for active helpers);
+  the API heartbeat age is shown next to it. The health history is kept in memory per node (100 changes) and starts again at a restart; the
+  durable record is the audit trail.
+* Console: the manager SSH key cannot be rotated from the console (the install-key step skips itself when the key already works); remove
+  and re-add the helper for a new one. The Credentials page says so.
+* Console: the manager has no container runtime access by design, so "resource use across primary-hosted projects" is the host-wide pressure
+  the placement rules already use plus the console's own footprint; per-project attribution is not possible without such access.
+* Console: "saved key" means a key stored in advance for ONE enrollment (60 minutes, encrypted, used only after the host key is pinned). A key
+  that outlives its enrollment would contradict OET-RWP/1 section 8.2 (S8 destroys the owner credential), so there is no cross-host key store.
+* Console: the passphrase of a protected key is one argument of one `ssh-keygen -p` call inside the container (see above); the alternative is
+  to give the manager only keys without a passphrase, which the JSON API also still accepts.

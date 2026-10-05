@@ -1,0 +1,104 @@
+@model PolicyInput
+<fieldset class="fieldset">
+    <legend>Allocation and concurrency</legend>
+    <div class="field narrow">
+        <label for="in-max">Maximum concurrent jobs</label>
+        <input id="in-max" name="Input.MaxConcurrency" type="number" inputmode="numeric" min="0" max="8" step="1" value="@Model.MaxConcurrency" required aria-describedby="in-max-hint" />
+        <p class="hint" id="in-max-hint">0 to 8 heavy-job slots. 0 stops the helper taking new work without draining it.</p>
+    </div>
+    <div class="table-wrap" role="region" aria-label="Job kinds" tabindex="0">
+        <table class="data compact">
+            <caption class="sr-only">Job kinds this policy allows and the cap for each</caption>
+            <thead>
+            <tr>
+                <th scope="col">Allowed</th>
+                <th scope="col">Cap per kind</th>
+            </tr>
+            </thead>
+            <tbody>
+            @for (var i = 0; i < Model.Kinds.Count; i++)
+            {
+                var row = Model.Kinds[i];
+                <tr>
+                    <td>
+                        <input type="hidden" name="@("Input.Kinds[" + i + "].Kind")" value="@row.Kind" />
+                        <input type="checkbox" id="@("kind-allowed-" + i)" name="@("Input.Kinds[" + i + "].Allowed")" value="true" checked="@row.Allowed" />
+                        <label for="@("kind-allowed-" + i)" class="inline-label"><code>@row.Kind</code></label>
+                    </td>
+                    <td>
+                        <input type="number" inputmode="numeric" min="0" max="8" step="1" name="@("Input.Kinds[" + i + "].Max")" value="@row.Max" aria-label="@("Cap for " + row.Kind)" class="short" />
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+    <p class="hint">A kind that is not ticked is never handed to this helper. The cap limits how many jobs of that kind run at once (0 to the maximum above; blank means the maximum).</p>
+</fieldset>
+
+<fieldset class="fieldset">
+    <legend>Resource budgets</legend>
+    <div class="field-grid">
+        <div class="field">
+            <label for="in-cpu">CPU budget (milli-cores)</label>
+            <input id="in-cpu" name="Input.CpuMilli" type="number" inputmode="numeric" min="0" max="64000" step="100" value="@Model.CpuMilli" required aria-describedby="in-cpu-hint" />
+            <p class="hint" id="in-cpu-hint">1000 is one vCPU. 0 to 64000.</p>
+        </div>
+        <div class="field">
+            <label for="in-mem">Memory budget (MiB)</label>
+            <input id="in-mem" name="Input.MemMiB" type="number" inputmode="numeric" min="0" max="262144" step="64" value="@Model.MemMiB" required />
+        </div>
+        <div class="field">
+            <label for="in-tmp">Scratch (tmpfs) budget (MiB)</label>
+            <input id="in-tmp" name="Input.TmpMiB" type="number" inputmode="numeric" min="0" max="65536" step="64" value="@Model.TmpMiB" required aria-describedby="in-tmp-hint" />
+            <p class="hint" id="in-tmp-hint">Scratch space is RAM, so it cannot exceed the memory budget.</p>
+        </div>
+    </div>
+</fieldset>
+
+<details class="fieldset-details">
+    <summary>Pressure and polling (advanced)</summary>
+    <fieldset class="fieldset">
+        <legend>When the helper slows itself down</legend>
+        <div class="field-grid">
+            <div class="field">
+                <label for="in-reduce-cpu">Reduce above CPU %</label>
+                <input id="in-reduce-cpu" name="Input.ReduceCpuPct" type="number" inputmode="numeric" min="1" max="100" step="1" value="@Model.ReduceCpuPct" />
+            </div>
+            <div class="field">
+                <label for="in-reduce-mem">Reduce below free memory %</label>
+                <input id="in-reduce-mem" name="Input.ReduceMemFreePct" type="number" inputmode="numeric" min="1" max="100" step="1" value="@Model.ReduceMemFreePct" />
+            </div>
+            <div class="field">
+                <label for="in-restore-cpu">Restore below CPU %</label>
+                <input id="in-restore-cpu" name="Input.RestoreCpuPct" type="number" inputmode="numeric" min="1" max="100" step="1" value="@Model.RestoreCpuPct" aria-describedby="in-restore-hint" />
+            </div>
+            <div class="field">
+                <label for="in-restore-mem">Restore above free memory %</label>
+                <input id="in-restore-mem" name="Input.RestoreMemFreePct" type="number" inputmode="numeric" min="1" max="100" step="1" value="@Model.RestoreMemFreePct" />
+            </div>
+            <div class="field">
+                <label for="in-restore-after">Restore after (seconds)</label>
+                <input id="in-restore-after" name="Input.RestoreAfterSeconds" type="number" inputmode="numeric" min="30" max="3600" step="1" value="@Model.RestoreAfterSeconds" />
+            </div>
+        </div>
+        <p class="hint" id="in-restore-hint">Restore thresholds must be calmer than the reduce thresholds (restore CPU below reduce CPU, restore free memory above reduce free memory), so the helper does not flap.</p>
+    </fieldset>
+    <fieldset class="fieldset">
+        <legend>How often the agent asks for work (seconds)</legend>
+        <div class="field-grid">
+            <div class="field">
+                <label for="in-poll-idle">Idle</label>
+                <input id="in-poll-idle" name="Input.PollIdle" type="number" inputmode="numeric" min="2" max="60" step="1" value="@Model.PollIdle" />
+            </div>
+            <div class="field">
+                <label for="in-poll-min">Fastest</label>
+                <input id="in-poll-min" name="Input.PollMin" type="number" inputmode="numeric" min="2" max="60" step="1" value="@Model.PollMin" />
+            </div>
+            <div class="field">
+                <label for="in-poll-max">Slowest</label>
+                <input id="in-poll-max" name="Input.PollMax" type="number" inputmode="numeric" min="2" max="120" step="1" value="@Model.PollMax" />
+            </div>
+        </div>
+    </fieldset>
+</details>

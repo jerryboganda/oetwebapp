@@ -7,7 +7,7 @@ namespace Fleet.Manager.Pages;
 
 public sealed class LogoutModel : PageModel
 {
-    public IActionResult OnGet() => RedirectToPage("/Health");
+    public IActionResult OnGet() => RedirectToPage("/Index");
 
     public async Task<IActionResult> OnPostAsync()
     {

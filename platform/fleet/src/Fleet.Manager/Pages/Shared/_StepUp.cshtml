@@ -1,0 +1,6 @@
+@model string
+<div class="field narrow">
+    <label for="@("Code-" + Model)">Authenticator code</label>
+    <input id="@("Code-" + Model)" name="Code" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" autocomplete="one-time-code" required aria-describedby="@("Code-hint-" + Model)" />
+    <p class="hint" id="@("Code-hint-" + Model)">Six digits from your authenticator app. Each code works once: if you just used one, wait for the next.</p>
+</div>

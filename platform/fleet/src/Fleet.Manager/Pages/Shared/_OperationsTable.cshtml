@@ -1,0 +1,57 @@
+@model Fleet.Manager.Dashboard.OperationsPageView
+<div data-live-state="@Model.OpenCount">
+    @if (Model.Operations.Count == 0)
+    {
+        <p class="empty">No operation matches. Enrollments, repairs, drains, token rotations, removals and image rollouts all appear here.</p>
+    }
+    else
+    {
+        <div class="table-wrap" role="region" aria-label="Operations" tabindex="0">
+            <table class="data">
+                <caption class="sr-only">Operations, newest first</caption>
+                <thead>
+                <tr>
+                    <th scope="col">Operation</th>
+                    <th scope="col">Helper</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Step</th>
+                    <th scope="col">Started</th>
+                    <th scope="col">Last change</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var op in Model.Operations)
+                {
+                    <tr>
+                        <th scope="row"><a href="@("/Operations/Detail/" + Uri.EscapeDataString(op.Id))">@Fmt.KindLabel(op.Kind)</a></th>
+                        <td>
+                            @if (op.HostId is not null)
+                            {
+                                <a href="@("/Hosts/Detail/" + Uri.EscapeDataString(op.HostId))">@op.HostName</a>
+                            }
+                            else
+                            {
+                                <span>@op.HostName</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge @Fmt.BadgeClass(op.State)">@Fmt.StateLabel(op.State)</span>
+                            @if (op.FailureReason is not null)
+                            {
+                                <span class="sub"><code>@op.FailureReason</code></span>
+                            }
+                            @if (op.NextAction.Length > 0)
+                            {
+                                <span class="sub">@op.NextAction</span>
+                            }
+                        </td>
+                        <td>@Fmt.StepLabel(op.CurrentStep)</td>
+                        <td>@Fmt.Timestamp(op.StartedAt)</td>
+                        <td>@Fmt.Ago(op.UpdatedAt, Model.Now)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

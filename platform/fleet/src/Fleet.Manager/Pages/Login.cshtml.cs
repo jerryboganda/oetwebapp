@@ -34,7 +34,7 @@ public sealed class LoginModel : PageModel
     public string? Error { get; private set; }
 
     public IActionResult OnGet() =>
-        User.Identity?.IsAuthenticated == true ? RedirectToPage("/Health") : Page();
+        User.Identity?.IsAuthenticated == true ? RedirectToPage("/Index") : Page();
 
     public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken)
     {
@@ -62,6 +62,6 @@ public sealed class LoginModel : PageModel
             CookieAuthenticationDefaults.AuthenticationScheme,
             principal,
             new AuthenticationProperties { IsPersistent = false, AllowRefresh = true });
-        return RedirectToPage("/Health");
+        return RedirectToPage("/Index");
     }
 }

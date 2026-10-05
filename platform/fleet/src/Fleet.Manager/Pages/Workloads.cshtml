@@ -1,0 +1,11 @@
+@page
+@model WorkloadsModel
+@{
+    ViewData["Title"] = "Workloads";
+}
+<div class="page-head">
+    <h1>Workloads</h1>
+</div>
+<div id="workloads-live" data-live-url="/Workloads?handler=Fragment" data-live-events="node.updated,operation.updated,policy.updated,host.updated" data-live-every="15">
+    @await Html.PartialAsync("_WorkloadsBody", Model.Workloads)
+</div>
