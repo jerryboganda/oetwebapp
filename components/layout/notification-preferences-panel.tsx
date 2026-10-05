@@ -106,7 +106,12 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
     updatePreferences,
     subscribeToPush,
     unsubscribeFromPush,
+    ensureSettingsLoaded,
   } = useNotificationCenter();
+  // Preferences and the push configuration load on first use, not at app start.
+  useEffect(() => {
+    ensureSettingsLoaded();
+  }, [ensureSettingsLoaded]);
   const [draft, setDraft] = useState<NotificationPreferencePayload | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);

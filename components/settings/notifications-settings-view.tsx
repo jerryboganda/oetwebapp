@@ -162,7 +162,13 @@ export function NotificationsSettingsView() {
     updatePreferences,
     subscribeToPush,
     unsubscribeFromPush,
+    ensureSettingsLoaded,
   } = useNotificationCenter();
+
+  // Preferences and the push configuration load on first use, not at app start.
+  useEffect(() => {
+    ensureSettingsLoaded();
+  }, [ensureSettingsLoaded]);
 
   const [draft, setDraft] = useState<NotificationPreferencePayload | null>(null);
   const [filter, setFilter] = useState<ChannelFilter>('all');
