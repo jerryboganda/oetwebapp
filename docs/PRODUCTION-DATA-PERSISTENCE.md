@@ -20,6 +20,11 @@ Inspected live on `root@185.252.233.186` 2026-08-20 after deploy `fdcc4776`
 Created 2026-06-03. Compose pins them `external: true` with these exact names
 so a deploy cannot attach a new empty volume.
 
+Separate compose projects follow the same law with their own external volumes: the Owner Agent Console
+(`oet-agent-console_oet_agent_home|workspace|sessions`) and the Owner Fleet manager (`oet-fleet_fleet_data`: host inventory,
+encrypted SSH keys, audit chain; see `docs/ops/FLEET.md`). All are listed in `scripts/deploy/protect-production-data.sh`, so the host
+wrapper blocks `docker volume rm`, `volume prune` and `compose down -v` for them too.
+
 `Storage__LocalRootPath` is always `/var/opt/oet-learner/storage`.
 
 ## What a deploy does

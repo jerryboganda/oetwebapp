@@ -221,6 +221,7 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 | Validate the successful release manifest and original API SQL artifact, apply SQL when not proven deployed, then bound preparation and durable health-gated blue/green promotion. Serialized by `production-deploy`; `workflow_dispatch -f sha=<previous-deployed-sha>` is rollback | `.github/workflows/production-deploy.yml` |
 | Mobile/Android release build (manual) | `.github/workflows/mobile-release.yml` |
 | Owner Agent Console sidecar + proxy images (build → GHCR → pull-only VPS rollout of `docker-compose.agent-console.yml`) | `.github/workflows/agent-console.yml` (`workflow_dispatch`, `apply=true` to recreate) |
+| Owner Fleet manager + helper-agent images (build-only, no QA: compile → GHCR, pull-only rollout of the isolated `oet-fleet` project, dispatch-only `sync` of the approved agent digest). See "Owner Fleet exception" | `.github/workflows/fleet.yml` (push to `main` on `platform/fleet/**`, `workflow_dispatch`) |
 
 ## Owner Agent Console exception (owner directive 2026-09-27)
 
@@ -246,6 +247,46 @@ host or user. Runbook: `docs/ops/OWNER-AGENT-CONSOLE.md` · wire contract: `agen
 - **(h)** SSH break-glass (`docker exec -it -u agent oet-agent-console claude auth login`,
   `docker exec -it -u agent oet-agent-console opencode auth login`, `docker stop oet-agent-console`)
   is ops, not compute.
+
+## Owner Fleet exception (owner directive 2026-10-05)
+
+The fleet manager (`platform/fleet/**`, compose project `oet-fleet`) and the rented **helper VPSs** that run its agent
+are an authorized runtime host class for the Owner Fleet program only. Nothing else in this file is relaxed for any
+other agent, host or user, and the primary-VPS rule above stands: **the primary VPS = DEPLOY + SERVE only**. Runbook:
+`docs/ops/FLEET.md` · decision record: `docs/adr/0005-fleet-manager-and-remote-workers.md` · AI statement:
+`docs/AI-USAGE-POLICY.md` §22. Wire contract: OET Remote Worker Protocol (OET-RWP/1).
+
+- **(a) Digest-only executors.** A helper runs a **prebuilt image by immutable digest** (`ghcr.io/jerryboganda/oetwebapp-fleet-agent@sha256:...`)
+  and nothing else: its bootstrap is Docker engine + the agent. No checkout, build, test, benchmark, source install or mutable tag
+  there, and no agent uses a helper as a workstation or build host. All build compute for the fleet code still runs on GitHub Actions; no test or
+  benchmark compute exists anywhere (see "NO AUTOMATED QA ANYWHERE").
+- **(b) Ansible is runtime behaviour.** It runs only **inside the fleet-manager container**, as the provisioning half of enrollment,
+  repair and rollout, **after an owner action in the manager UI**. Never from a workstation, a console session or any agent; no agent runs
+  `ssh`, `docker` or `ansible` against a helper.
+- **(c) Agents never hold helper IPs, SSH keys, node tokens or the vault master key.** They live only in the manager's encrypted store and the
+  helper's 0600 env file (the owner enters them in the manager UI). Never in the repo (`.gitignore` + the `platform/**` secret scan in
+  `pnpm run pipeline:check`), chat, PRs, logs, `SESSION_STATE.md` or `.env*`.
+- **(d) The manager has no public ingress.** Isolated compose project `oet-fleet` on the primary: loopback bind reached by SSH tunnel, on no
+  production network, owner password + TOTP, lockout, short sessions, external protected volume `oet-fleet_fleet_data`, hard `mem_limit`/`cpus`/`pids_limit`,
+  `oom_score_adj` above Postgres and the API, one playbook at a time (running it on the primary is authorized only by this exception). Console agents are denied
+  every `oet-fleet*` container, volume and network by `oet-agent-dockerproxy`. The inventory validator refuses `185.252.233.186` and any host of
+  compose project `oetwebsite`. Host keys are pinned out-of-band and enforced (`StrictHostKeyChecking=yes`; `accept-new` is forbidden in fleet code).
+- **(e) No AI, no credentials, no shortcuts around Max.** Helpers hold no DB, provider or storage credentials and make no AI calls. The
+  Claude Max rule above is untouched; one `AiUsageRecord` per provider call stays on the primary; OCR tiers and all grading stay on the primary.
+  Files reach a helper only through job-scoped API endpoints (`IFileStorage` stays primary-only); helper scratch is tmpfs, deleted on completion,
+  never in logs.
+- **(f) Pipeline.** Fleet images build and roll out only through `.github/workflows/fleet.yml` (name `Fleet (build + rollout)`, its own `fleet`
+  concurrency group, pull-only SSH rollout between `# BEGIN/END REMOTE FLEET ROLLOUT` markers). It is **BUILD-ONLY**: compile, package, push and
+  roll out; it runs **no QA of any kind** (no unit, integration, parity or benchmark job; the owner QAs the fleet by hand). There is **no fifth release component**, the
+  `Build images` job graph and the 510.240 s baseline are untouched, and `fleet.yml` may not reference `auto-deploy-ghcr.sh`. A platform-only
+  push ends `pnpm run ship` with `SHIP-WATCH_NOTHING_TO_DEPLOY`; verify a fleet change with `gh run watch` on `fleet.yml` for that SHA, then
+  `pnpm run ax:record`. Never loosen the `Deploy production` watcher. `pnpm run pipeline:check` enforces all of this (SSH allow-list
+  `PROD_SSH_WORKFLOWS`, fleet.yml identity/guards, `platform/**` scan); a new SSH workflow needs a visible edit there plus this exception.
+- **(g) Console sessions** author fleet changes as `agent/*` PRs merged by the Ship executor and verified with `gh run watch` on `fleet.yml`;
+  they hold no helper credential and cannot see the manager.
+- **(h) Rust is not built.** Reopen only on the owner's say-so, gated on a **manual** benchmark on real PDFs that the owner runs (never an agent,
+  never a workflow or CI job) and that first demonstrates byte-exact parity and then beats the .NET baseline by at least 30% p95 or 40% CPU per job.
+  A benchmark never proves a release.
 
 ## OET Writing Model Answers — COMPULSORY (owner directives 2026-09-13 + 2026-09-14)
 
@@ -435,3 +476,8 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
   never invent a `TO VERIFY` value.
 - `agent-console/etc/MANUAL.md` — operating manual appended to every Owner Agent Console session;
   load `docs/ops/OWNER-AGENT-CONSOLE.md` + `agent-console/CONTRACT.md` before touching `agent-console/**`.
+- `docs/ops/FLEET.md` — Owner Fleet runbook (SSH-tunnel access, enrollment, credential custody and rotation,
+  host-key verification, removal, rollback skew, failure states, capacity, what is and is not automatic);
+  `docs/adr/0005-fleet-manager-and-remote-workers.md` — the decision record. Load both before touching
+  `platform/fleet/**`, `.github/workflows/fleet.yml`, remote-worker (`/v1/internal/remote-worker`,
+  `/v1/internal/fleet`) code, or the fleet rules of `scripts/deploy/verify-pipeline-contract.mjs`.

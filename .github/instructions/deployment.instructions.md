@@ -72,6 +72,26 @@ that had already been superseded on live Play Console and had to be reverted.
 - **Pipeline-only deploys (hard enforced):** the rollout path is `Build images` → `Production deploy`; never SSH-deploy, never run the rollout script or `docker compose` on the VPS by hand, never add a second rollout workflow. `pnpm run pipeline:check` (`scripts/deploy/verify-pipeline-contract.mjs`) runs in the `guards` job of every build **and** inside `pnpm run ship:gate`, so a bypassing change fails the pipeline before images exist.
 - Flip the repo private only under the lease rule above. Then confirm public health + VPS image tags contain the SHA. VPS remains pull-only.
 
+## Owner Fleet (owner directive 2026-10-05) — see `docs/ops/FLEET.md`, `docs/adr/0005-fleet-manager-and-remote-workers.md`
+
+Read the `AGENTS.md` "Owner Fleet exception" before touching `platform/**`, `.github/workflows/fleet.yml` or the fleet rules of the pipeline contract.
+
+- Fleet code lives under `platform/**`, never under `scripts/deploy/**`, `scripts/backup/**`, root `*.json|*.ts|*.mjs` or `docker-compose.production*.yml`
+  (those are build inputs and would cost a production release). Its pipeline is `.github/workflows/fleet.yml` (name `Fleet (build + rollout)`,
+  concurrency group `fleet`), separate from `Build images` and `Deploy production`: **no fifth release component**, no edit of the `build-images.yml`
+  job graph, never `auto-deploy-ghcr.sh`.
+- Its SSH rollout stays pull-only between `# BEGIN REMOTE FLEET ROLLOUT` and `# END REMOTE FLEET ROLLOUT` (`compose pull`, `up --no-build`; no build,
+  install, source sync, volume removal or `:latest`) and `fleet.yml` runs its own `guards` job (`node scripts/deploy/verify-pipeline-contract.mjs`,
+  `bash scripts/deploy/verify-compute-offload.sh`) because a platform-only push does not run the `Build images` guards.
+- Only the audited workflows in `PROD_SSH_WORKFLOWS` (`scripts/deploy/verify-pipeline-contract.mjs`) may hold a production/VPS SSH credential. A new SSH
+  workflow is a visible edit of that list plus an owner-written exception; the fleet scan also rejects `accept-new` host-key trust and committed keys or tokens.
+- Verify a fleet change with `gh run watch` on `fleet.yml` for the SHA, then `pnpm run ax:record`. A platform-only push ends `pnpm run ship` with
+  `SHIP-WATCH_NOTHING_TO_DEPLOY`; never loosen the `Deploy production` watcher to cover it.
+- Helpers run prebuilt images by digest only; Ansible runs only inside the manager container after an owner UI action; agents never hold helper IPs, keys
+  or tokens; console agents are denied every `oet-fleet*` container, volume and network (`agent-console/dockerproxy/src/policy.ts`).
+- `scripts/deploy/protect-production-data.sh` lists `oet-fleet_fleet_data` as protected and `scripts/deploy/prune-stale-images.sh` skips `oetwebapp-fleet-*`.
+- Load (k6) and Playwright workflows are `workflow_dispatch` only, and a crossed k6 threshold must fail the run (no `|| true`, no `continue-on-error`).
+
 ## VPS production operational notes
 
 The VPS (`185.252.233.186`, production deploy target — never run validation there) has known gotchas:

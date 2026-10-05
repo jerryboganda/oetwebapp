@@ -677,3 +677,22 @@ no sidecar, no new container or egress path.
   written OK or accept the risk before ticking Active.
 - **Default route stays Claude.** A non-Claude default route needs a recorded benchmark run
   (`AiProviderRouteApprovalService`). No endpoint records one.
+
+## 22. Fleet helpers make no AI calls
+
+**Owner directive 2026-10-05.** The helper VPSs of the Owner Fleet (`docs/ops/FLEET.md`, `AGENTS.md` "Owner Fleet exception") execute prebuilt
+agent images by digest. They are not AI providers and are outside every routing, quota and credential option in this document.
+
+- **No AI on a helper.** No job kind may call an AI provider, an OCR service or the Claude Max sidecar from a helper, and a helper never holds a
+  provider key, a database credential or a storage credential.
+- **OCR stays on the primary.** The OCR tiers of `AutoPdfTextExtractor` (Azure, Mistral) and their `AiUsageRecord` stay in the API / `ai-worker`; a
+  helper that finds no embedded text answers `needsOcr` and the existing local path continues.
+- **Max is untouched.** Speaking and Writing grading, credit reserve/commit, Whisper, embeddings and the Max chain never move to a helper, and nothing
+  in the fleet may add, persist or compute a "Max is off" state. Every grade still starts on `writing-claude-sub`.
+- **Accounting stays on the primary.** One `AiUsageRecord` per physical provider call (section 12) is written by the primary; helpers write none. A
+  follow-up that calls a provider for a helper result (for example `companion.index-prep`) runs on the primary after the completion transaction commits
+  (the job outcome is `Deferred`).
+- **Evidence.** Fleet activity is evidenced by `AuditEvent` rows (`RemoteWorker`, `RemoteJob`) and the manager's hash-chained audit, not by
+  `AiUsageRecord`.
+- **Third-party processing.** By owner decision any data may leave the primary for a helper; the helper's VPS vendor is a processor. Record each
+  node's region and provider in the processor register (privacy notice and transfer assessment are an owner/legal task).
