@@ -41,13 +41,24 @@ Rows in `FeatureFlags` (seeded disabled at startup so `/admin/flags` lists them;
 Flags are cached per process for at most 5 s. With the master flag off, `heartbeat`, `inputs`, `outputs`, `complete`,
 `fail` and the applier keep working for leases that already exist; only `claim` and the producers stop.
 
-Options (`RemoteJobs__<Name>` environment variables; secrets are never configuration): `LeaseSeconds` (120),
-`HeartbeatEverySeconds` (20), `NodeHeartbeatSeconds` (15), `NodeStaleAfterSeconds` (45), `MaxAttempts` (3), `ReleaseLimit`
-(5), `BackoffBaseSeconds`/`BackoffMaxSeconds`/`BackoffJitterPercent` (5/300/20), `ReaperIntervalSeconds` (15),
-`FallbackAfterMinutes` (10), `FallbackHardAfterMinutes` (60), `JobRetentionDays` (30), `DeferredResultRetentionDays` (7),
-`IntegrityStrikeLimit`/`StrikeWindowMinutes` (3/60), `FairShareGate` (false), `ClaimRatePerMinute` (60), `TokenTtlDays`
-(30), `FleetTokenTtlDays` (90), `TokenRotationGraceSeconds` (3600), `FleetAllowedCidrs` (empty), `VerifySampleRate` (0),
-`Kinds:<kind>:EngineVersion`. Out-of-range values are clamped (`RemoteJobsOptions.Normalized`).
+Options (`RemoteJobs__<Name>` in .NET configuration; secrets are never configuration): `LeaseSeconds` (120),
+`HeartbeatEverySeconds` (20), `NodeHeartbeatSeconds` (15), `NodeStaleAfterSeconds` (45), `NodeOfflineAfterSeconds` (600),
+`MaxAttempts` (3), `ReleaseLimit` (5), `BackoffBaseSeconds`/`BackoffMaxSeconds`/`BackoffJitterPercent` (5/300/20),
+`ReaperIntervalSeconds` (15), `ReaperBatch` (100), `FallbackAfterMinutes` (10), `FallbackHardAfterMinutes` (60),
+`JobRetentionDays` (30), `DeferredResultRetentionDays` (7), `IntegrityStrikeLimit`/`StrikeWindowMinutes` (3/60),
+`FairShareGate` (false), `ClaimRatePerMinute` (60), `TokenTtlDays` (30), `FleetTokenTtlDays` (90),
+`TokenRotationGraceSeconds` (3600), `FleetAllowedCidrs` (empty), `VerifySampleRate` (0), `Kinds:<kind>:EngineVersion`.
+Out-of-range values are clamped (`RemoteJobsOptions.Normalized`).
+
+**Production sets them in `.env.production`, not in .NET syntax.** `docker-compose.production.yml` has a closed environment list
+(no `env_file`), so it forwards each option explicitly, to both API slots and the `ai-worker`, as the upper-case key
+`REMOTEJOBS__<NAME>` (for example `REMOTEJOBS__VERIFYSAMPLERATE=0.05`, `REMOTEJOBS__FAIRSHAREGATE=true`). A list takes indexed
+keys: `REMOTEJOBS__FLEETALLOWEDCIDRS__0=172.18.0.0/16` (and `__1`); blank entries are ignored. A media kind's engine pin is
+`REMOTEJOBS__KINDS__MEDIA_AUDIO_EXTRACT__ENGINEVERSION` / `REMOTEJOBS__KINDS__MEDIA_SPEAKING_JOIN__ENGINEVERSION`. Defaults
+in the compose file equal the code defaults (a backend test fails the build if they drift); an option that is not in that
+list cannot be set in production. `validate-production-env.sh` rejects a malformed `REMOTEJOBS__VERIFYSAMPLERATE` (must be 0 to
+1), `REMOTEJOBS__CLAIMRATEPERMINUTE` (integer >= 1) or `REMOTEJOBS__FAIRSHAREGATE` (true/false). Changing one needs a normal
+deploy (a container recreate) to take effect.
 
 ## Bring-up order (owner)
 
@@ -60,12 +71,20 @@ Options (`RemoteJobs__<Name>` environment variables; secrets are never configura
    `tokens/rotate` issues another). The node starts `Pending`; its first accepted `workers/heartbeat` makes it `Probation`.
 4. `POST /nodes/{id}/canary` enqueues the known-answer canary (embedded fixture, no learner data). Claims by a `Probation`
    node only ever receive canary jobs. A matching result sets `LastCanaryOk`; `POST /nodes/{id}/enable` then makes it `Active`
-   (`409 canary_required` otherwise). A canary MISMATCH quarantines the node immediately.
+   (`409 canary_required` otherwise). A canary MISMATCH quarantines the node immediately. At most one canary is open
+   (`Queued`/`Leased`) per node, enforced by the partial unique index `UX_RemoteJobs_OpenCanary` (`409 canary_in_progress`, also
+   when a requeue of an old canary would reopen a second one). A canary no node claims within `FallbackAfterMinutes` is cancelled
+   by the reaper (`canary_timeout`, audited `RemoteJob.CanaryTimeout`); just request a new one.
 5. Turn on `remote_jobs_enabled` and `remote_jobs_kind_pdf_extract_shadow`. Helpers run hash-only shadow jobs; the
    ai-worker re-extracts each asset in-process (fresh) and writes `RemoteJob.ShadowMismatch` audit rows on any difference.
    Review zero mismatches over real Listening Part B/C papers (the tracked corpus has none).
-6. Turn on `remote_jobs_kind_pdf_extract`. Set `RemoteJobs__VerifySampleRate=0.05` after cutover (the ai-worker re-checks a
-   deterministic 5% of applied jobs; a mismatch audits, strikes the node and the in-process text replaces the helper's).
+6. Turn on `remote_jobs_kind_pdf_extract`. Set `REMOTEJOBS__VERIFYSAMPLERATE=0.05` in `.env.production` after cutover and deploy
+   (the ai-worker re-checks a deterministic 5% of applied jobs; a mismatch audits, strikes the node and the in-process text
+   replaces the helper's). The sampler scans the 50 oldest uncompared jobs of the last two days each minute, records the
+   unselected ones as `comparison: not_sampled` so the window always advances to newer jobs, and re-extracts at most 3 sampled
+   jobs per pass (shadow comparison: at most 3 per pass too). A job whose asset cannot be read is retried later, behind newer
+   jobs; a vanished object is recorded `stale`. Check coverage with
+   `SELECT "ResultSummaryJson"->>'comparison', count(*) FROM "RemoteJobs" WHERE "Kind"='pdf.extract' GROUP BY 1;`.
 7. Optionally `remote_jobs_kind_companion_index_prep`.
 
 Kill switches, in order of severity: disable one kind flag; `remote_jobs_enabled` off; `remote_jobs_freeze_applies` on
@@ -131,7 +150,10 @@ rotating exactly as the local pass rotates it. Any failure of the remote path de
   narrows the offer. Per-node limits are keyed by the verified node id (never by IP).
 * Inputs stream through `IFileStorage.OpenReadWithMetadataAsync` with Range support after the database connection is
   released; the node never learns a storage key or asset id; a length that differs from the manifest is `409 stale_input`
-  and the job is cancelled so the producer re-enqueues with a fresh fingerprint.
+  and the job is cancelled so the producer re-enqueues with a fresh fingerprint (a vanished object is the same `409`, also on
+  the `HEAD` pre-flight, whichever storage provider is configured). Outputs are written to a private per-request temp key and
+  moved onto the final key only after size and SHA-256 verify, so a failed re-PUT of an accepted output never damages the
+  earlier object.
 * Results are untrusted: strict UTF-8, depth-limited JSON, size caps, every hash recomputed from `pages`, character rules,
   fingerprint/engine echoes. Audit rows carry ids, kinds, outcomes, counts and hashes only, never content or secrets.
 
@@ -149,7 +171,8 @@ rotating exactly as the local pass rotates it. Any failure of the remote path de
    alphabet would otherwise sometimes contain `_`).
 5. `IdempotencyKey` longer than 256 characters is replaced deterministically by a hash of its parts (companion keys can reach 259).
 6. A repeated `revoke` converges (200) instead of `409`, so a retrying manager is idempotent.
-7. Canary jobs and shadow jobs are never swept to `FallbackLocal` (they have no local path).
+7. Canary jobs and shadow jobs are never swept to `FallbackLocal` (they have no local path); a canary nobody claims is
+   cancelled `canary_timeout` instead (reaper step R2b).
 8. The companion consumer rebuilds drafts from the corpus rows once a result was consumed, so the source's metadata is still
    refreshed and missing embeddings retried on every reindex without a new extraction.
 

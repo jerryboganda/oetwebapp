@@ -231,6 +231,39 @@ x-learner-api-slot: &learner-api-slot
     Conversation__RealtimeSttEstimatedCostUsdPerMinute: ${CONVERSATION__REALTIMESTTESTIMATEDCOSTUSDPERMINUTE:-0}
     Conversation__RealtimeSttAssumeLearnersAdult: ${CONVERSATION__REALTIMESTTASSUMELEARNERSADULT:-false}
     Conversation__RealtimeSttAllowManagedLearnerRealProvider: ${CONVERSATION__REALTIMESTTALLOWMANAGEDLEARNERREALPROVIDER:-false}
+    # Remote-worker boundary (docs/ops/REMOTE-WORKER.md). The env list is closed (no env_file), so every RemoteJobs option an
+    # operator may tune is forwarded here, for both API slots and the ai-worker (which runs the verify sampler and the reaper).
+    # Defaults equal the RemoteJobsOptions defaults and a test fails the build if they drift. The feature itself stays OFF
+    # until its FeatureFlags rows are enabled. FleetAllowedCidrs is a list: set _0 (and _1) in CIDR form, blank = no restriction.
+    # Kinds__<kind>__EngineVersion pins the engine string a media kind is offered under (blank = not offered).
+    RemoteJobs__LeaseSeconds: ${REMOTEJOBS__LEASESECONDS:-120}
+    RemoteJobs__HeartbeatEverySeconds: ${REMOTEJOBS__HEARTBEATEVERYSECONDS:-20}
+    RemoteJobs__NodeHeartbeatSeconds: ${REMOTEJOBS__NODEHEARTBEATSECONDS:-15}
+    RemoteJobs__NodeStaleAfterSeconds: ${REMOTEJOBS__NODESTALEAFTERSECONDS:-45}
+    RemoteJobs__NodeOfflineAfterSeconds: ${REMOTEJOBS__NODEOFFLINEAFTERSECONDS:-600}
+    RemoteJobs__MaxAttempts: ${REMOTEJOBS__MAXATTEMPTS:-3}
+    RemoteJobs__ReleaseLimit: ${REMOTEJOBS__RELEASELIMIT:-5}
+    RemoteJobs__BackoffBaseSeconds: ${REMOTEJOBS__BACKOFFBASESECONDS:-5}
+    RemoteJobs__BackoffMaxSeconds: ${REMOTEJOBS__BACKOFFMAXSECONDS:-300}
+    RemoteJobs__BackoffJitterPercent: ${REMOTEJOBS__BACKOFFJITTERPERCENT:-20}
+    RemoteJobs__ReaperIntervalSeconds: ${REMOTEJOBS__REAPERINTERVALSECONDS:-15}
+    RemoteJobs__ReaperBatch: ${REMOTEJOBS__REAPERBATCH:-100}
+    RemoteJobs__FallbackAfterMinutes: ${REMOTEJOBS__FALLBACKAFTERMINUTES:-10}
+    RemoteJobs__FallbackHardAfterMinutes: ${REMOTEJOBS__FALLBACKHARDAFTERMINUTES:-60}
+    RemoteJobs__JobRetentionDays: ${REMOTEJOBS__JOBRETENTIONDAYS:-30}
+    RemoteJobs__DeferredResultRetentionDays: ${REMOTEJOBS__DEFERREDRESULTRETENTIONDAYS:-7}
+    RemoteJobs__IntegrityStrikeLimit: ${REMOTEJOBS__INTEGRITYSTRIKELIMIT:-3}
+    RemoteJobs__StrikeWindowMinutes: ${REMOTEJOBS__STRIKEWINDOWMINUTES:-60}
+    RemoteJobs__FairShareGate: ${REMOTEJOBS__FAIRSHAREGATE:-false}
+    RemoteJobs__ClaimRatePerMinute: ${REMOTEJOBS__CLAIMRATEPERMINUTE:-60}
+    RemoteJobs__TokenTtlDays: ${REMOTEJOBS__TOKENTTLDAYS:-30}
+    RemoteJobs__FleetTokenTtlDays: ${REMOTEJOBS__FLEETTOKENTTLDAYS:-90}
+    RemoteJobs__TokenRotationGraceSeconds: ${REMOTEJOBS__TOKENROTATIONGRACESECONDS:-3600}
+    RemoteJobs__VerifySampleRate: ${REMOTEJOBS__VERIFYSAMPLERATE:-0}
+    RemoteJobs__FleetAllowedCidrs__0: ${REMOTEJOBS__FLEETALLOWEDCIDRS__0:-}
+    RemoteJobs__FleetAllowedCidrs__1: ${REMOTEJOBS__FLEETALLOWEDCIDRS__1:-}
+    RemoteJobs__Kinds__media.audio-extract__EngineVersion: ${REMOTEJOBS__KINDS__MEDIA_AUDIO_EXTRACT__ENGINEVERSION:-}
+    RemoteJobs__Kinds__media.speaking-join__EngineVersion: ${REMOTEJOBS__KINDS__MEDIA_SPEAKING_JOIN__ENGINEVERSION:-}
     # Upload virus-scanning. Production MUST NOT run with Provider=noop - the
     # API refuses to start in that case. 'clamav' is the compose service name
     # of the sidecar above; port 3310 is clamd's default.

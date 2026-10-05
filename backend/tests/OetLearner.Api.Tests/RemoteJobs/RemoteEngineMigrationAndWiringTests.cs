@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Net;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -190,6 +192,107 @@ public sealed class RemoteEngineMigrationAndWiringTests
         Assert.Contains("\"SecretHash\"", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Secret\" ", sql, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Token\" ", sql, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Schema_AllowsOneOpenCanaryPerNode_ThroughAPartialUniqueIndex()
+    {
+        var sql = RemoteJobsSchemaSql.Up;
+        var index = $"CREATE UNIQUE INDEX IF NOT EXISTS \"{RemoteJobsSchemaSql.OpenCanaryIndex}\" ON \"RemoteJobs\" (\"TargetNodeId\")";
+
+        Assert.Equal("UX_RemoteJobs_OpenCanary", RemoteJobsSchemaSql.OpenCanaryIndex);
+        Assert.Contains(index, sql, StringComparison.Ordinal);
+        var tail = sql[(sql.IndexOf(index, StringComparison.Ordinal) + index.Length)..];
+        Assert.Matches(
+            new Regex(@"^\s+WHERE ""Purpose"" = 'canary' AND ""State"" IN \('Queued', 'Leased'\);", RegexOptions.CultureInvariant),
+            tail);
+    }
+
+    // ── production compose forwards every operator-tunable option ─────────────
+
+    /// <summary>
+    /// The production compose file has a CLOSED environment list (no <c>env_file</c>): an option that is not forwarded there cannot be
+    /// set in production at all (the documented <c>REMOTEJOBS__VERIFYSAMPLERATE</c> step would be a no-op). Every scalar option is
+    /// forwarded with a default that must equal the code default, or an unset variable would silently change behaviour.
+    /// </summary>
+    [Fact]
+    public void ProductionCompose_ForwardsEveryScalarRemoteJobsOption_WithTheCodeDefault()
+    {
+        var compose = File.ReadAllText(Path.Combine(FindRepoRoot(), "docker-compose.production.yml"));
+        var defaults = new RemoteJobsOptions();
+        var protocolNumbers = new HashSet<string>(StringComparer.Ordinal) { nameof(RemoteJobsOptions.CurrentProtocol), nameof(RemoteJobsOptions.MinProtocol) };
+
+        var scalars = typeof(RemoteJobsOptions)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Where(property => property.CanWrite
+                && (property.PropertyType == typeof(int) || property.PropertyType == typeof(bool) || property.PropertyType == typeof(double))
+                && !protocolNumbers.Contains(property.Name))
+            .ToList();
+        Assert.True(scalars.Count >= 20, "the reflection no longer finds the scalar options");
+
+        foreach (var property in scalars)
+        {
+            var line = new Regex(
+                @"^\s+RemoteJobs__" + property.Name + @": \$\{REMOTEJOBS__" + property.Name.ToUpperInvariant() + @":-(?<default>[^}]*)\}\s*$",
+                RegexOptions.Multiline | RegexOptions.CultureInvariant);
+            var match = line.Match(compose);
+
+            Assert.True(match.Success, $"docker-compose.production.yml does not forward RemoteJobs:{property.Name} as REMOTEJOBS__{property.Name.ToUpperInvariant()}.");
+            var expected = Convert.ToString(property.GetValue(defaults), CultureInfo.InvariantCulture)!.ToLowerInvariant();
+            Assert.True(
+                string.Equals(expected, match.Groups["default"].Value, StringComparison.Ordinal),
+                $"RemoteJobs:{property.Name} defaults to '{expected}' in code but '{match.Groups["default"].Value}' in docker-compose.production.yml.");
+        }
+    }
+
+    [Fact]
+    public void ProductionCompose_ForwardsTheFleetCidrListAndTheMediaEnginePins()
+    {
+        var compose = File.ReadAllText(Path.Combine(FindRepoRoot(), "docker-compose.production.yml"));
+
+        Assert.Contains("RemoteJobs__FleetAllowedCidrs__0: ${REMOTEJOBS__FLEETALLOWEDCIDRS__0:-}", compose, StringComparison.Ordinal);
+        Assert.Contains("RemoteJobs__FleetAllowedCidrs__1: ${REMOTEJOBS__FLEETALLOWEDCIDRS__1:-}", compose, StringComparison.Ordinal);
+        Assert.Contains(
+            $"RemoteJobs__Kinds__{RemoteJobKinds.MediaAudioExtract}__EngineVersion: ${{REMOTEJOBS__KINDS__MEDIA_AUDIO_EXTRACT__ENGINEVERSION:-}}",
+            compose,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            $"RemoteJobs__Kinds__{RemoteJobKinds.MediaSpeakingJoin}__EngineVersion: ${{REMOTEJOBS__KINDS__MEDIA_SPEAKING_JOIN__ENGINEVERSION:-}}",
+            compose,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ForwardedOptionNames_BindToTheOptionsTheDocumentationPromises()
+    {
+        // The compose keys become these colon paths in .NET configuration (double underscore = section separator).
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RemoteJobs:VerifySampleRate"] = "0.05",
+                ["RemoteJobs:FairShareGate"] = "true",
+                ["RemoteJobs:FleetAllowedCidrs:0"] = "172.18.0.0/16",
+                ["RemoteJobs:FleetAllowedCidrs:1"] = "",
+                [$"RemoteJobs:Kinds:{RemoteJobKinds.MediaAudioExtract}:EngineVersion"] = "ffmpeg:7.1/oet-audio:1",
+                [$"RemoteJobs:Kinds:{RemoteJobKinds.MediaSpeakingJoin}:EngineVersion"] = "",
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddRemoteJobs(configuration, isNpgsql: false, isWorker: false);
+        using var provider = services.BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<RemoteJobsOptions>>().Value.Normalized();
+
+        Assert.Equal(0.05, options.VerifySampleRate);
+        Assert.True(options.FairShareGate);
+        Assert.Equal("ffmpeg:7.1/oet-audio:1", options.EngineVersionOverride(RemoteJobKinds.MediaAudioExtract));
+        Assert.Null(options.EngineVersionOverride(RemoteJobKinds.MediaSpeakingJoin)); // a blank pin means "not offered"
+        Assert.Equal("172.18.0.0/16", Assert.Single(options.FleetAllowedCidrs.Where(cidr => !string.IsNullOrWhiteSpace(cidr))));
+
+        // A blank list entry (compose forwards an empty value when the variable is unset) must not turn the allow-list on.
+        Assert.True(RemoteFleetPlaneFilter.IsAllowedSource(IPAddress.Parse("198.51.100.7"), ["", " "]));
+        Assert.False(RemoteFleetPlaneFilter.IsAllowedSource(IPAddress.Parse("198.51.100.7"), ["", "172.18.0.0/16"]));
+        Assert.True(RemoteFleetPlaneFilter.IsAllowedSource(IPAddress.Parse("172.18.4.9"), ["", "172.18.0.0/16"]));
     }
 
     // ── dependency injection: dark by default, Postgres only ─────────────────

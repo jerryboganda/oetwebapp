@@ -641,6 +641,20 @@ require_int_min_if_set TYPESAFE__VERIFYMAXFINDINGSPERCALL 1
 require_int_min_if_set TYPESAFE__BREAKERFAILURETHRESHOLD 1
 require_int_min_if_set TYPESAFE__BREAKERCOOLDOWNSECONDS 1
 
+# Remote-worker boundary (docs/ops/REMOTE-WORKER.md): every REMOTEJOBS__* key is optional and falls back to the default
+# docker-compose.production.yml forwards. The verify-sampling fraction is the content-level integrity control for helper
+# results (a bad value would silently disable or over-run it) and a malformed bool/number makes .NET option binding throw.
+require_unit_interval_if_set REMOTEJOBS__VERIFYSAMPLERATE
+require_int_min_if_set REMOTEJOBS__CLAIMRATEPERMINUTE 1
+fairshare_value=$(read_env_value REMOTEJOBS__FAIRSHAREGATE || true)
+case "$(printf '%s' "$fairshare_value" | tr '[:upper:]' '[:lower:]')" in
+  ""|true|false) ;;
+  *)
+    echo "[env] REMOTEJOBS__FAIRSHAREGATE must be true or false when set" >&2
+    failed=1
+    ;;
+esac
+
 # GEPA placement engine connection is OPTIONAL in the env file (same owner
 # policy as live voice / LiveKit / TypeSafe): when both keys are empty the
 # placement proxy fails closed with 503 placement_engine_not_configured and
