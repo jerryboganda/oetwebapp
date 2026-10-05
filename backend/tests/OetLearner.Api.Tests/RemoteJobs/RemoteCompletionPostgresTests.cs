@@ -1,4 +1,6 @@
+using System.Net;
 using System.Text.Json;
+using Amazon.S3;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
@@ -511,10 +513,11 @@ public sealed class RemoteCompletionPostgresTests
         byte[] bytes,
         string? declaredSha = null,
         long? declaredLength = null,
-        long fence = 1)
+        long fence = 1,
+        IFileStorage? storage = null)
     {
         await using var db = h.NewContext();
-        return await h.IO(db).PutOutputAsync(
+        return await h.IO(db, storage).PutOutputAsync(
             node,
             jobId,
             fence,
@@ -590,6 +593,135 @@ public sealed class RemoteCompletionPostgresTests
         var expired = await PutAsync(h, node, mediaJob, "late.m4a", new byte[] { 1 });
         Assert.Equal("lease_lost", expired.Error!.Code);
         Assert.Equal(0, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobOutputs";"""));
+    }
+
+    private static async Task<byte[]> ReadObjectAsync(IFileStorage storage, string key)
+    {
+        await using var stream = await storage.OpenReadAsync(key, CancellationToken.None);
+        using var copy = new MemoryStream();
+        await stream.CopyToAsync(copy);
+        return copy.ToArray();
+    }
+
+    private static Task<string?> OutputShaAsync(RemotePgHarness h, string name)
+        => h.ScalarAsync<string>("""SELECT "Sha256" FROM "RemoteJobOutputs" WHERE "Name" = @n;""", ("n", name));
+
+    [PostgreSqlFact]
+    public async Task PutOutput_AFailedRePutOfAnAcceptedOutput_LeavesTheObjectAndItsRowIntact()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var node = await h.AddNodeAsync();
+        var jobId = await h.InsertLeasedJobAsync(node);
+        var storage = new FaultInjectingStorage(h.Storage) { MoveRemovesSource = true };
+        var accepted = new byte[] { 1, 2, 3, 4 };
+        var finalKey = RemoteInputOutputService.OutputKey(jobId, 1, "audio.m4a");
+        Assert.Null((await PutAsync(h, node, jobId, "audio.m4a", accepted, storage: storage)).Error);
+
+        var wrongHash = await PutAsync(h, node, jobId, "audio.m4a", new byte[] { 9, 9 }, declaredSha: new string('0', 64), storage: storage);
+        var shortBody = await PutAsync(h, node, jobId, "audio.m4a", new byte[] { 7, 7, 7 }, declaredLength: 10, storage: storage);
+        var overrun = await PutAsync(h, node, jobId, "audio.m4a", new byte[] { 5, 5, 5, 5 }, declaredLength: 2, storage: storage);
+
+        Assert.Equal("output_hash_mismatch", wrongHash.Error!.Code);
+        Assert.Equal("output_hash_mismatch", shortBody.Error!.Code);
+        Assert.Equal("output_too_large", overrun.Error!.Code);
+
+        // The accepted object and the row that describes it still agree ...
+        Assert.Equal(accepted, await ReadObjectAsync(h.Storage, finalKey));
+        Assert.Equal(RemoteIds.Sha256Hex(accepted), await OutputShaAsync(h, "audio.m4a"));
+        Assert.Equal(1, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobOutputs";"""));
+
+        // ... and no half-written temp object survives any of the rejected uploads.
+        Assert.False(h.Storage.AnyKeyStartsWith($"remote-jobs/{jobId}/1/."));
+    }
+
+    [PostgreSqlFact]
+    public async Task PutOutput_ASuccessfulRePut_ReplacesTheObject_AndLeavesOnlyTheFinalKey()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var node = await h.AddNodeAsync();
+        var jobId = await h.InsertLeasedJobAsync(node);
+        var storage = new FaultInjectingStorage(h.Storage) { MoveRemovesSource = true };
+        var second = new byte[] { 9, 8, 7 };
+        await PutAsync(h, node, jobId, "audio.m4a", new byte[] { 1, 2, 3, 4 }, storage: storage);
+
+        var replaced = await PutAsync(h, node, jobId, "audio.m4a", second, storage: storage);
+
+        Assert.Null(replaced.Error);
+        Assert.True(replaced.Replaced);
+        Assert.Equal(second, await ReadObjectAsync(h.Storage, RemoteInputOutputService.OutputKey(jobId, 1, "audio.m4a")));
+        Assert.Equal(RemoteIds.Sha256Hex(second), await OutputShaAsync(h, "audio.m4a"));
+        Assert.False(h.Storage.AnyKeyStartsWith($"remote-jobs/{jobId}/1/."));
+    }
+
+    [PostgreSqlFact]
+    public async Task PutOutput_AnOverrun_LeavesNothingInStorage_NotEvenARestoredCopy()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var node = await h.AddNodeAsync();
+        var jobId = await h.InsertLeasedJobAsync(node);
+
+        var result = await PutAsync(h, node, jobId, "audio.m4a", new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, declaredLength: 5);
+
+        Assert.Equal(413, result.Error!.StatusCode);
+        Assert.Equal("output_too_large", result.Error.Code);
+        Assert.False(h.Storage.AnyKeyStartsWith($"remote-jobs/{jobId}/"));
+        Assert.Equal(0, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobOutputs";"""));
+    }
+
+    [PostgreSqlFact]
+    public async Task PutOutput_AStorageFailureWhilePublishing_Answers503_KeepsTheOldObject_AndDeletesTheTempObject()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var node = await h.AddNodeAsync();
+        var jobId = await h.InsertLeasedJobAsync(node);
+        var storage = new FaultInjectingStorage(h.Storage) { MoveRemovesSource = true };
+        var accepted = new byte[] { 1, 2, 3, 4 };
+        Assert.Null((await PutAsync(h, node, jobId, "audio.m4a", accepted, storage: storage)).Error);
+        storage.Fault = (operation, _) => operation == "move" ? new IOException("disk full") : null;
+
+        var failed = await PutAsync(h, node, jobId, "audio.m4a", new byte[] { 6, 6, 6 }, storage: storage);
+
+        Assert.Equal(503, failed.Error!.StatusCode);
+        Assert.Equal("storage_unavailable", failed.Error.Code);
+        Assert.Equal(accepted, await ReadObjectAsync(h.Storage, RemoteInputOutputService.OutputKey(jobId, 1, "audio.m4a")));
+        Assert.Equal(RemoteIds.Sha256Hex(accepted), await OutputShaAsync(h, "audio.m4a"));
+        Assert.False(h.Storage.AnyKeyStartsWith($"remote-jobs/{jobId}/1/."));
+    }
+
+    // ── HEAD pre-flight of an input whose object vanished ────────────────────
+
+    [PostgreSqlFact]
+    public async Task OpenInput_AHeadRequestForAVanishedObject_Is409StaleInput_AndCancelsTheJob()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        var (node, job) = await LeasedPdfJobAsync(h, size: 512); // nothing was stored under the manifest's key
+        await using var db = h.NewContext();
+
+        var opened = await h.IO(db).OpenInputAsync(node, job.Id, job.FenceToken, "pdf", headOnly: true, CancellationToken.None);
+
+        Assert.Equal(409, opened.Error!.StatusCode);
+        Assert.Equal("stale_input", opened.Error.Code);
+        Assert.Equal("Cancelled", await h.StateOfAsync(job.Id));
+    }
+
+    [PostgreSqlFact]
+    public async Task OpenInput_TheStorageProviderReportingAnS3NotFoundOnLength_IsStaleInput_NotAnInternalError()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await StoreSamplePdfAsync(h, 512);
+        var (node, job) = await LeasedPdfJobAsync(h, size: 512);
+        var storage = new FaultInjectingStorage(h.Storage)
+        {
+            // The S3 provider's LengthAsync lets its own 404 escape; the object can also vanish between the two calls.
+            Fault = (operation, _) => operation == "length" ? new AmazonS3Exception("missing") { StatusCode = HttpStatusCode.NotFound } : null,
+        };
+        await using var db = h.NewContext();
+
+        var opened = await h.IO(db, storage).OpenInputAsync(node, job.Id, job.FenceToken, "pdf", headOnly: true, CancellationToken.None);
+
+        Assert.Equal(409, opened.Error!.StatusCode);
+        Assert.Equal("stale_input", opened.Error.Code);
+        Assert.Equal("Cancelled", await h.StateOfAsync(job.Id));
     }
 
     // ── a canary that really extracts ────────────────────────────────────────

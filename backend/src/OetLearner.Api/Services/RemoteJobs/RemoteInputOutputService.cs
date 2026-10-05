@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Amazon.S3;
 using Npgsql;
 using OetLearner.Api.Data;
 using OetLearner.Api.Services.Content;
@@ -70,6 +71,14 @@ public sealed partial class RemoteInputOutputService(
             Stream? stream = null;
             if (headOnly)
             {
+                // LengthAsync reports a missing object differently per provider (the S3 provider lets its own not-found exception
+                // escape), while ExistsAsync answers false everywhere: ask that first so a vanished object is always stale_input.
+                if (!await storage.ExistsAsync(entry.StorageKey, ct))
+                {
+                    await lifecycle.CancelLeasedAsync(jobId, nodeId, fence, "stale_input", ct);
+                    return RemoteInputOpen.Fail(RemoteProblems.Conflict("stale_input", "The input no longer exists."));
+                }
+
                 length = await storage.LengthAsync(entry.StorageKey, ct);
             }
             else
@@ -89,8 +98,9 @@ public sealed partial class RemoteInputOutputService(
 
             return new RemoteInputOpen(null, stream, length, entry.Sha256, entry.ContentType);
         }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        catch (Exception ex) when (IsMissingObject(ex))
         {
+            // Also the narrow race where the object vanishes between the existence check and the length/open call.
             await lifecycle.CancelLeasedAsync(jobId, nodeId, fence, "stale_input", ct);
             return RemoteInputOpen.Fail(RemoteProblems.Conflict("stale_input", "The input no longer exists."));
         }
@@ -100,6 +110,11 @@ public sealed partial class RemoteInputOutputService(
             return RemoteInputOpen.Fail(RemoteProblems.ServiceUnavailable("storage_unavailable", "Storage is temporarily unavailable."));
         }
     }
+
+    /// <summary>A missing storage object as any provider reports it: local file/directory not found, or an S3 404.</summary>
+    private static bool IsMissingObject(Exception ex)
+        => ex is FileNotFoundException or DirectoryNotFoundException
+            || ex is AmazonS3Exception { StatusCode: System.Net.HttpStatusCode.NotFound };
 
     internal static IReadOnlyList<RemoteInputEntry> ReadManifest(string inputsJson)
     {
@@ -133,8 +148,9 @@ public sealed partial class RemoteInputOutputService(
     // ── outputs ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Streams one binary output to its final per-job key while hashing it. A declared-versus-computed hash mismatch deletes
-    /// the object (<c>422 output_hash_mismatch</c>); a lease lost during the upload deletes it too and answers 409.
+    /// Streams one binary output to a temp key while hashing it, then moves it onto its final per-job key. A declared-versus-computed
+    /// hash mismatch (<c>422 output_hash_mismatch</c>), an overrun, or a lease lost during the upload deletes only the temp object, so
+    /// an output accepted earlier under the same name stays intact.
     /// </summary>
     public async Task<RemoteOutputPut> PutOutputAsync(
         string nodeId,
@@ -184,42 +200,55 @@ public sealed partial class RemoteInputOutputService(
             return Failed(RemoteProblems.PayloadTooLarge("output_too_large", "The output exceeds the limits of this job."));
         }
 
+        // The bytes land under a private per-request temp key and replace the final key only after size and hash are verified, so a
+        // failed re-PUT of an accepted (fence, name) can never overwrite or delete the object its RemoteJobOutputs row describes.
+        // The name pattern forbids a leading dot, so a temp key can never collide with a final key.
         var key = OutputKey(jobId, fence, name);
+        var partKey = OutputKey(jobId, fence, "." + name + "." + Guid.NewGuid().ToString("N") + ".part");
         long written = 0;
-        string computed;
+        string computed = string.Empty;
+        var oversize = false;
         try
         {
-            await using var destination = await storage.OpenWriteAsync(key, ct);
-            using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            var buffer = new byte[81920];
-            while (true)
+            await using (var destination = await storage.OpenWriteAsync(partKey, ct))
             {
-                var read = await body.ReadAsync(buffer, ct);
-                if (read == 0) break;
-                written += read;
-                if (written > contentLength.Value || written > limits.MaxOutputBytes)
+                using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                var buffer = new byte[81920];
+                while (true)
                 {
-                    await destination.DisposeAsync();
-                    await storage.DeleteAsync(key, ct);
-                    return Failed(RemoteProblems.PayloadTooLarge("output_too_large", "The output exceeds its declared length."));
+                    var read = await body.ReadAsync(buffer, ct);
+                    if (read == 0) break;
+                    written += read;
+                    if (written > contentLength.Value || written > limits.MaxOutputBytes)
+                    {
+                        oversize = true;
+                        break;
+                    }
+
+                    hasher.AppendData(buffer, 0, read);
+                    await destination.WriteAsync(buffer.AsMemory(0, read), ct);
                 }
 
-                hasher.AppendData(buffer, 0, read);
-                await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+                if (!oversize) computed = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
             }
-
-            computed = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             logger.LogWarning(ex, "Storage failure while writing an output of job {JobId}.", jobId);
-            await TryDeleteAsync(key);
+            await TryDeleteAsync(partKey);
             return Failed(RemoteProblems.ServiceUnavailable("storage_unavailable", "Storage is temporarily unavailable."));
+        }
+
+        // The temp object exists only once the stream above is disposed, so it is deleted here, after that scope has closed.
+        if (oversize)
+        {
+            await TryDeleteAsync(partKey);
+            return Failed(RemoteProblems.PayloadTooLarge("output_too_large", "The output exceeds its declared length."));
         }
 
         if (written != contentLength.Value || !string.Equals(computed, declaredSha256, StringComparison.Ordinal))
         {
-            await TryDeleteAsync(key);
+            await TryDeleteAsync(partKey);
             return Failed(RemoteProblems.Unprocessable("output_hash_mismatch", "The uploaded bytes do not match X-Content-SHA256."));
         }
 
@@ -227,8 +256,19 @@ public sealed partial class RemoteInputOutputService(
         var stillLive = await lifecycle.GuardAsync(jobId, nodeId, fence, ct);
         if (stillLive.Error is not null)
         {
-            await TryDeleteAsync(key);
+            await TryDeleteAsync(partKey);
             return Failed(stillLive.Error);
+        }
+
+        try
+        {
+            await storage.MoveAsync(partKey, key, overwrite: true, ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            logger.LogWarning(ex, "Storage failure while publishing an output of job {JobId}.", jobId);
+            await TryDeleteAsync(partKey);
+            return Failed(RemoteProblems.ServiceUnavailable("storage_unavailable", "Storage is temporarily unavailable."));
         }
 
         await RemoteDb.ExecuteAsync(
