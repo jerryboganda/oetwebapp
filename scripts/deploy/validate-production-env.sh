@@ -646,6 +646,9 @@ require_int_min_if_set TYPESAFE__BREAKERCOOLDOWNSECONDS 1
 # results (a bad value would silently disable or over-run it) and a malformed bool/number makes .NET option binding throw.
 require_unit_interval_if_set REMOTEJOBS__VERIFYSAMPLERATE
 require_int_min_if_set REMOTEJOBS__CLAIMRATEPERMINUTE 1
+# Hours a prepared Speaking audio join (learner audio) may wait for its grade before it is deleted: a malformed value would make
+# option binding throw, and 0 is clamped up in code but is almost certainly a typo.
+require_int_min_if_set REMOTEJOBS__SPEAKINGJOINOUTPUTTTLHOURS 1
 fairshare_value=$(read_env_value REMOTEJOBS__FAIRSHAREGATE || true)
 case "$(printf '%s' "$fairshare_value" | tr '[:upper:]' '[:lower:]')" in
   ""|true|false) ;;

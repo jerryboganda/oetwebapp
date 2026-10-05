@@ -32,6 +32,13 @@ public sealed class RemoteJobsOptions
     public int FallbackHardAfterMinutes { get; set; } = 60;
     public int JobRetentionDays { get; set; } = 30;
     public int DeferredResultRetentionDays { get; set; } = 7;
+
+    /// <summary>
+    /// Hours a prepared Speaking audio join (<c>media.speaking-join</c>, learner audio) may wait for its grade before the reaper deletes it.
+    /// The grade deletes it the moment it uses it, and retention or an erasure of the clips deletes it too, so this is only the backstop.
+    /// </summary>
+    public int SpeakingJoinOutputTtlHours { get; set; } = 24;
+
     public int IntegrityStrikeLimit { get; set; } = 3;
     public int StrikeWindowMinutes { get; set; } = 60;
 
@@ -85,6 +92,7 @@ public sealed class RemoteJobsOptions
             FallbackHardAfterMinutes = Math.Clamp(FallbackHardAfterMinutes, 1, 10080),
             JobRetentionDays = Math.Clamp(JobRetentionDays, 1, 3650),
             DeferredResultRetentionDays = Math.Clamp(DeferredResultRetentionDays, 1, 365),
+            SpeakingJoinOutputTtlHours = Math.Clamp(SpeakingJoinOutputTtlHours, 1, 168),
             IntegrityStrikeLimit = Math.Clamp(IntegrityStrikeLimit, 1, 100),
             StrikeWindowMinutes = Math.Clamp(StrikeWindowMinutes, 1, 1440),
             FairShareGate = FairShareGate,

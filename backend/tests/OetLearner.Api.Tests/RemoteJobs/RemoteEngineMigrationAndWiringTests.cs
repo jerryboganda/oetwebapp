@@ -353,7 +353,9 @@ public sealed class RemoteEngineMigrationAndWiringTests
         var handlers = services.Where(d => d.ServiceType == typeof(IRemoteKindHandler)).Select(d => d.ImplementationType).ToList();
         Assert.Contains(typeof(PdfExtractKindHandler), handlers);
         Assert.Contains(typeof(CompanionIndexPrepKindHandler), handlers);
-        Assert.Equal(2, handlers.Count);
+        Assert.Contains(typeof(AudioExtractKindHandler), handlers);
+        Assert.Contains(typeof(SpeakingJoinKindHandler), handlers);
+        Assert.Equal(RemoteJobKinds.All.Count, handlers.Count); // every registry kind has exactly one handler
         Assert.Contains(services, d => d.ServiceType == typeof(IRemotePdfExtractionProducer) && d.ImplementationType == typeof(RemotePdfExtractionProducer));
         Assert.Contains(services, d => d.ServiceType == typeof(IRemoteCompanionIndexPrep) && d.ImplementationType == typeof(RemoteCompanionIndexPrepProducer));
     }

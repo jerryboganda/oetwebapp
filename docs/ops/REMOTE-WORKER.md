@@ -34,7 +34,8 @@ Rows in `FeatureFlags` (seeded disabled at startup so `/admin/flags` lists them;
 | `remote_jobs_kind_pdf_extract` | `pdf.extract` purpose `apply` |
 | `remote_jobs_kind_pdf_extract_shadow` | `pdf.extract` purpose `shadow` (hash-only, never applied) |
 | `remote_jobs_kind_companion_index_prep` | `companion.index-prep` |
-| `remote_jobs_kind_media_audio_extract`, `remote_jobs_kind_media_speaking_join` | reserved for the media tracks (also need a pinned `RemoteJobs:Kinds:<kind>:EngineVersion`) |
+| `remote_jobs_kind_media_audio_extract` | `media.audio-extract`: Live Class recordings over the 24 MiB single-call cap are extracted into mp3 chunks on a helper (also needs a pinned `RemoteJobs:Kinds:media.audio-extract:EngineVersion`) |
+| `remote_jobs_kind_media_speaking_join` | `media.speaking-join`: optional precompute of the consented candidate-audio mp3 (also needs the `speaking_audio_assessment` flag and a pinned `RemoteJobs:Kinds:media.speaking-join:EngineVersion`) |
 | `remote_fleet_service_enabled` | `/v1/internal/fleet/*` and the owner's read-only node list (off = `404 fleet_service_disabled`) |
 | `remote_jobs_freeze_applies` | EMERGENCY: `complete` answers `503 applies_frozen` and cancels the job |
 
@@ -45,7 +46,7 @@ Options (`RemoteJobs__<Name>` in .NET configuration; secrets are never configura
 `HeartbeatEverySeconds` (20), `NodeHeartbeatSeconds` (15), `NodeStaleAfterSeconds` (45), `NodeOfflineAfterSeconds` (600),
 `MaxAttempts` (3), `ReleaseLimit` (5), `BackoffBaseSeconds`/`BackoffMaxSeconds`/`BackoffJitterPercent` (5/300/20),
 `ReaperIntervalSeconds` (15), `ReaperBatch` (100), `FallbackAfterMinutes` (10), `FallbackHardAfterMinutes` (60),
-`JobRetentionDays` (30), `DeferredResultRetentionDays` (7), `IntegrityStrikeLimit`/`StrikeWindowMinutes` (3/60),
+`JobRetentionDays` (30), `DeferredResultRetentionDays` (7), `SpeakingJoinOutputTtlHours` (24), `IntegrityStrikeLimit`/`StrikeWindowMinutes` (3/60),
 `FairShareGate` (false), `ClaimRatePerMinute` (60), `TokenTtlDays` (30), `FleetTokenTtlDays` (90),
 `TokenRotationGraceSeconds` (3600), `FleetAllowedCidrs` (empty), `VerifySampleRate` (0), `Kinds:<kind>:EngineVersion`.
 Out-of-range values are clamped (`RemoteJobsOptions.Normalized`).
@@ -57,7 +58,8 @@ keys: `REMOTEJOBS__FLEETALLOWEDCIDRS__0=172.18.0.0/16` (and `__1`); blank entrie
 `REMOTEJOBS__KINDS__MEDIA_AUDIO_EXTRACT__ENGINEVERSION` / `REMOTEJOBS__KINDS__MEDIA_SPEAKING_JOIN__ENGINEVERSION`. Defaults
 in the compose file equal the code defaults (keep them in step by hand; the test source that compares them is a manual tool,
 no CI runs it); an option that is not in that list cannot be set in production. `validate-production-env.sh` rejects a malformed `REMOTEJOBS__VERIFYSAMPLERATE` (must be 0 to
-1), `REMOTEJOBS__CLAIMRATEPERMINUTE` (integer >= 1) or `REMOTEJOBS__FAIRSHAREGATE` (true/false). Changing one needs a normal
+1), `REMOTEJOBS__CLAIMRATEPERMINUTE` (integer >= 1), `REMOTEJOBS__SPEAKINGJOINOUTPUTTTLHOURS` (integer >= 1) or
+`REMOTEJOBS__FAIRSHAREGATE` (true/false). Changing one needs a normal
 deploy (a container recreate) to take effect.
 
 ## Bring-up order (owner)
@@ -93,6 +95,8 @@ deploy (a container recreate) to take effect.
    jobs; a vanished object is recorded `stale`. Check coverage with
    `SELECT "ResultSummaryJson"->>'comparison', count(*) FROM "RemoteJobs" WHERE "Kind"='pdf.extract' GROUP BY 1;`.
 7. Optionally `remote_jobs_kind_companion_index_prep`.
+8. Optionally the media kinds (section "Media kinds" below). They need a node whose agent image carries ffmpeg, the engine pin
+   for the kind in `.env.production`, and the kind's flag; they never run on a PDF-only agent.
 
 Kill switches, in order of severity: disable one kind flag; `remote_jobs_enabled` off; `remote_jobs_freeze_applies` on
 (stops results being written); node `disable`/`drain`/`revoke` (manager or owner break-glass); stop the helper. Rollback of
@@ -110,7 +114,10 @@ fence is never reset, so zombies of an earlier incarnation stay fenced).
 * The **reaper** (`RemoteJobReaper`, every API process incl. the ai-worker; all statements are state-conditional and skip
   locked rows) is the ONLY code that turns an expired lease back into work (`claim` never selects a `Leased` row).
   R1 expiry (requeue with backoff, or `Quarantined` at the attempt cap), R2 fallback (queue wait ran out, or master off),
-  R3 orphan outputs, R4 retention. It never calls a hub or an AI provider.
+  R3 orphan outputs, R5 output expiry (the media kinds' binary outputs: a Speaking join after `SpeakingJoinOutputTtlHours`,
+  any other output with its job row after `JobRetentionDays`; objects are deleted first, rows after), R4 retention (a row that
+  still has outputs waits for R5, so no object is ever left without a row that names it). It never calls a hub or an AI
+  provider.
 * `complete` is one transaction: fenced CAS to `Succeeded` + the kind's applier; an applier exception rolls everything back
   and the job stays `Leased` (`503 apply_failed`, retryable). The same `(job, fence, resultSha256)` replays the stored outcome
   without running the applier. A different hash for the same fence is `409 result_conflict`.
@@ -132,7 +139,8 @@ Node: `Pending` -> `Probation` (first heartbeat) -> `Active` (canary + `enable`)
 | --- | --- | --- | --- |
 | `pdf.extract` | `ContentTextExtractionWorker` -> `RemotePdfExtractionProducer` | `PdfExtractKindHandler` | merges ONE key (the `ContentPaperAsset` id) into `ContentPaper.ExtractedTextJson` with a compare-and-swap on the stored text AND `RowVersion` (+1), 3 attempts; `NoOp` for needsOcr/already cached; `Discarded` for a vanished or changed asset |
 | `companion.index-prep` | `CompanionDocumentIndexer` -> `RemoteCompanionIndexPrepProducer` | `CompanionIndexPrepKindHandler` | `Deferred`: the validated result is parked in `RemoteJobs.ResultJson`; the reindex consumes it (embeddings, corpus guard and hash-gated commit stay on the API) |
-| `media.audio-extract`, `media.speaking-join` | owned by the media tracks | not implemented here | the registry, limits, outputs route and `RemoteJobOutputs` are generic and ready |
+| `media.audio-extract` | `LiveClassRecordingProcessingService` (transcribe stage) -> `RemoteAudioExtractionProducer` | `AudioExtractKindHandler` | `Applied`: the verified chunk manifest is written to `LiveClassRecordings.AudioChunksJson`; `Discarded` when the recording moved on (other stored file, real transcript arrived, deleted) |
+| `media.speaking-join` | `RemoteSpeakingJoinSweeper` (ai-worker) -> `RemoteSpeakingJoinProducer`; consumed by `SpeakingAudioEvidenceService` | `SpeakingJoinKindHandler` | `Applied` writes nothing to a domain table (the output row + job ARE the record); `Discarded` when a clip was archived or erased meanwhile |
 
 To add a kind: add a row to `RemoteJobKinds`, an `IRemoteKindHandler` (pure `Validate`, transactional `ApplyAsync`; it must not
 call an AI provider or a hub), register it in `RemoteJobsServiceCollectionExtensions`, and write a producer. The lease, fence,
@@ -147,6 +155,63 @@ touches nothing on the paper to keep the worker rotating: the worker walks its c
 (`ContentTextExtractionWorker`, 20 papers per tick), so a paper that remote jobs own is simply revisited on the next lap and
 `ContentPaper.UpdatedAt` / `RowVersion` only change when text is really applied. The producer is resolved from the per-paper
 scope the worker opens. Any failure of the remote path degrades to the unchanged local path.
+
+## Media kinds (OET-RWP/1 sections 6.3 and 6.4)
+
+Both are OFF by default and are never offered until their flag is on AND `REMOTEJOBS__KINDS__MEDIA_<KIND>__ENGINEVERSION` pins the
+exact engine string the agent image reports (for example `ffmpeg:7.1.1/audio-extract:1`). Provider calls stay on the primary: no
+media code references an AI gateway, a recorder or a key (a source-scan test fails the build otherwise), helpers hold no
+credentials, and nothing here touches grading, credits or the Claude Max route.
+
+### `media.audio-extract` (Live Class recordings)
+
+Today a recording over 24 MiB cannot be transcribed at all (`ProcessTranscribeAsync` loads it into one `byte[]`). The transcribe
+stage now behaves as follows; everything else about it is unchanged, including `LiveClasses.AiRecordingProcessingEnabled` (off =
+the recording stays `Pending`, nothing is enqueued, nothing is called):
+
+1. A recording that is small enough takes the single-call path exactly as before. The remote path is never consulted.
+2. An oversize recording with no chunk manifest asks `IRemoteAudioExtraction.PlanAsync`. With the flag off, no pinned engine, no
+   healthy node, an unsupported file type or any doubt the answer is "local" and the stage fails with the SAME message as before
+   (there is deliberately no local ffmpeg chunker: that would put the CPU work back on the primary). Otherwise one idempotent job
+   is enqueued (`ResourceType=LiveClassRecording`, input `media`, fingerprint = SHA-256 of the stored file, computed once) and the
+   stage queues a continuation of itself 45 s later and finishes: the transcribe job never blocks and never burns its retries
+   while a helper works. A terminal failure of the job (`no_audio_stream`, `duration_exceeded`, quarantine) fails the recording
+   with the reason; a withdrawn job (`FallbackLocal`, `Cancelled`) is re-enqueued when a node can take it.
+3. The completion applier verifies a contiguous, sample-exact manifest (6.3), writes it to `LiveClassRecordings.AudioChunksJson`
+   in the same transaction that settles the job, and fills `DurationSeconds` only when it was 0. The chunks are NOT registered as
+   `MediaAsset`s (nothing needs them as assets, no recording-retention worker exists to find them there, and they would show up in
+   media listings); the manifest names their keys, which are server-side only (never in a DTO: guarded by a test).
+4. With a manifest the stage makes ONE `IAiGatewayService` call per chunk (feature `class.recording.transcribe.v1`, so every call
+   writes its own `AiUsageRecord` exactly like the single call), saves each chunk's transcript immediately (a retry resumes, it
+   never pays twice), verifies each chunk's size and SHA-256 before sending it, and continues in a new job after 12 minutes of
+   work so it never hits the 20-minute execution ceiling. The transcripts are joined in order into `TranscriptText`.
+5. Delete-on-complete: after the transcript is saved the chunk audio is deleted (the transcripts stay in the manifest). A failed
+   delete never fails the stage; reaper R5 removes what is left after `JobRetentionDays`. A chunk that vanished or changed
+   drops the manifest and the recording is extracted again.
+
+### `media.speaking-join` (candidate audio)
+
+Replicates `FfmpegSpeakingAudioTranscoder.JoinToMp3Async` (`PcmJoiner` now lives in its own file `PcmJoiner.cs`, which the agent
+link-compiles). The judge call (`openai-audio`) stays in `SpeakingAudioEvidenceService`.
+
+* **Producer.** `RemoteSpeakingJoinSweeper` (ai-worker only, every 20 s) hands the sessions of waiting `speaking.grade`
+  operations (queued, leased or scheduled for retry, at most two hours old) to `RemoteSpeakingJoinProducer`, which enqueues ONE job
+  per session when all of these hold: master flag, kind flag, pinned engine, the `speaking_audio_assessment` flag, a healthy node,
+  at most 64 clips of at most 16 MiB (64 MiB total) of the allowed audio types. It picks the clips through the SAME query as the
+  audio stage (`SpeakingAudioClips`), after the same connectivity-chatter strip, so the key matches. A clip with no recorded hash
+  (several Speaking paths leave it empty) is hashed once and the hash is recorded on its `MediaAsset`.
+  Key = `(kind, apply, SpeakingSession, sessionId, sha256 of the ORDERED clip shas, engine, settings)`: per session, never
+  content-addressed, so byte-identical audio of two learners gets two jobs and two outputs. `params` carry no identifier; the
+  claim response shows the node only names, sizes, hashes and content types (never a storage key, recording id or session).
+* **Consumer.** The audio stage asks `IRemoteSpeakingJoin.TryServeAsync` first; a hit must match the ordered clip hashes exactly,
+  the flags must still be on, and the stored mp3 must match the hash the API itself verified at completion. Anything else, or any
+  error, means the unchanged local join. The grade never waits for a remote job.
+* **Learner-audio hygiene.** The derivative is deleted the moment it is used; reaper R5 deletes it after
+  `SpeakingJoinOutputTtlHours`; `SpeakingAudioRetentionWorker` and a learner's erasure of a recording delete it with the clips
+  (and withdraw an unclaimed job); the applier refuses (`Discarded`) a join whose clips were archived while the helper worked.
+  It is NOT registered as a `SpeakingRecording`/`MediaAsset` linked to the session, because a recording row would make the audio
+  stage join the derivative as if it were another clip: the `RemoteJobOutputs` row and the job (resource `SpeakingSession`) are
+  the registry, and every cleanup path above walks it.
 
 ## Security and hygiene (what the code guarantees)
 
@@ -187,6 +252,20 @@ scope the worker opens. Any failure of the remote path degrades to the unchanged
    cancelled `canary_timeout` instead (reaper step R2b).
 8. The companion consumer rebuilds drafts from the corpus rows once a result was consumed, so the source's metadata is still
    refreshed and missing embeddings retried on every reindex without a new extraction.
+9. **Audio chunks are not `MediaAsset`s** (6.3 says the applier registers each chunk as one). They live only in the recording's
+   manifest and are deleted once transcribed, which is stricter than a retention policy: no recording-retention worker exists to
+   honour one, and the chunks carry learner voices. Reaper R5 is the backstop.
+10. **The Speaking join is not registered on a `MediaAsset`/`SpeakingRecording`** (6.4 says it is linked to the session): it is
+    keyed by session on its job and `RemoteJobOutputs` row, deleted on use, by TTL, and with the clips (retention sweep and
+    erasure). See "Media kinds".
+11. **No local chunker for oversize recordings** (3.7 lists a local fallback for the media kinds): extraction is net-new capability,
+    not an offload, and doing it locally would put hundreds of MB of ffmpeg work on the primary. With no node, an oversize
+    recording fails exactly as it did before this change.
+12. **R5 and the R4 guard**: reaper R5 (output expiry) is not in the spec; it exists because R4 alone would delete a job row and
+    leave its output objects behind. R4 now skips a row that still has outputs.
+13. **Speaking join trigger**: the spec says jobs are enqueued "at session end"; the audio stage runs when the grade runs, so the
+    precompute follows the queued `speaking.grade` operations instead (a hook inside the grade code was ruled out). The lead
+    time is however long a grade waits (the Max lane is serial), so a hit rate below 100% is normal and costs nothing.
 
 ## Diagnostics
 
@@ -214,5 +293,9 @@ stay identical to `LearnerDbContext.RemoteJobs.cs` (ADR 0001).
 `backend/tests/OetLearner.Api.Tests/RemoteJobs/*` (xUnit; the `[PostgreSqlFact]` classes need
 `OET_TEST_POSTGRES_CONNECTION`) are **inert manual tools** kept in git for the owner: no workflow runs them, agents do not run
 them, and nothing in this repository may claim they passed. Conformance ids are in the test names or `[Trait("RW", "...")]`.
+The media kinds' sources are `RemoteMediaKindValidatorTests` (pure), `RemoteMediaPostgresTests` (producers, completion,
+serve/delete, sweeper, R5) and `RemoteMediaWiringTests` (migration, DI, source guards), plus
+`LiveClasses/LiveClassRecordingChunkTranscriptionTests`, the remote-join cases of `Speaking/SpeakingAudioEvidenceServiceTests`
+and the cleanup cases of `Speaking/SpeakingComplianceTests` - same status: manual tools, not run by any workflow.
 The extractor golden-hash row in `RemoteEngineMigrationAndWiringTests` is a manual reminder to bump
 `PdfTextEngine.LayoutRevision` when `PdfPigPdfTextExtractor` changes behaviour.

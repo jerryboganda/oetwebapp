@@ -4,6 +4,8 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Companion;
+using OetLearner.Api.Services.LiveClasses;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Services.RemoteJobs;
 
@@ -47,9 +49,16 @@ public static class RemoteJobsServiceCollectionExtensions
         services.TryAddScoped<IRemotePdfExtractionProducer, RemotePdfExtractionProducer>();
         services.TryAddScoped<IRemoteCompanionIndexPrep, RemoteCompanionIndexPrepProducer>();
 
+        // Media kinds (OET-RWP/1 sections 6.3 and 6.4). The consumers are optional constructor parameters of the existing stages, so
+        // with these absent (any non-PostgreSQL host) the Live Class transcription and the Speaking audio stage behave exactly as before.
+        services.TryAddScoped<IRemoteAudioExtraction, RemoteAudioExtractionProducer>();
+        services.TryAddScoped<IRemoteSpeakingJoin, RemoteSpeakingJoinProducer>();
+
         // One handler (validator + applier) per kind. A new kind adds a handler and a producer; nothing else changes.
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IRemoteKindHandler, PdfExtractKindHandler>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IRemoteKindHandler, CompanionIndexPrepKindHandler>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IRemoteKindHandler, AudioExtractKindHandler>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IRemoteKindHandler, SpeakingJoinKindHandler>());
 
         // The reaper runs in EVERY process (blue, green, ai-worker): all of its statements are state-conditional and skip locked rows.
         services.AddHostedService<RemoteJobReaper>();
@@ -57,6 +66,9 @@ public static class RemoteJobsServiceCollectionExtensions
 
         // Re-extraction for shadow/verify comparison is CPU work: only the ai-worker does it, never an API slot.
         if (isWorker) services.AddHostedService<RemoteJobShadowComparer>();
+
+        // The Speaking join precompute follows the grades the ai-worker executes: only the ai-worker enqueues, and only once every flag is on.
+        if (isWorker) services.AddHostedService<RemoteSpeakingJoinSweeper>();
 
         return services;
     }

@@ -14,7 +14,8 @@ public sealed record RemoteSweepResult(
     int OrphanOutputSets,
     int Purged,
     int ResultsCleared,
-    int CanariesCancelled = 0);
+    int CanariesCancelled = 0,
+    int ExpiredOutputSets = 0);
 
 /// <summary>
 /// The statements of the reaper (OET-RWP/1 section 3.5). R1 is the ONE code path that turns an expired lease back into work: the
@@ -74,7 +75,7 @@ public sealed class RemoteJobSweeper(
         FROM due WHERE r."Id" = due."Id";
         """;
 
-    /// <summary>One full pass: R1 expiry, R2 fallback, R3 orphan outputs, R4 retention.</summary>
+    /// <summary>One full pass: R1 expiry, R2 fallback, R3 orphan outputs, R5 output expiry, R4 retention.</summary>
     public async Task<RemoteSweepResult> SweepAsync(CancellationToken ct)
     {
         PgScope.RequireNpgsql(db);
@@ -84,8 +85,11 @@ public sealed class RemoteJobSweeper(
         var fellBack = await SweepFallbackAsync(ct);
         var canaries = await SweepStaleCanariesAsync(options, ct);
         var orphans = await SweepOrphanOutputsAsync(ct);
+
+        // R5 runs before R4: a job row is only purged once its outputs are gone, so no object is ever left without a row that names it.
+        var expired = await SweepExpiredOutputsAsync(options, ct);
         var (purged, cleared) = await PurgeAsync(options, ct);
-        return new RemoteSweepResult(requeued, quarantined, fellBack, orphans, purged, cleared, canaries);
+        return new RemoteSweepResult(requeued, quarantined, fellBack, orphans, purged, cleared, canaries, expired);
     }
 
     /// <summary>R1: expired leases become <c>Queued</c> (with backoff) or <c>Quarantined</c> (attempts exhausted).</summary>
@@ -229,17 +233,80 @@ public sealed class RemoteJobSweeper(
         return orphans.Count;
     }
 
-    /// <summary>R4: terminal rows past retention are deleted in batches; parked results (Deferred) are cleared after their own, shorter window.</summary>
+    /// <summary>
+    /// R5: the outputs (binary artefacts of the media kinds) of a finished job are deleted once they are no longer needed. A Speaking join
+    /// is learner audio and is only useful to the grade that is waiting for it: it expires after <c>SpeakingJoinOutputTtlHours</c>. Every
+    /// other output (the chunks of a Live Class recording, which the transcription stage normally deletes itself) expires with the job
+    /// row, after <c>JobRetentionDays</c>. The storage objects are deleted FIRST and the rows only after, so a failed delete is retried
+    /// on the next pass and no object is ever left without a row that names it.
+    /// </summary>
+    public async Task<int> SweepExpiredOutputsAsync(RemoteJobsOptions options, CancellationToken ct)
+    {
+        var expired = await RemoteDb.QueryAsync(
+            db,
+            """
+            SELECT o."JobId", o."Fence"
+            FROM "RemoteJobOutputs" o
+            JOIN "RemoteJobs" j ON j."Id" = o."JobId"
+            WHERE j."State" IN ('Succeeded', 'Failed', 'Quarantined', 'FallbackLocal', 'Cancelled')
+              AND (
+                    (j."Kind" = 'media.speaking-join'
+                        AND COALESCE(j."CompletedAt", j."UpdatedAt") < clock_timestamp() - make_interval(hours => @ttlHours))
+                 OR j."UpdatedAt" < clock_timestamp() - make_interval(days => @days))
+            GROUP BY o."JobId", o."Fence"
+            ORDER BY o."JobId", o."Fence"
+            LIMIT 50;
+            """,
+            parameters =>
+            {
+                parameters.AddWithValue("ttlHours", options.SpeakingJoinOutputTtlHours);
+                parameters.AddWithValue("days", options.JobRetentionDays);
+            },
+            reader => (JobId: RemoteDb.Str(reader, "JobId"), Fence: RemoteDb.Long(reader, "Fence")),
+            ct);
+
+        foreach (var (jobId, fence) in expired)
+        {
+            try
+            {
+                // The trailing slash matters: fence 2 must never match the keys of fence 20 (object stores match by raw prefix).
+                await storage.DeletePrefixAsync(RemoteInputOutputService.OutputKey(jobId, fence, string.Empty), ct);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                logger.LogWarning(ex, "Could not delete expired outputs of remote job {JobId} fence {Fence}.", jobId, fence);
+                continue;
+            }
+
+            await RemoteDb.ExecuteAsync(
+                db,
+                """DELETE FROM "RemoteJobOutputs" WHERE "JobId" = @id AND "Fence" = @fence;""",
+                parameters =>
+                {
+                    parameters.AddWithValue("id", jobId);
+                    parameters.AddWithValue("fence", fence);
+                },
+                ct);
+        }
+
+        return expired.Count;
+    }
+
+    /// <summary>
+    /// R4: terminal rows past retention are deleted in batches (a row that still has outputs waits for R5 to remove them first);
+    /// parked results (Deferred) are cleared after their own, shorter window.
+    /// </summary>
     public async Task<(int Purged, int Cleared)> PurgeAsync(RemoteJobsOptions options, CancellationToken ct)
     {
         var purged = await RemoteDb.ExecuteAsync(
             db,
             """
             DELETE FROM "RemoteJobs" WHERE "Id" IN (
-                SELECT "Id" FROM "RemoteJobs"
-                WHERE "State" IN ('Succeeded', 'Failed', 'Quarantined', 'FallbackLocal', 'Cancelled')
-                  AND "UpdatedAt" < clock_timestamp() - make_interval(days => @days)
-                ORDER BY "UpdatedAt" LIMIT 500);
+                SELECT j."Id" FROM "RemoteJobs" j
+                WHERE j."State" IN ('Succeeded', 'Failed', 'Quarantined', 'FallbackLocal', 'Cancelled')
+                  AND j."UpdatedAt" < clock_timestamp() - make_interval(days => @days)
+                  AND NOT EXISTS (SELECT 1 FROM "RemoteJobOutputs" o WHERE o."JobId" = j."Id")
+                ORDER BY j."UpdatedAt" LIMIT 500);
             """,
             parameters => parameters.AddWithValue("days", options.JobRetentionDays),
             ct);
