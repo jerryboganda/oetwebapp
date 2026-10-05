@@ -126,6 +126,26 @@ describe('Private speaking booking — tutor room availability (B9)', () => {
     expect(mockFetchEntitlement).not.toHaveBeenCalled();
   });
 
+  it('writes the new balance into the shared snapshot and refetches it after a booking', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(queryKeys.dashboard.entitlement('learner-1'), { speakingSessionsRemaining: 1, speakingAddonsEnabled: true });
+    // The refetch stays pending, so what the cache holds right after the booking is the written balance.
+    mockFetchEntitlement.mockImplementation(() => new Promise(() => undefined));
+    const user = userEvent.setup();
+    renderPage(client);
+
+    await user.selectOptions(await screen.findByRole('combobox'), 'any');
+    await user.click(await screen.findByRole('button', { name: /09:00/ }));
+    await user.click(screen.getByRole('button', { name: 'Use Session Credit & Book' }));
+
+    await waitFor(() => expect(mockCreateBooking).toHaveBeenCalled());
+    await waitFor(() => expect(client.getQueryData(queryKeys.dashboard.entitlement('learner-1'))).toEqual(
+      expect.objectContaining({ speakingSessionsRemaining: 0, speakingAddonsEnabled: true }),
+    ));
+    // Marked stale and fetched again, so the two-minute cache cannot keep the old count on screen.
+    await waitFor(() => expect(mockFetchEntitlement).toHaveBeenCalledTimes(1));
+  });
+
   it('hides slot browsing for a learner whose snapshot says they cannot book a tutor', async () => {
     mockFetchEntitlement.mockResolvedValue({ speakingSessionsRemaining: 0, speakingAddonsEnabled: false });
 

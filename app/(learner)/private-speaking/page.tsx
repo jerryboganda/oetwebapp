@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User, Download, ShoppingBag, Globe } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
@@ -29,13 +30,14 @@ import {
   ratePrivateSpeakingSession,
   safePaymentRedirect,
   isApiError,
+  type MyEntitlementSnapshot,
   type PaymentCaptureResult,
 } from '@/lib/api';
 import { LazyPayPalExpandedCheckout } from '@/components/billing/lazy-paypal-expanded-checkout';
 import { createSpeakingExamFromBooking } from '@/lib/api/speaking-exams';
 import { analytics } from '@/lib/analytics';
 import { useAuth } from '@/contexts/auth-context';
-import { useEntitlementSnapshot } from '@/lib/query/hooks';
+import { queryKeys, useEntitlementSnapshot } from '@/lib/query/hooks';
 
 type Config = {
   isEnabled: boolean; defaultPriceMinorUnits: number; currency: string;
@@ -238,11 +240,20 @@ export default function PrivateSpeakingPage() {
   const [cancelConfirm, setCancelConfirm] = useState<Booking | null>(null);
   const [cancelInProgress, setCancelInProgress] = useState(false);
   const [rescheduleConfirmOpen, setRescheduleConfirmOpen] = useState(false);
-  // A booking answers with the new balance; until then it comes from the snapshot.
-  const [remainingAfterBooking, setRemainingAfterBooking] = useState<number | null | undefined>(undefined);
-  const entitlementRemaining = remainingAfterBooking !== undefined
-    ? remainingAfterBooking
-    : (entitlement?.speakingSessionsRemaining ?? null);
+  const entitlementRemaining = entitlement?.speakingSessionsRemaining ?? null;
+  const queryClient = useQueryClient();
+  // A booking spends a session and a cancellation can give one back. The snapshot is shared with the
+  // dashboard and cached for two minutes, so the change is written into it (when the server answered
+  // the new balance) and the snapshot is refetched: neither this page nor the dashboard keeps the old count.
+  function refreshEntitlementAfterChange(remaining?: number | null) {
+    const key = queryKeys.dashboard.entitlement(userId);
+    if (typeof remaining === 'number') {
+      queryClient.setQueryData<MyEntitlementSnapshot>(key, (current) => (
+        current ? { ...current, speakingSessionsRemaining: remaining } : current
+      ));
+    }
+    void queryClient.invalidateQueries({ queryKey: key });
+  }
   // FINAL 2026-09-06: Live Tutor booking is entitlement-gated. Only holders of
   // an eligible main course/package or the Speaking Crash Course
   // (plan flag SpeakingAddonsEnabled, resolved server-side) may book.
@@ -342,9 +353,7 @@ export default function PrivateSpeakingPage() {
       // Fallback: refresh bookings
       setSelectedSlot(null);
       setBookingNotes('');
-      if (result.speakingSessionsRemaining !== undefined) {
-        setRemainingAfterBooking(result.speakingSessionsRemaining ?? null);
-      }
+      refreshEntitlementAfterChange(result.speakingSessionsRemaining);
       const updated = await fetchLearnerPrivateSpeakingBookings() as Booking[];
       setBookings(updated);
       setViewMode('bookings');
@@ -452,6 +461,7 @@ export default function PrivateSpeakingPage() {
     setError(null);
     try {
       await cancelPrivateSpeakingBooking(bookingId);
+      refreshEntitlementAfterChange();
       setCancelConfirm(null);
       // Refresh from the server so refund/penalty outcome fields are surfaced.
       const updated = await fetchLearnerPrivateSpeakingBookings() as Booking[];
