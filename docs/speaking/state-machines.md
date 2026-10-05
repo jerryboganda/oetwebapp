@@ -108,8 +108,13 @@ debit without its reservation row; the changes below close the ones that were ch
   (`AvailableSpeakingActivities >= 2`, the same simulation as `POST /v1/speaking/exams`), because the balance can change after the
   exam was created. Exempt: an exam covered by the learner's own mock attempt, an account with a Full Mock Speaking Exam Access
   unit (one unit funds the whole exam, ledger reference `exam:{id}:mock`) and an account with no wallet at all (the Card A hold
-  itself refuses it with 402 `ai_credits_insufficient`). A retry that already holds Card A skips the check and adopts the
-  existing hold.
+  itself refuses it with 402 `ai_credits_insufficient`; when the live-session admission gate applies that wallet-less account is
+  refused by the check itself, before it takes a place or a line position, so it can never queue behind paying learners). A
+  retry that already holds Card A skips the check and adopts the existing hold. When the live-session gate applies, the check
+  runs only when a call is about to take or look for a place, never on a waiting learner's repeat poll, and a practice card gets
+  the same read-only mirror of its hold before the gate (see
+  [live-voice.md](live-voice.md#admission-control-live-session-cap-and-wait-queue)). A start that fails after the gate admitted it
+  (a refused hold) gives the place back at once.
 - `POST /v1/speaking/sessions` no longer accepts mode `ai_exam` (409 `speaking_session_exam_managed`): exam cards are only
   created by their exam, which is what takes their hold.
 

@@ -94,9 +94,16 @@ behaviour above the cap (default 100 concurrent live AI sessions), not an outage
    `PUT /v1/admin/ai/live-voice/admission {"maxConcurrent":150}` (no restart, audited, takes effect on the next decision).
 3. The gate itself is suspect (learners cannot start although nothing is running, errors in
    `Live Speaking admission failed`): switch it off, `PUT /v1/admin/ai/live-voice/admission {"enabled":false}`. Waiters are
-   let through on their next poll and nothing is counted until it is switched back on. A running session is never cut off by
-   any of these changes. The gate already fails open on its own errors.
-4. Do not touch `SpeakingLiveAdmissions` rows by hand: every decision expires stale rows itself, and the sweeper purges old
+   let through on their next poll and nothing is counted until it is switched back on. The switch never waits on the decision
+   lock (a waiting row is released by one UPDATE), so it works even when a lock holder is stuck; the gate's own lock wait is
+   bounded at 5 s and then fails open. A running session is never cut off by any of these changes. The gate already fails
+   open on its own errors. (The environment keys `SPEAKING__LIVEADMISSION__*` are NOT forwarded by the production compose file:
+   the admin switch is the only lever, see [../env/speaking.md](../env/speaking.md#live-ai-session-admission-has-no-environment-keys-in-production).)
+4. A learner reports "You already have a live Speaking session open or waiting" (409 `speaking_live_session_active`): one live
+   place per learner is the designed rule. Their other place is a waiting row (frees by "Leave the queue" or after 90 s without
+   a heartbeat) or a card/exam that is still running or in preparation (frees when it ends, is cancelled, or at the safety TTL:
+   practice 20 min, exam 45 min). A learner who cannot pay is refused with the credit 402 and does not queue.
+5. Do not touch `SpeakingLiveAdmissions` rows by hand: every decision expires stale rows itself, and the sweeper purges old
    ones.
 
 ---

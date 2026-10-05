@@ -69,16 +69,28 @@ hard duration cap, hang-up): [../speaking/live-voice.md](../speaking/live-voice.
 | `LIVEVOICE__TRANSCRIPTFLUSHGRACESECONDS` | optional | `900` | How long (clamped 60-3600) after a role-play ended (after its hard stop if still Active) a late transcript, turn or recording is still accepted. A transcript is also frozen once grading has taken it; recordings are only time-bounded. |
 | `LIVEVOICE__MAXPROVIDERSESSIONSPERROLEPLAY` | optional | `3` | Provider sessions (clamped 1-10) one role-play may open; retries, reloads and failover all count, refused creations do not. |
 | `LIVEVOICE__RETENTIONDAYS` | optional | `30` | Bounded retention for live voice transcript and connection audit data: the turn rows and the `live_session` audit rows, which carry the raw OpenAI session id used by the hang-up. The retention sweep wipes them after this many days. |
-| `SPEAKING__LIVEADMISSION__ENABLED` | optional | `true` | Environment-level kill switch of the live AI session admission gate ([live-voice.md](../speaking/live-voice.md#admission-control-live-session-cap-and-wait-queue)). `false` lets every learner through. The admin switch (`PUT /v1/admin/ai/live-voice/admission`) needs no restart; this one does. |
-| `SPEAKING__LIVEADMISSION__DEFAULTMAXCONCURRENT` | optional | `100` | Concurrent live AI Speaking sessions (1-10000; a value below 1 falls back to 100, never to 1; to switch the gate off use `…ENABLED=false` or the admin kill switch) when no admin setting exists. The admin setting, once saved, wins. |
-| `SPEAKING__LIVEADMISSION__WAITERHEARTBEATSECONDS` / `…MAXWAITSECONDS` / `…MAXQUEUELENGTH` | optional | `90` / `1800` / `1000` | A waiter silent this long (clamped 15-600 s) leaves the line; a place kept longer than this (60-7200 s) goes to the back; the line holds at most this many (1-100000), beyond it a retryable 503 `speaking_live_queue_full`. |
-| `SPEAKING__LIVEADMISSION__CLAIMWINDOWSECONDS` / `…EXAMADMITTEDTTLMINUTES` / `…PRACTICEADMITTEDTTLMINUTES` | optional | `120` / `45` / `20` | How long a fresh admission holds its place before its subject has started (30-900 s), and the safety TTL of an admitted exam or practice card (10-240 min). A running session is never evicted. |
-| `SPEAKING__LIVEADMISSION__AVERAGESESSIONSECONDS` / `…POLLAFTERSECONDS` / `…RETENTIONDAYS` | optional | `900` / `4` / `7` | Slot hold time used only for the wait estimate (60-3600 s), seconds the page waits between retries (2-30), and days an ended admission row is kept before the sweeper purges it (1-90). |
 
 The `ai-worker` container inherits these keys from the same env block. It needs the
 OpenAI key and URLs for the hard-stop hang-up (without them the hang-up silently does
 nothing); it does not run the catalog probe, and only the API slots hold the provider
 circuit state.
+
+### Live AI session admission has no environment keys in production
+
+The live-session admission gate
+([live-voice.md](../speaking/live-voice.md#admission-control-live-session-cap-and-wait-queue)) binds its options
+from the `Speaking:LiveAdmission` configuration section (`SpeakingLiveAdmissionOptions`), but
+`docker-compose.production.yml` has a **closed environment list** (no `env_file`) and forwards no
+`Speaking__LiveAdmission__*` key. Setting `SPEAKING__LIVEADMISSION__*` in `.env.production` therefore changes
+**nothing**: the API and the `ai-worker` run the shipped defaults (cap 100, waiter heartbeat 90 s, claim window 120 s, exam
+and practice safety TTL 45 and 20 min, maximum wait 2 h, line limit 1000 bounded by what the maximum wait can serve, poll
+4 s, retention 7 days).
+
+The operational levers need no restart and are the **admin settings**: `GET` / `PUT /v1/admin/ai/live-voice/admission`
+(the cap, 1-10000, and the kill switch; audited as `SpeakingLiveAdmissionSettingsUpdated`). To make a timing option
+reachable from the environment, forward it in the API **and** `ai-worker` env blocks of `docker-compose.production.yml`
+(`Speaking__LiveAdmission__<Name>: ${SPEAKING__LIVEADMISSION__<NAME>:-<default>}`) and document it here in the same change;
+that is a deployment-pipeline change and has not been made.
 
 ## TypeSafe SystemOne / Jev
 
