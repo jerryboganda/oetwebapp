@@ -355,8 +355,10 @@ def start_agent(values, digest):
         "--cpus", "%.2f" % (cpu_milli / 1000.0),
         "--user", "10001:10001",
         "--ulimit", "core=0",
-        "--tmpfs", "/scratch:rw,noexec,nosuid,nodev,size=%dm" % tmp_mib,
-        "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=256m",
+        # tmpfs mounts are root-owned on newer Docker unless uid/mode are given explicitly; the agent (uid 10001)
+        # must own its scratch or ScratchManager.WipeAtStart dies with EACCES at every start (seen live on Docker 29.1.3).
+        "--tmpfs", "/scratch:rw,noexec,nosuid,nodev,size=%dm,uid=10001,gid=10001,mode=1700" % tmp_mib,
+        "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=256m,uid=10001,gid=10001,mode=1700",
         "--log-driver", "local",
         "--log-opt", "max-size=5m",
         "--log-opt", "max-file=2",
