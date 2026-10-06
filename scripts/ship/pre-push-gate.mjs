@@ -676,6 +676,15 @@ async function main(argv) {
   }
 
   if (!ci && !process.env.CI && !process.env.GITHUB_ACTIONS) {
+    // Owner directive 2026-10-07: stale agent worktrees/branches are a hard failure.
+    const { sweep } = await import('./branch-hygiene.mjs');
+    const hygiene = sweep();
+    for (const n of hygiene.notes) console.log(`branch-hygiene: ${n}`);
+    if (hygiene.failures.length) {
+      for (const f of hygiene.failures) console.error(`branch-hygiene: ${f}`);
+      console.error('ship-gate FAILED (branch hygiene) - remove or push the leftover worktrees/branches on purpose');
+      process.exit(1);
+    }
     await reportLedgerAdvisory();
   }
 }

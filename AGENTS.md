@@ -29,6 +29,15 @@ The **owner-console exception below remains mandatory**: its agents use
 main-push or visibility authority. Benchmarks and immutable rollback stay separate
 labelled tools; neither proves a new live release.
 
+## ⛔ ONE CHECKOUT, NO STALE BRANCHES OR WORKTREES — COMPULSORY (owner directive 2026-10-07; HARD ENFORCED)
+
+Parallel agents/workflows once left 45 worktrees and ~285 branches behind. Never again.
+
+- **Work in the primary checkout on one active branch.** Do not create extra worktrees or branches unless a task truly needs isolation; at most 2 extra worktrees and 4 local branches (`main` + active) may exist.
+- **Every agent/workflow that creates a worktree or branch removes it before finishing** (`git worktree remove`, `git branch -D` once pushed/merged). Delegation is not an exception: subagents and `isolation: "worktree"` runs inherit this.
+- **Mechanically enforced:** `pnpm run ship:gate` (so every `pnpm run ship`) runs `scripts/ship/branch-hygiene.mjs`, which auto-removes provably safe leftovers (clean worktree / branch already in `origin/main` or on a remote) and **fails the push** if the caps are still exceeded. Unmerged + unpushed work is never auto-deleted: push it or discard it on purpose. `pnpm run branches:clean` also prunes remote branches merged into `main` with no open PR.
+- GitHub is set to delete a PR's head branch on merge; do not turn that off. Never delete the hygiene check to get a push through.
+
 ## Stack
 
 - Frontend: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, motion v12.

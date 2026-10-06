@@ -25,6 +25,7 @@
     "ship": "node ./scripts/ship/ship.mjs",
     "pipeline:check": "node ./scripts/deploy/verify-pipeline-contract.mjs",
     "ship:self-test": "node ./scripts/ship/ship.mjs --self-test",
+    "branches:clean": "node ./scripts/ship/branch-hygiene.mjs --remote",
     "ship:gate": "node ./scripts/ship/pre-push-gate.mjs",
     "ship:gate:self-test": "node ./scripts/ship/pre-push-gate.mjs --self-test",
     "ship:watch": "powershell -ExecutionPolicy Bypass -File ./scripts/ship/watch-deploy.ps1",
