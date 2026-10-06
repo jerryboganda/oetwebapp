@@ -27,7 +27,8 @@ public sealed class UserHardDeleteService(
     LearnerDbContext db,
     ILogger<UserHardDeleteService> logger,
     IFileStorage? fileStorage = null,
-    UserStateCache? userStateCache = null)
+    UserStateCache? userStateCache = null,
+    OetLearner.Api.Services.Speaking.IRemoteSpeakingJoin? remoteSpeakingJoin = null)
 {
     // Column-name suffixes (lower-cased) that denote a reference to a user/account.
     private static readonly string[] UserRefSuffixes =
@@ -119,6 +120,18 @@ public sealed class UserHardDeleteService(
             .ToListAsync(ct);
         ids.AddRange(ownedMedia.Select(asset => asset.Id));
 
+        // The user's Speaking sessions, read BEFORE the purge removes them: the remote Speaking audio join is keyed by session id, and
+        // the erasure promise (RemoteSpeakingJoinProducer, RemoteJobs:SpeakingJoinOutputTtlHours) covers the prepared audio too.
+        // Null unless the remote-worker boundary is registered, so the default path pays no extra query.
+        var speakingSessionIds = new List<string>();
+        if (remoteSpeakingJoin is not null)
+        {
+            speakingSessionIds = await db.SpeakingSessions.AsNoTracking()
+                .Where(session => userReferenceIds.Contains(session.UserId))
+                .Select(session => session.Id)
+                .ToListAsync(ct);
+        }
+
         var report = new Dictionary<string, int>();
         if (fileStorage is not null)
         {
@@ -196,6 +209,20 @@ public sealed class UserHardDeleteService(
             foreach (var learnerId in learnerIds)
             {
                 userStateCache.InvalidateLearner(learnerId);
+            }
+        }
+
+        // Best effort, exactly like a learner's erasure of one recording (SpeakingComplianceService.DeleteRecordingAsync): the purge is
+        // committed and irreversible, so a failure here is logged and never turns the delete into an error (the join also expires on its TTL).
+        if (remoteSpeakingJoin is not null && speakingSessionIds.Count > 0)
+        {
+            try
+            {
+                await remoteSpeakingJoin.DeleteForSessionsAsync(speakingSessionIds, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Hard delete: could not remove the remote Speaking audio join of {Sessions} session(s); it expires on its TTL.", speakingSessionIds.Count);
             }
         }
 
