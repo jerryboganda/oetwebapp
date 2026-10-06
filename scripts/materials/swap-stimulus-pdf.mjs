@@ -150,18 +150,24 @@ async function uploadPdf(filePath) {
 }
 
 // Every mirrored field of WritingTaskUpsertDto (full-replace protection).
+// The API serialises GET responses in camelCase and binds PUT bodies
+// case-insensitively: mirror by camelCase name, emit the DTO's PascalCase.
 const UPSERT_FIELDS = [
-  'InternalCode', 'Title', 'Profession', 'LetterType', 'Difficulty', 'WriterRole', 'TodayDate',
-  'TaskPromptMarkdown', 'ExpectedPurpose', 'ExpectedAction', 'FixedInstructions', 'WordGuideMin',
-  'WordGuideMax', 'ReadingTimeSeconds', 'WritingTimeSeconds', 'SimulationModes', 'MarkingMode',
-  'SourceProvenance', 'IntegrityAcknowledged', 'StimulusPdfMediaAssetId', 'AnswerSheetPdfMediaAssetId',
-  'RecipientRawText', 'RecipientNormalizedJson', 'ConfirmedPurposeText',
+  ['internalCode', 'InternalCode'], ['title', 'Title'], ['profession', 'Profession'], ['letterType', 'LetterType'],
+  ['difficulty', 'Difficulty'], ['writerRole', 'WriterRole'], ['todayDate', 'TodayDate'],
+  ['taskPromptMarkdown', 'TaskPromptMarkdown'], ['expectedPurpose', 'ExpectedPurpose'], ['expectedAction', 'ExpectedAction'],
+  ['fixedInstructions', 'FixedInstructions'], ['wordGuideMin', 'WordGuideMin'], ['wordGuideMax', 'WordGuideMax'],
+  ['readingTimeSeconds', 'ReadingTimeSeconds'], ['writingTimeSeconds', 'WritingTimeSeconds'],
+  ['simulationModes', 'SimulationModes'], ['markingMode', 'MarkingMode'], ['sourceProvenance', 'SourceProvenance'],
+  ['integrityAcknowledged', 'IntegrityAcknowledged'], ['stimulusPdfMediaAssetId', 'StimulusPdfMediaAssetId'],
+  ['answerSheetPdfMediaAssetId', 'AnswerSheetPdfMediaAssetId'], ['recipientRawText', 'RecipientRawText'],
+  ['recipientNormalizedJson', 'RecipientNormalizedJson'], ['confirmedPurposeText', 'ConfirmedPurposeText'],
 ];
 
 function buildUpsertPayload(task, newStimulusAssetId) {
   const payload = {};
-  for (const field of UPSERT_FIELDS) {
-    if (task[field] !== undefined) payload[field] = task[field];
+  for (const [readKey, writeKey] of UPSERT_FIELDS) {
+    if (task[readKey] !== undefined) payload[writeKey] = task[readKey];
   }
   payload.StimulusPdfMediaAssetId = newStimulusAssetId;
   return payload;
@@ -204,9 +210,14 @@ async function swapOne({ task: scenarioId, asset, upload }) {
     } catch (e) { result.validate = { error: e.message.slice(0, 200) }; }
   } else {
     result.after = upload ? '(upload on apply)' : asset;
+    const probe = buildUpsertPayload(before, 'dry-run-probe');
+    result.payloadMirror = { fields: Object.keys(probe).length, titlePresent: Boolean(probe.Title), professionPresent: Boolean(profession0(before)) };
+    if (!probe.Title) throw new Error('mirrored payload would drop Title (camelCase read failed) — refusing to apply');
   }
   return result;
 }
+
+const profession0 = (task) => task?.profession;
 
 function parseArgs() {
   const jobs = [];
