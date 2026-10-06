@@ -1,0 +1,54 @@
+name: writing-samples-retype
+
+# Raster→vector retype of Writing stimulus PDFs (owner patch 7 Oct 2026).
+# Builds real-text vector rebuilds of the ledgered raster/mixed stimuli —
+# words at their ORIGINAL positions (tesseract TSV boxes), nothing reworded,
+# every low-confidence word flagged for human review before any swap.
+# Manual only; the built PDFs land in the artifact for review + commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Max rows to build this run (0 = all)"
+        type: string
+        default: "6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: writing-samples-retype
+  cancel-in-progress: false
+
+jobs:
+  retype:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install OCR / PDF toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq poppler-utils tesseract-ocr python3-reportlab fonts-dejavu-core
+
+      - name: Rebuild as vector text
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+        run: node scripts/materials/retype-stimuli.mjs --from scripts/materials/retype-ledger.json --out built-retype/ --limit "${{ inputs.limit }}"
+
+      - name: Upload built PDFs + report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: retype-${{ github.run_id }}
+          path: |
+            built-retype/
+            retype-report.json
+          retention-days: 30
