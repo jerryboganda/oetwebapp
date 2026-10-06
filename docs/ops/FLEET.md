@@ -204,7 +204,8 @@ admin endpoints, rotate everything, and re-enroll helpers from fresh VPSs.
   `426`; agents downgrade once or enter `ProtocolMismatch`. No manual action is needed on helpers (RWP 5.6).
 - **Agent rollback:** the manager rolls one host at a time (drain, pull the previous approved digest, verify, run, canary, enable). The approved list
   keeps the current digest plus the previous two (at most 8). A failure halts the rollout and leaves later hosts untouched.
-- **Manager rollback:** `gh workflow run fleet.yml` for a previous SHA (images are already in GHCR). The manager's state volume is never recreated.
+- **Manager rollback:** `fleet.yml` always builds the commit it runs on and has no by-SHA reuse path (unlike `production-deploy.yml`), so revert or fix
+  forward on `main` and dispatch `fleet.yml` with `sync=true`; a push alone only builds and records. The manager's state volume is never recreated.
 - **Kill switch:** `remote_jobs_enabled` off returns every claim `204 disabled`; in-flight leases keep working; queued work falls back to the primary.
 
 ## 11. Failure states
