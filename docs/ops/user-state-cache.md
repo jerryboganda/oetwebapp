@@ -108,9 +108,12 @@ slots of a cutover each hold their own cache; each is bounded by its own TTL.
 | Switch | Effect | Latency |
 | --- | --- | --- |
 | Feature flag `user_state_cache`, **Enabled = false** (Admin > Feature Flags, create the flag if it does not exist) | cache off, all entries dropped. No row = ON (the approved default); the newest row for the key wins | about 35 s, no deploy |
-| `Performance__UserStateCache__Enabled=false` | hard off | restart |
-| `Performance__UserStateCache__TtlSeconds` (1..30) | shorter staleness bound | restart |
-| `Performance__UserStateCache__MaxEntries` | memory bound | restart |
+| `Performance__UserStateCache__Enabled=false` (`.env.production`: `PERFORMANCE__USERSTATECACHE__ENABLED`) | hard off | restart |
+| `Performance__UserStateCache__TtlSeconds` (1..30; `PERFORMANCE__USERSTATECACHE__TTLSECONDS`, default 15) | shorter staleness bound | restart |
+| `Performance__UserStateCache__MaxEntries` (`PERFORMANCE__USERSTATECACHE__MAXENTRIES`, default 50000) | memory bound | restart |
+
+`docker-compose.production.yml` forwards all three to both API slots and the ai-worker (its environment list is closed, so a key that is not
+forwarded there never reaches the process), with defaults equal to `UserStateCacheOptions`. Set the upper-case key in `.env.production` and redeploy or restart.
 
 `UserStateCacheSwitchWorker` polls the flag; it is a hosted service, not a read on the request path,
 so the JWT check stays a single database command. A failed read keeps the last value.

@@ -267,6 +267,12 @@ x-learner-api-slot: &learner-api-slot
     RemoteJobs__FleetAllowedCidrs__1: ${REMOTEJOBS__FLEETALLOWEDCIDRS__1:-}
     RemoteJobs__Kinds__media.audio-extract__EngineVersion: ${REMOTEJOBS__KINDS__MEDIA_AUDIO_EXTRACT__ENGINEVERSION:-}
     RemoteJobs__Kinds__media.speaking-join__EngineVersion: ${REMOTEJOBS__KINDS__MEDIA_SPEAKING_JOIN__ENGINEVERSION:-}
+    # Per-process user-state cache (docs/ops/user-state-cache.md). The env list is closed, so the restart-time switches are forwarded for both
+    # API slots and the ai-worker. Defaults equal UserStateCacheOptions (Enabled true, DefaultTtlSeconds 15, DefaultMaxEntries 50000; keep them in
+    # step by hand). TtlSeconds is clamped to 1..30 in code. The runtime switch is the `user_state_cache` feature flag, not these keys.
+    Performance__UserStateCache__Enabled: ${PERFORMANCE__USERSTATECACHE__ENABLED:-true}
+    Performance__UserStateCache__TtlSeconds: ${PERFORMANCE__USERSTATECACHE__TTLSECONDS:-15}
+    Performance__UserStateCache__MaxEntries: ${PERFORMANCE__USERSTATECACHE__MAXENTRIES:-50000}
     # Upload virus-scanning. Production MUST NOT run with Provider=noop - the
     # API refuses to start in that case. 'clamav' is the compose service name
     # of the sidecar above; port 3310 is clamd's default.
