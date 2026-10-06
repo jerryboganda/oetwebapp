@@ -21,6 +21,15 @@ if (string.IsNullOrEmpty(builder.Configuration["urls"]) && string.IsNullOrEmpty(
 
 var app = builder.Build();
 
+// Every ingress to this container is the loopback / SSH-tunnel publish (StartupChecks and the rollout assert it), which is plain HTTP.
+// The cookies and antiforgery stay SecurePolicy.Always; marking the request HTTPS stops ASP.NET's CheckSSLConfig throwing on the tunnel path.
+// Browsers treat http://127.0.0.1 as a secure context and accept the Secure cookies (Safari does not: use Chrome, Edge or Firefox).
+app.Use((context, next) =>
+{
+    context.Request.Scheme = Uri.UriSchemeHttps;
+    return next();
+});
+
 app.UseExceptionHandler(errorApp => errorApp.Run(async context =>
 {
     context.Response.StatusCode = StatusCodes.Status500InternalServerError;
