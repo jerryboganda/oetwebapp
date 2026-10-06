@@ -50,12 +50,21 @@ services:
       Fleet__Provisioning__ScratchDirectory: /tmp/fleet
       Fleet__Provisioning__DockerSource: ${FLEET_DOCKER_SOURCE:-distro}
       Fleet__Image__Mode: ${FLEET_IMAGE_MODE:-scoped-token}
+      # UBAG project integration (off until the owner turns it on): the allocation poll endpoint
+      # answers 503 without Enabled, publishes nothing without Hosts (comma-separated host ids,
+      # or "*"), and 404 without the bearer secret. See README "UBAG project allocations".
+      Fleet__Ubag__Enabled: ${FLEET_UBAG_ENABLED:-false}
+      Fleet__Ubag__Hosts: ${FLEET_UBAG_HOSTS:-}
+      Fleet__Ubag__EndpointTemplate: ${FLEET_UBAG_ENDPOINT_TEMPLATE:-}
+      Fleet__Ubag__MaxBrowserWorkloads: ${FLEET_UBAG_MAX_BROWSER_WORKLOADS:-1}
+      Fleet__Ubag__GrantTtlMinutes: ${FLEET_UBAG_GRANT_TTL_MINUTES:-30}
     secrets:
       - fleet_master_key
       - fleet_master_key_prev
       - fleet_api_credential
       - fleet_sync_token
       - fleet_metrics_token
+      - fleet_ubag_token
     volumes:
       - fleet_data:/data
     tmpfs:
@@ -90,6 +99,10 @@ secrets:
     file: ${FLEET_SYNC_TOKEN_FILE:-/dev/null}
   fleet_metrics_token:
     file: ${FLEET_METRICS_TOKEN_FILE:-/dev/null}
+  # Optional: the bearer UBAG's gateway sends on the allocation poll. An EMPTY file
+  # (the /dev/null default) means "not configured" (the endpoint answers 404).
+  fleet_ubag_token:
+    file: ${FLEET_UBAG_TOKEN_FILE:-/dev/null}
 
 # External + exact name so compose can never create an empty parallel volume or remove one on `down`.
 # Created (if absent) by the fleet deploy, exactly like the agent console volumes.

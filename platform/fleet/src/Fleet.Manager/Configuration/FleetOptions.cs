@@ -31,6 +31,8 @@ public sealed class FleetOptions
     public AuditOptions Audit { get; set; } = new();
 
     public WorkerOptions Workers { get; set; } = new();
+
+    public UbagOptions Ubag { get; set; } = new();
 }
 
 public sealed class DataOptions
@@ -203,4 +205,42 @@ public sealed class WorkerOptions
 {
     /// <summary>Starts the operation worker, node monitor and token-rotation scheduler. Tests turn this off.</summary>
     public bool Enabled { get; set; } = true;
+}
+
+/// <summary>
+/// The UBAG project integration (the shared manager's second consumer, OET first): a bearer-authenticated
+/// <c>GET /internal/ubag/allocations</c> that publishes, per opted-in host, the capacity UBAG may use AFTER
+/// OET's own policy budget is deducted, in the allocation_list v1 schema UBAG's gateway polls
+/// (<c>UBAG_FLEET_MANAGER_URL</c>). Everything is off until the owner turns it on: no token file means 404,
+/// and an empty <see cref="Hosts"/> list means no host is ever published.
+/// </summary>
+public sealed class UbagOptions
+{
+    /// <summary>Master switch. False: the endpoint answers 503 and nothing is ever published.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Bearer file under the secrets directory. Absent = the endpoint is disabled (404), like the sync and metrics tokens.</summary>
+    public string TokenFile { get; set; } = "fleet_ubag_token";
+
+    /// <summary>Host ids eligible for UBAG work (exact <see cref="Persistence.HostEntity.Id"/> match, or "*" for every Active host with known hardware). Empty publishes nothing.</summary>
+    public string[] Hosts { get; set; } = Array.Empty<string>();
+
+    /// <summary>
+    /// The helper's WireGuard-reachable <c>host:port</c> template for the mTLS gRPC server UBAG dials.
+    /// <c>{address}</c> is the enrolled host address. Per-host overrides live in <see cref="EndpointOverrides"/>;
+    /// when the fleet moves to WireGuard-only reachability the owner sets the peer address there.
+    /// </summary>
+    public string EndpointTemplate { get; set; } = "{address}:7443";
+
+    public Dictionary<string, string> EndpointOverrides { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>Initial per-node browser workload ceiling (the plan's "start each qualified helper at one; raise after measurement"). 0..64.</summary>
+    public int MaxBrowserWorkloads { get; set; } = 1;
+
+    /// <summary>How long a published grant stays valid; UBAG re-polls well inside it. 1..1440 minutes.</summary>
+    public int GrantTtlMinutes { get; set; } = 30;
+
+    public int ClampedMaxBrowserWorkloads => Math.Clamp(MaxBrowserWorkloads, 0, 64);
+
+    public int ClampedGrantTtlMinutes => Math.Clamp(GrantTtlMinutes, 1, 1440);
 }

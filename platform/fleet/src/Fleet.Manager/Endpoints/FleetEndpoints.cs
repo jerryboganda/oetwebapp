@@ -183,6 +183,41 @@ public static class FleetEndpoints
             }
         }).AllowAnonymous().RequireRateLimiting("api");
 
+        // The UBAG project's allocation poll (the shared manager's second consumer, OET first).
+        // Bearer from the secrets file (absent = 404, like /internal/sync), ETag revalidation with
+        // 304, and 503 while UBAG is disabled: the gateway treats any of those as "no new grants",
+        // which is the safe direction. No request or response body is ever logged.
+        app.MapGet("/internal/ubag/allocations", async (HttpContext http, Projects.UbagAllocationService ubag, IOptions<FleetOptions> options, CancellationToken ct) =>
+        {
+            var ubagOptions = options.Value.Ubag;
+            var expected = SecretFile.TryRead(Path.Combine(options.Value.Secrets.Directory, ubagOptions.TokenFile));
+            if (expected is null)
+            {
+                return Results.NotFound();
+            }
+
+            var header = http.Request.Headers.Authorization.ToString();
+            const string prefix = "Bearer ";
+            if (!header.StartsWith(prefix, StringComparison.Ordinal) || !SecretFile.FixedTimeEquals(header[prefix.Length..], expected))
+            {
+                return Results.Unauthorized();
+            }
+
+            var snapshot = await ubag.BuildAsync(ct);
+            if (snapshot is null)
+            {
+                return Results.Json(new { code = "ubag_disabled", message = "UBAG allocations are not enabled on this manager." }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+
+            if (http.Request.Headers.IfNoneMatch.ToString() == snapshot.ETag)
+            {
+                return Results.StatusCode(StatusCodes.Status304NotModified);
+            }
+
+            http.Response.Headers.ETag = snapshot.ETag;
+            return Results.Text(snapshot.Body, "application/json", System.Text.Encoding.UTF8);
+        }).AllowAnonymous().RequireRateLimiting("api");
+
         var api = app.MapGroup("/api/v1")
             .RequireAuthorization()
             .RequireRateLimiting("api")

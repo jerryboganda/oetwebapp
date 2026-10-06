@@ -145,6 +145,39 @@ newer than the build, or without `schema_info`, is refused. EF Core migrations a
 | `Fleet__Provisioning__DockerSource` | `distro` | `vendor` uses Docker's repository with the pinned key fingerprint |
 | `Fleet__Timing__*` | see code | polling, timeouts, token rotation (14 days of a 30-day TTL) |
 | `Fleet__Audit__AllowBrokenChain` | `false` | forensic boot only |
+| `Fleet__Ubag__Enabled` | `false` | the UBAG allocation poll endpoint answers 503 while false |
+| `Fleet__Ubag__Hosts` | *(empty)* | comma-separated host ids (or `*`) eligible for UBAG work |
+| `Fleet__Ubag__EndpointTemplate` | `{address}:7443` | the helper `host:port` UBAG dials; per-host `Fleet__Ubag__EndpointOverrides__<hostId>` wins |
+
+## UBAG project allocations (the second consumer, OET first)
+
+`GET /internal/ubag/allocations` serves UBAG's `allocation_list` v1 schema — the exact body the
+UBAG gateway's `UBAG_FLEET_MANAGER_URL` poller parses (strict: an unknown field rejects the list).
+Auth is a bearer secret like the sync token: mount `fleet_ubag_token` (compose wires it from
+`FLEET_UBAG_TOKEN_FILE`; absent/empty = the endpoint answers 404). Responses carry a strong ETag
+(sha256 of the body), so the gateway's `If-None-Match` revalidation round trips as 304.
+
+Per opted-in host the published grant is **min(the UBAG ceiling for its hardware size, the
+hardware minus the OET budget in force)** — the UBAG plan's ceiling table (2c/4G → 1500m/2.5 GiB,
+4c/8G → 3000m/5 GiB, else 75 %/62.5 %) is defence in depth on top of the OET-first deduction.
+The OET budget is the effective policy the node actually runs (host override → global → the
+scaled default), so tuning OET policy automatically re-scopes UBAG on the next poll. `state` is
+`active` only for an Active host whose API node reads usable (Active/Enabled + Online/healthy);
+draining hosts, stale heartbeats and disabled hosts publish `draining`; removed/failed hosts and
+hosts whose remaining capacity is zero are left out entirely (UBAG treats absence as draining).
+
+Honest limits: `spki_sha256` is empty until the manager CA exists (UBAG decision D3), so a helper
+cannot yet pass UBAG's mTLS dial even when a grant is published — the grant says what capacity
+WOULD be assigned, and UBAG's prober keeps the node unusable until the trust plane lands.
+`voice_capable` is always false. `max_browser_workloads` starts at 1 (the plan's qualified-helper
+starting point) via `Fleet__Ubag__MaxBrowserWorkloads`. Node ids are `ubag-<hostId>` with URI SAN
+`spiffe://ubag/node/<node_id>`; generation is the host's `DesiredRevision` (monotonic in practice).
+
+Reaching the endpoint from the UBAG gateway: the manager publishes on the host's loopback only,
+so attach the gateway container to the manager's bridge once
+(`docker network connect oet_fleet_net <gateway-container>`) and point
+`UBAG_FLEET_MANAGER_URL=http://oet-fleet-manager:8080/internal/ubag/allocations`,
+`UBAG_FLEET_MANAGER_TOKEN=<contents of fleet_ubag_token>` in the UBAG env.
 
 ## First deployment (owner steps; the pipeline does the rest)
 

@@ -68,6 +68,7 @@ public static class ServiceRegistration
         services.AddSingleton<HostStore>();
         services.AddSingleton<OperationStore>();
         services.AddSingleton<CredentialStore>();
+        services.AddSingleton<Projects.UbagAllocationService>();
 
         services.AddSingleton<IHostResolver, DnsHostResolver>();
         services.AddSingleton(sp =>
