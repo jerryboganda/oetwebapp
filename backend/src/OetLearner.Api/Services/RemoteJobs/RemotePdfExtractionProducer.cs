@@ -27,12 +27,22 @@ public interface IRemotePdfExtractionProducer
     /// doubt, the answer is <see cref="RemoteExtractionDecision.Local"/>: the local path ALWAYS works as the fallback.
     /// </summary>
     Task<RemoteExtractionDecision> HandlePaperAsync(string paperId, CancellationToken ct);
+
+    /// <summary>
+    /// Shadow evidence for papers the extraction worker never visits again. The worker only walks papers that still have an
+    /// uncached PDF, so once a corpus is fully extracted <see cref="HandlePaperAsync"/> is never reached for it and could not
+    /// produce the parity evidence the cutover needs. This enqueues a few hash-only shadow jobs for already-extracted assets
+    /// that have none for the current engine and settings. A no-op unless the shadow flag is on and a node can take the work.
+    /// Returns how many jobs it enqueued; never throws except for cancellation.
+    /// </summary>
+    Task<int> SweepShadowBacklogAsync(CancellationToken ct);
 }
 
 /// <summary>
 /// The <c>pdf.extract</c> producer used by <c>ContentTextExtractionWorker</c> (OET-RWP/1 section 6.1.2). It enqueues idempotent
 /// jobs for assets that have no cache entry (apply) and, in shadow mode, for assets that already do (hash-only comparison
-/// against a fresh in-process extraction). It never extracts anything itself, never touches provider keys, and the seven
+/// against a fresh in-process extraction): per visited paper through <see cref="HandlePaperAsync"/>, and for the whole already
+/// extracted corpus through <see cref="SweepShadowBacklogAsync"/>. It never extracts anything itself, never touches provider keys, and the seven
 /// synchronous call sites of <c>IPdfTextExtractor</c> are untouched. Only the PdfPig tier is ever remote: the
 /// <c>azure</c>/<c>noop</c> providers, assets over 100 MiB and assets without a SHA-256 stay local.
 /// </summary>
@@ -190,7 +200,88 @@ public sealed class RemotePdfExtractionProducer(
         };
     }
 
-    private async Task EnqueueShadowAsync(
+    private const int ShadowMaxPerTick = 5;
+
+    // Assets that are PDFs of a live paper and have no shadow job for this engine and these settings. Not tied to
+    // ContentTextExtractionWorker.CandidatePaperIds: that predicate is "has an uncached PDF", so it skips exactly the already
+    // extracted papers a shadow comparison is about. Jobs of any state count as "has a job", so a job that failed or was
+    // compared is never re-enqueued by this sweep (an admin requeue or an engine/settings change is the way to run it again);
+    // the result shrinks as shadow rows appear, so no cursor is needed. IX_RemoteJobs_Resource serves the NOT EXISTS.
+    private const string ShadowBacklogSql = """
+        SELECT m."Id", m."Format", m."Sha256", m."SizeBytes", m."StoragePath"
+        FROM "MediaAssets" m
+        WHERE lower(m."Format") = 'pdf'
+          AND m."Sha256" ~ '^[0-9a-f]{64}$'
+          AND m."SizeBytes" <= @maxBytes
+          AND EXISTS (
+              SELECT 1 FROM "ContentPaperAssets" l
+              JOIN "ContentPapers" p ON p."Id" = l."PaperId"
+              WHERE l."MediaAssetId" = m."Id" AND p."Status" <> @archived)
+          AND NOT EXISTS (
+              SELECT 1 FROM "RemoteJobs" j
+              WHERE j."ResourceType" = 'MediaAsset' AND j."ResourceId" = m."Id"
+                AND j."Kind" = @kind AND j."Purpose" = @purpose
+                AND j."InputSha256" = m."Sha256" AND j."EngineVersion" = @engine AND j."SettingsHash" = @settingsHash)
+        ORDER BY m."Id"
+        LIMIT @limit;
+        """;
+
+    public async Task<int> SweepShadowBacklogAsync(CancellationToken ct)
+    {
+        try
+        {
+            return await SweepShadowCoreAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Remote PDF shadow sweep failed; it runs again on the next pass.");
+            return 0;
+        }
+    }
+
+    private async Task<int> SweepShadowCoreAsync(CancellationToken ct)
+    {
+        var flagSnapshot = await flags.GetAsync(ct);
+        if (!flagSnapshot.KindEnabled(RemoteJobKinds.PdfExtract, RemoteJobPurpose.Shadow)) return 0;
+
+        var current = (await runtimeSettings.GetAsync(ct)).PdfExtraction;
+        var provider = (current.Provider ?? "auto").Trim().ToLowerInvariant();
+        if (provider is not ("auto" or "pdfpig")) return 0;
+
+        var engine = RemoteJobKinds.EngineVersion(RemoteJobKinds.PdfExtract, settings.Current);
+        var spec = RemoteJobKinds.Find(RemoteJobKinds.PdfExtract);
+        if (engine is null || spec is null) return 0;
+
+        // Cheap gate first: with no node that can take a job the backlog query would only be wasted work every pass.
+        if (!await placement.HasEligibleNodeAsync(RemoteJobKinds.PdfExtract, spec.Limits.Weight, ct)) return 0;
+
+        var settingsHash = PdfExtractSettings.Hash("flat", provider, current.MinTextLengthForSuccess, replaceExisting: false);
+        var candidates = await RemoteDb.QueryAsync(
+            db,
+            ShadowBacklogSql,
+            parameters =>
+            {
+                parameters.AddWithValue("maxBytes", spec.Limits.MaxInputBytes);
+                parameters.AddWithValue("archived", (int)ContentStatus.Archived);
+                parameters.AddWithValue("kind", RemoteJobKinds.PdfExtract);
+                parameters.AddWithValue("purpose", RemoteJobPurpose.Shadow);
+                parameters.AddWithValue("engine", engine);
+                parameters.AddWithValue("settingsHash", settingsHash);
+                parameters.AddWithValue("limit", ShadowMaxPerTick);
+            },
+            reader => new PdfAsset(
+                string.Empty,
+                RemoteDb.Str(reader, "Id"),
+                RemoteDb.Str(reader, "Format"),
+                RemoteDb.Str(reader, "Sha256"),
+                RemoteDb.Long(reader, "SizeBytes"),
+                RemoteDb.Str(reader, "StoragePath")),
+            ct);
+
+        return await EnqueueShadowAsync(candidates, current.MinTextLengthForSuccess, provider, engine, spec, ct);
+    }
+
+    private async Task<int> EnqueueShadowAsync(
         IReadOnlyList<PdfAsset> pdfs,
         int minTextLength,
         string provider,
@@ -198,13 +289,12 @@ public sealed class RemotePdfExtractionProducer(
         RemoteKindSpec spec,
         CancellationToken ct)
     {
-        const int MaxPerTick = 5;
         var enqueued = 0;
         foreach (var asset in pdfs)
         {
-            if (enqueued >= MaxPerTick) return;
+            if (enqueued >= ShadowMaxPerTick) return enqueued;
             if (asset.Sha256 is null || asset.SizeBytes > spec.Limits.MaxInputBytes) continue;
-            if (!await placement.HasEligibleNodeAsync(RemoteJobKinds.PdfExtract, spec.Limits.Weight, ct)) return;
+            if (!await placement.HasEligibleNodeAsync(RemoteJobKinds.PdfExtract, spec.Limits.Weight, ct)) return enqueued;
 
             var key = RemoteJobKeys.IdempotencyKey(
                 RemoteJobKinds.PdfExtract, RemoteJobPurpose.Shadow, "MediaAsset", asset.MediaId, asset.Sha256, engine,
@@ -217,6 +307,8 @@ public sealed class RemotePdfExtractionProducer(
                 ct);
             enqueued++;
         }
+
+        return enqueued;
     }
 
     private static RemoteEnqueueRequest BuildRequest(

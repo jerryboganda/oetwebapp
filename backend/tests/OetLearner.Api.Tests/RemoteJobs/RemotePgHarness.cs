@@ -49,6 +49,7 @@ internal sealed class RemotePgHarness : IAsyncDisposable
             "Id"                character varying(64)    NOT NULL PRIMARY KEY,
             "ExtractedTextJson" text                     NOT NULL DEFAULT '{}',
             "RowVersion"        integer                  NOT NULL DEFAULT 0,
+            "Status"            integer                  NOT NULL DEFAULT 0,
             "UpdatedAt"         timestamp with time zone NOT NULL DEFAULT now()
         );
         CREATE TABLE "CompanionSources" (

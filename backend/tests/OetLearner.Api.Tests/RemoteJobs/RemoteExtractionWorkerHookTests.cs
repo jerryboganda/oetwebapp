@@ -36,6 +36,8 @@ public sealed class RemoteExtractionWorkerHookTests
             Handled.Add(paperId);
             return Task.FromResult(decide(paperId));
         }
+
+        public Task<int> SweepShadowBacklogAsync(CancellationToken ct) => Task.FromResult(0);
     }
 
     private static async Task<ServiceProvider> BuildAsync(IContentTextExtractionService extraction, IRemotePdfExtractionProducer? producer)

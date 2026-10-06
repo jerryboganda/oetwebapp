@@ -778,6 +778,36 @@ public sealed class RemoteNodesAndProducersPostgresTests
     }
 
     [PostgreSqlFact]
+    public async Task ShadowSweep_ReachesFullyExtractedPapersTheWorkerNeverVisits_AndEnqueuesEachAssetOnce()
+    {
+        await using var h = await RemotePgHarness.CreateAsync();
+        await h.SeedPdfAsync(extractedJson: "{\"asset-1\":\"already extracted text for this asset\"}");
+        await h.SeedPdfAsync(mediaId: "media-2", paperId: "paper-2", assetId: "asset-2", extractedJson: "{\"asset-2\":\"already extracted text for this asset\"}");
+        // an archived paper, a non-PDF asset and an asset without a SHA-256 are never swept
+        await h.SeedPdfAsync(mediaId: "media-3", paperId: "paper-3", assetId: "asset-3", extractedJson: "{\"asset-3\":\"already extracted text for this asset\"}");
+        await h.SqlAsync("""UPDATE "ContentPapers" SET "Status" = 6 WHERE "Id" = 'paper-3';""");
+        await h.SeedPdfAsync(mediaId: "media-4", paperId: "paper-4", assetId: "asset-4", format: "mp3");
+        await h.SeedPdfAsync(mediaId: "media-5", paperId: "paper-5", assetId: "asset-5");
+        await h.SqlAsync("""UPDATE "MediaAssets" SET "Sha256" = NULL WHERE "Id" = 'media-5';""");
+        await h.AddNodeAsync();
+
+        await using var db = h.NewContext();
+        var producer = Producer(h, db, new FixedHeadroom { Value = true });
+
+        // flag off: nothing
+        h.Flags.Set();
+        Assert.Equal(0, await producer.SweepShadowBacklogAsync(CancellationToken.None));
+
+        h.Flags.Set(RemoteJobFlagKeys.Master, RemoteJobFlagKeys.PdfExtractShadow); // the apply flag stays off
+        Assert.Equal(2, await producer.SweepShadowBacklogAsync(CancellationToken.None));
+        Assert.Equal(0, await producer.SweepShadowBacklogAsync(CancellationToken.None));
+
+        Assert.Equal(2, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobs" WHERE "Purpose" = 'shadow' AND "FallbackAfter" IS NULL;"""));
+        Assert.Equal(0, await h.CountAsync("""SELECT COUNT(*)::int FROM "RemoteJobs" WHERE "Purpose" = 'apply';"""));
+        Assert.Equal("{\"asset-1\":\"already extracted text for this asset\"}", await h.PaperJsonAsync());
+    }
+
+    [PostgreSqlFact]
     public async Task Placement_DecidesRemoteLocalOrWait()
     {
         await using var h = await RemotePgHarness.CreateAsync();

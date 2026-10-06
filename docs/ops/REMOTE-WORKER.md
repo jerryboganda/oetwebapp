@@ -77,7 +77,14 @@ deploy (a container recreate) to take effect.
    by the reaper (`canary_timeout`, audited `RemoteJob.CanaryTimeout`); just request a new one.
 5. Turn on `remote_jobs_enabled` and `remote_jobs_kind_pdf_extract_shadow`. Helpers run hash-only shadow jobs; the
    ai-worker re-extracts each asset in-process (fresh) and writes `RemoteJob.ShadowMismatch` audit rows on any difference.
-   Review zero mismatches over real Listening Part B/C papers (the tracked corpus has none).
+   Shadow reaches papers that are already fully extracted through a sweep, not through the extraction worker (which only
+   visits papers that still have an uncached PDF): each minute the ai-worker enqueues up to 5 shadow jobs for PDF assets of
+   non-archived papers that have no shadow job for the current engine version and settings (valid SHA-256, at most 100 MiB,
+   only while a node can take the work). A job that failed or was already compared is not enqueued again by the sweep; an
+   admin requeue, an engine bump or a settings change runs the asset again. Progress is
+   `SELECT "ResultSummaryJson"->>'comparison', count(*) FROM "RemoteJobs" WHERE "Kind"='pdf.extract' AND "Purpose"='shadow' GROUP BY 1;`
+   (no rows of `mismatch`, and the shadow count approaching the number of PDF assets, is the evidence).
+   Review zero mismatches over real Listening Part B/C papers (the tracked corpus has none) before step 6.
 6. Turn on `remote_jobs_kind_pdf_extract`. Set `REMOTEJOBS__VERIFYSAMPLERATE=0.05` in `.env.production` after cutover and deploy
    (the ai-worker re-checks a deterministic 5% of applied jobs; a mismatch audits, strikes the node and the in-process text
    replaces the helper's). The sampler scans the 50 oldest uncompared jobs of the last two days each minute, records the

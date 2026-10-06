@@ -55,7 +55,8 @@ public static class PdfParity
 /// <c>ai-worker</c> so the primary's API slots never pay for the re-extraction:
 /// <list type="bullet">
 /// <item><b>Shadow</b> jobs (hash-only, never applied) are compared with a FRESH in-process extraction of the asset (the stored text
-/// may pre-date extractor fixes); any difference writes <c>RemoteJob.ShadowMismatch</c>.</item>
+/// may pre-date extractor fixes); any difference writes <c>RemoteJob.ShadowMismatch</c>. The same pass also enqueues up to five
+/// shadow jobs per minute for already-extracted assets that have none yet, because the extraction worker no longer visits them.</item>
 /// <item><b>Verify sampling</b> (<c>RemoteJobs:VerifySampleRate</c>, default 0) re-extracts a deterministic fraction of Applied jobs;
 /// a mismatch audits, strikes the node, and replaces the helper's cached text with the in-process result, which is authoritative.</item>
 /// </list>
@@ -111,6 +112,12 @@ public sealed class RemoteJobShadowComparer(
             {
                 if (await CompareAsync(scope.ServiceProvider, db, job, authoritative: false, options, ct)) compared++;
             }
+
+            // Cutover evidence for papers that are already fully extracted: the extraction worker never revisits those, so
+            // enqueue a few shadow jobs for them here (see IRemotePdfExtractionProducer.SweepShadowBacklogAsync). Absent
+            // (not registered) = nothing to sweep.
+            var producer = scope.ServiceProvider.GetService<IRemotePdfExtractionProducer>();
+            if (producer is not null) await producer.SweepShadowBacklogAsync(ct);
         }
 
         if (options.VerifySampleRate > 0 && snapshot.KindEnabled(RemoteJobKinds.PdfExtract, RemoteJobPurpose.Apply))
