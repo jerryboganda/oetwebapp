@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ArrowRight, Clock, FileText, RefreshCw } from 'lucide-react';
+import { ArrowRight, Clock, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -12,6 +12,7 @@ import { cardClassName } from '@/components/ui/card';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
+import { WritingReleaseCountdown } from '@/components/domain/writing/WritingReleaseCountdown';
 import { getWritingSubmission, retryWritingGrade } from '@/lib/writing/api';
 import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import type { WritingSubmissionDto, WritingSubmissionStatus } from '@/lib/writing/types';
@@ -41,8 +42,26 @@ export default function WritingSubmissionDetailPage() {
     if (!submissionId) return;
     void getWritingSubmission(submissionId)
       .then(setSubmission)
-      .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.detail.error.load')));
+      .catch((err) => setError(toCandidateSafeWritingErrorMessage(err, t('writing.submissions.detail.error.load'))));
   }, [submissionId, t]);
+
+  // Re-reads the submission (poll tick, or the countdown reaching zero).
+  const refresh = useCallback(() => {
+    if (!submissionId) return;
+    void getWritingSubmission(submissionId)
+      .then(setSubmission)
+      .catch(() => {
+        /* keep the last view; the next tick tries again */
+      });
+  }, [submissionId]);
+
+  // Effective status: a finished letter stays 'grading' until the server releases it.
+  const inProgress = submission?.status === 'queued' || submission?.status === 'preflight' || submission?.status === 'grading';
+  useEffect(() => {
+    if (!inProgress) return;
+    const timer = window.setInterval(refresh, 5000);
+    return () => window.clearInterval(timer);
+  }, [inProgress, refresh]);
 
   // Re-grades the SAME submission (no new letter, no second charge), once per
   // click, then follows it on the grading page.
@@ -74,7 +93,6 @@ export default function WritingSubmissionDetailPage() {
         highlights={submission ? [
           { icon: Clock, label: t('writing.submissions.detail.highlights.submitted'), value: new Date(submission.submittedAt).toLocaleString() },
           { icon: FileText, label: t('writing.submissions.detail.highlights.words'), value: `${submission.wordCount}` },
-          { icon: RefreshCw, label: t('writing.submissions.detail.highlights.revision'), value: submission.isRevision ? t('writing.submissions.detail.highlights.revisionYes') : t('writing.submissions.detail.highlights.revisionNo') },
         ] : []}
       />
 
@@ -89,10 +107,15 @@ export default function WritingSubmissionDetailPage() {
               <h2 id="status-heading" className="text-base font-bold text-navy">{t('writing.submissions.detail.statusHeading')}</h2>
               {statusVariant && statusLabel ? <Badge variant={statusVariant} size="sm">{statusLabel}</Badge> : null}
             </header>
-            <p className="mt-2 text-sm text-muted">
-              {t('writing.submissions.detail.tierLabel')} <span className="font-bold capitalize text-navy">{submission.gradingTier}</span>{' '}
-              · {t('writing.submissions.detail.sourceLabel')} <span className="font-bold capitalize text-navy">{submission.inputSource}</span>
-            </p>
+            {inProgress ? (
+              <WritingReleaseCountdown
+                className="mt-3"
+                releaseAt={submission.releaseAt}
+                serverNow={submission.serverNow}
+                releaseState={submission.releaseState}
+                onHeldElapsed={refresh}
+              />
+            ) : null}
             {submission.autoRetrying ? (
               <p className="mt-2 text-sm font-semibold text-warning-strong">{t('writing.myWork.delayed')}</p>
             ) : null}
@@ -110,7 +133,7 @@ export default function WritingSubmissionDetailPage() {
                   </Link>
                 </Button>
               ) : null}
-              {submission.status === 'queued' || submission.status === 'grading' || submission.status === 'preflight' ? (
+              {inProgress ? (
                 <Button asChild variant="outline">
                   <Link href={`/writing/submissions/${encodeURIComponent(submission.id)}/grading`}>
                     {t('writing.submissions.detail.waitForGrade')}

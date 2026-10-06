@@ -149,11 +149,9 @@ describe('credit rule', () => {
     expect(released.problems.join(' ')).toMatch(/release\/refund/);
   });
 
-  it('charges nothing for a free sample and 2 at grade time for a revision', () => {
+  it('charges nothing for a free sample', () => {
     expect(creditVerdict({ kind: 'free_sample', userId: user, scenarioId: scenario, submissionId: submission, before, after: before }).ok).toBe(true);
     expect(creditVerdict({ kind: 'free_sample', userId: user, scenarioId: scenario, submissionId: submission, before, after: snapshot(10, open) }).ok).toBe(false);
-    const revise = { id: 't4', reason: 'GradingDeduct', referenceId: `writing-grade:${submission.replaceAll('-', '')}`, writingOnlyCreditsDelta: -2 };
-    expect(creditVerdict({ kind: 'revision', userId: user, scenarioId: scenario, submissionId: submission, before, after: snapshot(10, revise) }).ok).toBe(true);
   });
 
   it('refuses learners whose credit assertions would be vacuous', () => {
@@ -311,6 +309,10 @@ describe('report and post-submission checks', () => {
     expect(sectionOrderProblems(['score', 'priorities', 'model-answer', 'criteria', 'corrections', 'reference', 'next-actions'])).toEqual([]);
     expect(sectionOrderProblems(['score', 'criteria', 'priorities', 'model-answer', 'corrections', 'next-actions'])[0]).toMatch(/order/);
     expect(sectionOrderProblems(['score', 'priorities', 'criteria', 'corrections', 'next-actions'])[0]).toMatch(/model-answer/);
+    // Priorities are required only when a scored correction exists (advisory-only reports have none).
+    const noPriorities = ['score', 'model-answer', 'criteria', 'corrections', 'next-actions'];
+    expect(sectionOrderProblems(noPriorities)).toEqual([]);
+    expect(sectionOrderProblems(noPriorities, { prioritiesRequired: true })[0]).toMatch(/"priorities" is missing/);
     expect(correctionsProblems({ preview: 5, full: 12, api: 12, expandable: true })).toEqual([]);
     expect(correctionsProblems({ preview: 4, full: 4, api: 4, expandable: false })).toEqual([]);
     expect(correctionsProblems({ preview: 5, full: 11, api: 12, expandable: true })).toHaveLength(1);
@@ -369,39 +371,69 @@ describe('realistic letters (suite=letters)', () => {
 });
 
 describe('report shape (priorities, criterion cards, labels, Exemplar)', () => {
-  const error = (code: string, severity: string, rule: string, extra = {}) => ({ primaryCriterionCode: code, severity, ruleSource: rule, whyItMatters: 'A short reason.', correction: 'A fix.', ...extra });
+  // The candidate API sends no rule source any more: ruleSource stays null and the plain explanation carries the meaning.
+  const error = (code: string, severity: string, why: string, extra = {}) => ({ primaryCriterionCode: code, severity, ruleSource: null, category: 'Purpose', whyItMatters: why, correction: 'A fix.', ...extra });
   const good = {
     grade: { perCriterion: { c1: { feedback: 'Short.' }, c2: { feedback: 'Short.' }, c3: { feedback: '' }, c4: { feedback: '' }, c5: { feedback: '' }, c6: { feedback: '' } } },
     report: {
-      topPriorities: ['AI.purpose: State the purpose first.', 'R12.4: Use passive voice.', 'OW-005: Cut the repeated detail.'],
+      topPriorities: ['The purpose is not stated in the opening sentence.', 'Use passive voice for medications.', 'Cut the repeated detail.'],
       criteria: [
         { criterionCode: 'purpose', summary: 'Purpose is vague.' }, { criterionCode: 'content', summary: 'A fact is missing.' },
         { criterionCode: 'conciseness_clarity', summary: null }, { criterionCode: 'genre_style' }, { criterionCode: 'organisation_layout' }, { criterionCode: 'language', summary: 'Tense errors.' },
       ],
-      errors: [error('purpose', 'critical', 'AI.purpose'), error('content', 'major', 'R12.4'), error('language', 'minor', 'OW-005')],
+      errors: [
+        error('purpose', 'critical', 'The purpose is not stated in the opening sentence.'),
+        error('content', 'major', 'The allergy is missing from the letter.', { category: 'Content' }),
+        error('language', 'minor', 'The tense is wrong here.', { category: 'Language' }),
+      ],
     },
   };
 
   it('accepts a short, distinct, label-free report and records the severity mix', () => {
     const facts = reportShapeFacts(good.grade, good.report);
     expect(reportShapeProblems(facts)).toEqual([]);
-    expect(facts).toMatchObject({ errorsCount: 3, critical: 1, major: 1, minor: 1, priorityCount: 3, distinctPriorities: 3, purposePriorities: 1, labelLeaks: 0 });
-    expect(facts.leakKinds).toEqual({ ruleLabel: 0, ruleId: 0, affects: 0, exemplar: 0 });
+    expect(facts).toMatchObject({ errorsCount: 3, critical: 1, major: 1, minor: 1, advisory: 0, scoredCorrections: 3, priorityCount: 3, distinctPriorities: 3, purposePriorities: 1, labelLeaks: 0, rawPriorityLabels: 0, neutralisedLeaks: 0 });
+    expect(Object.values(facts.leakKinds).every((n) => n === 0)).toBe(true);
+    expect(Object.keys(facts.leakKinds)).toEqual(expect.arrayContaining(['ruleLabel', 'ruleId', 'affects', 'exemplar', 'internalId', 'checkId', 'providerTag', 'debugTerm']));
     expect(severityMixPartials(facts)).toEqual([]);
     expect(severityMixPartials({ ...facts, minor: 0 })[0]).toMatch(/did not mix/);
   });
 
   it.each([
-    ['a fourth priority', { topPriorities: [...good.report.topPriorities, 'R1.1: One more.'] }, /expected at most 3/],
-    ['a repeated priority', { topPriorities: ['R1.1: Same.', 'R1.2: Same.', 'R1.3: Other.'] }, /repeat/],
-    ['two Purpose priorities', { topPriorities: ['AI.purpose: One.', 'AI.purpose: Two.'], errors: [error('purpose', 'major', 'AI.purpose')] }, /about Purpose/],
+    ['a fourth priority', { topPriorities: [...good.report.topPriorities, 'One more priority.'] }, /expected at most 3/],
+    ['a repeated priority', { topPriorities: ['Same.', 'Same.', 'Other.'] }, /repeat/],
+    ['two Purpose priorities', { topPriorities: ['The purpose is not stated in the opening sentence.', 'The purpose is not stated in the opening sentence and it is vague.'], errors: [error('purpose', 'major', 'The purpose is not stated in the opening sentence.')] }, /about Purpose/],
     ['a long criterion summary', { criteria: [{ criterionCode: 'purpose', summary: 'x'.repeat(241) }] }, /summary is 241/],
     ['a criterion with findings but no summary', { criteria: [{ criterionCode: 'purpose' }] }, /no summary/],
-    ['an internal label', { errors: [error('purpose', 'critical', 'AI.purpose', { whyItMatters: 'R1: leaked' })] }, /internal rule label/],
-    ['the word Exemplar', { topPriorities: ['AI.purpose: Compare with the Exemplar.'] }, /Exemplar/],
+    ['an internal label', { errors: [error('purpose', 'critical', 'R1: leaked')] }, /internal rule label/],
+    ['an internal rule id in the text', { errors: [error('purpose', 'critical', 'Violates OW-005 here.')] }, /internal rule label/],
+    ['a registry check id in the text', { errors: [error('purpose', 'critical', 'See linker_avoid_words for this.')] }, /internal rule label/],
+    ['a provider tag in the text', { errors: [error('purpose', 'critical', 'The claude-opus grader flagged this.')] }, /internal rule label/],
+    ['a debug term in the text', { errors: [error('purpose', 'critical', 'The validator failed this letter.')] }, /internal rule label/],
+    ['the word Exemplar', { topPriorities: ['Compare with the Exemplar.'] }, /Exemplar/],
+    ['a priority that still carries its label', { topPriorities: ['AI:OW-007: Include the plan.', 'Cut the repeated detail.'] }, /still carries an internal label/],
+    ['scored corrections but no priorities', { topPriorities: [] }, /scored corrections but no top priorities/],
+    ['a neutralised field that still has a value', { rulePackVersion: '2.4.0-senior-assessor-audit', errors: [error('purpose', 'critical', 'A reason.', { ruleSource: 'AI.purpose' })] }, /internal field\(s\) still carry a value/],
   ])('flags %s', (_name, patch: any, expected) => {
     const facts = reportShapeFacts(good.grade, { ...good.report, ...patch });
     expect(reportShapeProblems(facts).join(' | ')).toMatch(expected);
+  });
+
+  it('does not require priorities when every correction is advisory, and ignores the candidate\'s own wording', () => {
+    const advisoryOnly = {
+      ...good.report,
+      topPriorities: [],
+      errors: [error('language', 'advisory', 'An optional style choice.', { candidateWording: 'the OW-005 patient_has', category: 'Language' })],
+    };
+    const facts = reportShapeFacts(good.grade, advisoryOnly);
+    expect(facts).toMatchObject({ scoredCorrections: 0, advisory: 1, priorityCount: 0, labelLeaks: 0 });
+    expect(reportShapeProblems(facts)).toEqual([]);
+  });
+
+  it('flags a revise offer in the report text and links', () => {
+    expect(reportTextProblems('Revise & Resubmit')[0]).toMatch(/Revise & Resubmit/);
+    expect(reportTextProblems('ok', ['/writing/submissions/s1/revise'])[0]).toMatch(/\/revise/);
+    expect(reportTextProblems('Practice this again', ['/writing/practice/session/sc-1'])).toEqual([]);
   });
 
   it('flags a long per-criterion feedback in the grade', () => {

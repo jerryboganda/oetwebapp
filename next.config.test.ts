@@ -52,4 +52,14 @@ describe('nextConfig redirects', () => {
     expect(bySource.get('/goal')).toMatchObject({ destination: '/goals', permanent: true });
     expect(bySource.get('/boost')).toMatchObject({ destination: '/#boost', permanent: false });
   });
+
+  it('sends the retired Writing revise route to that letter\'s result', async () => {
+    const redirects = await nextConfig.redirects?.();
+    const bySource = new Map(redirects?.map((r) => [r.source, r]));
+
+    expect(bySource.get('/writing/submissions/:id/revise')).toMatchObject({
+      destination: '/writing/submissions/:id/results',
+      permanent: false,
+    });
+  });
 });

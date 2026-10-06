@@ -307,7 +307,11 @@ public sealed partial class WritingRuleEngine
             var start = Math.Max(0, pronoun.Index - 25);
             var snippet = p.Substring(start, Math.Min(p.Length - start, pronoun.Length + 45)).Trim();
             var offset = BodyOffset(s) + s.Body.IndexOf(p, StringComparison.Ordinal);
-            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+            // Candidates: a paragraph that opens with He/She is a house-rule slip (Minor). It becomes Major
+            // only when clarity really suffers, which is when another person is named or referred to
+            // before the patient is first named, so the pronoun could point at either.
+            var ambiguous = OtherPersonRe.IsMatch(p[..Math.Min(p.Length, firstNonPronoun)]);
+            yield return new LintFinding(rule.Id, ModeSeverity(input, ambiguous ? RuleSeverity.Major : RuleSeverity.Minor),
                 $"The first mention of the patient in this paragraph is the pronoun \"{pronoun.Value}\". Start each body paragraph with \"{approved}\", then use pronouns.",
                 Quote: snippet, Start: offset + pronoun.Index, End: offset + pronoun.Index + pronoun.Length,
                 FixSuggestion: approved);
@@ -317,6 +321,13 @@ public sealed partial class WritingRuleEngine
     private static readonly Regex RelationshipLabelRe = new(
         @"\byour\s+(mother|father|mum|mom|dad|son|daughter|wife|husband|partner|child|grandmother|grandfather|grandson|granddaughter|brother|sister|aunt|uncle|niece|nephew|relative|parent)\b",
         RegexOptions.IgnoreCase);
+
+    // Another person mentioned in a paragraph: a titled surname ("Dr Patel", "Mrs Jones") or a relative or
+    // carer by role ("his wife", "her daughter", "the carer"). Used only by the candidate ambiguity guard of
+    // paragraph_start_patient_name.
+    private static readonly Regex OtherPersonRe = new(
+        @"\b(?:Dr|Mr|Mrs|Ms|Miss|Prof|Professor|Sister|Nurse)\.?\s+[A-Z][a-zA-Z'’\-]+|(?i:\b(?:his|her|their)\s+(?:wife|husband|partner|mother|father|son|daughter|brother|sister|carer|friend|neighbour|parents?|children|child|GP|doctor|nurse)\b|\bthe\s+(?:wife|husband|mother|father|carer|daughter|son)\b)",
+        RegexOptions.None);
 
     // OWN-W-012 — "When the patient is named, do not use 'your mother',
     // 'your father' or another relationship label as the normal patient
@@ -501,7 +512,13 @@ public sealed partial class WritingRuleEngine
                 .Where(m => !MedicationStopWords.Contains(m.Groups["drug"].Value))
                 .ToList();
             if (items.Count == 0) continue;
-            foreach (var item in items.Where(i => !i.Groups["comma"].Success))
+            // A comma between the medicine and its dose is a Model Answer house form; for a candidate it is a
+            // punctuation preference, never an error (owner handoff, 6 Oct 2026, section 3). The genuine
+            // list-ambiguity check below still runs for candidates.
+            var missingComma = input.IsModelAnswer
+                ? items.Where(i => !i.Groups["comma"].Success)
+                : Enumerable.Empty<Match>();
+            foreach (var item in missingComma)
             {
                 var drug = item.Groups["drug"].Value;
                 var dose = $"{item.Groups["dose"].Value} {item.Groups["unit"].Value}".Trim();

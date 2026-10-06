@@ -77,9 +77,8 @@ describe('learner dashboard route policy', () => {
     expect(resolveLearnerChrome('/writing/paper/session/s1')).toEqual({
       mode: 'focus', requireAuth: true, titleKey: 'writing.paper.pageTitle', examOrLive: true,
     });
-    expect(resolveLearnerChrome('/writing/submissions/w1/revise')).toMatchObject({
-      mode: 'focus', titleKey: 'writing.submissions.revise.pageTitle',
-    });
+    // The retired revise page is no longer a focus route (it redirects to the result).
+    expect(resolveLearnerChrome('/writing/submissions/w1/revise').mode).toBe('workspace');
   });
 
   it('keeps the public speaking reference pages outside the auth gate', () => {

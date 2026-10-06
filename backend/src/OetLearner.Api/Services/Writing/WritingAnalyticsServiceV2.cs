@@ -74,12 +74,20 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
         return new WritingAnalyticsBundle(dashboard, bands, criteria, letterTypes, canon, avgSeconds, withinPct, timeBuckets, skills, calendar);
     }
 
+    /// <summary>
+    /// The learner's submissions whose result may be shown: graded AND past the 15-minute release window
+    /// (or an allowlisted account). Every stat that reads a grade joins this, so a letter still inside its
+    /// window never moves the dashboard, band history, radar or letter-type averages early.
+    /// </summary>
+    private Task<IQueryable<WritingSubmission>> ReleasedSubmissionsAsync(string userId, CancellationToken ct)
+        => WritingResultRelease.ReleasedSubmissionsAsync(db, userId, clock.GetUtcNow(), ct);
+
     public async Task<WritingAnalyticsDashboard> GetDashboardViewAsync(string userId, CancellationToken ct)
     {
         var profile = await db.LearnerWritingProfiles.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId, ct);
+        var released = await ReleasedSubmissionsAsync(userId, ct);
         var grades = await db.WritingGrades.AsNoTracking()
-            .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
-            .Where(x => x.s.UserId == userId)
+            .Join(released, g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
             .OrderByDescending(x => x.g.GradedAt)
             .Take(5)
             .Select(x => new { x.g.RawTotal, x.g.BandLabel })
@@ -103,10 +111,10 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
 
     public async Task<IReadOnlyList<WritingAnalyticsBandPoint>> GetBandsHistoryAsync(string userId, int take, CancellationToken ct)
     {
+        var released = await ReleasedSubmissionsAsync(userId, ct);
         var rows = await db.WritingGrades.AsNoTracking()
-            .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
+            .Join(released, g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
             .Join(db.WritingScenarios.AsNoTracking(), x => x.s.ScenarioId, s => s.Id, (x, s) => new { x.g, x.s, s.LetterType })
-            .Where(x => x.s.UserId == userId)
             .OrderByDescending(x => x.g.GradedAt)
             .Take(Math.Clamp(take, 1, 100))
             .Select(x => new { x.g.SubmissionId, x.g.GradedAt, x.g.RawTotal, x.g.EstimatedBand, x.LetterType, x.s.IsRevision })
@@ -120,13 +128,14 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
     public async Task<IReadOnlyList<WritingAnalyticsCanonRow>> GetCanonTrackerAsync(string userId, int days, CancellationToken ct)
     {
         var since = clock.GetUtcNow().AddDays(-Math.Clamp(days, 1, 365));
+        var released = await ReleasedSubmissionsAsync(userId, ct);
         // Project the grouped aggregates into an anonymous type so the ORDER BY /
         // TAKE stay translatable in SQL — EF cannot translate ordering over a
         // property of a positional-record constructor projection
         // (WritingAnalyticsCanonRow), only over the group/anonymous shape.
         var grouped = await db.WritingCanonViolations.AsNoTracking()
-            .Join(db.WritingSubmissions.AsNoTracking(), v => v.SubmissionId, s => s.Id, (v, s) => new { v, s })
-            .Where(x => x.s.UserId == userId && x.v.DetectedAt >= since)
+            .Join(released, v => v.SubmissionId, s => s.Id, (v, s) => new { v, s })
+            .Where(x => x.v.DetectedAt >= since)
             .GroupBy(x => new { x.v.RuleId, x.v.Severity })
             .Select(g => new { g.Key.RuleId, g.Key.Severity, Count = g.Count() })
             .OrderByDescending(r => r.Count)
@@ -153,9 +162,9 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
 
     private async Task<WritingAnalyticsCriteriaRadar> GetCriteriaRadarAsync(string userId, CancellationToken ct)
     {
+        var released = await ReleasedSubmissionsAsync(userId, ct);
         var grades = await db.WritingGrades.AsNoTracking()
-            .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
-            .Where(x => x.s.UserId == userId)
+            .Join(released, g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
             .OrderByDescending(x => x.g.GradedAt)
             .Take(5)
             .Select(x => new { x.g.C1Purpose, x.g.C2Content, x.g.C3Conciseness, x.g.C4Genre, x.g.C5Organisation, x.g.C6Language })
@@ -172,10 +181,11 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
 
     private async Task<IReadOnlyList<WritingAnalyticsLetterTypeRow>> GetLetterTypesViewAsync(string userId, CancellationToken ct)
     {
+        var released = await ReleasedSubmissionsAsync(userId, ct);
         return await db.WritingGrades.AsNoTracking()
-            .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
+            .Join(released, g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
             .Join(db.WritingScenarios.AsNoTracking(), x => x.s.ScenarioId, s => s.Id, (x, scenario) => new { x.g, x.s.UserId, scenario.LetterType })
-            .Where(x => x.UserId == userId && x.LetterType != null)
+            .Where(x => x.LetterType != null)
             .GroupBy(x => x.LetterType)
             .Select(g => new WritingAnalyticsLetterTypeRow(g.Key, g.Count(), Math.Round(g.Average(x => (double)x.g.RawTotal), 2)))
             .ToListAsync(ct);
@@ -183,8 +193,7 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
 
     private async Task<(int AverageSeconds, int PercentWithin40Min, IReadOnlyList<WritingAnalyticsTimeBucket> Distribution)> GetTimeStatsViewAsync(string userId, CancellationToken ct)
     {
-        var subs = await db.WritingSubmissions.AsNoTracking()
-            .Where(s => s.UserId == userId && s.Status == "graded")
+        var subs = await (await ReleasedSubmissionsAsync(userId, ct))
             .OrderByDescending(s => s.SubmittedAt)
             .Take(50)
             .Select(s => s.TimeSpentSeconds)
@@ -249,9 +258,10 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
     private async Task<(string? Criterion, string? Label)> GetTopWeaknessAsync(string userId, CancellationToken ct)
     {
         var since = clock.GetUtcNow().AddDays(-30);
+        var released = await ReleasedSubmissionsAsync(userId, ct);
         var grades = await db.WritingGrades.AsNoTracking()
-            .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
-            .Where(x => x.s.UserId == userId && x.g.GradedAt >= since)
+            .Join(released, g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
+            .Where(x => x.g.GradedAt >= since)
             .Select(x => new { x.g.C1Purpose, x.g.C2Content, x.g.C3Conciseness, x.g.C4Genre, x.g.C5Organisation, x.g.C6Language })
             .ToListAsync(ct);
         if (grades.Count == 0) return (null, null);
@@ -348,15 +358,29 @@ public sealed class WritingAnalyticsServiceV2(LearnerDbContext db, TimeProvider 
     public async Task<WritingStatsCanonResponse> GetCanonStatsAsync(string userId, CancellationToken ct)
     {
         var rows = await GetCanonTrackerAsync(userId, 30, ct);
-        var ruleText = await db.WritingCanonRules.AsNoTracking()
-            .Where(r => rows.Select(x => x.RuleId).Contains(r.Id))
-            .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
-        var top = rows.Select(r => new WritingStatsCanonRuleStatResponse(
-            RuleId: r.RuleId,
-            RuleText: ruleText.TryGetValue(r.RuleId, out var t) ? t : string.Empty,
-            Count: r.Count,
-            TrendLast30Days: r.TrendLast30Days)).ToList();
+        var ruleIds = rows.Select(x => x.RuleId).ToList();
+        var categories = await db.WritingCanonRules.AsNoTracking()
+            .Where(r => ruleIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, r => r.Category, ct);
+        // A learner sees skill areas, never rule ids or rule text: rows are grouped by the rule's category and
+        // labelled in plain English (the label also serves as the row's stable key).
+        // ponytail: groups only the tracker's top 15 rules, so a category total can undercount; widen the take if needed.
+        var top = rows
+            .GroupBy(r => CategoryLabel(categories.GetValueOrDefault(r.RuleId)))
+            .Select(g => new WritingStatsCanonRuleStatResponse(
+                RuleId: g.Key,
+                RuleText: g.Key,
+                Count: g.Sum(r => r.Count),
+                TrendLast30Days: g.Sum(r => r.TrendLast30Days)))
+            .OrderByDescending(r => r.Count)
+            .ToList();
         return new WritingStatsCanonResponse(top);
+    }
+
+    private static string CategoryLabel(string? category)
+    {
+        var words = (category ?? string.Empty).Replace('_', ' ').Trim();
+        return words.Length == 0 ? "General writing" : char.ToUpperInvariant(words[0]) + words[1..];
     }
 
     public async Task<WritingStatsTimeResponse> GetTimeStatsAsync(string userId, CancellationToken ct)

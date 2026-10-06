@@ -12,7 +12,7 @@ describe('listFreeSamples', () => {
       professionId: 'medicine',
       contentId: 'c1',
       state: 'retry_available',
-      route: '/writing/submissions/sub-1/revise',
+      route: '/writing/practice/session/c1',
       limit: 2,
       successfulCount: 1,
       remaining: 1,

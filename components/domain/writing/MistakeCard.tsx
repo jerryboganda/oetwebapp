@@ -5,6 +5,7 @@ import { ArrowUpRight, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { plainCategoryLabel } from '@/lib/writing/candidate-text';
 import type { WritingCommonMistakeDto, WritingLearnerMistakeStatDto } from '@/lib/writing/types';
 
 export interface MistakeCardProps {
@@ -33,8 +34,8 @@ function formatRelative(iso: string | null | undefined): string {
  *   - /writing/common-mistakes (library; no `personalStat`)
  *   - /writing/common-mistakes/mine (personal stats highlighted)
  *
- * Provides a wrong/right example pair plus a deep-link to the canon
- * rule the mistake violates (if any).
+ * Provides a wrong/right example pair plus a deep-link to the guidance
+ * for the rule the mistake breaks (if any), without showing the rule id.
  */
 export function MistakeCard({ mistake, personalStat, className }: MistakeCardProps) {
   return (
@@ -44,7 +45,7 @@ export function MistakeCard({ mistake, personalStat, className }: MistakeCardPro
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning-strong" aria-hidden="true" />
           <h3 className="min-w-0 text-sm font-bold text-navy">{mistake.summary}</h3>
         </div>
-        <Badge variant="muted" size="sm" className="shrink-0">{mistake.category}</Badge>
+        <Badge variant="muted" size="sm" className="shrink-0">{plainCategoryLabel(mistake.category)}</Badge>
       </header>
 
       <dl className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -65,12 +66,13 @@ export function MistakeCard({ mistake, personalStat, className }: MistakeCardPro
       <footer className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs text-muted">
           {mistake.relatedSubSkill ? <Badge variant="violet" size="sm">{mistake.relatedSubSkill}</Badge> : null}
+          {/* The link text is plain: the internal rule id is only part of the URL, never shown. */}
           {mistake.canonRuleId ? (
             <Link
               href={`/writing/canon/${encodeURIComponent(mistake.canonRuleId)}`}
               className="inline-flex items-center gap-1 rounded font-bold text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
-              {mistake.canonRuleId}
+              Read the guidance
               <ArrowUpRight className="h-3 w-3 rtl:-scale-x-100" aria-hidden="true" />
             </Link>
           ) : null}

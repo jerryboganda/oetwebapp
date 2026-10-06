@@ -50,6 +50,7 @@ public sealed class AiProviderRouteApprovalService(LearnerDbContext db) : IAiPro
     private static readonly HashSet<string> ScoringCritical = new(StringComparer.OrdinalIgnoreCase)
     {
         AiFeatureCodes.WritingGrade,
+        AiFeatureCodes.WritingGradeReview,
         AiFeatureCodes.WritingSampleScore,
         AiFeatureCodes.SpeakingGrade,
         AiFeatureCodes.SpeakingAudioAssess,

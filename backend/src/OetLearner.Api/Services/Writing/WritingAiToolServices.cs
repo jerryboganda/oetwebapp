@@ -188,7 +188,10 @@ public sealed class WritingAskService(IAiGatewayService aiGateway) : IWritingAsk
             UserId = userId,
         }, ct);
         var threadId = string.IsNullOrWhiteSpace(request.ThreadId) ? Guid.NewGuid().ToString("N") : request.ThreadId;
-        return new WritingAskResult(threadId, new WritingAskMessage("coach", (result.Completion ?? string.Empty).Trim()));
+        // The tutor reply is explanatory text the grounded prompt can seed with rule ids: plain wording only.
+        // Rewrite, Paraphrase and Outline return letter-style text with no explanatory part, so they stay as written.
+        var reply = WritingCandidateText.Clean(result.Completion, "Sorry, I could not answer that. Please rephrase your question and try again.");
+        return new WritingAskResult(threadId, new WritingAskMessage("coach", reply));
     }
 }
 

@@ -51,7 +51,7 @@ type LintResponse = {
 };
 
 test.describe('Writing — rule engine violations (RW-007) @writing @rule-engine', () => {
-  test('POST /v1/writing/lint returns rule citations for a violating letter', async ({
+  test('POST /v1/writing/lint returns plain-wording findings for a violating letter', async ({
     request,
   }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
@@ -95,17 +95,17 @@ test.describe('Writing — rule engine violations (RW-007) @writing @rule-engine
     const body = (await response.json()) as LintResponse;
     expect(Array.isArray(body.findings), 'lint response missing findings array').toBe(true);
 
-    const returnedRuleIds = new Set(
-      body.findings
-        .map((f) => f.ruleId)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0),
-    );
-
-    const matched = EXPECTED_RULE_IDS.filter((id) => returnedRuleIds.has(id));
+    // A learner never receives rule ids (teaching staff keep them): the violating letter must
+    // still produce several findings, each with a plain message and a public severity.
     expect(
-      matched.length,
-      `Expected at least 3 of ${EXPECTED_RULE_IDS.join(', ')} to be cited; got: ${[...returnedRuleIds].join(', ') || '<none>'}`,
+      body.findings.length,
+      `Expected several findings for the violating letter (formerly ${EXPECTED_RULE_IDS.join(', ')}); got ${body.findings.length}`,
     ).toBeGreaterThanOrEqual(3);
+    for (const finding of body.findings) {
+      expect(finding.ruleId, 'learner lint findings must not carry a rule id').toBeUndefined();
+      expect(typeof finding.message === 'string' && finding.message.length > 0).toBe(true);
+      expect(['critical', 'major', 'minor', 'advisory']).toContain(finding.severity);
+    }
   });
 
   test('feedback page renders at least one [Rxx.n] rule badge', async ({ page }, testInfo) => {

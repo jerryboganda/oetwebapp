@@ -23,6 +23,7 @@ import {
   type MockProctoringSeverity,
   recordMockProctoringEvents,
 } from '@/lib/api';
+import { usePasteExempt } from '@/lib/paste-exempt';
 
 interface UseMockProctoringOptions {
   /** Mock attempt id to associate events with. */
@@ -57,6 +58,9 @@ export function useMockProctoring(options: UseMockProctoringOptions): UseMockPro
     flushIntervalMs = 8000,
     blockPaste = false,
   } = options;
+
+  // Exempt owner/testing accounts paste freely, so nothing is blocked and no paste_blocked event is logged.
+  const pasteExempt = usePasteExempt();
 
   const queueRef = useRef<MockProctoringEventInput[]>([]);
   const attemptIdRef = useRef<string | null | undefined>(attemptId);
@@ -139,7 +143,7 @@ export function useMockProctoring(options: UseMockProctoringOptions): UseMockPro
       handlers.push(() => document.removeEventListener('fullscreenchange', onFsChange));
     }
 
-    if (listenFor.has('paste_blocked')) {
+    if (listenFor.has('paste_blocked') && !pasteExempt) {
       const onPaste = (event: ClipboardEvent) => {
         if (blockPaste) event.preventDefault();
         enqueue('paste_blocked', { severity: 'info', metadata: { hasClipboardData: !!event.clipboardData } });
@@ -162,7 +166,7 @@ export function useMockProctoring(options: UseMockProctoringOptions): UseMockPro
       for (const off of handlers) off();
       void flush();
     };
-  }, [blockPaste, enabled, listenFor, enqueue, flush]);
+  }, [blockPaste, enabled, listenFor, enqueue, flush, pasteExempt]);
 
   return { report: enqueue, flush };
 }

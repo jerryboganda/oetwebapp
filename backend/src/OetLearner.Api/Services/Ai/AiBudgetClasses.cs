@@ -133,6 +133,8 @@ public static class AiBudgetClasses
     private static bool IsScoringFeature(string code)
     {
         if (string.Equals(code, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase)
+            // Already matched by the "grade" keyword below; explicit so the intent is searchable.
+            || string.Equals(code, AiFeatureCodes.WritingGradeReview, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.WritingSampleScore, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
             || string.Equals(code, AiFeatureCodes.SpeakingAudioAssess, StringComparison.OrdinalIgnoreCase)

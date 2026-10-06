@@ -12,12 +12,12 @@ namespace OetLearner.Api.Services.FreeSamples;
 /// Null only when the learner's profession has no eligible item.</param>
 /// <param name="State"><c>available</c> | <c>retry_available</c> | <c>in_progress</c> |
 /// <c>grading_failed</c> | <c>completed</c> | <c>unavailable</c></param>
-/// <param name="Route">Where the learner goes next (start, revise, or the result
+/// <param name="Route">Where the learner goes next (start a fresh attempt, or the result
 /// being processed); null for <c>completed</c> / <c>unavailable</c>.</param>
-/// <param name="SuccessfulCount">Uses that produced a result (up to the subtest-specific limit).</param>
+/// <param name="SuccessfulCount">Uses that produced a released result (up to the subtest-specific limit).</param>
 /// <param name="LastResultRoute">Result page of the latest successful use.</param>
 /// <param name="LastSubmissionId">Resource id of the latest successful use (Writing:
-/// the submission to revise, "D"; Speaking: the session / legacy attempt id).</param>
+/// the latest released submission, "D"; Speaking: the session / legacy attempt id).</param>
 public sealed record FreeSampleOffer(
     string ProfessionId,
     string? ContentId,
@@ -160,10 +160,8 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
             else
             {
                 state = StateRetryAvailable;
-                // Writing's second result is "Revise & Resubmit" of the same letter.
-                route = subtest == Writing
-                    ? $"/writing/submissions/{Uri.EscapeDataString(last.SubmissionId)}/revise"
-                    : StartRoute(subtest, claim.ContentId);
+                // The second result (Writing and Speaking alike) is a fresh attempt on the same sample.
+                route = StartRoute(subtest, claim.ContentId);
             }
             return [new FreeSampleOffer(
                 claim.Profession, claim.ContentId, state, route,
@@ -464,7 +462,10 @@ public sealed class FreeSampleService(LearnerDbContext db) : IFreeSampleService
                 var state = row?.Status switch
                 {
                     null => UseState.Dead,
-                    WritingSubmissionStatuses.Graded => UseState.Done,
+                    // A graded letter still inside its 15-minute release window is not a produced result yet:
+                    // it reads Grading (the hub card stays on the grading route) until it is released.
+                    WritingSubmissionStatuses.Graded => await OetLearner.Api.Services.Writing.WritingResultRelease.IsReleasedAsync(
+                        db, use.UserId, submissionId, DateTimeOffset.UtcNow, ct) ? UseState.Done : UseState.Grading,
                     // Failed grading never counts. A retryable failure re-enters the same use through
                     // RetryGradeAsync (the grading gate); a FINAL failure (task not ready, manual review,
                     // letter invalid) can never be graded, so the use is Dead and the learner can start

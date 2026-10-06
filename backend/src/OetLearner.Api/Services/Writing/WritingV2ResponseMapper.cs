@@ -5,6 +5,17 @@ using OetLearner.Api.Domain;
 namespace OetLearner.Api.Services.Writing;
 
 /// <summary>
+/// Who a grade response is for. <see cref="Candidate"/> (the default) never carries rule ids, model or canon
+/// versions, provider tags or an unreviewed confidence flag; <see cref="Staff"/> (tutor review detail) keeps
+/// the raw values tutors work with.
+/// </summary>
+public enum WritingGradeAudience
+{
+    Candidate,
+    Staff,
+}
+
+/// <summary>
 /// Translation layer between the WS5 service "view" record types and the
 /// WS6 endpoint contract records (declared in
 /// <see cref="WritingV2Contracts" />). Endpoints take the contract types
@@ -234,11 +245,20 @@ public static class WritingV2ResponseMapper
             CreatedAt: view.CreatedAt,
             CompletedAt: view.CompletedAt);
 
+    /// <summary>
+    /// The legacy grade projection. For a candidate (the default) nothing internal leaves it: no cited rule
+    /// ids, no model or canon version, no rule id or rule text on a canon violation, the Jev review flag reads
+    /// "awaiting_review", the suggested fix and feedback are plain English and the priorities are clean and
+    /// label-free. The candidate's own quoted wording stays verbatim. <see cref="WritingGradeAudience.Staff"/>
+    /// (tutor review detail) keeps the raw stored values.
+    /// </summary>
     public static WritingGradeResponseV2 ToGradeResponse(
         WritingGrade grade,
         IReadOnlyList<WritingCanonViolation> violations,
-        IReadOnlyDictionary<string, string> ruleText)
+        IReadOnlyDictionary<string, string> ruleText,
+        WritingGradeAudience audience = WritingGradeAudience.Candidate)
     {
+        var candidate = audience == WritingGradeAudience.Candidate;
         Dictionary<string, WritingPerCriterionFeedbackResponse> perCriterion = new();
         try
         {
@@ -247,17 +267,19 @@ public static class WritingV2ResponseMapper
             {
                 int score = 0;
                 string feedback = string.Empty;
-                string? exemplar = null;
+                string? suggestedFix = null;
                 string? quote = null;
                 var cited = new List<string>();
                 if (el.ValueKind == JsonValueKind.Object)
                 {
                     if (el.TryGetProperty("score", out var sEl) && sEl.TryGetInt32(out var s)) score = s;
                     if (el.TryGetProperty("feedback", out var fEl) && fEl.ValueKind == JsonValueKind.String) feedback = WritingReportDigest.Clip(fEl.GetString(), WritingReportDigest.SummaryMaxChars);
-                    if (el.TryGetProperty("exemplarFix", out var eEl) && eEl.ValueKind == JsonValueKind.String) exemplar = eEl.GetString();
+                    // Stored as suggestedFix (new) or exemplarFix (older rows): the same suggested fix.
+                    if (el.TryGetProperty("suggestedFix", out var sfEl) && sfEl.ValueKind == JsonValueKind.String) suggestedFix = sfEl.GetString();
+                    else if (el.TryGetProperty("exemplarFix", out var eEl) && eEl.ValueKind == JsonValueKind.String) suggestedFix = eEl.GetString();
                     // Addendum Rev8 §19.4: the candidate's own wording the grader flagged.
                     if (el.TryGetProperty("quote", out var qEl) && qEl.ValueKind == JsonValueKind.String) quote = qEl.GetString();
-                    if (el.TryGetProperty("citedRuleIds", out var cEl) && cEl.ValueKind == JsonValueKind.Array)
+                    if (!candidate && el.TryGetProperty("citedRuleIds", out var cEl) && cEl.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var item in cEl.EnumerateArray())
                         {
@@ -269,7 +291,8 @@ public static class WritingV2ResponseMapper
                         }
                     }
                 }
-                perCriterion[key] = new WritingPerCriterionFeedbackResponse(score, feedback, exemplar, cited, quote);
+                if (candidate) suggestedFix = WritingCandidateText.CleanOrNull(suggestedFix);
+                perCriterion[key] = new WritingPerCriterionFeedbackResponse(score, feedback, suggestedFix, cited, quote, suggestedFix);
             }
         }
         catch (JsonException)
@@ -285,9 +308,10 @@ public static class WritingV2ResponseMapper
         }
         catch (JsonException) { /* ignore */ }
 
-        var revisionInvite = grade.RawTotal < 30
-            ? new WritingRevisionInviteResponse(true, "Significant gains likely on a focused revision.")
-            : new WritingRevisionInviteResponse(false, "Score within target — revision optional.");
+        // The Jev review flag is an internal state: a candidate only learns that the result is awaiting review.
+        var confidenceFlag = grade.ConfidenceFlag ?? "medium";
+        if (candidate && string.Equals(confidenceFlag, "jev_review", StringComparison.OrdinalIgnoreCase))
+            confidenceFlag = "awaiting_review";
 
         return new WritingGradeResponseV2(
             Id: grade.Id,
@@ -302,23 +326,59 @@ public static class WritingV2ResponseMapper
             EstimatedBand: grade.EstimatedBand,
             BandLabel: grade.BandLabel,
             PerCriterion: perCriterion,
-            TopThreePriorities: priorities,
-            ConfidenceFlag: grade.ConfidenceFlag ?? "medium",
-            ModelUsed: grade.ModelUsed,
-            CanonVersion: grade.CanonVersion,
-            CanonViolations: violations.Select(v => ToResponse(v, ruleText.TryGetValue(v.RuleId, out var t) ? t : string.Empty)).ToList(),
-            RevisionInvite: revisionInvite,
+            TopThreePriorities: candidate ? WritingReportDigest.CleanStoredPriorities(priorities) : priorities,
+            ConfidenceFlag: confidenceFlag,
+            ModelUsed: candidate ? string.Empty : grade.ModelUsed,
+            CanonVersion: candidate ? string.Empty : grade.CanonVersion,
+            CanonViolations: violations
+                .Select(v => candidate
+                    ? ToCandidateResponse(v)
+                    : ToResponse(v, ruleText.TryGetValue(v.RuleId, out var t) ? t : string.Empty))
+                .ToList(),
             GradedAt: grade.GradedAt);
     }
+
+    /// <summary>
+    /// A canon violation as the candidate sees it: the violation's own id (the dispute call needs it), the
+    /// flagged wording and a plain suggested fix. The rule id and the rule text are internal and are not sent.
+    /// </summary>
+    public static WritingCanonViolationResponse ToCandidateResponse(WritingCanonViolation v)
+        => new(
+            Id: v.Id,
+            SubmissionId: v.SubmissionId,
+            RuleId: string.Empty,
+            RuleText: string.Empty,
+            Severity: v.Severity,
+            Snippet: v.Snippet ?? string.Empty,
+            LineNumber: v.LineNumber ?? 0,
+            CharStart: v.CharStart ?? 0,
+            CharEnd: v.CharEnd ?? 0,
+            SuggestedFix: WritingCandidateText.CleanOrNull(v.SuggestedFix),
+            Disputed: v.Disputed,
+            // The stored value is "pending:" plus the learner's own reason; only the state is returned.
+            DisputeResolution: v.DisputeResolution is { } resolution && resolution.StartsWith("pending", StringComparison.OrdinalIgnoreCase)
+                ? "pending"
+                : v.DisputeResolution);
 
     /// <summary>
     /// <c>CanRetry</c>: a failed run that Retry can help (legacy rows without a verdict count as
     /// retryable), a grading claim past the lease, or a queued row nobody picked up within it.
     /// <c>AutoRetrying</c>: the server re-queued a failed run by itself.
+    /// <para/>
+    /// Release window (owner handoff, 6 Oct 2026): <paramref name="learnerUnrestricted"/> is the learner's
+    /// allowlist state. <c>null</c> means staff/raw mode, which is never held; <c>false</c> is a normal
+    /// candidate, whose <c>graded</c> row reads <c>grading</c> until the 15-minute window has elapsed;
+    /// <c>true</c> is an allowlisted account, which is released as soon as grading completes. The status is
+    /// the EFFECTIVE status, so every existing "graded" consumer keeps waiting; the retry/failure fields
+    /// still read the raw row (a held row is neither failed nor stale).
     /// </summary>
-    public static WritingSubmissionResponse ToSubmissionResponse(WritingSubmission s, DateTimeOffset? now = null)
+    public static WritingSubmissionResponse ToSubmissionResponse(
+        WritingSubmission s,
+        DateTimeOffset? now = null,
+        bool? learnerUnrestricted = null)
     {
         var at = now ?? DateTimeOffset.UtcNow;
+        var view = WritingResultRelease.Describe(s.Status, s.SubmittedAt, learnerUnrestricted ?? true, at);
         var failed = s.Status == WritingSubmissionStatuses.Failed;
         var autoRetrying = s.Status == WritingSubmissionStatuses.Queued && s.AutoRetryCount > 0;
         return new(
@@ -334,7 +394,7 @@ public static class WritingV2ResponseMapper
             SubmittedAt: s.SubmittedAt,
             IsRevision: s.IsRevision,
             OriginalSubmissionId: s.OriginalSubmissionId,
-            Status: s.Status,
+            Status: view.EffectiveStatus,
             GradingTier: s.GradingTier,
             InputSource: s.InputSource,
             FailureCode: failed || autoRetrying ? s.FailureCode : null,
@@ -342,7 +402,10 @@ public static class WritingV2ResponseMapper
                 || WritingGradeRecovery.IsStaleGrading(s, at)
                 || WritingGradeRecovery.IsStaleQueued(s, at),
             AutoRetrying: autoRetrying,
-            AttemptCount: s.GradeEpoch);
+            AttemptCount: s.GradeEpoch,
+            ReleaseState: view.State,
+            ReleaseAt: view.ReleaseAt,
+            ServerNow: at);
     }
 
     public static WritingDraftV2Response ToResponse(WritingDraftV2View view)

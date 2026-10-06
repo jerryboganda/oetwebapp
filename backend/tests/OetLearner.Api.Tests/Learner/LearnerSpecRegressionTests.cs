@@ -631,18 +631,20 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var findings = json.RootElement.GetProperty("findings").EnumerateArray().ToArray();
-        // R09.7/R09.8 were renamed to the BUILTIN.* id scheme; the checks
-        // themselves are unchanged (consent/patient-request must appear in
-        // the closure when the case notes flag them).
-        Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "BUILTIN.closure_mentions_consent_if_flagged");
-        Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "BUILTIN.closure_mentions_patient_request_if_flagged");
+        // The learner view carries no rule id (staff keep it): the consent and patient-request
+        // closure checks are asserted by their plain message instead.
+        static bool HasMessage(JsonElement finding, string fragment)
+            => (finding.GetProperty("message").GetString() ?? string.Empty).Contains(fragment, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(findings, finding => HasMessage(finding, "consent statement"));
+        Assert.Contains(findings, finding => HasMessage(finding, "upon his/her request"));
         Assert.All(findings, finding =>
         {
+            Assert.False(finding.TryGetProperty("ruleId", out _));
             var severity = finding.GetProperty("severity");
             Assert.Equal(JsonValueKind.String, severity.ValueKind);
             var severityText = severity.GetString();
             Assert.True(
-                severityText is "critical" or "major" or "minor" or "info",
+                severityText is "critical" or "major" or "minor" or "advisory",
                 $"Unexpected severity '{severityText}'.");
         });
     }

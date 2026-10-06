@@ -11,6 +11,8 @@ const REASON_LABELS: Record<string, string> = {
   criteria_divergence: 'Criterion disagreement',
   verify_flag: 'Cited finding unsupported',
   finding_valid_alternative: 'Possible valid alternative',
+  rv_override: 'Reviewer overrode a critical finding',
+  rv_unresolved: 'High score could not be verified',
 };
 
 const FALLBACK_LABEL = 'Flagged submission';

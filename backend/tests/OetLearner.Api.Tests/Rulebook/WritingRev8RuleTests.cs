@@ -267,9 +267,14 @@ public sealed class WritingRev8RuleTests
     // ---------------------------------------------------------------------
 
     [Fact]
-    public void MedicationListPunctuation_Fires_On_Missing_Comma_With_Fix()
-        => Assert.Contains(Lint(Letter(TaylorRe, TaylorIntro, "Mr Taylor takes ranitidine 150 mg twice a day.", TaylorClosure), model: false),
+    public void MedicationListPunctuation_Fires_On_Missing_Comma_With_Fix_For_Model_Answers_Only()
+    {
+        var letter = Letter(TaylorRe, TaylorIntro, "Mr Taylor takes ranitidine 150 mg twice a day.", TaylorClosure);
+        Assert.Contains(Lint(letter, model: true),
             f => f.RuleId == "BUILTIN.medication_list_punctuation" && f.FixSuggestion == "ranitidine, 150 mg");
+        // A comma between the medicine and its dose is a preference, never a candidate error.
+        Assert.DoesNotContain(Lint(letter, model: false), f => f.RuleId == "BUILTIN.medication_list_punctuation");
+    }
 
     [Theory]
     [InlineData("Mr Taylor takes ranitidine, 150 mg twice a day.")]
@@ -369,7 +374,7 @@ public sealed class WritingRev8RuleTests
     // ---------------------------------------------------------------------
 
     [Theory]
-    [InlineData(false, RuleSeverity.Major)]
+    [InlineData(false, RuleSeverity.Minor)]
     [InlineData(true, RuleSeverity.Critical)]
     public void ParagraphStartName_Fires_When_A_Body_Paragraph_Opens_With_A_Pronoun(bool model, RuleSeverity expected)
     {
@@ -377,6 +382,16 @@ public sealed class WritingRev8RuleTests
         var finding = Assert.Single(Findings(Lint(letter, model), "paragraph_start_patient_name"));
         Assert.Equal(expected, finding.Severity);
         Assert.Equal("Mr Weir", finding.FixSuggestion);
+    }
+
+    // A candidate's He/She paragraph start is Minor unless another person is named before the patient,
+    // so the pronoun could point at either (owner handoff, 6 Oct 2026, section 3).
+    [Fact]
+    public void ParagraphStartName_Is_Major_For_A_Candidate_Only_When_The_Pronoun_Is_Ambiguous()
+    {
+        var letter = Letter(WeirRe, WeirIntro, "He attended with his wife, who said Mr Weir had collapsed at home.", WeirClosure);
+        var finding = Assert.Single(Findings(Lint(letter, model: false), "paragraph_start_patient_name"));
+        Assert.Equal(RuleSeverity.Major, finding.Severity);
     }
 
     [Theory]

@@ -986,7 +986,9 @@ public sealed partial class AuthService(
             subject.AdminPermissions,
             subject.ActiveProfessionId,
             subject.ActiveProfessionLabel,
-            subject.AvatarUrl);
+            subject.AvatarUrl,
+            // In-memory check against the hard-coded list; true or null (null = omitted from the JSON).
+            WritingUnrestricted: OetLearner.Api.Services.Writing.WritingUnrestrictedAccounts.IsUnrestricted(subject.Email) ? true : (bool?)null);
 
     private async Task<LearnerUser?> EnsureAccountCanAuthenticateAsync(
         ApplicationUserAccount account,

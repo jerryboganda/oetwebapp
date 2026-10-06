@@ -195,10 +195,36 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
         Assert.Equal(0, await WritingCreditsLeftAsync());
     }
 
-    /// <summary>T-C5 — Revise &amp; Resubmit is a new letter: 2 more credits at grade time, under its
-    /// own reference.</summary>
+    /// <summary>T-C5 — "Practice this again" is a fresh attempt: the next task open pays 2 more credits
+    /// under a NEW start reference (the graded count advanced), and the new letter's grade adopts that
+    /// debit instead of taking a third one.</summary>
     [Fact]
-    public async Task TC5_Revision_CostsTwoMoreCredits_AtGradeTime()
+    public async Task TC5_PracticeAgain_CostsTwoMoreCredits_AtTaskOpen()
+    {
+        await GrantWritingCreditsAsync(4);
+        var pipeline = Pipeline(new ScriptedGateway(failFirst: 0));
+        await OpenTaskAsync();
+        var firstId = await SubmitAsync(pipeline);
+        await pipeline.EvaluateAsync(firstId, default);
+
+        Assert.True((await OpenTaskAsync()).Charged);
+        // The draft layer's "Practice this again" starts a new attempt, so the terminal lock does not apply.
+        var secondId = await SubmitAsync(pipeline, Letter + "\nSecond attempt.", newAttempt: true);
+        await pipeline.EvaluateAsync(secondId, default);
+
+        var debits = await LedgerRowsAsync(AiPackageCreditReason.GradingDeduct);
+        Assert.Equal(2, debits.Count);
+        Assert.All(debits, d => Assert.StartsWith("writing-v2:", d.ReferenceId));
+        var secondReference = (await SubmissionAsync(secondId)).CreditReference;
+        Assert.Contains(debits, d => d.ReferenceId == secondReference);
+        Assert.Equal(WritingSubmissionStatuses.Graded, await StatusAsync(secondId));
+        Assert.Equal(0, await WritingCreditsLeftAsync());
+    }
+
+    /// <summary>T-C5b — Revise &amp; Resubmit is retired, but a historical or in-flight revision row still
+    /// grades: it pays 2 credits at grade time, under its own reference.</summary>
+    [Fact]
+    public async Task TC5b_HistoricalRevisionRow_StillGrades_AndPaysItsOwnReference()
     {
         await GrantWritingCreditsAsync(4);
         var pipeline = Pipeline(new ScriptedGateway(failFirst: 0));
@@ -226,9 +252,10 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
 
         var firstId = await SubmitAsync(pipeline);
         await pipeline.EvaluateAsync(firstId, default);
-        var secondId = await SubmitAsync(pipeline, Letter + "\nSecond.", isRevision: true, originalId: firstId);
+        // Each further result is a fresh attempt ("Practice this again"), so the terminal lock does not apply.
+        var secondId = await SubmitAsync(pipeline, Letter + "\nSecond.", newAttempt: true);
         await pipeline.EvaluateAsync(secondId, default);
-        var thirdId = await SubmitAsync(pipeline, Letter + "\nThird.", isRevision: true, originalId: firstId);
+        var thirdId = await SubmitAsync(pipeline, Letter + "\nThird.", newAttempt: true);
         var refused = await Assert.ThrowsAsync<ApiException>(() => pipeline.EvaluateAsync(thirdId, default));
 
         Assert.Equal(WritingSubmissionStatuses.Graded, await StatusAsync(firstId));
@@ -613,8 +640,11 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
         return await _entitlement.AuthorizeStartAsync(UserId, reference, ScenarioId.ToString("D"), default);
     }
 
+    /// <param name="newAttempt">Simulates "Practice this again": the learner started a fresh attempt, so
+    /// the terminal lock of the previous one does not apply.</param>
     private async Task<Guid> SubmitAsync(
-        WritingSubmissionEvaluationPipeline pipeline, string letter = Letter, bool isRevision = false, Guid? originalId = null)
+        WritingSubmissionEvaluationPipeline pipeline, string letter = Letter, bool isRevision = false, Guid? originalId = null,
+        bool newAttempt = false)
         => (await pipeline.SubmitAsync(new WritingSubmitAttempt(
             UserId: UserId,
             ScenarioId: ScenarioId,
@@ -626,7 +656,8 @@ public sealed class WritingCreditInvariantTests : IAsyncDisposable
             StartedAt: DateTimeOffset.UtcNow.AddMinutes(-10),
             IsRevision: isRevision,
             OriginalSubmissionId: originalId,
-            IdempotencyKey: Guid.NewGuid().ToString("N")), default)).SubmissionId;
+            IdempotencyKey: Guid.NewGuid().ToString("N"),
+            CheckTerminalLock: !newAttempt), default)).SubmissionId;
 
     private Task<WritingSubmission> SubmissionAsync(Guid submissionId)
         => _db.WritingSubmissions.AsNoTracking().SingleAsync(s => s.Id == submissionId);

@@ -832,7 +832,14 @@ public static partial class SeedData
             // disabled row ⇒ every /v1/owner-agent route answers 503. Default OFF; the owner
             // enables it deliberately (production has no demo seed, so create the row with
             // this key from /admin/flags there).
-            new FeatureFlag { Id = "flg-031", Name = "Owner Agent Console", Key = "owner_agent_console", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Kill switch for the owner-only agent console (/admin/agent-console). Off = every /v1/owner-agent route returns 503.", Owner = "Owner", CreatedAt = now, UpdatedAt = now }
+            new FeatureFlag { Id = "flg-031", Name = "Owner Agent Console", Key = "owner_agent_console", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Kill switch for the owner-only agent console (/admin/agent-console). Off = every /v1/owner-agent route returns 503.", Owner = "Owner", CreatedAt = now, UpdatedAt = now },
+            // ── Secondary Writing reviewer shadow switch (writing.grade.review; WritingGradeReviewer) ──
+            // Read uncached, newest row wins, unreadable = off. Only the SHADOW row is seeded (Enabled = false: inert).
+            // The enforced reviewer's off switch is the key writing_ai_reviewer with Enabled = false and is deliberately
+            // NOT seeded: a disabled row means OFF, so seeding it would switch the reviewer off wherever this seed ran.
+            // With no such row the reviewer is on whenever the writing-codex-sub provider row is active. Production has
+            // no demo seed: create the rows from /admin/flags there.
+            new FeatureFlag { Id = "flg-032", Name = "Writing Secondary Reviewer (Shadow)", Key = "writing_ai_reviewer_shadow", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Shadow mode for the secondary Writing reviewer: runs it and records proposals in admin notes only; results are never changed or held.", Owner = "Owner", CreatedAt = now, UpdatedAt = now }
         );
 
         db.AIConfigVersions.AddRange(

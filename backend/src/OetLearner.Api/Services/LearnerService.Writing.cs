@@ -390,8 +390,8 @@ public partial class LearnerService
         {
             throw ApiException.Conflict(
                 "writing_v11_required",
-                "Legacy attempt-based AI Writing grading is disabled. Submit through the governed v1.1 Writing assessment flow.",
-                [new ApiFieldError("assessorType", "v11_required", "Use the Writing v1.1 assessment route; unapproved legacy AI scoring is not available.")]);
+                "This Writing submission route is no longer available. Submit your letter from the Writing task page instead.",
+                [new ApiFieldError("assessorType", "v11_required", "Submit your letter from the Writing task page.")]);
         }
         var idempotencyScope = $"writing-submit:{userId}:{attempt.Id}";
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
@@ -795,8 +795,8 @@ public partial class LearnerService
         {
             throw ApiException.Conflict(
                 "writing_v11_required",
-                "The legacy Writing evaluation surface is disabled. Use the governed v1.1 assessment result.",
-                [new ApiFieldError("evaluationId", "v11_required", "Legacy raw-total and band output is not candidate-visible.")]);
+                "This Writing result view is no longer available. Open your result from Past submissions instead.",
+                [new ApiFieldError("evaluationId", "v11_required", "Open your result from Past submissions.")]);
         }
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
@@ -878,8 +878,8 @@ public partial class LearnerService
         {
             throw ApiException.Conflict(
                 "writing_v11_required",
-                "The legacy Writing revision surface is disabled until a governed v1.1 assessment report is available.",
-                [new ApiFieldError("attemptId", "v11_required", "Legacy AI revision scoring is not candidate-visible.")]);
+                "This option is no longer available. To try this task again, start a new attempt from the task page.",
+                [new ApiFieldError("attemptId", "v11_required", "Start a new attempt from the task page.")]);
         }
         var requestedAttempt = await GetWritingAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var attempt = requestedAttempt.ParentAttemptId is null
@@ -935,8 +935,8 @@ public partial class LearnerService
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         throw ApiException.Conflict(
             "writing_v11_required",
-            "Legacy attempt-based AI Writing revisions are disabled. Use the governed v1.1 Writing assessment flow.",
-            [new ApiFieldError("attemptId", "v11_required", "Unapproved legacy AI scoring cannot be used for revisions.")]);
+            "This option is no longer available. To try this task again, start a new attempt from the task page.",
+            [new ApiFieldError("attemptId", "v11_required", "Start a new attempt from the task page.")]);
         var idempotencyKey = NormalizeWritingRevisionIdempotencyKey(request.IdempotencyKey);
         var idempotencyScope = $"writing-revision-submit:{userId}:{attemptId}";
         if (idempotencyKey is not null)

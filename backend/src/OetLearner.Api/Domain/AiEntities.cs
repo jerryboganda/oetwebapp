@@ -305,6 +305,10 @@ public static class AiFeatureCodes
     /// Answer (admin-triggered, never called from the candidate submit path).
     /// Scoring-adjacent but not itself a score — see AiCredentialResolver.</summary>
     public const string WritingModelAnswerPregenerate = "writing.model_answer_pregenerate";
+    /// <summary>Secondary reviewer of a primary Writing grade (provider-pinned to the Codex subscription
+    /// route, never credit-debited, proposals applied only by the deterministic applier). Scoring-critical
+    /// and platform-only — see WritingGradeReviewer and docs/AI-USAGE-POLICY.md.</summary>
+    public const string WritingGradeReview = "writing.grade.review";
     public const string SpeakingGrade = "speaking.grade";
     /// <summary>The acoustic half of Speaking grading: an OpenAI audio model listens to the candidate's
     /// recording and judges Intelligibility and fluency evidence. Scoring-critical and platform-only;

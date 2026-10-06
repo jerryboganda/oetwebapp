@@ -395,6 +395,16 @@ public partial class LearnerService
                 ["criteriaFocus"] = JsonSupport.Deserialize<List<string>>(content.CriteriaFocusJson, [])
             }, detail);
 
+        var analysis = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.AnalysisJson, new Dictionary<string, object?>());
+        if (string.Equals(attempt.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            // Historic V1 grading output: rule ids, rulebook version and the raw band stay server-side.
+            foreach (var internalKey in new[] { "aiProvenance", "rulebookFindings", "writingBand", "appliedRuleIds" })
+            {
+                analysis.Remove(internalKey);
+            }
+        }
+
         return new
         {
             attemptId = attempt.Id,
@@ -419,7 +429,7 @@ public partial class LearnerService
             answers = JsonSupport.Deserialize<Dictionary<string, string?>>(attempt.AnswersJson, new Dictionary<string, string?>()),
             audioUploadState = ToUploadState(attempt.AudioUploadState),
             transcript = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(attempt.TranscriptJson, []),
-            analysis = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.AnalysisJson, new Dictionary<string, object?>()),
+            analysis,
             content = contentPayload,
             feedbackMessage = (string?)null
         };

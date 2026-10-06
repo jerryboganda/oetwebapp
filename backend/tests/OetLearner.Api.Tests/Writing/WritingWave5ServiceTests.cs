@@ -137,6 +137,20 @@ public class WritingWave5ServiceTests
         var request = new WritingMockSubmitRequest(new string('w', 500), 120, 120);
 
         await service.SubmitMockAsync(UserId, started.Id, request, CancellationToken.None);
+        // The stub pipeline leaves the row "submitted"; the real pipeline sets it graded together with the grade.
+        var submission = await db.WritingSubmissions.SingleAsync();
+        submission.Status = WritingSubmissionStatuses.Graded;
+        await db.SaveChangesAsync();
+
+        // Graded but still inside the 15-minute release window: held, no grade is served.
+        var held = await service.GetMockResultsAsync(UserId, started.Id, CancellationToken.None);
+        Assert.NotNull(held);
+        Assert.Null(held!.Grade);
+        Assert.Equal(("held", "grading"), (held.ReleaseState, held.Status));
+
+        // Past the window: released.
+        submission.SubmittedAt = submission.SubmittedAt.AddHours(-1);
+        await db.SaveChangesAsync();
         var results = await service.GetMockResultsAsync(UserId, started.Id, CancellationToken.None);
 
         Assert.NotNull(results);

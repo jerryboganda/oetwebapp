@@ -124,6 +124,45 @@ public sealed class WritingAssessmentV11RuleEngineTests
         Assert.DoesNotContain(findings, f => namingRules.Contains(f.RuleId));
     }
 
+    // Owner handoff 6 Oct 2026: the candidate severity doctrine. House layout is coaching only (advisory,
+    // zero score effect) even though the engine reports it Critical; the engine's own severity is kept
+    // for the admin audit record.
+    [Fact]
+    public void Candidate_house_layout_is_advisory_and_keeps_the_engine_severity()
+    {
+        const string letter =
+            "Dear Dr Brown,\nRe: Mr David Taylor, aged 55\nI am writing to refer Mr Taylor for assessment of his right knee pain.\n\n" +
+            "Mr Taylor's pain settled after physiotherapy.\n\n" +
+            "Should you have any queries, please do not hesitate to contact me.\n\nYours sincerely,\n\nDoctor";
+        var engine = new WritingAssessmentV11RuleEngine(new WritingRuleEngine(new RulebookLoader()));
+
+        var finding = Assert.Single(
+            engine.Evaluate(new WritingLintInput(letter, "LT-RR", PatientAge: 55)),
+            f => f.RuleId == "BUILTIN.blank_line_after_re_line");
+
+        Assert.Equal("info", finding.Severity);
+        Assert.Equal("critical", finding.EngineSeverity);
+        Assert.False(WritingReportDigest.IsScoreBearing(finding.RuleId, finding.Severity));
+    }
+
+    [Fact]
+    public void Candidate_bmi_is_never_asked_for_a_unit_but_a_model_answer_still_is()
+    {
+        const string letter =
+            "Dear Dr Brown,\nRe: Mr David Taylor, aged 55\n\n" +
+            "I am writing to refer Mr Taylor for assessment of his right knee pain.\n\n" +
+            "Mr Taylor has long been overweight, with a BMI of 28.4.\n\n" +
+            "Should you have any queries, please do not hesitate to contact me.\n\nYours sincerely,\n\nDoctor";
+        var engine = new WritingRuleEngine(new RulebookLoader());
+
+        Assert.DoesNotContain(
+            engine.Lint(new WritingLintInput(letter, "LT-RR", PatientAge: 55)),
+            f => f.RuleId == "BUILTIN.numerical_values_have_units");
+        Assert.Contains(
+            engine.Lint(new WritingLintInput(letter, "LT-RR", PatientAge: 55, IsModelAnswer: true)),
+            f => f.RuleId == "BUILTIN.numerical_values_have_units");
+    }
+
     [Fact]
     public void Minor_re_line_with_a_title_is_flagged_by_the_engine_naming_rule()
     {

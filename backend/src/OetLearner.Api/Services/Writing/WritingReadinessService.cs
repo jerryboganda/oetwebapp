@@ -48,9 +48,13 @@ public sealed class WritingReadinessService(
             .ToListAsync(ct);
 
         var submissionIds = lastMocks.Select(m => m.SubmissionId!.Value).ToList();
+        // Released-only: a mock still inside its 15-minute result window must not move the predicted band,
+        // the mock average or the trajectory (those expose the held grade).
+        var released = await WritingResultRelease.ReleasedSubmissionsAsync(db, userId, now, ct);
         var grades = submissionIds.Count == 0
             ? new List<WritingGrade>()
             : await db.WritingGrades.AsNoTracking()
+                .Join(released, g => g.SubmissionId, s => s.Id, (g, s) => g)
                 .Where(g => submissionIds.Contains(g.SubmissionId))
                 .ToListAsync(ct);
 
@@ -173,8 +177,8 @@ public sealed class WritingReadinessService(
     private async Task<decimal> CalculateCanonCleanRateAsync(string userId, CancellationToken ct)
     {
         var since = clock.GetUtcNow().AddDays(-30);
-        var recent = await db.WritingSubmissions.AsNoTracking()
-            .Where(s => s.UserId == userId && s.SubmittedAt >= since && s.Status == "graded")
+        var recent = await (await WritingResultRelease.ReleasedSubmissionsAsync(db, userId, clock.GetUtcNow(), ct))
+            .Where(s => s.SubmittedAt >= since)
             .OrderByDescending(s => s.SubmittedAt)
             .Take(10)
             .Select(s => s.Id)
@@ -205,8 +209,9 @@ public sealed class WritingReadinessService(
     private async Task<int> CalculateTypeConsistencyAsync(string userId, CancellationToken ct)
     {
         var since = clock.GetUtcNow().AddDays(-30);
+        var released = await WritingResultRelease.ReleasedSubmissionsAsync(db, userId, clock.GetUtcNow(), ct);
         var grades = await db.WritingGrades.AsNoTracking()
-            .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
+            .Join(released, g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
             .Join(db.WritingScenarios.AsNoTracking(), x => x.s.ScenarioId, s => s.Id, (x, scenario) => new { x.g.RawTotal, scenario.LetterType, x.s.SubmittedAt, x.s.UserId })
             .Where(x => x.UserId == userId && x.SubmittedAt >= since)
             .ToListAsync(ct);

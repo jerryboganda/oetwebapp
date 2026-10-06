@@ -276,9 +276,12 @@ public sealed class AiQuotaService(
         // Placed AFTER the admin emergency controls above (per-feature kill
         // list, kill switch, global budget, per-user disable) so they still
         // win. The grant is server-derived (verified FreeSampleClaim) and only
-        // covers the sample's grading features — never conversation etc.
+        // covers the sample's grading features — never conversation etc. The secondary
+        // Writing reviewer rides the same grant (it reviews a grade the learner already
+        // paid for), so a plan without that feature code can never hold a letter.
         if (freeSampleGrant
             && (string.Equals(featureCode, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(featureCode, AiFeatureCodes.WritingGradeReview, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)))
         {
             return new AiQuotaDecision(

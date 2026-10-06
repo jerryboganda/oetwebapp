@@ -169,6 +169,8 @@ public sealed class WritingCoachServiceV2(
         }
 
         var hints = ParseCoachHints(result.Completion, request.DraftContent.Length);
+        logger.LogDebug("Writing coach hints for user {UserId} cite rule ids [{RuleIds}]",
+            request.UserId, string.Join(",", hints.Select(h => h.RuleId).Where(id => id is not null)));
         await PersistSessionAsync(request, hints, ct);
 
         var costForThisCall = EstimateCallCost(result.Usage);
@@ -251,9 +253,10 @@ public sealed class WritingCoachServiceV2(
             _ => "style",
         };
 
+    // Hints reach the learner over REST and SignalR: plain wording only, never a rule id or label.
     private static string NormalizeHintText(string? value)
     {
-        var text = (value ?? string.Empty).Trim();
+        var text = WritingCandidateText.Clean(value);
         return text.Length <= 180 ? text : text[..180];
     }
 
@@ -312,7 +315,7 @@ public sealed class WritingCoachServiceV2(
             SessionId: request.SessionId,
             Category: h.Category,
             Text: h.Text,
-            RuleId: h.RuleId,
+            RuleId: null, // the rule id stays server-side (see the debug log in RequestHintAsync)
             CharStart: h.CharStart,
             CharEnd: h.CharEnd,
             CreatedAt: now,

@@ -143,14 +143,11 @@ public sealed record WritingSubmissionCreateRequest(
     string? CaseNoteHighlightsJson = null,
     [property: StringLength(128)] string? IdempotencyKey = null);
 
-public sealed record WritingReviseRequest(
-    [property: Required(AllowEmptyStrings = true)] string LetterContent,
-    [property: Range(0, 5000)] int WordCount,
-    [property: Range(0, 7200)] int TimeSpentSeconds);
-
 public sealed record WritingDisputeViolationRequest(
     [property: Required] Guid ViolationId,
-    [property: Required, StringLength(8)] string RuleId,
+    // Candidates are no longer sent the rule id (the violation id alone identifies what is disputed), so a
+    // client may omit it or send it empty. The server never reads it.
+    [property: StringLength(8)] string? RuleId,
     [property: Required, StringLength(500)] string Reason);
 
 public sealed record WritingSubmissionResponse(
@@ -173,17 +170,34 @@ public sealed record WritingSubmissionResponse(
     string? FailureCode = null,
     bool CanRetry = false,
     bool AutoRetrying = false,
-    int AttemptCount = 0);
+    int AttemptCount = 0,
+    // Result-release window (owner handoff, 6 Oct 2026). Status is the EFFECTIVE status: a
+    // graded row inside the window reads "grading". ReleaseState is processing | held | released;
+    // ReleaseAt is the server release instant (null for allowlisted accounts and failed rows) and
+    // ServerNow the server clock of this response, so a client anchors its countdown to the server
+    // difference and never to the device clock.
+    string ReleaseState = "processing",
+    DateTimeOffset? ReleaseAt = null,
+    DateTimeOffset? ServerNow = null);
 
+/// <summary>
+/// <see cref="ExemplarFix"/> and <see cref="SuggestedFix"/> carry the same plain-English suggested fix (the
+/// older key is kept for one release). For a candidate <see cref="CitedRuleIds"/> is always empty and the
+/// text is free of rule ids and labels; <see cref="Quote"/> is the candidate's own wording, verbatim.
+/// </summary>
 public sealed record WritingPerCriterionFeedbackResponse(
     int Score,
     string Feedback,
     string? ExemplarFix,
     IReadOnlyList<string> CitedRuleIds,
-    string? Quote = null);
+    string? Quote = null,
+    string? SuggestedFix = null);
 
-public sealed record WritingRevisionInviteResponse(bool ShouldOffer, string Reason);
-
+/// <summary>
+/// The legacy grade response. For a candidate, <see cref="ModelUsed"/> and <see cref="CanonVersion"/> are
+/// empty, <see cref="ConfidenceFlag"/> never reads "jev_review" (it reads "awaiting_review") and a canon
+/// violation carries no rule id or rule text. There is no revision invitation.
+/// </summary>
 public sealed record WritingGradeResponseV2(
     Guid Id,
     Guid SubmissionId,
@@ -202,7 +216,6 @@ public sealed record WritingGradeResponseV2(
     string ModelUsed,
     string CanonVersion,
     IReadOnlyList<WritingCanonViolationResponse> CanonViolations,
-    WritingRevisionInviteResponse RevisionInvite,
     DateTimeOffset GradedAt);
 
 public sealed record WritingAssessmentV11CriterionResponse(
@@ -217,6 +230,15 @@ public sealed record WritingAssessmentV11CriterionResponse(
     // (WritingReportDigest.CriterionSummary); null when it has none.
     string? Summary = null);
 
+/// <summary>
+/// One correction as a candidate sees it: <see cref="Severity"/>, the criterion name, the problematic
+/// wording, a suggested fix and a plain-English explanation. <see cref="Severity"/> is lowercase
+/// critical | major | minor | advisory; advisory is coaching only, carries no score effect and is listed
+/// after the scored corrections. For a candidate <see cref="Category"/> is the plain criterion name and
+/// <see cref="Location"/>, <see cref="RuleSource"/>, <see cref="ProvenanceTag"/> and
+/// <see cref="CandidateBehavior"/> are null and <see cref="Confidence"/> is empty (the keys stay for one
+/// release; internal rule data is kept in backend and admin records only).
+/// </summary>
 public sealed record WritingAssessmentV11ErrorResponse(
     string Id,
     string? Location,
@@ -253,6 +275,13 @@ public sealed record WritingAssessmentV11ModelAnswerResponse(
     IReadOnlyList<string> GroundedFactReferences,
     bool IsCandidateVisible);
 
+/// <summary>
+/// The candidate report. <see cref="RulePackVersion"/>, <see cref="ModelVersion"/> and
+/// <see cref="CalibrationSetVersion"/> are empty, <see cref="BlockingCodes"/> is empty and
+/// <see cref="ConfidenceRange"/> is null for a candidate (the keys stay for one release), and
+/// <see cref="LetterType"/> is the display name (for example "Routine referral"), never an LT-xx code.
+/// <see cref="TopPriorities"/> are plain label-free sentences; there may be fewer than three, or none.
+/// </summary>
 public sealed record WritingAssessmentV11ReportResponse(
     string Id,
     string SubmissionId,
@@ -342,9 +371,17 @@ public sealed record WritingMyWorkItemResponse(
     DateTimeOffset LastActivityAt,
     bool CanRetry,
     bool AutoRetrying,
-    IReadOnlyList<WritingMyWorkActionResponse> Actions);
+    IReadOnlyList<WritingMyWorkActionResponse> Actions,
+    // Release window: processing | held | released for a submission row, null for a draft.
+    // ReleaseAt is null for allowlisted accounts and failed rows.
+    string? ReleaseState = null,
+    DateTimeOffset? ReleaseAt = null);
 
-public sealed record WritingMyWorkResponse(IReadOnlyList<WritingMyWorkItemResponse> Items, bool HasMore);
+public sealed record WritingMyWorkResponse(
+    IReadOnlyList<WritingMyWorkItemResponse> Items,
+    bool HasMore,
+    // One server clock for the whole list, so every row's countdown is anchored to it.
+    DateTimeOffset? ServerNow = null);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Case-note highlights (persist per user + scenario across attempts)
@@ -598,7 +635,12 @@ public sealed record WritingMockResultsResponse(
     WritingGradeResponseV2? Grade,
     // "graded" once a result exists; "awaiting_review" while neither an AI
     // grade nor a human mark is available yet.
-    string Status = "graded");
+    string Status = "graded",
+    // Release window (the same rule as a practice submission): processing | held | released.
+    // Grade is null while the result is held. ReleaseAt is null for allowlisted accounts.
+    string ReleaseState = "released",
+    DateTimeOffset? ReleaseAt = null,
+    DateTimeOffset? ServerNow = null);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Coach (Haiku 4.5 hints)

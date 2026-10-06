@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Services.Rulebook;
@@ -19,7 +20,7 @@ namespace OetLearner.Api.Services.Rulebook;
 /// Rulebook/WritingRev8*Tests.cs, Writing/WritingSeniorAuditG*RegressionTests.cs and
 /// Writing/WritingCrossModelAuditRegressionTests.cs.
 /// </summary>
-public sealed partial class WritingRuleEngine(IRulebookLoader loader)
+public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<WritingRuleEngine>? logger = null)
 {
     private static readonly HashSet<string> SupportedCheckIdSet = new(StringComparer.Ordinal)
     {
@@ -372,7 +373,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             }
             if (rule.ForbiddenPatterns is { Count: > 0 })
             {
-                findings.AddRange(RunForbiddenPatterns(rule, input.LetterText));
+                findings.AddRange(RunForbiddenPatterns(rule, input.LetterText, input.IsModelAnswer));
             }
         }
 
@@ -404,7 +405,44 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             findings.AddRange(RunDetectorSafely(det, builtIn, input, structure));
         }
 
+        // A candidate never sees which check crashed or with what exception: the detail goes to the
+        // server log and the finding keeps a neutral sentence. A Model Answer keeps the full message.
+        if (!input.IsModelAnswer) NeutraliseDetectorErrors(findings);
+
         return DedupeAndSort(findings);
+    }
+
+    private const string DetectorErrorRuleId = "BUILTIN.internal_detector_error";
+
+    private void NeutraliseDetectorErrors(List<LintFinding> findings)
+    {
+        for (var i = 0; i < findings.Count; i++)
+        {
+            if (!string.Equals(findings[i].RuleId, DetectorErrorRuleId, StringComparison.Ordinal)) continue;
+            logger?.LogWarning("Writing rule check failed during candidate lint: {Detail}", findings[i].Message);
+            findings[i] = findings[i] with { Message = "One of the automatic checks could not be completed for this letter." };
+        }
+    }
+
+    /// <summary>
+    /// The check id a rulebook rule is wired to (legacy professions report the rule id, for example R03.4,
+    /// not the check id), or null when the rule is unknown or carries none. Uses the cached rulebook.
+    /// </summary>
+    public string? CheckIdForRule(ExamProfession profession, string ruleId)
+    {
+        if (string.IsNullOrWhiteSpace(ruleId)) return null;
+        OetRulebook book;
+        try
+        {
+            book = loader.Load(RuleKind.Writing, profession);
+        }
+        catch (RulebookNotFoundException)
+        {
+            return null;
+        }
+        var checkId = book.Rules
+            .FirstOrDefault(r => string.Equals(r.Id, ruleId, StringComparison.OrdinalIgnoreCase))?.CheckId;
+        return string.IsNullOrWhiteSpace(checkId) ? null : checkId;
     }
 
     // P0 fix (Rev8 224-answer regeneration, 12 Sep 2026): every detector call
@@ -780,7 +818,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         yield return new LintFinding(
             rule.Id,
             RuleSeverity.Minor,
-            $"Letter body is {count} word(s) (target {min}–{max}). Too {direction} — {hint}. Advisory only; submission is not blocked.");
+            $"Letter body is {count} word(s) (target {min}–{max}). Too {direction} — {hint}.");
     }
 
     private static IEnumerable<LintFinding> DetectParagraphCount(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -1057,14 +1095,14 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             var g = m.Groups[1].Success ? m.Groups[1] : m.Groups[2].Success ? m.Groups[2] : m.Groups[3];
             if (!reported.Add(g.Index)) continue;
             yield return new LintFinding(rule.Id, rule.Severity,
-                $"\"{g.Value}\" is an owner-disallowed routine connective. Prefer however/therefore/thus/consequently/subsequently/in addition (with correct punctuation), or a direct sentence.",
+                $"\"{g.Value}\" is a routine connective that reads informally here. Prefer however/therefore/thus/consequently/subsequently/in addition (with correct punctuation), or a direct sentence.",
                 Quote: g.Value, Start: g.Index, End: g.Index + g.Length);
         }
         foreach (Match m in AlsoRe.Matches(s.Body))
         {
             if (!reported.Add(m.Index)) continue;
             yield return new LintFinding(rule.Id, RuleSeverity.Minor,
-                "Style preference: avoid \"also\" as a routine linking word; \"in addition\"/\"additionally\" or a direct sentence reads more formally. Advisory only.",
+                "Style preference: avoid \"also\" as a routine linking word; \"in addition\"/\"additionally\" or a direct sentence reads more formally.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
         }
     }
@@ -1191,9 +1229,15 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         var markers = new Regex(@"\b(I am writing to|I am referring|referr?ing|referral|I would like to refer|I am requesting|requesting|refer\w*|updat\w*|transfer\w*|informing you|regarding|for (your|specialist|further) (assessment|management|review))\b",
             RegexOptions.IgnoreCase);
         if (!markers.IsMatch(intro))
-            yield return new LintFinding(rule.Id, rule.Severity,
+            yield return new LintFinding(rule.Id, CandidateAtMostMajor(input, rule.Severity),
                 "Introduction does not state the purpose/request. Always include why you are writing.");
     }
+
+    // Candidate lane only: a keyword-level check of a semantic requirement (purpose present, discharge plan
+    // present) can weaken the criterion but is never a Critical task failure on its own. A Model Answer
+    // keeps the rule's own severity, so its output is unchanged.
+    private static RuleSeverity CandidateAtMostMajor(WritingLintInput input, RuleSeverity severity)
+        => !input.IsModelAnswer && severity == RuleSeverity.Critical ? RuleSeverity.Major : severity;
 
     private static IEnumerable<LintFinding> DetectUrgentIntro(OetRule rule, WritingLintInput input, LetterStructure s)
     {
@@ -1353,7 +1397,10 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     private static IEnumerable<LintFinding> DetectEnclosureResults(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (input.CaseNotesMarkers?.ResultsEnclosed != true) yield break;
-        if (!Regex.IsMatch(input.LetterText, @"please find enclosed", RegexOptions.IgnoreCase))
+        // A Model Answer uses the exact house phrase; a candidate may word the enclosure any natural way
+        // ("results are enclosed", "I enclose a copy", "attached").
+        var phrase = input.IsModelAnswer ? @"please find enclosed" : @"\b(?:enclosed|enclose|encloses|enclosing|attached)\b";
+        if (!Regex.IsMatch(input.LetterText, phrase, RegexOptions.IgnoreCase))
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Results/imaging marked as enclosed — include 'Please find enclosed a copy of the pathology results.'");
     }
@@ -1546,7 +1593,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         if (NonPrescribingProfessions.Contains(input.Profession) || !SourceRecordsDose(input.CaseNotesText))
         {
             if (!hasInstr)
-                yield return new LintFinding(rule.Id, rule.Severity,
+                yield return new LintFinding(rule.Id, CandidateAtMostMajor(input, rule.Severity),
                     "Discharge plan paragraph must contain post-discharge instructions.");
             yield break;
         }
@@ -1556,7 +1603,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         // 10 Sep 2026): match the unit directly after a number too.
         var hasMeds = Regex.IsMatch(s.Body, @"\d+\s*(mg|mcg|ml)\b|\b(tablet|capsule|prescribed|discharged? with|dose)\b", RegexOptions.IgnoreCase);
         if (!hasMeds || !hasInstr)
-            yield return new LintFinding(rule.Id, rule.Severity,
+            yield return new LintFinding(rule.Id, CandidateAtMostMajor(input, rule.Severity),
                 "Discharge plan paragraph must contain medications with doses AND post-discharge instructions.");
     }
 
@@ -1689,9 +1736,12 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     private static IEnumerable<LintFinding> DetectClosurePatientRequest(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (input.CaseNotesMarkers?.PatientInitiatedReferral != true) yield break;
-        if (!Regex.IsMatch(input.LetterText,
-            @"\bat (his|her|mr|ms|mrs|miss|dr) .*?(\brequest|\bown request)\b|upon (his|her) request",
-            RegexOptions.IgnoreCase))
+        // A candidate may state the request any natural way ("at the request of", "as requested by",
+        // "asked to be referred"); a Model Answer keeps the original two forms.
+        var requestForms = input.IsModelAnswer
+            ? @"\bat (his|her|mr|ms|mrs|miss|dr) .*?(\brequest|\bown request)\b|upon (his|her) request"
+            : @"\bat (his|her|their|mr|ms|mrs|miss|dr|the) .*?(\brequest|\bown request)\b|\b(?:upon|on) (?:his|her|their) (?:own )?request\b|\bas requested by\b|\brequested (?:this|the|a) referral\b|\b(?:asked|wishes|wished|requested) (?:to be referred|for (?:a )?referral)\b";
+        if (!Regex.IsMatch(input.LetterText, requestForms, RegexOptions.IgnoreCase))
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Patient-initiated referral — include 'upon his/her request' or 'at [Name]'s request'.");
     }
@@ -1999,6 +2049,27 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         foreach (Match m in re.Matches(s.Body))
         {
             if (m.Index < introLength) continue;
+            if (!input.IsModelAnswer)
+            {
+                // Candidate lane (owner handoff, 6 Oct 2026, section 3): present perfect can be correct
+                // ("I have advised ..."), and past perfect ("had advised") is valid, so judge the clause,
+                // not the verb pair. Only has/have + participle WITH a finished-time marker in the same
+                // clause is the real inconsistency, and never in the first person.
+                if (string.Equals(m.Groups[1].Value, "had", StringComparison.OrdinalIgnoreCase)) continue;
+                var before = s.Body[Math.Max(0, m.Index - 8)..m.Index];
+                if (Regex.IsMatch(before, @"\b(?:I|we)\s+$", RegexOptions.IgnoreCase)) continue;
+                var windowStart = m.Index + m.Length;
+                var clause = s.Body[windowStart..Math.Min(s.Body.Length, windowStart + 60)];
+                var clauseEnd = clause.IndexOfAny(new[] { '.', ';', '!', '?', '\n' });
+                if (clauseEnd >= 0) clause = clause[..clauseEnd];
+                if (!SurgeryFinishedTimeRegex.IsMatch(clause)
+                    && !Regex.IsMatch(clause, @"\byesterday\b", RegexOptions.IgnoreCase)) continue;
+                yield return new LintFinding(rule.Id, RuleSeverity.Minor,
+                    $"\"{m.Value}\" is used with a finished time; use past simple for something that happened at a stated time.",
+                    Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+                if (++hits >= 3) yield break;
+                continue;
+            }
             yield return new LintFinding(rule.Id, rule.Severity,
                 $"Visit content should use past simple. \"{m.Value}\" looks like present perfect.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
@@ -2037,6 +2108,9 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         var findings = 0;
         foreach (var keyword in keywords)
         {
+            // BMI is dimensionless: a candidate is never asked for a unit on it. The Model Answer lane keeps
+            // the keyword so its output is unchanged.
+            if (!input.IsModelAnswer && keyword == "BMI") continue;
             // False-positive fix (2026-09-07): "[^.\n]{0,30}" excludes '.'
             // entirely, so it stops dead at the DECIMAL POINT in a value
             // like "37.4\u00b0C" or "17.3" -- truncating the snippet to
@@ -2090,7 +2164,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     };
 
     // Forbidden patterns baked into the JSON (not tied to a specific checkId)
-    private static IEnumerable<LintFinding> RunForbiddenPatterns(OetRule rule, string text)
+    private static IEnumerable<LintFinding> RunForbiddenPatterns(OetRule rule, string text, bool isModelAnswer)
     {
         if (rule.ForbiddenPatterns is null) yield break;
         if (!string.IsNullOrWhiteSpace(rule.CheckId) && ForbiddenPatternCheckIdsNoLongerEnforced.Contains(rule.CheckId))
@@ -2102,9 +2176,14 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             catch { continue; }
             var m = re.Match(text);
             if (m.Success)
-                yield return new LintFinding(rule.Id, rule.Severity,
-                    $"Rule {rule.Id}: \"{m.Value}\" violates the pattern.",
+            {
+                // A candidate reads this message, so it never names the rule id.
+                var message = isModelAnswer
+                    ? $"Rule {rule.Id}: \"{m.Value}\" violates the pattern."
+                    : $"Reword \"{m.Value}\": it does not suit a formal clinical letter.";
+                yield return new LintFinding(rule.Id, rule.Severity, message,
                     Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+            }
         }
     }
 }

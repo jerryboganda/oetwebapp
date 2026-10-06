@@ -19,6 +19,7 @@ import { WritingReadingWindowOverlay } from '@/components/domain/writing/Writing
 import { DraftConflictNotice, DraftSaveStatus } from '@/components/domain/writing/DraftSaveStatus';
 import { useWritingDraftSync, type DraftSyncBaseline } from '@/hooks/use-writing-draft-sync';
 import { loadStoredSession } from '@/lib/auth-storage';
+import { usePasteExempt } from '@/lib/paste-exempt';
 import {
   beginWritingMockWriting,
   getWritingDraftV2,
@@ -45,6 +46,8 @@ function WritingMockSessionInner() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const sessionId = String(params?.id ?? '');
+  // The five allowlisted accounts have no release hold, so they are never promised 15 minutes.
+  const releaseExempt = usePasteExempt();
 
   // Strict 45-minute timing is ALWAYS enforced on the mock: 5 min forced reading
   // (pad locked) → 40 min writing → hard auto-submit. The legacy `?practice=1`
@@ -67,7 +70,7 @@ function WritingMockSessionInner() {
   // the writing view (both render the same Case Notes PDF).
   const [pdfHighlights, setPdfHighlights] = useState<Record<number, Highlight[]>>({});
   // Post-submit lock: instead of navigating away we freeze the letter and show
-  // a "Submitted — awaiting tutor review" read-only state with a results link.
+  // a submitted read-only state (with the release notice) and a results link.
   const [locked, setLocked] = useState(false);
   const [frozenLetter, setFrozenLetter] = useState('');
   const startedAtRef = useRef<number>(Date.now());
@@ -488,7 +491,8 @@ function WritingMockSessionInner() {
                 >
                   <Lock className="mt-0.5 h-4 w-4 shrink-0 text-success-strong" aria-hidden="true" />
                   <div>
-                    <p className="text-sm font-bold text-navy">Submitted — awaiting tutor review</p>
+                    <p className="text-sm font-bold text-navy">{t('writing.paper.answerLockedSubmitted')}</p>
+                    <p className="mt-0.5 text-xs text-muted">{releaseExempt ? t('writing.release.finalising') : t('writing.release.notice')}</p>
                     <p className="mt-0.5 text-xs text-muted">
                       Your letter is locked and can no longer be edited.
                     </p>

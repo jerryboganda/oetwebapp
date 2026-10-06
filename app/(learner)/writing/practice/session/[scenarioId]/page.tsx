@@ -59,6 +59,9 @@ import type {
 
 type ScenarioMode = Extract<WritingEditorMode, 'practice' | 'coached'>;
 
+// Catalogue codes with a candidate label (writing.practice.library.letterType.*); any other code is never shown.
+const LETTER_TYPE_CODES: readonly string[] = ['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-NM', 'LT-OT'];
+
 /** The task's authored value when it is a sane positive number, else the exam default. */
 function positiveOr(value: number | null | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
@@ -625,7 +628,9 @@ export default function WritingPracticeSessionPage() {
                 <Badge variant="info" size="sm">Practice mode</Badge>
                 {scenario ? (
                   <>
-                    <Badge variant="muted" size="sm">{scenario.letterType}</Badge>
+                    {LETTER_TYPE_CODES.includes(scenario.letterType) ? (
+                      <Badge variant="muted" size="sm">{t(`writing.practice.library.letterType.${scenario.letterType}`)}</Badge>
+                    ) : null}
                     <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
                   </>
                 ) : null}
@@ -744,8 +749,8 @@ export default function WritingPracticeSessionPage() {
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-muted">
-            You have no AI grading credits remaining. AI Credits grade your Writing letters and Speaking
-            cards instantly. Purchase a package to continue. Your draft has been saved.
+            You have no AI grading credits remaining. AI Credits are used to assess your Writing letters
+            and Speaking cards. Purchase a package to continue. Your draft has been saved.
           </p>
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setNoCreditsOpen(false)}>

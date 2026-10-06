@@ -1,13 +1,14 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { getWritingSubmission, getWritingSubmissionGrade, retryWritingGrade, replace, close, translate } = vi.hoisted(() => ({
+const { getWritingSubmission, getWritingSubmissionGrade, retryWritingGrade, replace, close, translate, stream } = vi.hoisted(() => ({
   getWritingSubmission: vi.fn(),
   getWritingSubmissionGrade: vi.fn(),
   retryWritingGrade: vi.fn(),
   replace: vi.fn(),
   close: vi.fn(),
   translate: (key: string) => key,
+  stream: { onGradeReady: null as null | (() => void) },
 }));
 
 const router = { replace };
@@ -26,13 +27,17 @@ vi.mock('@/lib/writing/api', () => ({
 }));
 
 vi.mock('@/lib/writing/realtime', () => ({
-  connectWritingSubmissionStream: () => ({ close }),
+  connectWritingSubmissionStream: (_id: string, handlers: { onGradeReady: () => void }) => {
+    stream.onGradeReady = handlers.onGradeReady;
+    return { close };
+  },
 }));
 
 vi.mock('@/components/domain/learner-surface', () => ({
-  LearnerPageHero: ({ title, highlights }: { title: string; highlights?: { label: string; value: string }[] }) => (
+  LearnerPageHero: ({ title, description, highlights }: { title: string; description?: string; highlights?: { label: string; value: string }[] }) => (
     <header>
       <h1>{title}</h1>
+      {description ? <p data-testid="hero-description">{description}</p> : null}
       {highlights?.map((h) => <p key={h.label} data-testid="hero-highlight">{h.value}</p>)}
     </header>
   ),
@@ -46,10 +51,23 @@ async function flush() {
   });
 }
 
+// A submission inside the 15-minute window, as the server reports it.
+function windowed(releaseState: 'processing' | 'held', secondsLeft: number, status = 'grading') {
+  const now = Date.now();
+  return {
+    id: 'sub-1',
+    status,
+    releaseState,
+    releaseAt: new Date(now + secondsLeft * 1000).toISOString(),
+    serverNow: new Date(now).toISOString(),
+  };
+}
+
 describe('Writing grading progress and failure recovery', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    stream.onGradeReady = null;
     getWritingSubmission.mockResolvedValue({ id: 'sub-1', status: 'grading' });
     getWritingSubmissionGrade.mockRejectedValue(new Error('Grade not ready'));
   });
@@ -58,24 +76,70 @@ describe('Writing grading progress and failure recovery', () => {
     vi.useRealTimers();
   });
 
-  it('keeps scoring active while the server is grading instead of claiming the rubric is done', async () => {
+  it('shows the 15:00 countdown and the exact release notice, never the internal pipeline steps', async () => {
+    getWritingSubmission.mockResolvedValue(windowed('processing', 900, 'queued'));
     render(<WritingSubmissionGradingPage />);
     await flush();
 
-    const scoring = screen.getByText('writing.submissions.grading.steps.scoring').closest('li');
-    expect(scoring).not.toBeNull();
-    expect(within(scoring!).getByText('writing.submissions.grading.status.inProgress')).toBeInTheDocument();
-    expect(within(scoring!).queryByText('writing.submissions.grading.status.done')).not.toBeInTheDocument();
+    expect(screen.getByRole('timer')).toHaveTextContent('15:00');
+    expect(screen.getByText('writing.release.notice')).toBeInTheDocument();
+    expect(screen.queryByTestId('hero-description')).not.toBeInTheDocument();
+    expect(screen.getByText('writing.release.savedNote')).toBeInTheDocument();
+    expect(screen.queryByTestId('writing-grading-steps')).not.toBeInTheDocument();
+    expect(screen.getByTestId('hero-highlight')).toHaveTextContent('writing.submissions.detail.status.queued');
   });
 
-  it('shows the "Preparing model answer" step and a translated status, never the raw token', async () => {
+  it('does not promise 15 minutes to an account without a hold, and shows no countdown', async () => {
+    getWritingSubmission.mockResolvedValue({ id: 'sub-1', status: 'grading', releaseState: 'processing', releaseAt: null });
     render(<WritingSubmissionGradingPage />);
     await flush();
 
-    const steps = screen.getByTestId('writing-grading-steps');
-    expect(within(steps).getByText('writing.submissions.grading.steps.modelAnswer')).toBeInTheDocument();
-    expect(within(steps).queryByText(/exemplar/)).not.toBeInTheDocument();
-    expect(screen.getByTestId('hero-highlight')).toHaveTextContent('writing.submissions.detail.status.grading');
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+    expect(screen.getByTestId('hero-description')).toHaveTextContent('writing.release.finalising');
+  });
+
+  it('keeps a finished but held result hidden, then opens it once the server releases it', async () => {
+    getWritingSubmission.mockResolvedValue(windowed('held', 600));
+    render(<WritingSubmissionGradingPage />);
+    await flush();
+
+    // A grade-ready push while held is only a nudge: refetch, no redirect.
+    await act(async () => { stream.onGradeReady?.(); });
+    await flush();
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.getByRole('timer')).toBeInTheDocument();
+
+    getWritingSubmission.mockResolvedValue({ id: 'sub-1', status: 'graded', releaseState: 'released' });
+    await act(async () => { stream.onGradeReady?.(); });
+    await flush();
+    expect(replace).toHaveBeenCalledWith('/writing/submissions/sub-1/results');
+  });
+
+  it('refetches once when a held countdown reaches zero, and shows finalising rather than a result', async () => {
+    getWritingSubmission.mockResolvedValue(windowed('held', 3));
+    render(<WritingSubmissionGradingPage />);
+    await flush();
+    const callsBefore = getWritingSubmission.mock.calls.length;
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3100); });
+
+    expect(getWritingSubmission.mock.calls.length).toBeGreaterThan(callsBefore);
+    expect(replace).not.toHaveBeenCalled();
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+    expect(screen.getByText('writing.release.finalising')).toBeInTheDocument();
+  });
+
+  it('a letter still processing past the window shows finalising and leaves the refetching to the normal poll', async () => {
+    getWritingSubmission.mockResolvedValue(windowed('processing', 1));
+    render(<WritingSubmissionGradingPage />);
+    await flush();
+    const callsBefore = getWritingSubmission.mock.calls.length;
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+
+    expect(getWritingSubmission.mock.calls.length).toBe(callsBefore);
+    expect(screen.getByText('writing.release.finalising')).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('shows a failed background grade and retry without requiring a page refresh', async () => {
@@ -117,7 +181,7 @@ describe('Writing grading progress and failure recovery', () => {
     expect(screen.getByText('writing.submissions.grading.delayedDescription')).toBeInTheDocument();
     expect(screen.queryByTestId('writing-grading-retry')).not.toBeInTheDocument();
     expect(screen.queryByTestId('writing-grading-failed')).not.toBeInTheDocument();
-    expect(screen.getByTestId('writing-grading-steps')).toBeInTheDocument();
+    expect(screen.getByText('writing.release.savedNote')).toBeInTheDocument();
   });
 
   it('a credits refusal links to AI credits and keeps Retry for after the top-up', async () => {

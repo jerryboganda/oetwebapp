@@ -7,6 +7,10 @@ vi.mock('@/lib/api', () => ({
   fetchAuthorizedObjectUrl: vi.fn().mockResolvedValue('blob:fake-url'),
 }));
 
+// ── Mock the copy/paste exemption (owner/testing accounts) ───────────────────
+const exempt = vi.hoisted(() => ({ value: false }));
+vi.mock('@/lib/paste-exempt', () => ({ usePasteExempt: () => exempt.value }));
+
 // ── Mock pdfjs-dist ──────────────────────────────────────────────────────────
 // Mirrors the dynamic import('pdfjs-dist/legacy/build/pdf.mjs') used in the
 // component. We return a minimal fake that satisfies the component's API:
@@ -36,6 +40,7 @@ vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => {
 // stub getContext so it returns a minimal object to avoid any uncaught errors
 // from libraries that probe capabilities.
 beforeEach(() => {
+  exempt.value = false;
   HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
     clearRect: vi.fn(),
     drawImage: vi.fn(),
@@ -156,6 +161,21 @@ describe('WritingStimulusViewer', () => {
     root.dispatchEvent(event);
 
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('lets an exempt account copy with Ctrl+C but still blocks save and print', () => {
+    exempt.value = true;
+    const { container } = render(<WritingStimulusViewer downloadPath="/v1/media/abc123/content" />);
+    const root = container.firstElementChild as HTMLElement;
+    const press = (key: string) => {
+      const event = new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, cancelable: true });
+      root.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+
+    expect(press('c')).toBe(false);
+    expect(press('s')).toBe(true);
+    expect(press('p')).toBe(true);
   });
 
   it('carries the print:hidden class on the root element', () => {

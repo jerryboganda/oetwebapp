@@ -9,6 +9,7 @@ import {
   type WritingPhase,
 } from '@/components/domain/writing/PaperBookletSimulation';
 import { WritingReadingWindowOverlay } from '@/components/domain/writing/WritingReadingWindowOverlay';
+import { WritingReleaseCountdown, releasePollDelayMs } from '@/components/domain/writing/WritingReleaseCountdown';
 import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import { Button } from '@/components/ui/button';
 import { useFocusExitGuard } from '@/components/layout/focus-exit';
@@ -29,6 +30,7 @@ import {
 } from '@/lib/writing/api';
 import { clearDraftShadow, draftShadowKey, readDraftShadow, reconcileDraft } from '@/lib/writing/draft-sync';
 import { countLetterWords } from '@/lib/writing/letter-text';
+import { isReleased } from '@/lib/writing/release';
 import { createSubmitIdempotencyKey, toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import {
@@ -522,6 +524,8 @@ export default function WritingPaperSessionPage() {
             timeSpentSeconds: elapsed,
           });
           setSubmissionId(result.id ?? null);
+          // Seeds the release countdown (15:00) before the first poll lands.
+          setGradedSubmission(result ?? null);
         } else if (scenarioId) {
           const result = await createWritingSubmission({
             scenarioId,
@@ -534,6 +538,7 @@ export default function WritingPaperSessionPage() {
             idempotencyKey,
           });
           setSubmissionId(result.id ?? null);
+          setGradedSubmission(result ?? null);
         }
         // Freeze in place — do NOT navigate away. The letter is now being
         // graded; show the grading state and poll until the result is ready.
@@ -584,13 +589,16 @@ export default function WritingPaperSessionPage() {
     let cancelled = false;
     let timer: number | undefined;
     const startedAt = Date.now();
+    let latest: WritingSubmissionDto | null = null;
     const tick = async () => {
       try {
         const sub = await getWritingSubmission(submissionId);
         if (cancelled) return;
+        latest = sub;
         setGradedSubmission(sub);
         const status = (sub as { status?: string } | null)?.status;
-        if (status === 'graded' || status === 'completed') {
+        // Effective status: a finished letter reads 'grading' until the server releases it.
+        if (isReleased(sub) || status === 'completed') {
           setGrading(false);
           window.location.assign(resultsHrefRef.current);
           return;
@@ -611,7 +619,8 @@ export default function WritingPaperSessionPage() {
         setGradingFailed(true);
         return;
       }
-      timer = window.setTimeout(() => void tick(), elapsed < 2 * 60_000 ? 4000 : 15_000);
+      // Release-aware pace: sparse while a finished letter is held, landing just after its release time.
+      timer = window.setTimeout(() => void tick(), releasePollDelayMs(latest, elapsed < 2 * 60_000 ? 4000 : 15_000));
     };
     timer = window.setTimeout(() => void tick(), 2500);
     return () => {
@@ -625,10 +634,11 @@ export default function WritingPaperSessionPage() {
     setRetrying(true);
     setRetryError(null);
     try {
-      await retryWritingGrade(submissionId);
+      const retried = await retryWritingGrade(submissionId);
       setGradingFailed(false);
       setGradingTimedOut(false);
-      setGradedSubmission(null);
+      // Same submission, same release anchor: the countdown carries on, it never restarts.
+      setGradedSubmission(retried ?? null);
       setGrading(true);
       setPollRound((n) => n + 1);
     } catch (err) {
@@ -710,23 +720,36 @@ export default function WritingPaperSessionPage() {
           failure shows a candidate-friendly message with a way through. */}
       {grading ? (
         <div
-          role="status"
-          aria-live="polite"
           data-testid="writing-paper-grading"
           data-state={gradedSubmission?.autoRetrying ? 'delayed' : 'grading'}
           className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm"
         >
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" aria-hidden="true" />
-          <p className="mt-6 max-w-md px-6 text-center text-lg font-medium">
-            {gradedSubmission?.autoRetrying
-              ? t('writing.paper.grading.delayedTitle')
-              : t('writing.paper.grading.submittedTitle')}
-          </p>
-          <p className="mt-2 max-w-md px-6 text-center text-sm text-muted">
-            {gradedSubmission?.autoRetrying
-              ? t('writing.paper.grading.delayedBody')
-              : t('writing.paper.grading.submittedBody')}
-          </p>
+          {/* The live region is the text only: the ticking timer below must not be announced every second. */}
+          <div role="status" aria-live="polite">
+            <p className="mt-6 max-w-md px-6 text-center text-lg font-medium">
+              {gradedSubmission?.autoRetrying
+                ? t('writing.paper.grading.delayedTitle')
+                : t('writing.paper.grading.submittedTitle')}
+            </p>
+            {/* With a release time the countdown below carries the notice; before the
+                first response the notice stands alone, and without one (no hold) the
+                page does not promise 15 minutes. */}
+            {gradedSubmission?.autoRetrying ? (
+              <p className="mt-2 max-w-md px-6 text-center text-sm text-muted">{t('writing.paper.grading.delayedBody')}</p>
+            ) : !gradedSubmission ? (
+              <p className="mt-2 max-w-md px-6 text-center text-sm text-muted">{t('writing.release.notice')}</p>
+            ) : !gradedSubmission.releaseAt ? (
+              <p className="mt-2 max-w-md px-6 text-center text-sm text-muted">{t('writing.release.finalising')}</p>
+            ) : null}
+          </div>
+          <WritingReleaseCountdown
+            className="mt-4 max-w-md px-6 text-center"
+            releaseAt={gradedSubmission?.releaseAt}
+            serverNow={gradedSubmission?.serverNow}
+            releaseState={gradedSubmission?.releaseState}
+            showNotice={gradedSubmission?.autoRetrying !== true}
+          />
         </div>
       ) : null}
 

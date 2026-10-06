@@ -168,6 +168,10 @@ public class WritingResultVisibilityConfig
 
     public bool ShowContentChecklist { get; set; } = true;
 
+    /// <summary>
+    /// RETIRED with Revise &amp; Resubmit (owner handoff, 6 Oct 2026): nothing reads or writes this any more.
+    /// The property and column stay only because dropping them needs a schema migration.
+    /// </summary>
     public bool AllowRewrite { get; set; } = true;
 
     public DateTimeOffset UpdatedAt { get; set; }

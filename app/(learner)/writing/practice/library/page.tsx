@@ -14,6 +14,7 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { listWritingScenarios } from '@/lib/writing/api';
+import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import type {
   WritingLetterType,
   WritingScenarioDto,
@@ -54,7 +55,7 @@ export default function WritingPracticeLibraryPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : t('writing.practice.library.error.load'));
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.practice.library.error.load')));
       })
       .finally(() => {
         if (cancelled) return;
@@ -81,7 +82,7 @@ export default function WritingPracticeLibraryPage() {
         setError(null);
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : t('writing.practice.library.error.load'));
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.practice.library.error.load')));
       })
       .finally(() => {
         setLoadingMore(false);
@@ -145,7 +146,7 @@ export default function WritingPracticeLibraryPage() {
               >
                 <option value="">{t('writing.practice.library.filters.all')}</option>
                 {LETTER_TYPES.map((lt) => (
-                  <option key={lt} value={lt}>{t(`writing.practice.library.letterType.${lt}`)} ({lt})</option>
+                  <option key={lt} value={lt}>{t(`writing.practice.library.letterType.${lt}`)}</option>
                 ))}
               </select>
             </label>
@@ -189,7 +190,10 @@ export default function WritingPracticeLibraryPage() {
               <MotionItem delayIndex={Math.min(index, 5)} className="h-full">
                 <Card padding="md" className="flex h-full flex-col" aria-label={t('writing.practice.library.cardAria', { title: scenario.title })}>
                   <header className="flex flex-wrap items-center gap-1">
-                    <Badge variant="muted" size="sm">{scenario.letterType}</Badge>
+                    {/* Catalogue codes (LT-RR ...) are internal: show the label, or nothing for an unknown code. */}
+                    {LETTER_TYPES.includes(scenario.letterType) ? (
+                      <Badge variant="muted" size="sm">{t(`writing.practice.library.letterType.${scenario.letterType}`)}</Badge>
+                    ) : null}
                     <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
                   </header>
                   {/* Scenario title and topics are OET-authored English content. */}

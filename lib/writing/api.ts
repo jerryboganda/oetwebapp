@@ -36,7 +36,6 @@
  *   POST   /v1/writing/submissions
  *   GET    /v1/writing/submissions/{id}
  *   GET    /v1/writing/submissions/{id}/grade
- *   POST   /v1/writing/submissions/{id}/revise
  *   POST   /v1/writing/submissions/{id}/dispute-violation
  *
  *   ─ Drafts V2 ────────────────────────────────────────────────────────
@@ -138,6 +137,7 @@ import type {
   WritingLessonCompletionDto,
   WritingMockDto,
   WritingMockSessionDto,
+  WritingMockResultsDto,
   WritingCoachHintDto,
   WritingStatsDashboardDto,
   WritingStatsBandsDto,
@@ -381,12 +381,6 @@ export const getWritingSubmissionCaseNotes = (submissionId: string) =>
     path('/v1/writing/submissions/{id}/case-notes', { id: submissionId }),
   );
 
-export const reviseWritingSubmission = (submissionId: string, payload: { letterContent: string; wordCount: number; timeSpentSeconds: number }) =>
-  apiClient.post<WritingSubmissionDto>(
-    path('/v1/writing/submissions/{id}/revise', { id: submissionId }),
-    payload,
-  );
-
 export const disputeWritingCanonViolation = (submissionId: string, payload: WritingDisputeViolationDto) =>
   apiClient.post<WritingCanonViolationDto>(
     path('/v1/writing/submissions/{id}/dispute-violation', { id: submissionId }),
@@ -592,9 +586,10 @@ export const submitWritingMock = (sessionId: string, payload: { letterContent: s
   );
 
 export const getWritingMockResults = (sessionId: string) =>
-  // `grade` is null while AI grading is still running. Mock Writing is AI-graded
-  // on the Mock Attempt and does not consume ordinary Writing credits.
-  apiClient.get<{ session: WritingMockSessionDto; grade: WritingGradeDto | null; status: string }>(
+  // `grade` is null while AI grading is still running or the result is held for
+  // release. Mock Writing is AI-graded on the Mock Attempt and does not consume
+  // ordinary Writing credits.
+  apiClient.get<WritingMockResultsDto>(
     path('/v1/writing/mocks/sessions/{id}/results', { id: sessionId }),
   );
 

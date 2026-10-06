@@ -30,7 +30,7 @@ export default function WritingPathwayPage() {
         icon={Compass}
         accent="writing"
         title="Your route from baseline to exam-ready Writing"
-        description="The pathway reads your real attempts, evaluations, rule violations, and practice plan without replacing the existing grading pipeline."
+        description="The pathway reads your real attempts, evaluations, recurring corrections, and practice plan to show your route to exam-ready Writing."
         // Chips show once the pathway is in: before that the stage would read
         // the "onboarding" default, not the learner's real stage.
         highlights={pathway ? [
@@ -45,7 +45,7 @@ export default function WritingPathwayPage() {
       <div className="flex flex-wrap gap-3">
         <Button asChild><Link href="/writing/today">Open today&apos;s plan</Link></Button>
         <Button asChild variant="outline"><Link href="/writing/profile-setup">Edit profile</Link></Button>
-        <Button asChild variant="ghost"><Link href="/writing/canon">Browse canon</Link></Button>
+        <Button asChild variant="ghost"><Link href="/writing/canon">Browse writing guidance</Link></Button>
       </div>
 
       <MotionSection delayIndex={0} className="space-y-4">

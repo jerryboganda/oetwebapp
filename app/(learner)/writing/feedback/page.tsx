@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { PageSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { fetchWritingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { cleanCandidateText, severityLabel } from '@/lib/writing/candidate-text';
 import type { WritingResult, AnchoredComment } from '@/lib/mock-data';
 
 /* --- Inline Highlight helper (needs activeComment state) --- */
@@ -144,7 +145,7 @@ function WritingDetailedFeedbackContent() {
           <div className="mx-auto max-w-2xl space-y-6">
             <LearnerSurfaceSectionHeader
               eyebrow="Feedback breakdown"
-              title="Score details and revision guidance"
+              title="Score details and guidance"
               description="A quick summary first, then the detailed breakdown below."
             />
             {result.criteria.map((criterion, index) => (
@@ -162,7 +163,7 @@ function WritingDetailedFeedbackContent() {
                   </div>
 
                   {/* Explanation */}
-                  <p className="mb-6 leading-relaxed text-navy/80">{criterion.explanation}</p>
+                  <p className="mb-6 leading-relaxed text-navy/80">{cleanCandidateText(criterion.explanation)}</p>
 
                   {/* Anchored Comments */}
                   {criterion.anchoredComments.length > 0 && (
@@ -178,29 +179,21 @@ function WritingDetailedFeedbackContent() {
                             : comment.severity === 'major' ? 'warning'
                             : comment.severity === 'minor' ? 'info'
                             : 'muted';
-                          const sourceLabel =
-                            comment.source === 'rule_engine' ? 'Rule check'
-                            : comment.source === 'ai' ? 'AI feedback'
-                            : null;
+                          // Where a finding came from (a rule check or the AI grader) is internal: never shown.
                           return (
                             <button key={comment.id} type="button" onClick={() => setActiveComment(isActive ? null : comment.id)}
                               className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${isActive ? 'border-primary/20 bg-primary/5 shadow-sm' : 'border-border bg-background-light hover:border-border-hover'}`}>
-                               {(comment.severity || sourceLabel) && (
+                               {comment.severity ? (
                                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                                   {comment.severity ? (
-                                     <Badge variant={severityVariant} size="sm">{comment.severity}</Badge>
-                                   ) : null}
-                                   {sourceLabel ? (
-                                     <span className="eyebrow text-muted">{sourceLabel}</span>
-                                   ) : null}
+                                   <Badge variant={severityVariant} size="sm">{severityLabel(comment.severity)}</Badge>
                                  </div>
-                               )}
+                               ) : null}
                                <div className="mb-2 border-l-2 border-border pl-3 text-sm italic text-muted">&quot;{comment.text}&quot;</div>
-                               <div className="text-sm font-medium text-navy">{comment.comment}</div>
+                               <div className="text-sm font-medium text-navy">{cleanCandidateText(comment.comment)}</div>
                                {comment.suggestedFix ? (
                                  <div className="mt-3 rounded-lg border border-success/30 bg-success/5 p-3 text-sm">
                                    <div className="eyebrow text-success-strong mb-1">Suggested fix</div>
-                                   <div className="text-navy/80">{comment.suggestedFix}</div>
+                                   <div className="text-navy/80">{cleanCandidateText(comment.suggestedFix)}</div>
                                  </div>
                                ) : null}
                               </button>
@@ -228,11 +221,11 @@ function WritingDetailedFeedbackContent() {
                     </div>
                   )}
 
-                  {/* Revision Suggestions */}
+                  {/* Suggested fixes */}
                   {criterion.revisionSuggestions.length > 0 && (
                     <div className="rounded-2xl border border-success/30 bg-success/10 p-4">
-                      <h4 className="eyebrow text-success-strong mb-3 flex items-center gap-2"><Lightbulb className="w-4 h-4" /> Revision Suggestions</h4>
-                      <ul className="space-y-3">{criterion.revisionSuggestions.map((item, i) => (<li key={i} className="text-sm text-success-strong flex items-start gap-2"><ArrowRight className="w-4 h-4 text-success-strong shrink-0 mt-0.5" /><span className="leading-snug">{item}</span></li>))}</ul>
+                      <h4 className="eyebrow text-success-strong mb-3 flex items-center gap-2"><Lightbulb className="w-4 h-4" /> Suggested fixes</h4>
+                      <ul className="space-y-3">{criterion.revisionSuggestions.map((item, i) => (<li key={i} className="text-sm text-success-strong flex items-start gap-2"><ArrowRight className="w-4 h-4 text-success-strong shrink-0 mt-0.5" /><span className="leading-snug">{cleanCandidateText(item)}</span></li>))}</ul>
                     </div>
                   )}
                 </Card>

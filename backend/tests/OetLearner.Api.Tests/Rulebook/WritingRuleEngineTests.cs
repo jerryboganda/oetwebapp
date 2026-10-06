@@ -528,7 +528,8 @@ Doctor";
         Assert.NotNull(advisory);
         Assert.Equal(RuleSeverity.Minor, advisory!.Severity);
         Assert.Contains("Too long", advisory.Message);
-        Assert.Contains("Advisory only", advisory.Message);
+        // The wording is plain: it never describes how the engine treats the finding.
+        Assert.DoesNotContain("Advisory only", advisory.Message);
     }
 
     [Fact]

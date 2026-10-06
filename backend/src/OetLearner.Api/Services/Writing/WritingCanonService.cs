@@ -225,9 +225,15 @@ public sealed class WritingCanonService(LearnerDbContext db, TimeProvider clock)
 
     public async Task<WritingCanonViolationListResponse> GetMyViolationsForRuleAsync(string userId, string ruleId, CancellationToken ct)
     {
+        // Released-only: a violation of a submission that is still being assessed (or held inside the
+        // 15-minute window) must not surface here before the candidate's final result does.
+        var cutoff = WritingResultRelease.Cutoff(clock.GetUtcNow());
+        var unrestricted = await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, userId, ct);
         var rows = await db.WritingCanonViolations.AsNoTracking()
             .Join(db.WritingSubmissions.AsNoTracking(), v => v.SubmissionId, s => s.Id, (v, s) => new { v, s })
-            .Where(x => x.v.RuleId == ruleId && x.s.UserId == userId)
+            .Where(x => x.v.RuleId == ruleId && x.s.UserId == userId
+                && x.s.Status == WritingSubmissionStatuses.Graded
+                && (unrestricted || x.s.SubmittedAt <= cutoff))
             .OrderByDescending(x => x.v.DetectedAt)
             .Take(200)
             .Select(x => x.v)
@@ -242,13 +248,15 @@ public sealed class WritingCanonService(LearnerDbContext db, TimeProvider clock)
         ArgumentNullException.ThrowIfNull(request);
         var submission = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId && s.UserId == userId, ct);
         if (submission is null) return null;
+        // Same released-only rule as the violation list: a held result has nothing to dispute yet.
+        if (!await WritingResultRelease.IsReleasedAsync(db, userId, submissionId, clock.GetUtcNow(), ct)) return null;
         var violation = await db.WritingCanonViolations.FirstOrDefaultAsync(v => v.Id == request.ViolationId && v.SubmissionId == submissionId, ct);
         if (violation is null) return null;
         violation.Disputed = true;
         violation.DisputeResolution = $"pending:{request.Reason}";
         await db.SaveChangesAsync(ct);
-        var rule = await db.WritingCanonRules.AsNoTracking().FirstOrDefaultAsync(r => r.Id == violation.RuleId, ct);
-        return WritingV2ResponseMapper.ToResponse(violation, rule?.RuleText ?? string.Empty);
+        // Candidate projection (same as the grade response): no rule id or rule text, dispute state only.
+        return WritingV2ResponseMapper.ToCandidateResponse(violation);
     }
 
     public async Task<WritingCanonRuleListResponseV2> AdminListCanonRulesAsync(string adminUserId, string? search, string? severity, string? category, CancellationToken ct)

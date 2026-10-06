@@ -253,7 +253,8 @@ public class WritingWave6ServiceTests
         var scenarioId = Guid.NewGuid();
         var submissionId = Guid.NewGuid();
         db.WritingScenarios.Add(Scenario(scenarioId));
-        db.WritingSubmissions.Add(Submission(submissionId, UserId, scenarioId, clock.GetUtcNow()));
+        // Submitted past the 15-minute result-release window: a held result cannot be put forward.
+        db.WritingSubmissions.Add(Submission(submissionId, UserId, scenarioId, clock.GetUtcNow().AddHours(-1)));
         db.WritingGrades.Add(Grade(Guid.NewGuid(), submissionId, 32, clock.GetUtcNow()));
         await db.SaveChangesAsync();
         var service = new WritingShowcaseService(db, clock);

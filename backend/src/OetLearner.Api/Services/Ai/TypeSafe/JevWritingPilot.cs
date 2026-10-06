@@ -158,6 +158,13 @@ public static class WritingJevReviewReasons
     public const string CriteriaDivergence = "criteria_divergence";
     public const string VerifyFlag = "verify_flag";
     public const string FindingValidAlternative = "finding_valid_alternative";
+
+    // Secondary Writing reviewer (WritingGradeReviewer). Short codes: ReviewReason is a 64-character
+    // column and the merge helper drops a code that does not fit.
+    /// <summary>The reviewer removed or downgraded a Critical finding: a human should confirm.</summary>
+    public const string ReviewerOverride = "rv_override";
+    /// <summary>A 400+ score still failed enhanced verification after the corrective rounds.</summary>
+    public const string ReviewerUnresolved = "rv_unresolved";
 }
 
 /// <summary>

@@ -12,13 +12,16 @@ namespace OetLearner.Api.Services.Writing;
 /// first, with server-computed states and actions. Learner-scoped; never
 /// carries letter text. Keyset paging: <c>before</c> = the last item's
 /// <c>lastActivityAt</c> (a draft's last save, a submission's submit time).
+/// A graded letter still inside its 15-minute release window reads as grading
+/// (<see cref="WritingResultRelease"/>): it never offers <c>open_result</c> early.
 /// </summary>
 public sealed class WritingMyWorkService(LearnerDbContext db, TimeProvider clock)
 {
     public const int DefaultLimit = 20;
     public const int MaxLimit = 50;
     private const string MockMode = "mock";
-    private const string RevisionMode = "revision";
+    // Revise & Resubmit is retired: drafts left in this mode are never listed or resumed.
+    private const string RetiredRevisionMode = "revision";
 
     private sealed record Row(DateTimeOffset At, WritingDraftV2? Draft, SubmissionRow? Submission)
     {
@@ -35,7 +38,8 @@ public sealed class WritingMyWorkService(LearnerDbContext db, TimeProvider clock
         var cursor = before?.ToUniversalTime(); // Npgsql only writes UTC timestamptz parameters
 
         var draftQuery = db.WritingDraftsV2.AsNoTracking()
-            .Where(d => d.UserId == userId && d.Status == WritingDraftStatuses.Active && d.Mode != MockMode);
+            .Where(d => d.UserId == userId && d.Status == WritingDraftStatuses.Active
+                && d.Mode != MockMode && d.Mode != RetiredRevisionMode);
         var submissionQuery = db.WritingSubmissions.AsNoTracking()
             .Where(s => s.UserId == userId && s.Mode != MockMode);
         if (cursor is { } at)
@@ -78,19 +82,8 @@ public sealed class WritingMyWorkService(LearnerDbContext db, TimeProvider clock
             .Select(id => Guid.TryParse(id, out var parsed) ? parsed : Guid.Empty)
             .ToHashSet();
 
-        // A revision draft is keyed by task, so it resumes on the latest graded letter of that task.
-        var revisionScenarioIds = page.Where(r => r.Draft?.Mode == RevisionMode).Select(r => r.ScenarioId).Distinct().ToList();
-        var reviseTargets = revisionScenarioIds.Count == 0
-            ? new Dictionary<Guid, Guid>()
-            : (await db.WritingSubmissions.AsNoTracking()
-                    .Where(s => s.UserId == userId && revisionScenarioIds.Contains(s.ScenarioId)
-                        && s.Mode != MockMode && s.Status == WritingSubmissionStatuses.Graded)
-                    .Select(s => new { s.ScenarioId, s.Id, s.CreatedAt })
-                    .ToListAsync(ct))
-                .GroupBy(s => s.ScenarioId)
-                .ToDictionary(g => g.Key, g => g.MaxBy(s => s.CreatedAt)!.Id);
-
         var now = clock.GetUtcNow();
+        var unrestricted = await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, userId, ct);
         var items = page.Select(row =>
         {
             scenarios.TryGetValue(row.ScenarioId, out var scenario);
@@ -99,32 +92,37 @@ public sealed class WritingMyWorkService(LearnerDbContext db, TimeProvider clock
             var letterType = scenario is null || string.IsNullOrWhiteSpace(scenario.LetterType) ? null : scenario.LetterType;
             if (row.Draft is { } d)
             {
-                var resumeHref = d.Mode != RevisionMode
-                    ? $"/writing/practice/session/{d.ScenarioId}"
-                    : reviseTargets.TryGetValue(d.ScenarioId, out var original) ? $"/writing/submissions/{original}/revise" : null;
                 return new WritingMyWorkItemResponse(
                     $"draft:{d.Id}", "draft", "draft", d.Status, d.ScenarioId, title, letterType, d.Mode,
-                    d.Mode == RevisionMode, IsFreeSample: false, d.Id, SubmissionId: null, d.WordCount,
+                    IsRevision: false, IsFreeSample: false, d.Id, SubmissionId: null, d.WordCount,
                     d.Phase, d.ReadingSecondsRemaining, d.WritingSecondsRemaining, d.LastSavedAt,
                     CanRetry: false, AutoRetrying: false,
-                    resumeHref is null ? [] : [new WritingMyWorkActionResponse("resume", resumeHref)]);
+                    [new WritingMyWorkActionResponse("resume", $"/writing/practice/session/{d.ScenarioId}")]);
             }
 
             var s = row.Submission!;
+            var release = WritingResultRelease.Describe(s.Status, s.SubmittedAt, unrestricted, now);
             var (state, canRetry, autoRetrying) = ComputeRetryState(
                 s.Status, s.ClaimedAt, s.SubmittedAt, s.NextAutoRetryAt, s.AutoRetryCount, s.FailureRetryable, now);
+            // Graded but inside the release window: still "being assessed" - never open_result, never Retry.
+            if (release.State == WritingResultRelease.Held)
+            {
+                state = "grading";
+                canRetry = false;
+            }
             var root = $"/writing/submissions/{s.Id}";
             IReadOnlyList<WritingMyWorkActionResponse> actions = state == "graded"
                 ? [new("open_result", $"{root}/results"), new("view_letter", root)]
                 : [new(canRetry ? "retry" : "wait", $"{root}/grading"), new("view_letter", root)];
             return new WritingMyWorkItemResponse(
-                $"submission:{s.Id}", "submission", state, s.Status, s.ScenarioId, title, letterType, s.Mode,
+                $"submission:{s.Id}", "submission", state, release.EffectiveStatus, s.ScenarioId, title, letterType, s.Mode,
                 s.IsRevision, freeSampleIds.Contains(s.Id), DraftId: null, s.Id, s.WordCount,
                 Phase: null, ReadingSecondsRemaining: null, WritingSecondsRemaining: null, s.CreatedAt,
-                canRetry, autoRetrying, actions);
+                canRetry, autoRetrying, actions,
+                ReleaseState: release.State, ReleaseAt: release.ReleaseAt);
         }).ToList();
 
-        return new WritingMyWorkResponse(items, hasMore);
+        return new WritingMyWorkResponse(items, hasMore, ServerNow: now);
     }
 
     /// <summary>

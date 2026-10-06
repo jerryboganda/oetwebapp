@@ -12,6 +12,7 @@ import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { getWritingCanon, type WritingCanonDto } from '@/lib/writing-pathway-api';
+import { cleanCandidateText, plainCategoryLabel, severityLabel } from '@/lib/writing/candidate-text';
 import { cn } from '@/lib/utils';
 
 export default function WritingCanonPage() {
@@ -96,14 +97,14 @@ export default function WritingCanonPage() {
             return (
               <MotionItem key={rule.ruleId} delayIndex={Math.min(index, 5)} className="min-w-0">
                 <article className={cn(cardClassName({ padding: 'md' }), 'h-full')}>
+                  {/* The rule id is internal: it keys the list but is never shown. */}
                   <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <Badge variant="info" size="sm">{rule.ruleId}</Badge>
-                    <Badge variant={rule.severity === 'critical' ? 'danger' : rule.severity === 'major' ? 'warning' : 'muted'} size="sm">{rule.severity}</Badge>
-                    <Badge variant="muted" size="sm">{rule.category}</Badge>
+                    <Badge variant={rule.severity === 'critical' ? 'danger' : rule.severity === 'major' ? 'warning' : 'muted'} size="sm">{severityLabel(rule.severity, t)}</Badge>
+                    <Badge variant="muted" size="sm">{plainCategoryLabel(rule.category)}</Badge>
                     {stat ? <Badge variant="warning" size="sm">{t('writing.canon.library.card.seen', { count: stat.count })}</Badge> : null}
                   </div>
                   {/* Canon rule text + examples are Dr Ahmed's authored English content — spec §32. */}
-                  <h2 className="break-words text-base font-bold text-navy" dir="ltr">{rule.ruleText}</h2>
+                  <h2 className="break-words text-base font-bold text-navy" dir="ltr">{cleanCandidateText(rule.ruleText)}</h2>
                   {rule.correctExamples.length > 0 || rule.incorrectExamples.length > 0 ? (
                     <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
                       {rule.correctExamples.length > 0 ? (

@@ -19,7 +19,6 @@ export interface BandHistoryDataPoint {
   rawTotal: number;
   estimatedBand: number;
   letterType?: string;
-  isRevision?: boolean;
 }
 
 export interface BandHistoryChartProps {
@@ -56,6 +55,16 @@ function linearTrend(points: { x: number; y: number }[]): number[] {
   return points.map((p) => slope * p.x + intercept);
 }
 
+// Plain names for the tooltip: the LT-* catalogue code is never shown to a candidate.
+const LETTER_TYPE_LABEL: Record<string, string> = {
+  'LT-RR': 'Routine referral',
+  'LT-UR': 'Urgent referral',
+  'LT-DG': 'Discharge',
+  'LT-TR': 'Transfer',
+  'LT-NM': 'Non-medical',
+  'LT-OT': 'Other Letters',
+};
+
 function formatShortDate(iso: string): string {
   try {
     const d = new Date(iso);
@@ -66,7 +75,7 @@ function formatShortDate(iso: string): string {
 }
 
 /**
- * Line chart of raw writing score (0-38) over time, with optional
+ * Line chart of the Writing criteria score (0-38) over time, with optional
  * target band overlay and a least-squares linear trendline.
  *
  * Y axis is locked to 0-38 (max raw total for the 6 OET criteria;
@@ -122,7 +131,7 @@ export function BandHistoryChart({ data, targetBand, className }: BandHistoryCha
             tickLine={false}
             axisLine={{ stroke: 'rgba(100,116,139,0.4)' }}
             label={{
-              value: 'Raw / 38',
+              value: 'Criteria score / 38',
               angle: -90,
               position: 'insideLeft',
               style: { fontSize: 10, fontWeight: 700, fill: '#64748b' },
@@ -138,7 +147,7 @@ export function BandHistoryChart({ data, targetBand, className }: BandHistoryCha
             formatter={(value, name) => {
               const num = typeof value === 'number' ? value : Number(value ?? 0);
               const key = String(name ?? '');
-              if (key === 'Raw') return [`${num} / 38`, 'Raw'];
+              if (key === 'Criteria score') return [`${num} / 38`, 'Criteria score'];
               if (key === 'Trend') return [num.toFixed(1), 'Trend'];
               return [String(value ?? ''), key];
             }}
@@ -146,8 +155,8 @@ export function BandHistoryChart({ data, targetBand, className }: BandHistoryCha
               const point = payload?.[0]?.payload as BandHistoryDataPoint | undefined;
               if (!point) return String(label ?? '');
               const parts = [point.date];
-              if (point.letterType) parts.push(point.letterType);
-              if (point.isRevision) parts.push('revision');
+              const letterType = point.letterType ? LETTER_TYPE_LABEL[point.letterType] : undefined;
+              if (letterType) parts.push(letterType);
               return parts.join(' · ');
             }}
           />
@@ -162,7 +171,7 @@ export function BandHistoryChart({ data, targetBand, className }: BandHistoryCha
           <Line
             type="monotone"
             dataKey="rawTotal"
-            name="Raw"
+            name="Criteria score"
             stroke="rgba(99,102,241,0.95)"
             strokeWidth={2.5}
             dot={{ r: 3, strokeWidth: 1.5 }}

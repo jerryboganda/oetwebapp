@@ -1,4 +1,5 @@
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Endpoints;
@@ -115,17 +116,15 @@ public static class WritingSubmissionEndpoints
         })
         .WithName("GetWritingSubmissionVoiceNote");
 
-        group.MapPost("/{id:guid}/revise", async (
-            Guid id,
-            WritingReviseRequest request,
-            HttpContext http,
-            IWritingSubmissionService service,
-            CancellationToken ct) =>
+        // Retired (owner handoff, 6 Oct 2026): a second try is a fresh attempt via "Practice this again".
+        // Kept mapped as a hard-disabled stub so a stale cached client gets a clear 409 instead of a bare
+        // 404: no body binding, no AI rate limiter, no service call, nothing is graded or charged.
+        group.MapPost("/{id:guid}/revise", () =>
         {
-            var revision = await service.ReviseSubmissionAsync(http.WritingV2UserId(), id, request, ct);
-            return revision is null ? Results.NotFound() : Results.Created($"/v1/writing/submissions/{revision.Id}", revision);
+            throw ApiException.Conflict(
+                "writing_revise_retired",
+                "This option is no longer available. To try this task again, start a new attempt from the task page.");
         })
-        .RequireRateLimiting("AiScoring")
         .WithName("ReviseWritingSubmission");
 
         group.MapPost("/{id:guid}/dispute-violation", async (

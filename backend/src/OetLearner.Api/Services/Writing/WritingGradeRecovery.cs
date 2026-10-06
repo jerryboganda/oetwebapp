@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Writing.Review;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -49,6 +50,11 @@ public static class WritingGradeRecovery
             => new(WritingGradeFailureCodes.ManualReview, Retryable: false, AutoRetry: false),
         "writing_submission_too_long"
             => new(WritingGradeFailureCodes.LetterInvalid, Retryable: false, AutoRetry: false),
+        // Secondary reviewer unavailable: the primary result and credit hold stay on the letter
+        // (ProviderResultJson), so every re-queue resumes the review for free. Explicit although the
+        // default arm says the same, so a future change to the default cannot silently drop the hold.
+        WritingReviewHold.UnavailableCode
+            => new(WritingGradeFailureCodes.GradingDelayed, Retryable: true, AutoRetry: true),
         _ => new(WritingGradeFailureCodes.GradingDelayed, Retryable: true, AutoRetry: true),
     };
 

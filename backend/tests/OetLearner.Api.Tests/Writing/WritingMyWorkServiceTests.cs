@@ -27,6 +27,7 @@ public sealed class WritingMyWorkServiceTests
         var freshGrading = AddSubmission(db, TaskB, WritingSubmissionStatuses.Grading, minutesAgo: 20, claimedMinutesAgo: 5);
         var staleGrading = AddSubmission(db, TaskA, WritingSubmissionStatuses.Grading, minutesAgo: 30, claimedMinutesAgo: 26);
         var revision = AddSubmission(db, TaskA, WritingSubmissionStatuses.Graded, minutesAgo: 35, isRevision: true);
+        var held = AddSubmission(db, TaskB, WritingSubmissionStatuses.Graded, minutesAgo: 5);                // graded inside the 15-minute release window
         AddSubmission(db, TaskA, WritingSubmissionStatuses.Graded, minutesAgo: 1, mode: "mock");             // mock: never listed
         AddSubmission(db, TaskA, WritingSubmissionStatuses.Graded, minutesAgo: 1, userId: "someone-else");   // another learner
         var practiceDraft = AddDraft(db, TaskB, "practice", minutesAgo: 10);
@@ -44,18 +45,25 @@ public sealed class WritingMyWorkServiceTests
         var result = await Service(db).ListAsync(User, limit: null, before: null, default);
 
         Assert.False(result.HasMore);
+        Assert.Equal(Now, result.ServerNow);
+        // Revise & Resubmit is retired: a leftover revision draft is never listed or resumed.
         Assert.Equal(
-            new[] { $"draft:{practiceDraft}", $"draft:{revisionDraft}", $"submission:{freshGrading}", $"submission:{staleGrading}",
+            new[] { $"submission:{held}", $"draft:{practiceDraft}", $"submission:{freshGrading}", $"submission:{staleGrading}",
                 $"submission:{revision}", $"submission:{failed}", $"submission:{graded}", $"submission:{queued}" },
             result.Items.Select(i => i.Key));
+        Assert.DoesNotContain(result.Items, i => i.Key == $"draft:{revisionDraft}");
         var byKey = result.Items.ToDictionary(i => i.Key);
 
         var draft = byKey[$"draft:{practiceDraft}"];
         Assert.Equal(("draft", "active", "Task B", "LT-UR", 5, "writing", (int?)1200), (draft.State, draft.RawStatus, draft.Title, draft.LetterType, draft.WordCount, draft.Phase, draft.WritingSecondsRemaining));
         Assert.Equal(Action("resume", $"/writing/practice/session/{TaskB}"), Assert.Single(draft.Actions));
-        // A revision draft resumes on the latest graded letter of its task.
-        Assert.Equal(Action("resume", $"/writing/submissions/{revision}/revise"), Assert.Single(byKey[$"draft:{revisionDraft}"].Actions));
-        Assert.True(byKey[$"draft:{revisionDraft}"].IsRevision);
+        Assert.Null(draft.ReleaseState);
+
+        // Graded 5 minutes ago: still "being assessed" - never open_result, countdown anchored to SubmittedAt + 15 min.
+        var heldItem = byKey[$"submission:{held}"];
+        Assert.Equal(("grading", "grading", false, "held"), (heldItem.State, heldItem.RawStatus, heldItem.CanRetry, heldItem.ReleaseState));
+        Assert.Equal(Now.AddMinutes(10), heldItem.ReleaseAt);
+        Assert.Equal(new[] { Action("wait", $"/writing/submissions/{held}/grading"), Action("view_letter", $"/writing/submissions/{held}") }, heldItem.Actions);
 
         var gradedItem = byKey[$"submission:{graded}"];
         Assert.Equal(("graded", false, true), (gradedItem.State, gradedItem.CanRetry, gradedItem.IsFreeSample));
@@ -75,6 +83,24 @@ public sealed class WritingMyWorkServiceTests
 
         // No letter text anywhere in the payload.
         Assert.DoesNotContain("SECRET LETTER", JsonSerializer.Serialize(result));
+    }
+
+    [Fact]
+    public async Task List_AnAllowlistedAccount_IsNeverHeld()
+    {
+        await using var db = await SeedAsync();
+        db.Users.Add(new LearnerUser
+        {
+            Id = User, DisplayName = "Owner", Email = "drahmedhesham.work@gmail.com", AccountStatus = "active",
+            CreatedAt = Now, LastActiveAt = Now,
+        });
+        var justGraded = AddSubmission(db, TaskA, WritingSubmissionStatuses.Graded, minutesAgo: 1);
+        await db.SaveChangesAsync();
+
+        var item = Assert.Single((await Service(db).ListAsync(User, limit: null, before: null, default)).Items);
+
+        Assert.Equal(($"submission:{justGraded}", "graded", "released", (DateTimeOffset?)null), (item.Key, item.State, item.ReleaseState, item.ReleaseAt));
+        Assert.Equal("open_result", item.Actions[0].Kind);
     }
 
     [Fact]

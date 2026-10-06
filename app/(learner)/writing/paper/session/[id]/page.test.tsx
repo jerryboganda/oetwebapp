@@ -142,6 +142,38 @@ describe('Paper session grading watch', () => {
     expect(assign).toHaveBeenCalledWith('/writing/submissions/sub-1/results');
   });
 
+  it('shows the release countdown and notice, and opens results only once the server releases the held letter', async () => {
+    let releaseMs = 0;
+    const view = (status: string, releaseState: string) => ({
+      id: 'sub-1',
+      status,
+      releaseState,
+      releaseAt: new Date(releaseMs).toISOString(),
+      serverNow: new Date().toISOString(),
+    });
+    api.createWritingSubmission.mockImplementation(async () => {
+      releaseMs = Date.now() + 30_000;
+      return view('queued', 'processing');
+    });
+    // The server holds a finished letter ('grading' status, 'held' state) until its release time.
+    api.getWritingSubmission.mockImplementation(async () =>
+      Date.now() >= releaseMs ? { id: 'sub-1', status: 'graded', releaseState: 'released' } : view('grading', 'held'));
+    await submitLetter();
+
+    const overlay = screen.getByTestId('writing-paper-grading');
+    expect(overlay).toHaveTextContent('writing.release.notice');
+    expect(screen.getByRole('timer')).toBeInTheDocument();
+    expect(overlay).not.toHaveTextContent('writing.paper.grading.submittedBody');
+
+    // Held: sparse polling, and never a redirect before the release time.
+    await advance(29_000);
+    expect(assign).not.toHaveBeenCalled();
+
+    // The poll lands just after the release time and opens the result.
+    await advance(3_000);
+    expect(assign).toHaveBeenCalledWith('/writing/submissions/sub-1/results');
+  });
+
   it('shows the delayed state while the server retries by itself', async () => {
     api.getWritingSubmission.mockResolvedValue({ id: 'sub-1', status: 'queued', autoRetrying: true, failureCode: 'grading_delayed' });
     await submitLetter();

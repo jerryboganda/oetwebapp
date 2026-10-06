@@ -300,7 +300,8 @@ public sealed class WritingRev8GraderAlignmentTests : IAsyncDisposable
             GradingTier = "express",
             InputSource = "typed",
             StartedAt = now,
-            SubmittedAt = now,
+            // Past the 15-minute result-release window, so the seeded result reads as released.
+            SubmittedAt = now.AddHours(-1),
             CreatedAt = now,
         });
         _db.WritingAssessmentReportsV11.Add(new WritingAssessmentReportV11

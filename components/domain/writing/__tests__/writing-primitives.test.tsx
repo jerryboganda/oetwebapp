@@ -130,6 +130,7 @@ describe('writing UI primitives', () => {
     );
 
     expect(screen.getByLabelText('Readiness score widget')).toHaveTextContent('92');
+    expect(screen.getByLabelText('Readiness score widget')).not.toHaveTextContent(/canon/i);
     expect(screen.getByText('Exam-ready')).toBeInTheDocument();
     expect(screen.getByText('+3 vs last week')).toBeInTheDocument();
     // The predicted band label and value render in separate elements, so match on
@@ -146,11 +147,11 @@ describe('writing UI primitives', () => {
     );
   });
 
-  it('opens the canon violation link and supports optimistic dispute feedback', async () => {
+  it('shows a plain severity with no rule id or link, and supports optimistic dispute feedback', async () => {
     const user = userEvent.setup();
     const onDispute = vi.fn().mockResolvedValue(undefined);
 
-    render(
+    const { container } = render(
       <CanonViolationCard
         violation={{
           id: 'violation-1',
@@ -170,8 +171,11 @@ describe('writing UI primitives', () => {
       />,
     );
 
-    expect(screen.getByRole('link', { name: /r09.2/i })).toHaveAttribute('href', '/writing/canon/R09.2');
-    expect(screen.getByText('Medium severity')).toBeInTheDocument();
+    // The rule id is internal: no link to the rule library and no id text on the card.
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/R09\.2/);
+    expect(screen.getByText('Major')).toBeInTheDocument();
+    expect(screen.getByText('Avoid direct reference to the patient.')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Mark this detection as incorrect' }));
 

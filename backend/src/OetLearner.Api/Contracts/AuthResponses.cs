@@ -14,7 +14,11 @@ public sealed record CurrentUserResponse(
     string[]? AdminPermissions = null,
     string? ActiveProfessionId = null,
     string? ActiveProfessionLabel = null,
-    string? AvatarUrl = null);
+    string? AvatarUrl = null,
+    // True only for the permanent Writing allowlist (result release + copy/paste exemption); omitted from
+    // the JSON for every other account, so an ordinary candidate's payload never carries the field.
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    bool? WritingUnrestricted = null);
 
 public sealed record AuthSessionResponse(
     string AccessToken,

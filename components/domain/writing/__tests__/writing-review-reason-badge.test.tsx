@@ -11,6 +11,8 @@ describe('reviewReasonLabels', () => {
     expect(reviewReasonLabels('finding_valid_alternative')).toEqual(['Possible valid alternative']);
     expect(reviewReasonLabels('verify_flag')).toEqual(['Cited finding unsupported']);
     expect(reviewReasonLabels('guard_block')).toEqual(['Flagged submission']);
+    expect(reviewReasonLabels('rv_override')).toEqual(['Reviewer overrode a critical finding']);
+    expect(reviewReasonLabels('rv_unresolved')).toEqual(['High score could not be verified']);
   });
 
   it('keeps stored order for a merged list and drops duplicate labels', () => {

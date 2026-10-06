@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import {
   CATEGORIES, CATEGORY_LETTER_TYPE, CONTRACT_GROUPS, CORRECTIONS_PREVIEW, CREDITS_PER_LETTER, EMPTY_MODEL, FALLBACK_LETTER_TYPES,
   GRADING_STEP_MODEL_ANSWER, HANDOFF_PROFESSIONS, LEDGER, PROFESSION_ALIASES, PROVIDERS, RESULT_SECTION_ORDER,
-  RESULT_SECTIONS_REQUIRED,
+  RESULT_SECTION_PRIORITIES, RESULT_SECTIONS_REQUIRED,
 } from './contract.mjs';
 
 export const STATUSES = ['PASS', 'FAIL', 'PARTIAL', 'NOT_RUN', 'BLOCKED', 'VOID_DEPLOY', 'NOT_ENABLED'];
@@ -330,7 +330,7 @@ export function creditPreflight(snapshot, entitlement, { letters, kind = 'paid',
  * The settled credit rule for ONE letter, judged on the ledger rows created during the test.
  * paid: exactly one 2-credit GradingDeduct at task open under writing-v2:{userId}:{scenarioId}:{n}; grading
  * adopts it (no second debit under writing-grade:...); no release/refund row; Retry costs 0.
- * revision: exactly one 2-credit debit at grade time under writing-grade:{submissionId}.
+ * "Practice this again" is just another paid letter (a new task-open debit under its own reference).
  * free_sample: no credit moves at all.
  * @param {any} input { kind, userId, scenarioId, submissionId, before, after, steps? }
  *   before/after = admin credit snapshots taken before the task was opened and at the end of the test;
@@ -350,10 +350,6 @@ export function creditVerdict(input) {
     const starts = moving.filter((t) => startRef.test(String(t.referenceId ?? '')));
     if (starts.length !== 1) problems.push(`${starts.length} task-open debit row(s), expected exactly 1 under writing-v2:${userId}:${scenarioId}:n`);
     if (starts.some((t) => t.reason !== LEDGER.debit || creditRowDelta(t) !== expected)) problems.push('the task-open debit is not one 2-credit GradingDeduct');
-  }
-  if (kind === 'revision') {
-    const grades = moving.filter((t) => hex(t.referenceId) === hex(gradeRef));
-    if (grades.length !== 1 || creditRowDelta(grades[0]) !== expected) problems.push(`a revision must be one 2-credit debit under ${gradeRef}`);
   }
   if (kind === 'paid' && moving.some((t) => String(t.referenceId ?? '').toLowerCase().startsWith(LEDGER.gradePrefix))) problems.push('a second debit was taken at grading (writing-grade:... reference)');
   if (fresh.some((t) => /:release$/i.test(String(t.referenceId ?? '')) || t.reason === LEDGER.refund)) problems.push('a release/refund row exists (a failed grade must hold the credit)');
@@ -552,9 +548,10 @@ export function gradingStepsProblems(steps) {
   return problems;
 }
 
-export function sectionOrderProblems(sections) {
+export function sectionOrderProblems(sections, { prioritiesRequired = false } = {}) {
   const problems = [];
-  for (const s of RESULT_SECTIONS_REQUIRED) if (!sections.includes(s)) problems.push(`report section "${s}" is missing`);
+  const required = prioritiesRequired ? [...RESULT_SECTIONS_REQUIRED, RESULT_SECTION_PRIORITIES] : RESULT_SECTIONS_REQUIRED;
+  for (const s of required) if (!sections.includes(s)) problems.push(`report section "${s}" is missing`);
   const dupes = sections.filter((s, i) => sections.indexOf(s) !== i);
   if (dupes.length) problems.push(`report section(s) repeated: ${[...new Set(dupes)].join(', ')}`);
   const known = sections.filter((s) => RESULT_SECTION_ORDER.includes(s));
@@ -586,16 +583,62 @@ export function reportTextProblems(text, hrefs = []) {
   if (/appeal/i.test(String(text ?? ''))) problems.push('the report mentions an appeal');
   if (/exemplar/i.test(String(text ?? ''))) problems.push('the report shows the word "Exemplar"');
   if (hrefs.some((h) => /\/appeal(\b|$)/i.test(String(h)))) problems.push('the report links to /appeal');
+  if (/revise\s*(?:&|and)\s*resubmit/i.test(String(text ?? ''))) problems.push('the report offers Revise & Resubmit');
+  if (hrefs.some((h) => /\/revise(\b|$)/i.test(String(h)))) problems.push('the report links to /revise');
   return problems;
 }
 
 // Owner review 5 Oct 2026: three different priorities, short criterion cards, no internal labels, no "Exemplar".
+// Owner directive 6 Oct 2026: no internal rule/check id, provider tag or debug term reaches the candidate at all.
 export const SUMMARY_MAX_CHARS = 240;
 export const PRIORITY_MAX_CHARS = 220;
 export const CARD_MAX_CHARS = 900;
-const LEAK_SAMPLE = { ruleLabel: /^R\d{1,2}[:.]\s?\S{0,12}/, ruleId: /\([A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d[^)]{0,24}/, affects: /This affects[^.]{0,28}/, exemplar: /[Ee]xemplar/ };
-const LEAK_KINDS = { ruleLabel: /^R\d{1,2}[:.]/, ruleId: /\([A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d/, affects: /This affects/, exemplar: /[Ee]xemplar/ };
+// Internal id families (rulebook ids, registry check ids, grader pseudo-ids). Case-sensitive; no generic pattern,
+// so clinical tokens such as B-12 are never flagged.
+const INTERNAL_ID = new RegExp(String.raw`\b(?:BUILTIN\.[A-Za-z0-9_]+|AI[.:][A-Za-z0-9_.-]*[A-Za-z0-9_]|(?:G|DH|OWN|[A-Z]{2,4})-W-\d{1,3}|[A-Z]{2,4}-[A-Z]{1,4}-\d{1,3}|OW-\d{1,3}|OA\d?-\d{1,3}|R\d{1,2}\.\d{1,3})(?![\w-])`);
+const CHECK_ID = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/;
+const PROVIDER_TAG = /\b(?:writing-claude-sub|claude(?:-[\w.]+)*|gpt-[\w.]+|openai|anthropic|codex|typesafe|jev)\b/i;
+const DEBUG_TERM = /\b(?:firewall|validator|rule engine|rulebook|parser|deterministic|Blocked by|release gate)\b/i;
+const LEAK_SAMPLE = {
+  ruleLabel: /^R\d{1,2}[:.]\s?\S{0,12}/, ruleId: /\([A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d[^)]{0,24}/, affects: /This affects[^.]{0,28}/, exemplar: /[Ee]xemplar/,
+  internalId: INTERNAL_ID, checkId: CHECK_ID, providerTag: PROVIDER_TAG, debugTerm: DEBUG_TERM,
+};
+const LEAK_KINDS = {
+  ruleLabel: /^R\d{1,2}[:.]/, ruleId: /\([A-Z]{1,4}\d?(?:-[A-Z]{1,3})?-\d/, affects: /This affects/, exemplar: /[Ee]xemplar/,
+  internalId: INTERNAL_ID, checkId: CHECK_ID, providerTag: PROVIDER_TAG, debugTerm: DEBUG_TERM,
+};
 const PRIORITY_LABEL = /^(?:AI(?:[.:][\w.-]*)?|[\w-]*[\d._-][\w.-]*):\s+/;
+// Server-written free text of the candidate payloads. The candidate's own wording (candidateWording, quote,
+// snippet, letter and model-answer text) is verbatim and is never inspected.
+const FREE_TEXT_KEYS = new Set([
+  'whyItMatters', 'correction', 'category', 'summary', 'strengthObservation', 'limitationObservation', 'improvementAction',
+  'explanation', 'feedback', 'exemplarFix', 'ruleText', 'suggestedFix', 'scoreLabel', 'confidenceLabel',
+  'topPriorities', 'topThreePriorities', 'strengths', 'studyPlan', 'whyThisWorks',
+]);
+function candidateFreeText(node, out = []) {
+  if (Array.isArray(node)) node.forEach((n) => candidateFreeText(n, out));
+  else if (node && typeof node === 'object') {
+    for (const [key, value] of Object.entries(node)) {
+      if (!FREE_TEXT_KEYS.has(key)) candidateFreeText(value, out);
+      else if (typeof value === 'string') out.push(value);
+      else if (Array.isArray(value)) value.forEach((v) => (typeof v === 'string' ? out.push(v) : candidateFreeText(v, out)));
+    }
+  }
+  return out;
+}
+// Fields the candidate API keeps for one release but must now send blank: any value is a leak.
+const filled = (v) => (Array.isArray(v) ? v.length > 0 : v != null && String(v).trim() !== '');
+function neutralisedLeakKeys(grade, report) {
+  const keys = [
+    ...(report?.errors ?? []).flatMap((e) => ['ruleSource', 'provenanceTag', 'candidateBehavior', 'location'].filter((k) => filled(e[k])).map((k) => `error.${k}`)),
+    ...['rulePackVersion', 'modelVersion', 'calibrationSetVersion', 'blockingCodes', 'confidenceRange'].filter((k) => filled(report?.[k])).map((k) => `report.${k}`),
+    ...['modelUsed', 'canonVersion'].filter((k) => filled(grade?.[k])).map((k) => `grade.${k}`),
+    ...['c1', 'c2', 'c3', 'c4', 'c5', 'c6'].filter((k) => filled(grade?.perCriterion?.[k]?.citedRuleIds)).map((k) => `grade.perCriterion.${k}.citedRuleIds`),
+    ...(grade?.revisionInvite ? ['grade.revisionInvite'] : []),
+    ...(String(grade?.confidenceFlag ?? '') === 'jev_review' ? ['grade.confidenceFlag'] : []),
+  ];
+  return [...new Set(keys)];
+}
 const CRITERION_CODES = ['purpose', 'content', 'conciseness_clarity', 'genre_style', 'organisation_layout', 'language'];
 const C_KEYS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
 
@@ -607,20 +650,30 @@ const C_KEYS = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
 export function reportShapeFacts(grade, report) {
   const errors = report?.errors ?? [];
   const severities = (name) => errors.filter((e) => String(e.severity).toLowerCase() === name).length;
-  const priorities = (report?.topPriorities ?? []).map((p) => String(p).replace(PRIORITY_LABEL, '').trim());
+  // The server now sends label-free priorities, so a raw label is itself a leak; the strip only keeps counts honest.
+  const rawPriorities = (report?.topPriorities ?? []).map((p) => String(p));
+  const priorities = rawPriorities.map((p) => p.replace(PRIORITY_LABEL, '').trim());
   const summaries = (report?.criteria ?? []).map((c) => String(c.summary ?? ''));
   const feedback = C_KEYS.map((k) => String(grade?.perCriterion?.[k]?.feedback ?? ''));
-  const leakTexts = [...priorities, ...summaries, ...feedback, ...errors.flatMap((e) => [e.whyItMatters, e.correction])].map((t) => String(t ?? ''));
+  const leakTexts = candidateFreeText({ grade, report }).map((t) => String(t ?? ''));
   const summaryOf = (code) => String((report?.criteria ?? []).find((c) => c.criterionCode === code)?.summary ?? '').trim();
+  // A Purpose priority repeats the opening of a Purpose correction's explanation (the server sends no ids to match on).
+  const purposeReasons = errors.filter((e) => e.primaryCriterionCode === 'purpose').map((e) => String(e.whyItMatters ?? '').toLowerCase().slice(0, 40)).filter(Boolean);
+  const neutralised = neutralisedLeakKeys(grade, report);
   return {
     errorsCount: errors.length, critical: severities('critical'), major: severities('major'), minor: severities('minor'),
+    advisory: severities('advisory') + severities('info'),
+    // Scored = anything that is not coaching only (advisory never takes a priority slot).
+    scoredCorrections: errors.length - severities('advisory') - severities('info'),
+    rawPriorityLabels: rawPriorities.filter((p) => PRIORITY_LABEL.test(p)).length,
+    neutralisedLeaks: neutralised.length, neutralisedLeakKeys: neutralised.slice(0, 8),
     priorityCount: priorities.length, distinctPriorities: new Set(priorities.map((p) => p.toLowerCase())).size,
     maxPriorityChars: Math.max(0, ...priorities.map((p) => p.length)),
     maxSummaryChars: Math.max(0, ...summaries.map((t) => t.length)),
     maxFeedbackChars: Math.max(0, ...feedback.map((t) => t.length)),
     criteriaWithFindings: CRITERION_CODES.filter((code) => errors.some((e) => e.primaryCriterionCode === code)).length,
     criteriaMissingSummary: CRITERION_CODES.filter((code) => errors.some((e) => e.primaryCriterionCode === code) && !summaryOf(code)).length,
-    purposePriorities: (report?.topPriorities ?? []).filter((p) => errors.some((e) => e.primaryCriterionCode === 'purpose' && String(p).startsWith(`${e.ruleSource}: `))).length,
+    purposePriorities: priorities.filter((p) => purposeReasons.some((reason) => p.toLowerCase().startsWith(reason))).length,
     leakKinds: Object.fromEntries(Object.entries(LEAK_KINDS).map(([kind, re]) => [kind, leakTexts.filter((t) => re.test(t)).length])),
     // The matched fragment only (a rule id / the "This affects ..." note), at most 40 chars: never letter or case-note text.
     leakSamples: Object.fromEntries(Object.entries(LEAK_SAMPLE).map(([kind, re]) => [kind, leakTexts.map((t) => re.exec(t)?.[0]?.slice(0, 40)).filter(Boolean).slice(0, 2)])),
@@ -631,14 +684,16 @@ export function reportShapeFacts(grade, report) {
 export function reportShapeProblems(f) {
   const problems = [];
   if (f.priorityCount > 3) problems.push(`${f.priorityCount} top priorities, expected at most 3`);
-  if (f.errorsCount > 0 && f.priorityCount === 0) problems.push('the report has corrections but no top priorities');
+  if (f.scoredCorrections > 0 && f.priorityCount === 0) problems.push('the report has scored corrections but no top priorities');
+  if (f.rawPriorityLabels) problems.push(`${f.rawPriorityLabels} top priorit${f.rawPriorityLabels === 1 ? 'y still carries' : 'ies still carry'} an internal label (the server must send plain text)`);
+  if (f.neutralisedLeaks) problems.push(`${f.neutralisedLeaks} internal field(s) still carry a value for candidates (${(f.neutralisedLeakKeys ?? []).join(', ')})`);
   if (f.distinctPriorities !== f.priorityCount) problems.push(`the top priorities repeat (${f.distinctPriorities} distinct of ${f.priorityCount})`);
   if (f.purposePriorities > 1) problems.push(`${f.purposePriorities} top priorities are about Purpose, expected at most 1`);
   if (f.maxPriorityChars > PRIORITY_MAX_CHARS) problems.push(`a top priority is ${f.maxPriorityChars} chars, expected at most ${PRIORITY_MAX_CHARS}`);
   if (f.maxSummaryChars > SUMMARY_MAX_CHARS) problems.push(`a criterion summary is ${f.maxSummaryChars} chars, expected at most ${SUMMARY_MAX_CHARS}`);
   if (f.maxFeedbackChars > SUMMARY_MAX_CHARS) problems.push(`a per-criterion feedback is ${f.maxFeedbackChars} chars, expected at most ${SUMMARY_MAX_CHARS}`);
   if (f.criteriaMissingSummary) problems.push(`${f.criteriaMissingSummary} criterion/criteria have findings but no summary`);
-  if (f.labelLeaks) problems.push(`${f.labelLeaks} report text(s) show an internal rule label, rule id or "Exemplar"`);
+  if (f.labelLeaks) problems.push(`${f.labelLeaks} report text(s) show an internal rule label, id, provider tag or debug term, or "Exemplar"`);
   return problems;
 }
 

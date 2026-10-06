@@ -233,8 +233,12 @@ public static class AiUsageAdminEndpoints
             var codex = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Codex;
 
             // Count the whole 3-level chain (subscription + Claude API + Codex).
+            // The secondary reviewer also lands on the Codex provider row; it is reported separately below so it is
+            // never counted as a grading fallback or as grading tokens.
+            var reviewCode = AiFeatureCodes.WritingGradeReview;
             var usage = await db.AiUsageRecords.AsNoTracking()
                 .Where(r => r.ProviderId == claude || r.ProviderId == claudeApi || r.ProviderId == codex)
+                .Where(r => r.FeatureCode != reviewCode)
                 .Where(r => r.CreatedAt >= weekAgo)
                 .GroupBy(r => r.ProviderId)
                 .Select(g => new
@@ -259,6 +263,13 @@ public static class AiUsageAdminEndpoints
                 .CountAsync(ct);
             var fallbackCountWeek = await db.AiUsageRecords.AsNoTracking()
                 .Where(r => (r.ProviderId == codex || r.ProviderId == claudeApi) && r.CreatedAt >= weekAgo)
+                .Where(r => r.FeatureCode != reviewCode)
+                .CountAsync(ct);
+            var reviewerCallsWeek = await db.AiUsageRecords.AsNoTracking()
+                .Where(r => r.FeatureCode == reviewCode && r.CreatedAt >= weekAgo)
+                .CountAsync(ct);
+            var reviewerSuccessesWeek = await db.AiUsageRecords.AsNoTracking()
+                .Where(r => r.FeatureCode == reviewCode && r.CreatedAt >= weekAgo && r.Outcome == AiCallOutcome.Success)
                 .CountAsync(ct);
 
             var claudeRow = usage.FirstOrDefault(u => u.provider == claude);
@@ -303,6 +314,8 @@ public static class AiUsageAdminEndpoints
                 gradedToday,
                 gradedWeek,
                 fallbackCountWeek,
+                reviewerCallsWeek,
+                reviewerSuccessesWeek,
                 claude = new { callsWeek = claudeRow?.callsWeek ?? 0, tokensWeek = claudeRow?.tokensWeek ?? 0L },
                 claudeApi = new
                 {

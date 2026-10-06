@@ -121,7 +121,7 @@ public class WritingResultVisibilityService(
         row.ShowMissingContent = dto.ShowMissingContent;
         row.ShowModelAnswer = dto.ShowModelAnswer;
         row.ShowContentChecklist = dto.ShowContentChecklist;
-        row.AllowRewrite = dto.AllowRewrite;
+        // AllowRewrite is retired with Revise & Resubmit: the column stays but is never written or read.
     }
 
     private static WritingResultVisibilityDto ToDto(WritingResultVisibilityConfig c) => new(
@@ -134,7 +134,6 @@ public class WritingResultVisibilityService(
         c.ShowMissingContent,
         c.ShowModelAnswer,
         c.ShowContentChecklist,
-        c.AllowRewrite,
         c.UpdatedAt);
 }
 
@@ -150,5 +149,4 @@ public record WritingResultVisibilityDto(
     bool ShowMissingContent,
     bool ShowModelAnswer,
     bool ShowContentChecklist,
-    bool AllowRewrite,
     DateTimeOffset UpdatedAt);

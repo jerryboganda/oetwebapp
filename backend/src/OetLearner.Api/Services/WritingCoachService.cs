@@ -121,6 +121,7 @@ public class WritingCoachService(
             {
                 var s = MaterialiseRuleFinding(f, session.Id, attemptId, text);
                 if (!seen.Add(SuggestionKey(f.RuleId, s.StartOffset, s.EndOffset))) continue;
+                logger.LogDebug("Writing coach rule finding {RuleId} ({Severity}) for attempt {AttemptId}", f.RuleId, f.Severity, attemptId);
                 db.WritingCoachSuggestions.Add(s);
                 session.SuggestionsGenerated++;
                 emitted.Add(s);
@@ -164,6 +165,7 @@ public class WritingCoachService(
             {
                 if (!allowedAiRuleIds.Contains(ai.RuleId)) continue;
                 if (!seen.Add(SuggestionKey(ai.RuleId, ai.StartOffset, ai.EndOffset))) continue;
+                logger.LogDebug("Writing coach AI finding {RuleId} ({Severity}) for attempt {AttemptId}", ai.RuleId, ai.Severity, attemptId);
                 var s = new WritingCoachSuggestion
                 {
                     Id = Guid.NewGuid(),
@@ -172,7 +174,7 @@ public class WritingCoachService(
                     SuggestionType = ai.Category,
                     OriginalText = ai.OriginalText,
                     SuggestedText = ai.SuggestedText,
-                    Explanation = ComposeExplanation(ai.RuleId, ai.Severity, ai.Message, ai.Rationale),
+                    Explanation = ComposeExplanation(ai.Message, ai.Rationale),
                     StartOffset = ai.StartOffset,
                     EndOffset = ai.EndOffset,
                     CreatedAt = DateTimeOffset.UtcNow,
@@ -345,7 +347,7 @@ public class WritingCoachService(
             SuggestionType = category,
             OriginalText = quote,
             SuggestedText = f.FixSuggestion ?? "",
-            Explanation = ComposeExplanation(f.RuleId, f.Severity.ToString().ToLowerInvariant(), f.Message, rationale: null),
+            Explanation = ComposeExplanation(f.Message, rationale: null),
             StartOffset = start,
             EndOffset = end,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -371,19 +373,17 @@ public class WritingCoachService(
         };
     }
 
-    private static string ComposeExplanation(string ruleId, string? severity, string? message, string? rationale)
+    // The persisted explanation is candidate-facing: plain wording only. The rule id and severity
+    // label never enter it (they are logged server-side where each finding is materialised).
+    private static string ComposeExplanation(string? message, string? rationale)
     {
-        var parts = new List<string>(4);
-        if (!string.IsNullOrWhiteSpace(ruleId))
-        {
-            parts.Add(string.IsNullOrWhiteSpace(severity)
-                ? $"[{ruleId}]"
-                : $"[{ruleId} · {severity}]");
-        }
-        if (!string.IsNullOrWhiteSpace(message)) parts.Add(message!.Trim());
-        if (!string.IsNullOrWhiteSpace(rationale)) parts.Add(rationale!.Trim());
+        var parts = new List<string>(2);
+        var cleanedMessage = OetLearner.Api.Services.Writing.WritingCandidateText.Clean(message);
+        var cleanedRationale = OetLearner.Api.Services.Writing.WritingCandidateText.Clean(rationale);
+        if (cleanedMessage.Length > 0) parts.Add(cleanedMessage);
+        if (cleanedRationale.Length > 0) parts.Add(cleanedRationale);
 
-        var text = string.Join(" ", parts);
+        var text = parts.Count == 0 ? "Please review this wording." : string.Join(" ", parts);
         return text.Length <= 512 ? text : text[..512];
     }
 

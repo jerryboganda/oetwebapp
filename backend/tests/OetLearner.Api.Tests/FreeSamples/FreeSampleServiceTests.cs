@@ -104,7 +104,8 @@ public sealed class FreeSampleServiceTests
             LetterContentHash = "hash",
             WordCount = 3,
             StartedAt = now,
-            SubmittedAt = now,
+            // Past the 15-minute result-release window, so a Graded seed reads as a released result.
+            SubmittedAt = now.AddHours(-1),
             CreatedAt = now,
             Status = status,
         });

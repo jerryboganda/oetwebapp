@@ -198,6 +198,16 @@ public static class AiFeatureRouteDefaults
         // falls through to the keyed top provider when no Anthropic key is
         // configured — so non-Anthropic deployments are untouched.
         SonnetDefault(AiFeatureCodes.WritingGrade, "Writing submission grading — official."),
+        // Secondary Writing reviewer: the reviewer pins this provider and model in its own request,
+        // so this entry only documents the route (the Codex subscription sidecar, never a paid API row).
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.WritingGradeReview,
+            PrimaryProviderCode: OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Codex,
+            PrimaryModel: OetLearner.Api.Services.Writing.WritingSubscriptionProviders.CodexModel,
+            FallbackProviderCode: null,
+            FallbackModel: null,
+            PromptCachingEnabled: false,
+            Description: "Writing secondary grade reviewer (Codex subscription, provider-pinned)."),
         SonnetDefault(AiFeatureCodes.WritingSampleScore, "Writing sample/exemplar scoring."),
         SonnetDefault(AiFeatureCodes.WritingRewriteV1, "Writing rewrite assistant — grading-adjacent quality."),
         SonnetDefault(AiFeatureCodes.WritingScenarioGenerateV1, "Writing scenario generation — grading-adjacent quality."),
@@ -291,6 +301,7 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
     public static readonly IReadOnlyList<string> KnownFeatureCodes = new[]
     {
         AiFeatureCodes.WritingGrade,
+        AiFeatureCodes.WritingGradeReview,
         AiFeatureCodes.WritingSampleScore,
         AiFeatureCodes.WritingCoachSuggest,
         AiFeatureCodes.WritingCoachExplain,

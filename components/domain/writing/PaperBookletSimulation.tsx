@@ -532,7 +532,9 @@ export function PaperBookletSimulation({
               aria-live="polite"
             >
               <p className="text-sm font-bold text-navy">{t('writing.paper.submittedTitle')}</p>
-              <p className="mt-1 text-sm text-muted">{t('writing.paper.submittedBody')}</p>
+              {/* Allowlisted accounts have no 15-minute hold, so they never see that promise. */}
+              <p className="mt-1 text-sm text-muted">{pasteExempt ? t('writing.release.finalising') : t('writing.release.notice')}</p>
+              <p className="mt-1 text-xs text-muted">{t('writing.release.savedNote')}</p>
               <Link
                 href={resultsHref}
                 className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand underline-offset-2 hover:underline"

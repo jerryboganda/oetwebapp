@@ -74,10 +74,20 @@ export type WritingEditorMode =
   | 'coached'
   | 'timed'
   | 'diagnostic'
-  | 'mock'
-  | 'revision';
+  | 'mock';
 
 export type WritingSeverity = 'high' | 'medium' | 'low';
+/**
+ * Candidate-facing severity on the Writing result (the v1.1 corrections list).
+ * Wire values are lowercase; 'advisory' is coaching only and never lowers the score.
+ */
+export type WritingCandidateSeverity = 'critical' | 'major' | 'minor' | 'advisory';
+/**
+ * Where a submission sits in the 15-minute result-release window.
+ * processing = grading/review still running · held = finished but not yet
+ * released · released = the result may be shown.
+ */
+export type WritingReleaseState = 'processing' | 'held' | 'released';
 export type WritingSubmissionStatus =
   | 'queued'
   | 'preflight'
@@ -139,12 +149,18 @@ export type WritingItemKind =
   | 'canon-refresher';
 export type WritingConfidenceFlag = 'high' | 'medium' | 'low';
 /**
- * `WritingGrade.ConfidenceFlag` as persisted: the grader's confidence band, or a
- * review state set after grading ('jev_review' = queued for a human review,
- * 'tutor_reviewed' = a tutor has reviewed it). Pre-assessment confidence
- * (tutor workspace) stays the three-level `WritingConfidenceFlag`.
+ * `WritingGrade.ConfidenceFlag` as the candidate API serves it: the grader's
+ * confidence band, or a review state ('awaiting_review' = queued for a human
+ * review, 'tutor_reviewed' = a tutor has reviewed it). Pre-assessment
+ * confidence (tutor workspace) stays the three-level `WritingConfidenceFlag`.
+ * ponytail: 'jev_review' is the pre-release wire value of 'awaiting_review';
+ * kept only so a stale API response still maps to neutral copy.
  */
-export type WritingGradeConfidenceFlag = WritingConfidenceFlag | 'jev_review' | 'tutor_reviewed';
+export type WritingGradeConfidenceFlag =
+  | WritingConfidenceFlag
+  | 'awaiting_review'
+  | 'jev_review'
+  | 'tutor_reviewed';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Onboarding & profile
@@ -320,6 +336,12 @@ export interface WritingSubmissionDto {
   autoRetrying?: boolean;
   /** Number of grading runs this submission has had. */
   attemptCount?: number;
+  /** 15-minute release window state. Absent from an old API: `status === 'graded'` then means released. */
+  releaseState?: WritingReleaseState;
+  /** When the result is released (null for unrestricted accounts and failed rows). */
+  releaseAt?: string | null;
+  /** Server clock when this response was built; anchors the countdown (never the device clock). */
+  serverNow?: string;
 }
 
 /**
@@ -335,7 +357,8 @@ export interface WritingPerCriterionFeedbackDto {
   score: number;
   feedback: string;
   exemplarFix: string | null;
-  citedRuleIds: string[];
+  /** Neutralised for candidates (always empty); the key stays for one release. Never render. */
+  citedRuleIds?: string[];
   /** The candidate's own wording the AI grader flagged (Addendum Rev8 §19.4). */
   quote?: string | null;
 }
@@ -355,13 +378,11 @@ export interface WritingGradeDto {
   perCriterion: Record<WritingCriterionCode, WritingPerCriterionFeedbackDto>;
   topThreePriorities: string[];
   confidenceFlag: WritingGradeConfidenceFlag;
-  modelUsed: string;
-  canonVersion: string;
+  /** Neutralised for candidates (empty); the key stays for one release. Never render. */
+  modelUsed?: string;
+  /** Neutralised for candidates (empty); the key stays for one release. Never render. */
+  canonVersion?: string;
   canonViolations: WritingCanonViolationDto[];
-  revisionInvite: {
-    shouldOffer: boolean;
-    reason: string;
-  };
   gradedAt: string;
 }
 
@@ -452,12 +473,18 @@ export interface WritingMyWorkItemDto {
   canRetry: boolean;
   autoRetrying: boolean;
   actions: WritingMyWorkActionDto[];
+  /** Release-window state of a submission row (null for drafts and from an old API). */
+  releaseState?: WritingReleaseState | null;
+  /** When the result is released (null for drafts, unrestricted accounts and failed rows). */
+  releaseAt?: string | null;
 }
 
 export interface WritingMyWorkDto {
   items: WritingMyWorkItemDto[];
   /** Keyset paging: pass the last item's `lastActivityAt` as `before` to fetch the next page. */
   hasMore: boolean;
+  /** Server clock when the list was built; one clock for every row's countdown. */
+  serverNow?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -613,6 +640,17 @@ export interface WritingMockSessionDto {
   readingSecondsRemaining: number;
   writingSecondsRemaining: number;
   isPractice: boolean;
+}
+
+/** GET /v1/writing/mocks/sessions/{id}/results. `grade` is null until the result is released. */
+export interface WritingMockResultsDto {
+  session: WritingMockSessionDto;
+  grade: WritingGradeDto | null;
+  status: string;
+  /** 15-minute release window state. Absent from an old API: a non-null `grade` then means released. */
+  releaseState?: WritingReleaseState;
+  releaseAt?: string | null;
+  serverNow?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1048,19 +1086,6 @@ export interface WritingResultVisibilityDto {
   showMissingContent: boolean;
   showModelAnswer: boolean;
   showContentChecklist: boolean;
-  allowRewrite: boolean;
-}
-
-/** Gated learner feedback bundle (spec §15.2). Null fields = not yet visible. */
-export interface WritingSubmissionFeedbackDto {
-  submission: WritingSubmissionDto;
-  visibility: WritingResultVisibilityDto;
-  status: 'submitted_awaiting_review' | 'ai_estimated' | 'tutor_reviewed';
-  grade: WritingGradeDto | null;
-  tutorReview: WritingTutorReviewDto | null;
-  annotations: WritingFeedbackAnnotationDto[];
-  nextSteps: string[];
-  assessmentV11: WritingAssessmentV11ReportDto | null;
 }
 
 export interface WritingAssessmentV11CriterionDto {
@@ -1077,12 +1102,16 @@ export interface WritingAssessmentV11CriterionDto {
 
 export interface WritingAssessmentV11ErrorDto {
   id: string;
-  location: string | null;
+  /** Neutralised for candidates (null); the key stays for one release. Never render. */
+  location?: string | null;
   candidateWording: string | null;
   correction: string | null;
+  /** A plain criterion label for candidates (never a rule code). */
   category: string;
-  ruleSource: string | null;
+  /** Neutralised for candidates (null); the key stays for one release. Never render. */
+  ruleSource?: string | null;
   whyItMatters: string | null;
+  /** Lowercase critical | major | minor | advisory (advisory = coaching only, no score effect). */
   severity: string;
   confidence: string;
   primaryCriterionCode: string;
@@ -1115,18 +1144,21 @@ export interface WritingAssessmentV11ReportDto {
   status: string;
   profession: string;
   letterType: string;
-  rulePackVersion: string;
-  modelVersion: string;
-  calibrationSetVersion: string;
+  /** The three version keys below are neutralised for candidates (empty); never render. */
+  rulePackVersion?: string;
+  modelVersion?: string;
+  calibrationSetVersion?: string;
   estimatedPracticeScore: number | null;
   scoreLabel: string;
   gradeBand: string | null;
   scoreRange: string | null;
   confidenceLabel: string | null;
-  confidenceRange: string | null;
+  /** Neutralised for candidates (null); never render. */
+  confidenceRange?: string | null;
   candidateNumericScoreEnabled: boolean;
   candidateReportVisible: boolean;
-  blockingCodes: string[];
+  /** Neutralised for candidates (always empty); never render. */
+  blockingCodes?: string[];
   topPriorities: string[];
   strengths: string[];
   studyPlan: string[];
@@ -1134,12 +1166,6 @@ export interface WritingAssessmentV11ReportDto {
   errors: WritingAssessmentV11ErrorDto[];
   facts: WritingAssessmentV11FactDto[];
   modelAnswer: WritingAssessmentV11ModelAnswerDto | null;
-}
-
-export interface WritingRewriteComparisonDto {
-  original: { submissionId: string; letterContent: string; grade: WritingGradeDto | null };
-  rewrite: { submissionId: string; letterContent: string; grade: WritingGradeDto | null };
-  perCriterionDelta: Partial<Record<WritingCriterionCode, number>>;
 }
 
 // ── Admin analytics (spec §16) ──

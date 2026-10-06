@@ -242,7 +242,7 @@ public sealed class WritingDraftServiceV2Tests
     }
 
     [Fact]
-    public async Task CreateSubmission_ConsumesThePracticeDraft_AndReviseConsumesTheRevisionDraft()
+    public async Task CreateSubmission_ConsumesThePracticeDraft_AndRevisionDraftsAreNoLongerWritten()
     {
         await using var db = NewDb();
         db.Users.Add(new LearnerUser
@@ -258,16 +258,16 @@ public sealed class WritingDraftServiceV2Tests
         await db.SaveChangesAsync();
         var drafts = Service(db);
         await drafts.SaveAsync(User, Scenario, "practice", Save("letter", expected: 0), default);
-        await drafts.SaveAsync(User, Scenario, "revision", Save("revised letter", expected: 0), default);
+        // Revise & Resubmit is retired: a stale client can no longer create or grow a revision draft.
+        var retired = await Assert.ThrowsAsync<ApiException>(
+            () => drafts.SaveAsync(User, Scenario, "revision", Save("revised letter", expected: 0), default));
+        Assert.Equal(("writing_revise_retired", 409), (retired.ErrorCode, retired.StatusCode));
+        Assert.False(await db.WritingDraftsV2.AnyAsync(d => d.Mode == "revision"));
         var submissions = new WritingSubmissionService(db, new SeamStub(db), NullLogger<WritingSubmissionService>.Instance, new NoHighlights());
 
         var created = await submissions.CreateSubmissionAsync(User, new WritingSubmissionCreateRequest(
             Scenario, "practice", "letter", 1, 60, "editor", null), default);
         Assert.Equal(("submitted", (Guid?)created.Id), await DraftStateAsync(db, "practice"));
-        Assert.Equal(("active", (Guid?)null), await DraftStateAsync(db, "revision"));
-
-        var revised = await submissions.ReviseSubmissionAsync(User, created.Id, new WritingReviseRequest("revised letter", 2, 60), default);
-        Assert.Equal(("submitted", (Guid?)revised!.Id), await DraftStateAsync(db, "revision"));
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────
@@ -290,7 +290,8 @@ public sealed class WritingDraftServiceV2Tests
         db.WritingSubmissions.Add(new WritingSubmission
         {
             Id = id, UserId = User, ScenarioId = Scenario, Mode = "practice", LetterContent = "submitted letter",
-            LetterContentHash = id.ToString("N"), Status = status, StartedAt = _clock.Now, SubmittedAt = _clock.Now, CreatedAt = _clock.Now,
+            // Submitted past the 15-minute release window, so a graded seed reads as a released result.
+            LetterContentHash = id.ToString("N"), Status = status, StartedAt = _clock.Now, SubmittedAt = _clock.Now.AddHours(-1), CreatedAt = _clock.Now,
         });
         await db.SaveChangesAsync();
         return id;

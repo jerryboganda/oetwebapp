@@ -174,6 +174,16 @@ describe('PaperBookletSimulation', () => {
     expect(screen.queryByText(/community-acquired pneumonia/i)).not.toBeInTheDocument();
   });
 
+  it('after submission shows the release notice and keeps the results link', () => {
+    render(<PaperBookletSimulation {...baseProps({ phase: 'completed', submitted: true })} />);
+
+    expect(screen.getByText('writing.release.notice')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'writing.paper.viewResults' })).toHaveAttribute(
+      'href',
+      '/writing/submissions/sub-1/results',
+    );
+  });
+
   it('shows the task prompt when no stimulus download path is provided', () => {
     // Explicitly-null download path behaves like the prop being absent.
     render(<PaperBookletSimulation {...baseProps({ stimulus: { downloadPath: null } })} />);

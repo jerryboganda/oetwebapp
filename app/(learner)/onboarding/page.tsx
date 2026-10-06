@@ -32,7 +32,7 @@ const STEPS = [
     description:
       'Our platform adapts to your strengths and weaknesses. Set your goals, then follow your AI-generated study plan to improve where it matters most.',
     details: [
-      'AI-powered practice tasks with instant feedback on all 4 sub-tests',
+      'AI-powered practice tasks with detailed feedback on all 4 sub-tests',
       'Expert human review available for Writing and Speaking',
       'Progress tracking with readiness estimates for your exam date',
     ],

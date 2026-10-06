@@ -10,6 +10,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cardClassName } from '@/components/ui/card';
 import { LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { WritingReleaseCountdown } from '@/components/domain/writing/WritingReleaseCountdown';
 import { formatDateTime } from '@/lib/domain/datetime';
 import { getWritingMyWork, retryWritingGrade } from '@/lib/writing/api';
 import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
@@ -44,6 +45,10 @@ const ACTION_TEST_ID: Record<WritingMyWorkActionKind, string> = {
 
 const LETTER_TYPE_CODES = new Set(['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-NM', 'LT-OT']);
 
+// An item plus the server clock of the page it came from: each page has its own
+// `serverNow`, and a row's countdown is anchored to the clock of its own page.
+type MyWorkRow = WritingMyWorkItemDto & { serverNow?: string };
+
 export interface WritingMyWorkListProps {
   /** Loaded item count, or null while loading / after a failed load (never "empty" then). */
   onCountChange?: (count: number | null) => void;
@@ -52,7 +57,7 @@ export interface WritingMyWorkListProps {
 export function WritingMyWorkList({ onCountChange }: WritingMyWorkListProps) {
   const t = useTranslations();
   const router = useRouter();
-  const [items, setItems] = useState<WritingMyWorkItemDto[] | null>(null);
+  const [items, setItems] = useState<MyWorkRow[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -68,7 +73,7 @@ export function WritingMyWorkList({ onCountChange }: WritingMyWorkListProps) {
     getWritingMyWork({ limit: PAGE_SIZE })
       .then((page) => {
         if (cancelled) return;
-        setItems(page.items);
+        setItems(page.items.map((item) => ({ ...item, serverNow: page.serverNow })));
         setHasMore(page.hasMore);
       })
       .catch(() => {
@@ -98,7 +103,10 @@ export function WritingMyWorkList({ onCountChange }: WritingMyWorkListProps) {
         // Keyset paging on a timestamp can repeat a boundary row; keep keys unique.
         setItems((prev) => {
           const seen = new Set((prev ?? []).map((item) => item.key));
-          return [...(prev ?? []), ...page.items.filter((item) => !seen.has(item.key))];
+          return [
+            ...(prev ?? []),
+            ...page.items.filter((item) => !seen.has(item.key)).map((item) => ({ ...item, serverNow: page.serverNow })),
+          ];
         });
         setHasMore(page.hasMore);
       })
@@ -187,8 +195,16 @@ export function WritingMyWorkList({ onCountChange }: WritingMyWorkListProps) {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Badge variant={STATE_BADGE[item.state]}>{stateLabels[item.state]}</Badge>
+                      {item.state === 'grading' && item.releaseAt ? (
+                        <WritingReleaseCountdown
+                          compact
+                          releaseAt={item.releaseAt}
+                          serverNow={item.serverNow}
+                          releaseState={item.releaseState}
+                          onHeldElapsed={reload}
+                        />
+                      ) : null}
                       {letterType ? <Badge variant="muted">{letterType}</Badge> : null}
-                      {item.isRevision ? <Badge variant="slate">{t('writing.submissions.detail.highlights.revision')}</Badge> : null}
                       {item.isFreeSample ? <Badge variant="violet">{t('writing.hub.freeSample.badge')}</Badge> : null}
                     </div>
                     {/* Scenario titles are OET-authored English content. */}
@@ -210,7 +226,8 @@ export function WritingMyWorkList({ onCountChange }: WritingMyWorkListProps) {
                     ) : null}
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
-                    {item.actions.map((action) => {
+                    {/* A result opens only once the server reports the row as graded (released). */}
+                    {item.actions.filter((action) => item.state !== 'grading' || action.kind !== 'open_result').map((action) => {
                       const testId = ACTION_TEST_ID[action.kind];
                       if (!testId) return null; // an action kind this client does not know yet
                       if (action.kind === 'retry') {

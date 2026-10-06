@@ -1,44 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { CircleDot, FileSearch, Sparkles, Award } from 'lucide-react';
+import { Sparkles, Award } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
+import { WritingReleaseCountdown } from '@/components/domain/writing/WritingReleaseCountdown';
 import { getWritingSubmission, retryWritingGrade } from '@/lib/writing/api';
+import { isReleased } from '@/lib/writing/release';
 import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { connectWritingSubmissionStream } from '@/lib/writing/realtime';
 import type { WritingSubmissionDto } from '@/lib/writing/types';
-
-const STEPS = [
-  { code: 'preflight', labelKey: 'writing.submissions.grading.steps.reading', icon: FileSearch },
-  { code: 'grading', labelKey: 'writing.submissions.grading.steps.scoring', icon: Sparkles },
-  { code: 'modelAnswer', labelKey: 'writing.submissions.grading.steps.modelAnswer', icon: CircleDot },
-  { code: 'ready', labelKey: 'writing.submissions.grading.steps.finalising', icon: Award },
-] as const;
-
-type StepCode = (typeof STEPS)[number]['code'];
-
-function stepIndexForStatus(status: WritingSubmissionDto['status']): number {
-  switch (status) {
-    case 'queued':
-      return 0;
-    case 'preflight':
-      return 0;
-    case 'grading':
-      return 1;
-    case 'graded':
-      return STEPS.length - 1;
-    default:
-      return 0;
-  }
-}
 
 export default function WritingSubmissionGradingPage() {
   const t = useTranslations();
@@ -48,7 +25,8 @@ export default function WritingSubmissionGradingPage() {
   const [submission, setSubmission] = useState<WritingSubmissionDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const [statusMessage, setStatusMessage] = useState(() => t('writing.submissions.grading.connecting'));
+  // Refetch hook for the countdown: set by the realtime/poll effect below.
+  const checkNow = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!submissionId) return;
@@ -57,7 +35,7 @@ export default function WritingSubmissionGradingPage() {
       .then((s) => {
         if (cancelled) return;
         setSubmission(s);
-        if (s.status === 'graded') {
+        if (isReleased(s)) {
           router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/results`);
         }
       })
@@ -87,7 +65,7 @@ export default function WritingSubmissionGradingPage() {
       .then(() => getWritingSubmission(submissionId))
       .then((s) => {
         setSubmission(s);
-        if (s.status === 'graded') {
+        if (isReleased(s)) {
           router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/results`);
         }
       })
@@ -103,30 +81,16 @@ export default function WritingSubmissionGradingPage() {
     if (!submissionId) return;
     let cancelled = false;
     let polling = false;
-    const d = connectWritingSubmissionStream(submissionId, {
-      onGradeReady: () => {
-        if (cancelled) return;
-        router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/results`);
-      },
-      onStatusChange: (s) => {
-        if (cancelled) return;
-        if (s === 'connected') setStatusMessage(t('writing.submissions.grading.listening'));
-        if (s === 'disconnected') setStatusMessage(t('writing.submissions.grading.reconnecting'));
-      },
-      onError: () => {
-        if (cancelled) return;
-        setStatusMessage(t('writing.submissions.grading.polling'));
-      },
-    });
-    // Polling fallback in case SignalR is unreachable.
-    const timer = window.setInterval(() => {
+    // Open the result only when the server says it is released; a finished but
+    // held result keeps the countdown on screen.
+    const check = () => {
       if (polling) return;
       polling = true;
       void getWritingSubmission(submissionId)
         .then((s) => {
           if (cancelled) return;
           setSubmission(s);
-          if (s.status === 'graded') {
+          if (isReleased(s)) {
             router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/results`);
           }
         })
@@ -137,15 +101,31 @@ export default function WritingSubmissionGradingPage() {
         .finally(() => {
           polling = false;
         });
-    }, 5000);
+    };
+    checkNow.current = check;
+    // A grade-ready push is only a nudge: the server decides whether it is released.
+    const d = connectWritingSubmissionStream(submissionId, {
+      onGradeReady: () => {
+        if (!cancelled) check();
+      },
+    });
+    // Polling fallback in case SignalR is unreachable.
+    const timer = window.setInterval(check, 5000);
     return () => {
       cancelled = true;
+      checkNow.current = () => {};
       d.close();
       window.clearInterval(timer);
     };
   }, [submissionId, router, t]);
 
-  const currentStepIdx = submission ? stepIndexForStatus(submission.status) : 0;
+  // The countdown applies when the server sent a release time; accounts without
+  // a hold (and failed rows) get none, so the page must not promise 15 minutes.
+  // The 15-minute notice lives only inside the countdown, which swaps it for the
+  // finalising line at zero, so no stale promise outlives the window and an
+  // account without a hold never sees it (not even before the first load).
+  const counting = Boolean(submission?.releaseAt);
+  const heroDescription = showFailure || !submission || counting ? undefined : t('writing.release.finalising');
 
   return (
     <>
@@ -154,7 +134,7 @@ export default function WritingSubmissionGradingPage() {
         icon={Sparkles}
         accent="writing"
         title={t('writing.submissions.grading.title')}
-        description={t('writing.submissions.grading.description')}
+        description={heroDescription}
         highlights={[
           {
             icon: Award,
@@ -219,36 +199,20 @@ export default function WritingSubmissionGradingPage() {
         </Card>
       ) : null}
 
-      {/* No looping pulse on the active step (WCAG 2.2.2): its tint and
-          "In progress" badge carry the state. */}
+      {/* No live region around the card: the ticking timer would be announced
+          every second. The finalising line inside the countdown is its own status. */}
       {!showFailure ? (
         <MotionSection delayIndex={0}>
-          <Card padding="lg" aria-live="polite" role="status" aria-busy={submission?.status !== 'graded'}>
-            <p className="text-sm text-muted">{statusMessage}</p>
-            <ol
-              className="mt-4 space-y-3"
-              aria-label={t('writing.submissions.grading.pipelineLabel')}
-              data-testid="writing-grading-steps"
-            >
-              {STEPS.map((step, idx) => {
-                const Icon = step.icon;
-                const active = idx === currentStepIdx;
-                const done = idx < currentStepIdx;
-                const tone = done
-                  ? 'bg-success/10 text-success-strong border-success/30'
-                  : active
-                    ? 'bg-warning/10 text-warning-strong border-warning/30'
-                    : 'bg-background-light text-muted border-border';
-                return (
-                  <li key={step.code as StepCode} className={`flex items-center gap-3 rounded-xl border p-3 ${tone}`}>
-                    <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                    <p className="min-w-0 text-sm font-bold">{t(step.labelKey)}</p>
-                    {done ? <Badge variant="success" size="sm" className="ms-auto shrink-0">{t('writing.submissions.grading.status.done')}</Badge> : null}
-                    {active ? <Badge variant="warning" size="sm" className="ms-auto shrink-0">{t('writing.submissions.grading.status.inProgress')}</Badge> : null}
-                  </li>
-                );
-              })}
-            </ol>
+          <Card padding="lg" aria-busy={!submission || !isReleased(submission)}>
+            <WritingReleaseCountdown
+              releaseAt={submission?.releaseAt}
+              serverNow={submission?.serverNow}
+              releaseState={submission?.releaseState}
+              onHeldElapsed={() => checkNow.current()}
+            />
+            {submission && !counting ? (
+              <p className="text-sm text-muted">{t('writing.release.savedNote')}</p>
+            ) : null}
             <div className="mt-4 flex justify-end">
               <Button asChild variant="outline" size="sm">
                 <Link href={`/writing/submissions/${encodeURIComponent(submissionId)}`}>

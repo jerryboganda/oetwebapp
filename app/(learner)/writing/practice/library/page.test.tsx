@@ -56,7 +56,7 @@ describe('Writing practice library', () => {
       professionId: 'medicine',
       contentId: 'sc-1',
       state: 'retry_available',
-      route: '/writing/submissions/sub-1/revise',
+      route: '/writing/practice/session/sc-1',
       limit: 2,
       successfulCount: 1,
       remaining: 1,
@@ -65,9 +65,10 @@ describe('Writing practice library', () => {
     }]);
     render(<WritingPracticeLibraryPage />);
 
+    // The second free result is a fresh attempt: the card opens the normal start route.
     const card = await screen.findByTestId('writing-library-free-sample-card');
-    expect(card).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
-    expect(card).toHaveTextContent('freeSample.writing.retryCta');
+    expect(card).toHaveAttribute('href', '/writing/practice/session/sc-1');
+    expect(card).toHaveTextContent('freeSample.writing.anotherAttempt');
     expect(mockListFreeSamples).toHaveBeenCalledWith('writing');
     expect(screen.queryByText('Free featured case note')).not.toBeInTheDocument();
   });

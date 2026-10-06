@@ -1,10 +1,10 @@
 import { apiClient } from '@/lib/api';
 
-// Free Mocks: each learner gets TWO Writing results (initial submission + revision)
-// and ONE completed Speaking attempt on the SAME designated free item of their
-// profession. Technical grading retries reuse the same Speaking attempt. The server decides
-// what is free and counts successes — this client only asks what is on offer
-// and never sends a "free" flag with any start/submit request.
+// Free Mocks: each learner gets TWO Writing results (the second is a fresh attempt
+// on the same task) and ONE completed Speaking attempt on the SAME designated free
+// item of their profession. Technical grading retries reuse the same saved attempt.
+// The server decides what is free and counts successes — this client only asks what
+// is on offer and never sends a "free" flag with any start/submit request.
 
 export type FreeSampleSubtest = 'writing' | 'speaking';
 
@@ -25,7 +25,7 @@ export interface FreeSampleOption {
   /** Writing: scenario id. Speaking: role-play card id. Null when unavailable. */
   contentId: string | null;
   state: FreeSampleState;
-  /** App route that opens the sample (server-built). Writing retry: the revise route. Null when unavailable. */
+  /** App route that opens the sample (server-built). retry_available: the normal start route (a fresh attempt). Null when unavailable. */
   route: string | null;
   /** Successful results allowed for this subtest. */
   limit: number;
@@ -33,7 +33,7 @@ export interface FreeSampleOption {
   remaining: number;
   /** Result page of the latest use, when there is one. */
   lastResultRoute: string | null;
-  /** Writing: the submission a free revision is made from. */
+  /** Writing: the latest submission of this sample. Informational only; no screen builds a route from it. */
   lastSubmissionId: string | null;
 }
 

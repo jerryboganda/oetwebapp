@@ -18,7 +18,10 @@ public sealed record WritingAssessmentRuleFinding(
     // whether it is score-bearing for a candidate or coaching-only house
     // style (the official-vs-house firewall §15.3).
     string ProvenanceTag = WritingProvenanceTags.OwnerModelAnswerCanonical,
-    string CandidateBehavior = WritingCandidateBehaviors.CoachingOnly);
+    string CandidateBehavior = WritingCandidateBehaviors.CoachingOnly,
+    // The detector's own severity before WritingCandidateSeverityPolicy calibrated it for the
+    // candidate. Admin audit only (FeatureRecordJson); never shown to a candidate.
+    string? EngineSeverity = null);
 
 /// <summary>
 /// v1.1 adapter around the deterministic Writing Rulebook engine: assigns
@@ -36,8 +39,28 @@ public sealed record WritingAssessmentRuleFinding(
 /// </summary>
 public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
 {
+    private const string DetectorErrorRuleId = "BUILTIN.internal_detector_error";
+
     public IReadOnlyList<WritingAssessmentRuleFinding> Evaluate(WritingLintInput input)
-        => ruleEngine.Lint(input).Select(ToFinding).ToList();
+    {
+        var lint = ruleEngine.Lint(input);
+        // A crashed detector is an internal fault, not a finding about the candidate's letter (and a
+        // false positive on a clean one). The engine has already logged it server-side; a Model Answer
+        // still sees it so it can never publish unreviewed.
+        var kept = input.IsModelAnswer
+            ? lint
+            : lint.Where(f => !string.Equals(f.RuleId, DetectorErrorRuleId, StringComparison.Ordinal)).ToList();
+        var findings = kept.Select(f => ToFinding(f, input.Profession)).ToList();
+        if (input.IsModelAnswer) return findings;
+
+        // Candidate lane: calibrate each severity (advisory, caps, repeats), keeping the engine's own.
+        var calibrated = WritingCandidateSeverityPolicy.CalibrateAll(
+            kept.Select((f, i) => new WritingSeverityInput(
+                ResolvedCheckId(f.RuleId, input.Profession), findings[i].Severity, FromGrader: false)).ToList());
+        return findings
+            .Select((f, i) => f with { Severity = calibrated[i], EngineSeverity = f.Severity })
+            .ToList();
+    }
 
     /// <summary>
     /// Kept for callers that still pass the case-note snapshot. Patient naming
@@ -279,15 +302,23 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
     internal static string ResolveCheckId(string? ruleId)
     {
         var id = (ruleId ?? string.Empty).Trim();
+        // "AI:<rule id>" is a rule the AI grader cited. "AI.<criterion>" (a rule-less grader finding) has
+        // no registry entry and is left as it is: an unregistered grader id.
+        if (id.StartsWith("AI:", StringComparison.OrdinalIgnoreCase)) id = id["AI:".Length..];
         if (id.StartsWith("BUILTIN.", StringComparison.OrdinalIgnoreCase)) id = id["BUILTIN.".Length..];
         if (OwnerRuleCheckIds.TryGetValue(id, out var ownerCheckId)) return ownerCheckId;
         return id;
     }
 
-    private static WritingAssessmentRuleFinding ToFinding(LintFinding finding)
+    // A legacy profession's rule-wired finding carries the rulebook rule id (R03.4), not the check id:
+    // resolve it through the rulebook first so a genuine grammar check is not read as house style.
+    private string ResolvedCheckId(string ruleId, ExamProfession profession)
+        => ruleEngine.CheckIdForRule(profession, ruleId) ?? ResolveCheckId(ruleId);
+
+    private WritingAssessmentRuleFinding ToFinding(LintFinding finding, ExamProfession profession)
     {
         var (criterion, category) = Classify(finding.RuleId);
-        var provenance = WritingRuleProvenance.For(ResolveCheckId(finding.RuleId));
+        var provenance = WritingRuleProvenance.For(ResolvedCheckId(finding.RuleId, profession));
         return new WritingAssessmentRuleFinding(
             finding.RuleId,
             category,

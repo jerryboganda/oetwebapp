@@ -17,8 +17,10 @@ import { CriterionScoreRow } from '@/components/domain/results/criterion-score-r
 import { CriteriaRadar } from '@/components/domain/writing/CriteriaRadar';
 import { BandHistoryChart } from '@/components/domain/writing/BandHistoryChart';
 import { CanonViolationCard } from '@/components/domain/writing/CanonViolationCard';
+import { WritingReleaseCountdown, releasePollDelayMs } from '@/components/domain/writing/WritingReleaseCountdown';
 import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import { getWritingAnswerSheet, getWritingMockResults, getWritingStatsBands } from '@/lib/writing/api';
+import { candidatePriorities } from '@/lib/writing/priorities';
 import { WRITING_RAW_MAX } from '@/lib/scoring';
 import { cn } from '@/lib/utils';
 import type {
@@ -26,16 +28,20 @@ import type {
   WritingCriteriaScoresDto,
   WritingCriterionCode,
   WritingGradeDto,
+  WritingMockResultsDto,
   WritingMockSessionDto,
 } from '@/lib/writing/types';
 
+/** The page keeps watching a queued/grading/held mock for up to an hour before it stops polling. */
+const RESULT_WATCH_LIMIT_MS = 60 * 60 * 1000;
+
 const CRITERION_NAMES: Record<WritingCriterionCode, string> = {
-  c1: 'C1 Purpose',
-  c2: 'C2 Content',
-  c3: 'C3 Conciseness & Clarity',
-  c4: 'C4 Genre & Style',
-  c5: 'C5 Organisation & Layout',
-  c6: 'C6 Language Accuracy',
+  c1: 'Purpose',
+  c2: 'Content',
+  c3: 'Conciseness & Clarity',
+  c4: 'Genre & Style',
+  c5: 'Organisation & Layout',
+  c6: 'Language Accuracy',
 };
 
 // C1 Purpose is out of 3, the rest out of 7; targets mirror the radar overlay.
@@ -60,6 +66,8 @@ export default function WritingMockResultsPage() {
   const [session, setSession] = useState<WritingMockSessionDto | null>(null);
   const [grade, setGrade] = useState<WritingGradeDto | null>(null);
   const [status, setStatus] = useState<string>('graded');
+  // 15-minute release window as the server last reported it (absent from an old API).
+  const [release, setRelease] = useState<Pick<WritingMockResultsDto, 'releaseState' | 'releaseAt' | 'serverNow'>>({});
   const [bandHistory, setBandHistory] = useState<WritingBandHistoryPointDto[]>([]);
   const [answerSheetPath, setAnswerSheetPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +77,7 @@ export default function WritingMockResultsPage() {
     let cancelled = false;
     let attempts = 0;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    const startedAt = Date.now();
 
     const load = () => {
       attempts++;
@@ -77,6 +86,7 @@ export default function WritingMockResultsPage() {
           if (cancelled) return;
           setSession(r.session);
           setGrade(r.grade);
+          setRelease({ releaseState: r.releaseState, releaseAt: r.releaseAt, serverNow: r.serverNow });
           // Answer-sheet PDF, resolved from the submission behind this session.
           if (r.session.submissionId) {
             void getWritingAnswerSheet(r.session.submissionId)
@@ -89,11 +99,15 @@ export default function WritingMockResultsPage() {
           setStatus(nextStatus);
           if (b) setBandHistory(b.history);
           setError(null);
-          // Keep polling until AI grading finishes (queued/preflight/grading)
-          // and while awaiting the examiner's band (human-marked path).
+          // Keep polling until AI grading finishes and the result is released
+          // (queued/preflight/grading, a held result reads 'grading'), and while
+          // awaiting the examiner's band (human-marked path). Release-aware pace:
+          // sparse while a finished result is held, landing just after its release time.
           const stillInProgress = !r.grade && ['queued', 'preflight', 'grading', 'awaiting_review'].includes(nextStatus);
-          if (stillInProgress && attempts < 120) {
-            timer = setTimeout(load, 5000);
+          // A release window (up to 15 minutes plus grading) outlasts the old 10-minute cap.
+          const withinWatch = r.releaseAt ? Date.now() - startedAt < RESULT_WATCH_LIMIT_MS : attempts < 120;
+          if (stillInProgress && withinWatch) {
+            timer = setTimeout(load, releasePollDelayMs(r, 5000));
           }
         })
         .catch((err) => {
@@ -122,7 +136,15 @@ export default function WritingMockResultsPage() {
   const delta = current && previous ? current.estimatedBand - previous.estimatedBand : null;
 
   const scores = grade ? gradeToScores(grade) : null;
+  const priorities = candidatePriorities(grade?.topThreePriorities);
 
+  // Not yet released: the server holds the result for 15 minutes after submission.
+  // A failed or cancelled mock has nothing to wait for, and an old API (no
+  // releaseState) keeps the legacy cards below.
+  const awaitingRelease =
+    !grade && !!release.releaseState && release.releaseState !== 'released' && status !== 'failed' && status !== 'cancelled';
+
+  const criteriaScoreLabel = t('writing.mocks.results.highlights.criteriaScore');
   const sectionCard = cardClassName({ padding: 'lg' });
 
   return (
@@ -137,12 +159,12 @@ export default function WritingMockResultsPage() {
           // stored in raw-total units, never a 0–7 band.
           gaugeValue={(grade.rawTotal / WRITING_RAW_MAX) * 100}
           gaugeCenter={<span className="text-2xl font-black text-navy">{grade.bandLabel}</span>}
-          gaugeLabel={`${grade.rawTotal}/38`}
+          gaugeLabel={`${criteriaScoreLabel} ${grade.rawTotal}/38`}
           // Neutral: raw marks have no inline pass mark (Writing is country-aware), and
           // the band label beside the ring already carries the result.
           gaugeColor="var(--color-primary)"
           stats={[
-            { label: t('writing.mocks.results.highlights.raw'), value: `${grade.rawTotal}/38`, tone: 'info', icon: <Award /> },
+            { label: criteriaScoreLabel, value: `${grade.rawTotal}/38`, tone: 'info', icon: <Award /> },
             {
               label: t('writing.mocks.results.highlights.delta'),
               // Whole raw marks out of 38, not a one-decimal band.
@@ -166,7 +188,26 @@ export default function WritingMockResultsPage() {
 
       {!session && !error ? <LearnerSkeleton variant="list" /> : null}
 
-      {!grade && status === 'awaiting_review' ? (
+      {awaitingRelease ? (
+        <Card padding="md" data-testid="writing-mock-release-pending">
+          <div className="flex items-start gap-3">
+            <Clock className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
+            <div className="min-w-0">
+              {release.releaseAt ? (
+                <WritingReleaseCountdown
+                  releaseAt={release.releaseAt}
+                  serverNow={release.serverNow}
+                  releaseState={release.releaseState}
+                />
+              ) : (
+                <p className="text-sm text-muted">{t('writing.release.finalising')}</p>
+              )}
+            </div>
+          </div>
+        </Card>
+      ) : null}
+
+      {!grade && !release.releaseState && status === 'awaiting_review' ? (
         <Card padding="md">
           <div className="flex items-start gap-3">
             <Clock className="mt-0.5 h-5 w-5 shrink-0 text-warning-strong" aria-hidden />
@@ -231,12 +272,12 @@ export default function WritingMockResultsPage() {
         </MotionSection>
       ) : null}
 
-      {grade?.topThreePriorities?.length ? (
+      {priorities.length ? (
         <MotionSection>
           <section className={sectionCard}>
             <h2 className="text-lg font-bold text-navy">{t('writing.mocks.results.priorities.heading')}</h2>
             <ol className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-              {grade.topThreePriorities.map((priority, idx) => (
+              {priorities.map((priority, idx) => (
                 <li key={idx} className="min-w-0">
                   <MotionItem delayIndex={Math.min(idx, 5)} className="h-full rounded-xl bg-background-light p-3">
                     <Badge variant="warning" size="sm" className="tabular-nums">#{idx + 1}</Badge>

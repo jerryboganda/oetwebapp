@@ -9,11 +9,12 @@ using OetLearner.Api.Services;
 namespace OetLearner.Api.Services.Writing;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Learner-facing gated feedback + rewrite comparison (spec §15.2 / §15.3, WS-B4
-// Section D). The result-visibility CONFIG resolver/upsert lives in
-// WritingResultVisibilityService; THIS service composes the gated learner bundle
-// (owner-checked) and the original↔rewrite delta. Every learner-visible field is
-// populated only when the corresponding visibility flag allows it.
+// Learner-facing gated feedback (spec §15.2, WS-B4 Section D). The
+// result-visibility CONFIG resolver/upsert lives in WritingResultVisibilityService;
+// THIS service composes the gated learner bundle (owner-checked). Every
+// learner-visible field is populated only when the corresponding visibility flag
+// allows it AND the result has been released (WritingResultRelease: not while the
+// 15-minute window is open).
 //
 // All response DTO record types (WritingResultVisibilityDto, WritingGradeDto,
 // WritingTutorReviewDto, WritingFeedbackAnnotationDto, WritingContentChecklistItemDto,
@@ -25,9 +26,6 @@ public interface IWritingResultFeedbackService
 {
     /// <summary>Owner-only gated feedback bundle for a submission.</summary>
     Task<WritingSubmissionFeedbackDto> GetFeedbackAsync(string userId, Guid submissionId, CancellationToken ct);
-
-    /// <summary>Owner-only original↔rewrite comparison; the submission must be a revision.</summary>
-    Task<WritingRewriteComparisonDto> GetRewriteComparisonAsync(string userId, Guid rewriteSubmissionId, CancellationToken ct);
 }
 
 public sealed class WritingResultFeedbackService(
@@ -49,11 +47,23 @@ public sealed class WritingResultFeedbackService(
         var vis = await visibility.ResolveAsync(submission.ScenarioId, ct);
         var visDto = ToVisibilityDto(vis);
 
-        var assessment = await db.WritingAssessmentReportsV11.AsNoTracking()
-            .Include(x => x.Facts)
-            .Include(x => x.Errors)
-            .Include(x => x.Criteria)
-            .SingleOrDefaultAsync(x => x.SubmissionId == submissionId, ct);
+        // Release gate: until the result is released (graded AND past the 15-minute window, or an
+        // allowlisted account) nothing the AI produced is read, mapped or returned - the bundle is the
+        // existing "submitted_awaiting_review" shell with no grade, assessment or next steps.
+        var release = WritingResultRelease.Describe(
+            submission.Status,
+            submission.SubmittedAt,
+            await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, userId, ct),
+            DateTimeOffset.UtcNow);
+        var released = release.State == WritingResultRelease.Released;
+
+        var assessment = !released
+            ? null
+            : await db.WritingAssessmentReportsV11.AsNoTracking()
+                .Include(x => x.Facts)
+                .Include(x => x.Errors)
+                .Include(x => x.Criteria)
+                .SingleOrDefaultAsync(x => x.SubmissionId == submissionId, ct);
         // Live verified task answer, never the grading-time snapshot (Rev8 §19.6).
         var modelAnswer = assessment is null
             ? null
@@ -64,12 +74,14 @@ public sealed class WritingResultFeedbackService(
             && assessment.CandidateReportVisible;
 
         // Authoritative grade for the submission (latest tutor-attached, else latest AI).
-        var grade = await db.WritingGrades
-            .AsNoTracking()
-            .Where(g => g.SubmissionId == submissionId)
-            .OrderByDescending(g => g.TutorReviewId != null)
-            .ThenByDescending(g => g.GradedAt)
-            .FirstOrDefaultAsync(ct);
+        var grade = !released
+            ? null
+            : await db.WritingGrades
+                .AsNoTracking()
+                .Where(g => g.SubmissionId == submissionId)
+                .OrderByDescending(g => g.TutorReviewId != null)
+                .ThenByDescending(g => g.GradedAt)
+                .FirstOrDefaultAsync(ct);
 
         // A submitted tutor review (any marker) — used both for the status and the gated review payload.
         var review = await db.WritingTutorReviews
@@ -86,8 +98,13 @@ public sealed class WritingResultFeedbackService(
             || (moderation is not null && string.Equals(moderation.Status, "finalized", StringComparison.Ordinal));
 
         // status: tutor_reviewed > ai_estimated (only if visible) > submitted_awaiting_review.
+        // A held / still-processing result is always submitted_awaiting_review.
         string status;
-        if (tutorFinalised)
+        if (!released)
+        {
+            status = "submitted_awaiting_review";
+        }
+        else if (tutorFinalised)
         {
             status = "tutor_reviewed";
         }
@@ -136,8 +153,9 @@ public sealed class WritingResultFeedbackService(
         }
 
         // ── Next steps (weakest criteria → short prompts) ─────────────────────────
-        var nextSteps = BuildNextSteps(gradeDto is null ? null : grade, vis);
+        var nextSteps = released ? BuildNextSteps(gradeDto is null ? null : grade, vis) : new List<string>();
 
+        // assessment is only loaded once released, so Map never sees a held result.
         WritingAssessmentV11ReportResponse? assessmentDto = assessment is null
             ? null
             : WritingAssessmentV11ResultService.Map(assessment, modelAnswer);
@@ -149,7 +167,7 @@ public sealed class WritingResultFeedbackService(
         }
 
         return new WritingSubmissionFeedbackDto(
-            MapSubmission(submission),
+            MapSubmission(submission, release.EffectiveStatus),
             visDto,
             status,
             gradeDto,
@@ -159,68 +177,9 @@ public sealed class WritingResultFeedbackService(
             assessmentDto);
     }
 
-    public async Task<WritingRewriteComparisonDto> GetRewriteComparisonAsync(string userId, Guid rewriteSubmissionId, CancellationToken ct)
-    {
-        var rewrite = await db.WritingSubmissions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == rewriteSubmissionId, ct)
-            ?? throw ApiException.NotFound("writing_submission_not_found", "Writing submission was not found.");
-        if (!string.Equals(rewrite.UserId, userId, StringComparison.Ordinal))
-        {
-            throw ApiException.Forbidden("writing_submission_forbidden", "This submission belongs to another learner.");
-        }
-        if (!rewrite.IsRevision || rewrite.OriginalSubmissionId is not { } originalId)
-        {
-            throw ApiException.Validation("writing_submission_not_a_revision", "This submission is not a rewrite of an earlier attempt.");
-        }
-
-        var original = await db.WritingSubmissions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Id == originalId, ct)
-            ?? throw ApiException.NotFound("writing_original_submission_not_found", "The original submission was not found.");
-        if (!string.Equals(original.UserId, userId, StringComparison.Ordinal))
-        {
-            throw ApiException.Forbidden("writing_submission_forbidden", "The original submission belongs to another learner.");
-        }
-
-        var originalGrade = await LatestGradeAsync(original.Id, ct);
-        var rewriteGrade = await LatestGradeAsync(rewrite.Id, ct);
-
-        // Per-criterion delta = rewrite − original, only where both grades exist.
-        var delta = new Dictionary<string, int>(StringComparer.Ordinal);
-        if (originalGrade is not null && rewriteGrade is not null)
-        {
-            delta["c1"] = rewriteGrade.C1Purpose - originalGrade.C1Purpose;
-            delta["c2"] = rewriteGrade.C2Content - originalGrade.C2Content;
-            delta["c3"] = rewriteGrade.C3Conciseness - originalGrade.C3Conciseness;
-            delta["c4"] = rewriteGrade.C4Genre - originalGrade.C4Genre;
-            delta["c5"] = rewriteGrade.C5Organisation - originalGrade.C5Organisation;
-            delta["c6"] = rewriteGrade.C6Language - originalGrade.C6Language;
-        }
-
-        return new WritingRewriteComparisonDto(
-            new WritingRewriteSideDto(
-                original.Id.ToString(),
-                original.LetterContent,
-                originalGrade is null ? null : MapGrade(originalGrade, includeCriteria: true)),
-            new WritingRewriteSideDto(
-                rewrite.Id.ToString(),
-                rewrite.LetterContent,
-                rewriteGrade is null ? null : MapGrade(rewriteGrade, includeCriteria: true)),
-            delta);
-    }
-
     // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
-
-    private async Task<WritingGrade?> LatestGradeAsync(Guid submissionId, CancellationToken ct)
-        => await db.WritingGrades
-            .AsNoTracking()
-            .Where(g => g.SubmissionId == submissionId)
-            .OrderByDescending(g => g.TutorReviewId != null)
-            .ThenByDescending(g => g.GradedAt)
-            .FirstOrDefaultAsync(ct);
 
     private static List<string> BuildNextSteps(
         WritingGrade? grade,
@@ -231,21 +190,21 @@ public sealed class WritingResultFeedbackService(
         if (grade is not null && vis.ShowFullCriteria)
         {
             // Weakest criteria first, normalised against each criterion's max (c1=3, others=7).
-            var ranked = new (string Code, string Label, double Ratio)[]
+            var ranked = new (string Label, double Ratio)[]
             {
-                ("c1", "Purpose", grade.C1Purpose / 3.0),
-                ("c2", "Content", grade.C2Content / 7.0),
-                ("c3", "Conciseness", grade.C3Conciseness / 7.0),
-                ("c4", "Genre/format", grade.C4Genre / 7.0),
-                ("c5", "Organisation", grade.C5Organisation / 7.0),
-                ("c6", "Language", grade.C6Language / 7.0),
+                ("Purpose", grade.C1Purpose / 3.0),
+                ("Content", grade.C2Content / 7.0),
+                ("Conciseness", grade.C3Conciseness / 7.0),
+                ("Genre/format", grade.C4Genre / 7.0),
+                ("Organisation", grade.C5Organisation / 7.0),
+                ("Language", grade.C6Language / 7.0),
             }
             .OrderBy(x => x.Ratio)
             .ToArray();
 
             foreach (var weak in ranked.Where(x => x.Ratio < 0.75).Take(2))
             {
-                steps.Add($"Focus on {weak.Label} ({weak.Code.ToUpperInvariant()}), your weakest criterion this attempt.");
+                steps.Add($"Focus on {weak.Label}, your weakest criterion this attempt.");
             }
         }
 
@@ -259,14 +218,15 @@ public sealed class WritingResultFeedbackService(
 
     // ── Mapping (mirrors WritingMarkingEndpoints camelCase DTOs) ────────────────
 
-    private static WritingSubmissionSummaryDto MapSubmission(WritingSubmission s)
+    /// <param name="effectiveStatus">The learner-facing status: a graded letter inside its release window reads as grading.</param>
+    private static WritingSubmissionSummaryDto MapSubmission(WritingSubmission s, string effectiveStatus)
         => new(
             s.Id.ToString(),
             s.ScenarioId.ToString(),
             s.UserId,
             s.LetterContent,
             s.WordCount,
-            s.Status,
+            effectiveStatus,
             s.SubmittedAt.ToString("o"));
 
     private static WritingGradeDto MapGrade(WritingGrade g, bool includeCriteria)
@@ -282,7 +242,44 @@ public sealed class WritingResultFeedbackService(
             g.RawTotal,
             g.EstimatedBand.ToString(),
             g.BandLabel,
-            includeCriteria ? DeserializeStringMap(g.PerCriterionFeedbackJson) : new Dictionary<string, string>());
+            includeCriteria ? ReadCriterionFeedback(g.PerCriterionFeedbackJson) : new Dictionary<string, string>());
+
+    /// <summary>
+    /// Criterion key to plain feedback text. The grader stores one object per criterion
+    /// (<c>score</c>, <c>feedback</c>, citation fields), a tutor-authored grade stores plain strings:
+    /// both read as text, and only the feedback sentence (cleaned of internal labels) reaches the candidate.
+    /// </summary>
+    private static Dictionary<string, string> ReadCriterionFeedback(string? json)
+    {
+        var map = new Dictionary<string, string>();
+        if (string.IsNullOrWhiteSpace(json)) return map;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return map;
+            foreach (var criterion in doc.RootElement.EnumerateObject())
+            {
+                string? text = null;
+                if (criterion.Value.ValueKind == JsonValueKind.String)
+                {
+                    text = criterion.Value.GetString();
+                }
+                else if (criterion.Value.ValueKind == JsonValueKind.Object
+                    && criterion.Value.TryGetProperty("feedback", out var feedback)
+                    && feedback.ValueKind == JsonValueKind.String)
+                {
+                    text = feedback.GetString();
+                }
+                var clean = WritingReportDigest.Clean(text);
+                if (clean.Length > 0) map[criterion.Name] = clean;
+            }
+        }
+        catch (JsonException)
+        {
+            // malformed stored JSON reads as no per-criterion feedback
+        }
+        return map;
+    }
 
     private static WritingTutorReviewDto MapReview(WritingTutorReview r)
         => new(
@@ -326,7 +323,6 @@ public sealed class WritingResultFeedbackService(
             c.ShowMissingContent,
             c.ShowModelAnswer,
             c.ShowContentChecklist,
-            c.AllowRewrite,
             c.UpdatedAt);
 
     // ── JSON helpers (mirror WritingMarkingEndpoints) ───────────────────────────
@@ -391,7 +387,7 @@ public sealed class WritingResultFeedbackService(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Learner gated-feedback + rewrite-comparison DTOs (mirror lib/writing/types.ts).
+// Learner gated-feedback DTO (mirrors lib/writing/types.ts).
 // WritingResultVisibilityDto / WritingGradeDto / WritingTutorReviewDto /
 // WritingFeedbackAnnotationDto / WritingContentChecklistItemDto /
 // WritingSubmissionSummaryDto are reused from existing code.
@@ -406,13 +402,3 @@ public sealed record WritingSubmissionFeedbackDto(
     IReadOnlyList<WritingFeedbackAnnotationDto> Annotations,
     IReadOnlyList<string> NextSteps,
     WritingAssessmentV11ReportResponse? AssessmentV11);
-
-public sealed record WritingRewriteSideDto(
-    string SubmissionId,
-    string LetterContent,
-    WritingGradeDto? Grade);
-
-public sealed record WritingRewriteComparisonDto(
-    WritingRewriteSideDto Original,
-    WritingRewriteSideDto Rewrite,
-    IReadOnlyDictionary<string, int> PerCriterionDelta);

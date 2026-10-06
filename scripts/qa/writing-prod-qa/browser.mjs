@@ -176,7 +176,7 @@ export async function requireContract(page, group, ms = 30_000) {
 export async function pageDiagnostics(page, shotPath) {
   if (!page || page.isClosed()) return { page: 'closed' };
   const url = new URL(page.url());
-  const sensitive = /\/writing\/(practice\/session|paper\/session|submissions\/[^/]+\/(results|revise))/.test(url.pathname);
+  const sensitive = /\/writing\/(practice\/session|paper\/session|submissions\/[^/]+\/results)/.test(url.pathname);
   const text = await page.evaluate((onlyHeadings) => {
     const raw = onlyHeadings
       ? [...document.querySelectorAll('h1, h2, [role="alert"], [role="status"], [role="dialog"] h2')].map((e) => e.innerText).join(' | ')
@@ -336,7 +336,9 @@ export async function gradeFacts(session, submissionId, typedText) {
   return {
     problems,
     facts: {
-      submissionStatus: s?.status, gradeId: g?.id ?? null, reportId: r?.id ?? null, modelUsed: g?.modelUsed ?? null,
+      // ponytail: the candidate API now blanks modelUsed, so the reuse and empty-letter notes in providerEvidence
+      // only fire when an admin read supplies it; the first-hop provider checks use the admin usage rows.
+      submissionStatus: s?.status, gradeId: g?.id ?? null, reportId: r?.id ?? null, modelUsed: g?.modelUsed || null,
       estimatedPracticeScore: r?.estimatedPracticeScore ?? null, errorsCount: (r?.errors ?? []).length, shape,
       severityMix: severityMixPartials(shape),
     },
@@ -378,7 +380,7 @@ export async function resultsUiChecks(session, submissionId, facts, { shotPrefix
   }
   if (shotPrefix) await page.locator(tid(TEST_IDS.scorePanel)).first().screenshot({ path: `${shotPrefix}-score.png` }).catch(() => undefined);
   const sections = await page.locator(tid(TEST_IDS.resultSection)).evaluateAll((els) => els.map((e) => e.getAttribute('data-section')));
-  problems.push(...sectionOrderProblems(sections));
+  problems.push(...sectionOrderProblems(sections, { prioritiesRequired: (facts.shape?.scoredCorrections ?? 0) > 0 }));
   problems.push(...scoreLabelProblems(await page.locator(tid(TEST_IDS.estimatedScore)).first().innerText().catch(() => null)));
   const answer = page.locator(tid(TEST_IDS.modelAnswer)).first();
   if (!(await answer.isVisible().catch(() => false))) problems.push('the grounded model answer is not visible');

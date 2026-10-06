@@ -22,7 +22,7 @@ namespace OetLearner.Api.Tests.FreeSamples;
 /// abandoned uses never do), a third is refused, a profession change neither
 /// resets nor moves the allowance, and two racing binds for the last slot
 /// resolve to exactly one winner. Speaking's free uses run on the shared
-/// session engine at zero credits; Writing's second is the revision.
+/// session engine at zero credits; Writing's second is a fresh attempt.
 /// </summary>
 public sealed class FreeSampleRetryPolicyTests
 {
@@ -35,26 +35,16 @@ public sealed class FreeSampleRetryPolicyTests
         return new LearnerDbContext(builder.Options);
     }
 
-    private static async Task<Guid> SeedRevisionAsync(LearnerDbContext db, string userId, Guid scenarioId, Guid originalId, string status)
-    {
-        var id = await SeedSubmissionAsync(db, userId, scenarioId, status);
-        var row = await db.WritingSubmissions.SingleAsync(s => s.Id == id);
-        row.IsRevision = true;
-        row.OriginalSubmissionId = originalId;
-        await db.SaveChangesAsync();
-        return id;
-    }
-
     private static async Task SetStatusAsync(LearnerDbContext db, Guid submissionId, string status)
     {
         (await db.WritingSubmissions.SingleAsync(s => s.Id == submissionId)).Status = status;
         await db.SaveChangesAsync();
     }
 
-    // ── Writing: the two results, the revise path, the refused third ─────────
+    // ── Writing: the two results, the fresh second attempt, the refused third ─
 
     [Fact]
-    public async Task Writing_ExactlyTwoResults_TheSecondIsTheRevision_AndAThirdIsRefused()
+    public async Task Writing_ExactlyTwoResults_TheSecondIsAFreshAttempt_AndAThirdIsRefused()
     {
         await using var db = NewDb();
         await EnableAsync(db);
@@ -79,29 +69,30 @@ public sealed class FreeSampleRetryPolicyTests
         Assert.Equal(FreeSampleService.StateRetryAvailable, retry.State);
         Assert.Equal((2, 1, 1), (retry.Limit, retry.SuccessfulCount, retry.Remaining));
         Assert.Equal(original.ToString("D"), retry.LastSubmissionId);
-        Assert.Equal($"/writing/submissions/{original:D}/revise", retry.Route);
+        // The second result is a fresh attempt on the same task: the normal start route.
+        Assert.Equal($"/writing/practice/session/{content}", retry.Route);
         Assert.Equal($"/writing/submissions/{original:D}/results", retry.LastResultRoute);
 
-        // 2nd result: Revise & Resubmit of the same letter is free (the grading
-        // pipeline passes revisions through TryClaimAsync too).
-        var revision = await SeedRevisionAsync(db, "u1", scenario, original, WritingSubmissionStatuses.Grading);
-        Assert.True(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, revision.ToString("N"), default));
-        Assert.True(await svc.IsFreeAttemptAsync("u1", "writing", revision.ToString("N"), default));
-        await SetStatusAsync(db, revision, WritingSubmissionStatuses.Graded);
+        // 2nd result: a fresh letter on the pinned task is free (the grading
+        // pipeline passes every non-mock letter through TryClaimAsync).
+        var second = await SeedSubmissionAsync(db, "u1", scenario, WritingSubmissionStatuses.Grading);
+        Assert.True(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, second.ToString("N"), default));
+        Assert.True(await svc.IsFreeAttemptAsync("u1", "writing", second.ToString("N"), default));
+        await SetStatusAsync(db, second, WritingSubmissionStatuses.Graded);
 
         var done = Assert.Single(await svc.ListAsync("u1", "writing", default));
         Assert.Equal(FreeSampleService.StateCompleted, done.State);
         Assert.Equal((2, 2, 0), (done.Limit, done.SuccessfulCount, done.Remaining));
         Assert.Null(done.Route);
-        Assert.Equal(revision.ToString("D"), done.LastSubmissionId);
+        Assert.Equal(second.ToString("D"), done.LastSubmissionId);
 
-        // 3rd: a further revision (or a fresh letter) is never free.
-        var third = await SeedRevisionAsync(db, "u1", scenario, revision, WritingSubmissionStatuses.Grading);
+        // 3rd: a further letter is never free.
+        var third = await SeedSubmissionAsync(db, "u1", scenario, WritingSubmissionStatuses.Grading);
         Assert.False(await svc.TryClaimAsync("u1", "writing", content, FreeSampleUse.KindWritingSubmission, third.ToString("N"), default));
         Assert.False(await svc.IsFreeAttemptAsync("u1", "writing", third.ToString("N"), default));
         Assert.False(await svc.IsOfferedAsync("u1", "writing", content, default));
         // A graded use stays free on re-entry (idempotent re-reads never flip it).
-        Assert.True(await svc.IsFreeAttemptAsync("u1", "writing", revision.ToString("N"), default));
+        Assert.True(await svc.IsFreeAttemptAsync("u1", "writing", second.ToString("N"), default));
         Assert.Equal(2, await db.FreeSampleUses.CountAsync());
     }
 

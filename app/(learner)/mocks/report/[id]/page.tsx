@@ -481,7 +481,7 @@ function MockReportContent() {
                       </div>
                       <div className="min-w-0">
                         <h3 className="text-base font-bold text-navy">{test.name}</h3>
-                        <p className="text-xs tabular-nums text-muted">Raw: {test.rawScore}</p>
+                        <p className="text-xs tabular-nums text-muted">{isWriting ? 'Criteria score' : 'Raw'}: {test.rawScore}</p>
                         {test.reviewState ? (
                           <p className="mt-1 tile-label text-warning-strong">
                             Review {test.reviewState.replace(/_/g, ' ')}

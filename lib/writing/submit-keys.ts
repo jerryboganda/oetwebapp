@@ -45,7 +45,7 @@ export function toCandidateSafeWritingErrorMessage(err: unknown, fallback: strin
     case 'writing_rubric_already_in_progress':
       return 'This submission is already being graded. Please wait a moment and check again.';
     case 'writing_submission_locked':
-      return 'You have already submitted this task. Submitted attempts are locked; use revise to try again.';
+      return 'You have already submitted this task. Submitted attempts are locked; use Practice this again to start a new attempt.';
     case 'ai_credits_insufficient':
       return 'You have no AI grading credits remaining. Purchase an AI Credits package to continue.';
     default:
@@ -58,8 +58,9 @@ export function toCandidateSafeWritingErrorMessage(err: unknown, fallback: strin
     return fallback;
   }
   const message = err instanceof Error ? err.message : '';
+  // Internal identifiers (rule/check ids, provider and model names) never reach the learner either.
   if (
-    /profession_pack|letter_type_pack|recipient_unknown|case_note_pages|task_classification|SqlException|Npgsql|NullReference|at OetLearner\.|Unhandled exception/i.test(
+    /profession_pack|letter_type_pack|recipient_unknown|case_note_pages|task_classification|SqlException|Npgsql|NullReference|at OetLearner\.|Unhandled exception|BUILTIN|\bOW-?\d|DH-W|G-W-|\bOA\d*-\d|\bclaude|anthropic|openai|\bgpt|\bcodex|\bjev\b|sidecar|\bprovider\b/i.test(
       message,
     )
   ) {

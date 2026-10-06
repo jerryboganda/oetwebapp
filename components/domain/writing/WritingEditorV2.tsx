@@ -35,7 +35,6 @@ export interface WritingEditorAnnotation {
   charEnd: number;
   type: 'canon' | 'feedback' | 'coach' | 'info';
   note: string;
-  ruleId?: string;
 }
 
 /** Map the parent-facing `type` to the CSS-class-bearing decoration type. */
@@ -59,7 +58,6 @@ function toDecorations(annotations: WritingEditorAnnotation[]): AnnotationDecora
     charEnd: a.charEnd,
     type: toDecorationType(a.type),
     note: a.note,
-    ruleId: a.ruleId,
   }));
 }
 
@@ -487,7 +485,6 @@ function useAnnotationOverlay(annotations: WritingEditorAnnotation[]): ReactNode
         {annotations.map((a, idx) => (
           <li key={`${a.charStart}-${a.charEnd}-${idx}`} className="leading-snug">
             <span className="tile-label mr-1.5">{a.type}</span>
-            {a.ruleId ? <span className="font-bold mr-1">[{a.ruleId}]</span> : null}
             <span>{a.note}</span>
             <span className="text-white/60 ml-2 tabular-nums">
               chars {a.charStart}-{a.charEnd}

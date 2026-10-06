@@ -313,7 +313,10 @@ export function WritingStimulusViewer({
   // ── Anti-exfiltration keyboard handler ──────────────────────────────────
   function handleKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.ctrlKey || e.metaKey) {
-      if (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P' || e.key === 'c' || e.key === 'C') {
+      // Save and print stay blocked for everyone; copy only for non-exempt accounts.
+      if (e.key === 's' || e.key === 'S' || e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+      } else if (!pasteExempt && (e.key === 'c' || e.key === 'C')) {
         e.preventDefault();
       }
     }

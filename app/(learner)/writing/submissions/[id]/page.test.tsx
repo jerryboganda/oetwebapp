@@ -92,6 +92,32 @@ describe('Writing submission detail: Retry grading', () => {
     expect(screen.queryByRole('button', RETRY)).not.toBeInTheDocument();
   });
 
+  it('shows the release countdown while the letter is being assessed, without an Open results button', async () => {
+    const now = Date.now();
+    getWritingSubmission.mockResolvedValue({
+      ...SUBMISSION,
+      status: 'grading',
+      canRetry: false,
+      failureCode: null,
+      releaseState: 'held',
+      releaseAt: new Date(now + 600_000).toISOString(),
+      serverNow: new Date(now).toISOString(),
+    });
+    render(<WritingSubmissionDetailPage />);
+
+    expect(await screen.findByRole('timer')).toHaveTextContent(/^(10:00|09:59)$/);
+    expect(screen.getByText('writing.release.notice')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'writing.submissions.detail.openResults' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'writing.submissions.results.actions.practiceAgain' })).not.toBeInTheDocument();
+  });
+
+  it('shows no countdown for a failed letter', async () => {
+    render(<WritingSubmissionDetailPage />);
+
+    expect(await screen.findByRole('button', RETRY)).toBeInTheDocument();
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+  });
+
   it('a failed retry shows a candidate-safe error and lets the learner try again', async () => {
     retryWritingGrade.mockRejectedValueOnce(Object.assign(new Error('upstream exploded'), { status: 503 }));
     render(<WritingSubmissionDetailPage />);

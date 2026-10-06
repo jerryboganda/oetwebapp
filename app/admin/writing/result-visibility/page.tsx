@@ -5,8 +5,8 @@
  *
  * Controls which parts of a graded Writing result are revealed to the learner
  * (spec §15.1): submission receipt, AI estimate, tutor score, full criteria,
- * the annotated response, missing-content list, model answer, content checklist,
- * and whether a rewrite is offered. Each toggle maps 1:1 to a boolean field on
+ * the annotated response, missing-content list, model answer and content
+ * checklist. Each toggle maps 1:1 to a boolean field on
  * `WritingResultVisibilityDto`. Backed by `getResultVisibilityConfig` /
  * `updateResultVisibilityConfig` (the marking/feedback contract). The settings
  * apply to the global default (no scenario override is edited here).
@@ -60,7 +60,6 @@ const DEFAULTS: WritingResultVisibilityDto = {
   showMissingContent: true,
   showModelAnswer: false,
   showContentChecklist: true,
-  allowRewrite: true,
 };
 
 const SCORE_TOGGLES: ToggleSpec[] = [
@@ -106,11 +105,6 @@ const DETAIL_TOGGLES: ToggleSpec[] = [
     key: 'showModelAnswer',
     label: 'Model answer',
     description: 'Reveal the reference model letter. Off by default to protect authored content.',
-  },
-  {
-    key: 'allowRewrite',
-    label: 'Allow rewrite',
-    description: 'Let the learner submit a graded rewrite of this task.',
   },
 ];
 

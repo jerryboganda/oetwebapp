@@ -26,6 +26,18 @@ public sealed class WritingGradeChainOptions
 
     /// <summary>Wait before re-queue N (the last value repeats).</summary>
     public int[] BackoffMinutes { get; set; } = [2, 5, 15, 30];
+
+    /// <summary>Attempts per secondary-review pass on the Codex subscription (typed quota/auth skips the second).</summary>
+    public int ReviewAttempts { get; set; } = 2;
+
+    /// <summary>Per attempt of a secondary-review pass (the Codex sidecar is one serial lane).</summary>
+    public int ReviewAttemptSeconds { get; set; } = 240;
+
+    /// <summary>Ceiling for ONE review pass; the stage budget (lease minus margin) can only lower it.</summary>
+    public int ReviewDeadlineSeconds { get; set; } = 600;
+
+    /// <summary>Kept clear of <see cref="WritingGradeTimings.StaleClaimLease"/> so the cron never reclaims a live review.</summary>
+    public int ReviewLeaseMarginSeconds { get; set; } = 90;
 }
 
 /// <summary>The three routes of one grading run, in order.</summary>
@@ -66,6 +78,15 @@ public static class WritingGradeChain
     public static int ResourceVersion(int epoch, WritingGradeHop hop, int attempt)
         => 100_000 + epoch * 256 + (int)hop * 64 + attempt * 16;
 
+    /// <summary>
+    /// Slot of one secondary-review attempt. Disjoint from <see cref="ResourceVersion"/> and the legacy
+    /// versions (and a different resource type and feature code besides), 16 apart so the coordinator's
+    /// replay walk never reaches the next slot: <c>pass</c> is 0..3 (review plus up to two enhanced
+    /// rounds), <c>attempt</c> 0..1.
+    /// </summary>
+    public static int ReviewResourceVersion(int epoch, int pass, int attempt)
+        => 5_000_000 + epoch * 256 + pass * 64 + attempt * 16;
+
     internal sealed record Step(WritingGradeHop Hop, string Provider, string Model, int Attempts, int BudgetSeconds);
 
     /// <summary>The run plan. The API hop exists only behind the Max hop (a test host's stub
@@ -84,7 +105,7 @@ public static class WritingGradeChain
 
     /// <param name="template">The grading request; only Provider, Model and ResourceVersion change per attempt.</param>
     /// <param name="injectFault">QA fault switch (WAI-05): true fails that hop before any provider call.</param>
-    public static async Task<T> RunAsync<T>(
+    public static Task<T> RunAsync<T>(
         IAiGatewayService gateway,
         AiGatewayRequest template,
         WritingSubscriptionDecision decision,
@@ -95,10 +116,79 @@ public static class WritingGradeChain
         ILogger logger,
         Func<WritingGradeHop, bool>? injectFault,
         CancellationToken ct)
+        => RunPlanAsync(
+            gateway,
+            template,
+            Plan(decision, options),
+            (step, attempt) => ResourceVersion(epoch, step.Hop, attempt),
+            parse,
+            TimeSpan.FromSeconds(options.ChainDeadlineSeconds),
+            clock,
+            logger,
+            "grading",
+            injectFault,
+            ct);
+
+    /// <summary>
+    /// One pass of the secondary Writing reviewer: a ONE-route plan on the Codex subscription (GPT-6.1 Sol),
+    /// never the paid API and never Max (the reviewer is not a grade hop). Same per-attempt budgets, typed
+    /// failure handling and slot discipline as <see cref="RunAsync{T}"/>; the pass is bounded by the
+    /// smaller of <see cref="WritingGradeChainOptions.ReviewDeadlineSeconds"/> and <paramref name="stageBudget"/>.
+    /// Parsing happens inside the attempt, so an unreadable reply fails the attempt over like any failure.
+    /// </summary>
+    public static Task<T> RunReviewAsync<T>(
+        IAiGatewayService gateway,
+        AiGatewayRequest template,
+        int epoch,
+        int pass,
+        Func<AiGatewayResult, T> parse,
+        WritingGradeChainOptions options,
+        TimeSpan stageBudget,
+        TimeProvider clock,
+        ILogger logger,
+        CancellationToken ct)
     {
-        var deadline = clock.GetUtcNow() + TimeSpan.FromSeconds(options.ChainDeadlineSeconds);
+        var plan = new List<Step>
+        {
+            new(
+                WritingGradeHop.Codex,
+                WritingSubscriptionProviders.Codex,
+                WritingSubscriptionProviders.CodexModel,
+                Math.Max(1, options.ReviewAttempts),
+                options.ReviewAttemptSeconds),
+        };
+        var ceiling = TimeSpan.FromSeconds(options.ReviewDeadlineSeconds);
+        return RunPlanAsync(
+            gateway,
+            template,
+            plan,
+            (step, attempt) => ReviewResourceVersion(epoch, pass, attempt),
+            parse,
+            stageBudget < ceiling ? stageBudget : ceiling,
+            clock,
+            logger,
+            "review",
+            injectFault: null,
+            ct);
+    }
+
+    /// <summary>The attempt loop shared by the grade chain and the review pass.</summary>
+    private static async Task<T> RunPlanAsync<T>(
+        IAiGatewayService gateway,
+        AiGatewayRequest template,
+        IReadOnlyList<Step> plan,
+        Func<Step, int, int> resourceVersionFor,
+        Func<AiGatewayResult, T> parse,
+        TimeSpan runBudget,
+        TimeProvider clock,
+        ILogger logger,
+        string stage,
+        Func<WritingGradeHop, bool>? injectFault,
+        CancellationToken ct)
+    {
+        var deadline = clock.GetUtcNow() + runBudget;
         Exception? last = null;
-        foreach (var step in Plan(decision, options))
+        foreach (var step in plan)
         {
             for (var attempt = 0; attempt < step.Attempts; attempt++)
             {
@@ -126,7 +216,7 @@ public static class WritingGradeChain
                         {
                             Provider = step.Provider,
                             Model = step.Model,
-                            ResourceVersion = ResourceVersion(epoch, step.Hop, attempt),
+                            ResourceVersion = resourceVersionFor(step, attempt),
                         },
                         linked.Token);
                     return parse(result);
@@ -137,8 +227,8 @@ public static class WritingGradeChain
                     var typed = AiProviderErrorParser.FindHttpException(ex)?.ErrorClass;
                     // Class code only: provider text is logged (redacted) by the gateway itself.
                     logger.LogWarning(
-                        "Writing grading hop {Hop} attempt {Attempt} via {Provider} failed ({ErrorClass}).",
-                        step.Hop, attempt + 1, step.Provider, FailureClass(ex));
+                        "Writing {Stage} hop {Hop} attempt {Attempt} via {Provider} failed ({ErrorClass}).",
+                        stage, step.Hop, attempt + 1, step.Provider, FailureClass(ex));
                     if (typed is AiProviderErrorClass.QuotaExhausted or AiProviderErrorClass.Auth or AiProviderErrorClass.InvalidRequest)
                     {
                         break; // the same route cannot help this run; the next route still can

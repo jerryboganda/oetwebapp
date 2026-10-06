@@ -134,6 +134,65 @@ describe('WritingMyWorkList (Post Submissions)', () => {
     expect(grading).not.toHaveTextContent('writing.myWork.delayed');
   });
 
+  it('shows a compact countdown on a row being assessed and never offers the result before it is released', async () => {
+    const now = Date.now();
+    mockGetMyWork.mockResolvedValue({
+      items: [
+        item({
+          key: 'submission:sub-5',
+          state: 'grading',
+          rawStatus: 'grading',
+          submissionId: 'sub-5',
+          releaseState: 'held',
+          releaseAt: new Date(now + 600_000).toISOString(),
+          // A held row must never carry the result action; the list drops it even if the server slips.
+          actions: [
+            { kind: 'wait', href: '/writing/submissions/sub-5/grading' },
+            { kind: 'open_result', href: '/writing/submissions/sub-5/results' },
+          ],
+        }),
+      ],
+      hasMore: false,
+      serverNow: new Date(now).toISOString(),
+    });
+    renderWithRouter(<WritingMyWorkList />);
+
+    const row = await screen.findByTestId('post-submission-row');
+    expect(within(row).getByRole('timer')).toHaveTextContent(/^(10:00|09:59)$/);
+    expect(within(row).getByTestId('post-submission-wait')).toBeInTheDocument();
+    expect(within(row).queryByTestId('post-submission-open')).not.toBeInTheDocument();
+  });
+
+  it('reloads the list once when a held row reaches zero', async () => {
+    mockGetMyWork.mockResolvedValue({
+      items: [
+        item({
+          key: 'submission:sub-6',
+          state: 'grading',
+          rawStatus: 'grading',
+          submissionId: 'sub-6',
+          releaseState: 'held',
+          releaseAt: '2026-10-02T09:44:59Z',
+          actions: [{ kind: 'wait', href: '/writing/submissions/sub-6/grading' }],
+        }),
+      ],
+      hasMore: false,
+      serverNow: '2026-10-02T09:45:00Z',
+    });
+    renderWithRouter(<WritingMyWorkList />);
+
+    await waitFor(() => expect(mockGetMyWork).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+  });
+
+  it('never labels a letter as a revision', async () => {
+    mockGetMyWork.mockResolvedValue({ items: [item({ isRevision: true })], hasMore: false });
+    renderWithRouter(<WritingMyWorkList />);
+
+    const row = await screen.findByTestId('post-submission-row');
+    expect(row).not.toHaveTextContent('writing.submissions.detail.highlights.revision');
+  });
+
   it('Retry grading re-grades the SAME submission exactly once, then opens its grading page', async () => {
     let finishRetry!: () => void;
     mockRetry.mockReturnValue(new Promise((resolve) => { finishRetry = () => resolve({}); }));

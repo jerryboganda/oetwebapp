@@ -300,8 +300,6 @@ export interface SubmissionStreamHandlers {
 export interface WritingGradeReadyEventDto {
   submissionId: string;
   gradeId: string;
-  estimatedBand: number;
-  bandLabel: string;
   gradedAt: string;
 }
 

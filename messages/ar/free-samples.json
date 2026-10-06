@@ -1,8 +1,8 @@
 {
   "freeSample.speaking.allowance": "تتضمن العيّنة المجانية محاولة كاملة واحدة. تتطلب المحاولات الجديدة أرصدة التحدّث.",
   "freeSample.speaking.gradingFailed": "محادثتك محفوظة لكن التصحيح لم يكتمل — أعد المحاولة (دون استهلاك أرصدة)",
-  "freeSample.writing.allowance": "تتضمن العيّنة المجانية تسليمًا واحدًا مُصحّحًا + مراجعة مجانية واحدة.",
-  "freeSample.writing.retryCta": "راجِع وأعد التسليم - تبقّت مراجعة مجانية واحدة",
+  "freeSample.writing.allowance": "تتضمن العيّنة المجانية تسليمين مُصحّحين.",
+  "freeSample.writing.anotherAttempt": "تدرّب مرة أخرى - تبقّت محاولة مجانية واحدة",
   "freeSample.writing.gradingFailed": "رسالة العيّنة محفوظة لكن التصحيح لم يكتمل — أعد المحاولة",
   "freeSample.completed": "اكتملت العيّنة المجانية",
   "freeSample.unavailable": "العيّنة المجانية غير متاحة لمهنتك المسجّلة.",

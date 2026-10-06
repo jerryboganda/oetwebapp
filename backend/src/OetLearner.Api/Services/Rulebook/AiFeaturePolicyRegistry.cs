@@ -159,6 +159,9 @@ public static class AiFeaturePolicyDefaults
         // below. See 20261104090000_AddAiModelPricingAndFeaturePolicy.cs,
         // which mirrors this override in its seed data.
         AiFeatureCodes.WritingAppealV1,
+        // Secondary Writing reviewer: it decides the published score. Also matched by the
+        // "grade" keyword below; explicit so the intent is searchable.
+        AiFeatureCodes.WritingGradeReview,
     };
 
     /// <summary>Feature codes whose operation class does not follow the

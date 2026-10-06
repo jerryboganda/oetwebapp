@@ -1860,7 +1860,10 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine();
         sb.AppendLine(ctx.Kind == RuleKind.Speaking && ctx.Task == AiTaskMode.Score
             ? "1. Never write rule IDs (e.g. \"RULE_13\") or internal codes in any text the candidate will read; describe each observation in plain language tied to a published criterion."
-            : "1. Cite rule IDs explicitly in every feedback finding (e.g. \"OW-001\", \"RULE_27\").");
+            : ctx.Kind == RuleKind.Writing
+                // Writing candidates read `message`/`fixSuggestion`: the id belongs ONLY in the structured `ruleId` field.
+                ? "1. Record rule IDs ONLY in the structured `ruleId` field. NEVER write a rule ID, rule label (R1-R9), addendum name, internal code, or provider/model name in `message`, `fixSuggestion`, `text` or any other text the candidate will read; explain each finding in plain English tied to the six OET criteria."
+                : "1. Cite rule IDs explicitly in every feedback finding (e.g. \"OW-001\", \"RULE_27\").");
         sb.AppendLine("2. Do NOT invent, rename, or extend rules. If a concern falls outside the rulebook, say so plainly.");
         sb.AppendLine("3. Do NOT produce a numeric grade that contradicts the country-aware scoring table above.");
         sb.AppendLine("4. Do NOT replace expert grading — your output is advisory. Mark it clearly as AI-generated.");
@@ -1924,8 +1927,13 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 {
                     // Addendum Rev8 §19.4: every mistake must be detected, located,
                     // explained under its criterion and corrected — not a top-N.
-                    sb.AppendLine("For Writing, `findings` must list EVERY distinct mistake in the candidate letter as its own finding — rule breaches, grammar, tense, articles/prepositions, spelling, punctuation, comma splices, sentence structure, register, layout, organisation, omitted important case-note information, invented details and unsupported changes of certainty — each with the exact `quote` from the letter, a `message` explaining the rule or OET criterion impact, a corrected `fixSuggestion`, and `criterionCode` (purpose | content | conciseness_clarity | genre_style | organisation_layout | language). Report an omission with the missing case-note fact as the quote. Never report correct wording or a valid professional alternative as a mistake.");
+                    sb.AppendLine("For Writing, `findings` must list EVERY distinct mistake in the candidate letter as its own finding — rule breaches, grammar, tense, articles/prepositions, spelling, punctuation, comma splices, sentence structure, register, layout, organisation, omitted important case-note information, invented details and unsupported changes of certainty — each with the exact `quote` from the letter, a `message` explaining the rule or OET criterion impact, a corrected `fixSuggestion`, and `criterionCode` (purpose | content | conciseness_clarity | genre_style | organisation_layout | language). Report an omission with the missing case-note fact as the quote. Never report correct wording or a valid professional alternative as a mistake. Write `message` and `fixSuggestion` in plain English for the candidate: put the rule ID only in `ruleId`, and never write rule IDs, rule labels, addendum names or internal codes inside `message` or `fixSuggestion`. Use severity critical | major | minor only.");
                 }
+                break;
+            // The secondary reviewer requests its own JSON in the user message (verdicts per finding, added
+            // findings, criterion scores); a second envelope here would contradict it.
+            case AiTaskMode.ReviewWriting when ctx.Kind == RuleKind.Writing:
+                sb.AppendLine("Reply with exactly the JSON object requested in the user message (no extra prose).");
                 break;
             case AiTaskMode.Coach:
                 sb.AppendLine("```json");
@@ -2214,7 +2222,10 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("Hard requirements: exactly 3 parts A/B/C; Part A has 4 texts and 20 questions; Part B has 6 texts and 6 questions with MultipleChoice3; Part C has 2 texts and 16 questions with MultipleChoice4; every correctAnswerJson/optionsJson field must itself be valid JSON text.");
                 break;
             default:
-                sb.AppendLine("Plain text, concise, ≤ 200 words. Cite rule IDs in parentheses when invoking rules.");
+                // Writing text reaches candidates: no rule IDs in it (ids belong in structured fields only).
+                sb.AppendLine(ctx.Kind == RuleKind.Writing
+                    ? "Plain text, concise, ≤ 200 words. Explain in plain English; never write rule IDs, rule labels or internal codes."
+                    : "Plain text, concise, ≤ 200 words. Cite rule IDs in parentheses when invoking rules.");
                 break;
         }
     }
@@ -2263,7 +2274,9 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         {
             RuleKind.Writing => ctx.Task == AiTaskMode.GenerateContent
                 ? $"Task: produce or validate an OET Writing Model Answer ({WritingLetterTypeLabel(ctx)}) strictly from the provided case notes and task, under the active rulebook and the owner house style."
-                : $"Task: analyse the candidate's OET Writing letter ({WritingLetterTypeLabel(ctx)}) against the active rulebook, and produce rule-cited feedback.",
+                : ctx.Task == AiTaskMode.ReviewWriting
+                    ? $"Task: review another grader's assessment of the candidate's OET Writing letter ({WritingLetterTypeLabel(ctx)}) against the case notes, the task and the active rulebook. Check each correction and score; do not re-grade from scratch, and write every candidate-facing sentence in plain English without rule IDs."
+                    : $"Task: analyse the candidate's OET Writing letter ({WritingLetterTypeLabel(ctx)}) against the active rulebook, and produce rule-cited feedback.",
             RuleKind.Speaking => ctx.Task == AiTaskMode.Score
                 ? $"Task: score the candidate's OET Speaking performance ({RequireCardType(ctx)}) against the official band descriptors above, using the active rulebook as interpretation guidance only."
                 : $"Task: analyse the candidate's OET Speaking transcript ({RequireCardType(ctx)}) against the active rulebook, and produce rule-cited feedback.",
@@ -2325,7 +2338,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateListeningExplanation, AnswerListeningQuestion, GenerateReadingStructure, GenerateReadingExplanation, AnswerReadingPassageQuestion }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario, GenerateListeningStructure, GenerateListeningExplanation, AnswerListeningQuestion, GenerateReadingStructure, GenerateReadingExplanation, AnswerReadingPassageQuestion, ReviewWriting }
 
 public sealed class AiGroundingContext
 {

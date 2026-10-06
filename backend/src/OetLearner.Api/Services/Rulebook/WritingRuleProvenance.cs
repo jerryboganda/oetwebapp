@@ -244,6 +244,14 @@ public static class WritingRuleProvenance
             ? p
             : new Provenance(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly);
 
+    /// <summary>
+    /// Registered-only lookup: unlike <see cref="For"/> it never invents a default, so a caller can
+    /// tell "registered as coaching-only" from "not in the registry at all" (an unregistered rule id
+    /// cited by the AI grader is a detected mistake, not a house-style note).
+    /// </summary>
+    public static bool TryGet(string? checkId, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out Provenance provenance)
+        => ByCheckId.TryGetValue(Normalize(checkId), out provenance);
+
     private static string Normalize(string? checkId)
     {
         var id = (checkId ?? string.Empty).Trim();

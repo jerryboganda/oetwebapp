@@ -39,7 +39,7 @@ public class WritingCoachServiceTests
         // never emit "generic" suggestions sourced purely from response
         // length / word count. The new pipeline routes everything through
         // the rule engine + the grounded gateway, so every persisted finding
-        // MUST carry an explicit rule citation in its explanation. The AI
+        // comes from a rule (the id is logged, never persisted). The AI
         // gateway is stubbed out (empty list) so this test only exercises
         // the rule-engine path; the assertion guards against any future
         // regression that re-introduces ungrounded length heuristics.
@@ -54,10 +54,13 @@ public class WritingCoachServiceTests
             ct: CancellationToken.None);
 
         var suggestions = await db.WritingCoachSuggestions.ToListAsync();
-        // BUILTIN.<checkId> is the canonical rule-id scheme (R-ids retired):
-        // every persisted suggestion must still carry an explicit citation.
+        // The persisted explanation is candidate-facing: plain wording only, never a
+        // bracketed rule id (the id is logged server-side).
         Assert.All(suggestions, s =>
-            Assert.Matches(@"^\[(R|RULE_|BUILTIN)[A-Za-z0-9_.]+", s.Explanation));
+        {
+            Assert.False(string.IsNullOrWhiteSpace(s.Explanation));
+            Assert.DoesNotMatch(@"\[(R|RULE_|BUILTIN)[A-Za-z0-9_.]+", s.Explanation);
+        });
 
         var session = await db.WritingCoachSessions.SingleAsync();
         Assert.Equal(suggestions.Count, session.SuggestionsGenerated);
@@ -112,9 +115,12 @@ public class WritingCoachServiceTests
         var persisted = await db.WritingCoachSuggestions.ToListAsync();
         Assert.NotEmpty(persisted);
 
-        // The two AI items must both be present (deduped by ruleId+anchor).
-        Assert.Contains(persisted, s => s.Explanation.Contains("[R12.1", StringComparison.Ordinal));
-        Assert.Contains(persisted, s => s.Explanation.Contains("[R03.4", StringComparison.Ordinal));
+        // The two AI items must both be present (deduped by ruleId+anchor), with plain
+        // wording and no rule id in the persisted explanation.
+        Assert.Contains(persisted, s => s.Explanation.Contains("named recipient", StringComparison.Ordinal));
+        Assert.Contains(persisted, s => s.Explanation.Contains("Salutation must use", StringComparison.Ordinal));
+        Assert.DoesNotContain(persisted, s => s.Explanation.Contains("R12.1", StringComparison.Ordinal)
+            || s.Explanation.Contains("R03.4", StringComparison.Ordinal));
 
         var session = await db.WritingCoachSessions.SingleAsync();
         Assert.Equal(persisted.Count, session.SuggestionsGenerated);
@@ -143,7 +149,7 @@ public class WritingCoachServiceTests
                   "category": "grammar",
                   "severity": "major",
                   "anchor": { "start": 0, "end": 11, "snippet": "Dear Doctor" },
-                  "message": "Use the rulebook citation supplied in the grounded prompt.",
+                  "message": "Use the named recipient supplied in the grounded prompt.",
                   "suggestedReplacement": "Dear Dr Smith"
                 },
                 {
@@ -174,8 +180,8 @@ public class WritingCoachServiceTests
             ct: CancellationToken.None);
 
         var persisted = await db.WritingCoachSuggestions.ToListAsync();
-        Assert.Contains(persisted, s => s.Explanation.Contains("[R12.1", StringComparison.Ordinal));
-        Assert.DoesNotContain(persisted, s => s.Explanation.Contains("[R99.9", StringComparison.Ordinal));
+        Assert.Contains(persisted, s => s.Explanation.Contains("named recipient supplied", StringComparison.Ordinal));
+        Assert.DoesNotContain(persisted, s => s.Explanation.Contains("Invented", StringComparison.Ordinal));
 
         await db.DisposeAsync();
     }

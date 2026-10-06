@@ -104,7 +104,6 @@ export const TEST_IDS = {
   estimatedScore: 'ai-estimated-score',
   modelAnswer: 'grounded-model-answer',
   criteriaList: 'criteria-list', // exactly 6 li
-  freeSampleReviseCta: 'free-sample-revise-cta',
   // Native-shell-only entries of the mobile menu (below lg the floating handle is hidden): the phone-width
   // positive control of the native-shell emulation.
   menuReloadApp: 'mobile-menu-reload-app',
@@ -125,7 +124,10 @@ export const CONTRACT_GROUPS = {
 };
 export const GRADING_STEP_MODEL_ANSWER = 'Preparing model answer';
 export const RESULT_SECTION_ORDER = ['score', 'priorities', 'model-answer', 'criteria', 'corrections', 'reference', 'next-actions'];
-export const RESULT_SECTIONS_REQUIRED = ['score', 'priorities', 'model-answer', 'criteria', 'corrections', 'next-actions'];
+// 'priorities' is required only when the report has a scored correction: advisory items never take a slot,
+// and fewer than three (down to none) is correct when fewer distinct problems exist.
+export const RESULT_SECTIONS_REQUIRED = ['score', 'model-answer', 'criteria', 'corrections', 'next-actions'];
+export const RESULT_SECTION_PRIORITIES = 'priorities';
 
 export const SELECTORS = {
   editorInput: 'div.ProseMirror#practice-editor',

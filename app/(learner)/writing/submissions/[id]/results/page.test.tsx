@@ -26,8 +26,8 @@ const {
   disputeWritingCanonViolation,
   publishToShowcase,
   createWritingSubmission,
-  reviseWritingSubmission,
   listFreeSamples,
+  routerReplace,
 } = vi.hoisted(() => ({
   getWritingSubmission: vi.fn(),
   getWritingSubmissionGrade: vi.fn(),
@@ -37,11 +37,11 @@ const {
   getWritingSubmissionCaseNotes: vi.fn(),
   disputeWritingCanonViolation: vi.fn(),
   publishToShowcase: vi.fn(),
-  // Not imported by this page today — kept as spies so a future regression
-  // that wires either into the free review path is caught here too.
+  // Not imported by this page today — kept as a spy so a future regression
+  // that wires it into the free review path is caught here too.
   createWritingSubmission: vi.fn(),
-  reviseWritingSubmission: vi.fn(),
   listFreeSamples: vi.fn(),
+  routerReplace: vi.fn(),
 }));
 
 vi.mock('@/lib/api/free-samples', () => ({ listFreeSamples }));
@@ -56,11 +56,11 @@ vi.mock('@/lib/writing/api', () => ({
   disputeWritingCanonViolation,
   publishToShowcase,
   createWritingSubmission,
-  reviseWritingSubmission,
 }));
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'sub-1' }),
+  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
 }));
 
 vi.mock('@/components/layout/learner-dashboard-shell', () => ({
@@ -124,7 +124,6 @@ const GRADE = {
   modelUsed: 'v1',
   canonVersion: 'v1',
   canonViolations: [],
-  revisionInvite: { shouldOffer: false, reason: '' },
   gradedAt: '2026-09-01T00:41:00Z',
 };
 
@@ -169,7 +168,6 @@ describe('Writing results page — free review vs. new attempt (Addendum Rev5 §
     expect(disputeWritingCanonViolation).not.toHaveBeenCalled();
     expect(publishToShowcase).not.toHaveBeenCalled();
     expect(createWritingSubmission).not.toHaveBeenCalled();
-    expect(reviseWritingSubmission).not.toHaveBeenCalled();
   });
 
   // Launch handoff UI-1 (2 Oct 2026): "Appeal score" is removed completely —
@@ -194,12 +192,12 @@ describe('Writing results page — free review vs. new attempt (Addendum Rev5 §
   });
 });
 
-describe('Writing results page — free sample revise & resubmit (retry addendum, 23 Sep 2026)', () => {
+describe('Writing results page — free sample (no Revise & Resubmit)', () => {
   const FREE_ROW = {
     professionId: 'medicine',
     contentId: 'scenario-1',
     state: 'retry_available',
-    route: '/writing/submissions/sub-1/revise',
+    route: '/writing/practice/session/scenario-1',
     limit: 2,
     successfulCount: 1,
     remaining: 1,
@@ -217,16 +215,15 @@ describe('Writing results page — free sample revise & resubmit (retry addendum
     getWritingSubmissionCaseNotes.mockResolvedValue(null);
   });
 
-  it("retry_available on this letter: primary \"Revise & Resubmit\" CTA links to this submission's revise page", async () => {
+  it('retry_available on this letter: no revise control, only the normal "Practice this again" link', async () => {
     listFreeSamples.mockResolvedValue([FREE_ROW]);
-    renderPage();
+    const { container } = renderPage();
 
-    const cta = await screen.findByTestId('free-sample-revise-cta');
-    expect(cta).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
-    expect(cta).toHaveTextContent('freeSample.writing.retryCta');
-    expect(listFreeSamples).toHaveBeenCalledWith('writing');
-    // Linking only — the revise itself happens on the revise page.
-    expect(reviseWritingSubmission).not.toHaveBeenCalled();
+    await screen.findByText(/I am writing to refer this patient/);
+    await waitFor(() => expect(listFreeSamples).toHaveBeenCalledWith('writing'));
+    expect(screen.queryByTestId('free-sample-revise-cta')).not.toBeInTheDocument();
+    expect(container.querySelector('a[href*="/revise"]')).toBeNull();
+    expect(screen.getByRole('link', { name: /practiceAgain/i })).toHaveAttribute('href', '/writing/practice/session/scenario-1');
     expect(screen.queryByTestId('free-sample-completed')).not.toBeInTheDocument();
   });
 
@@ -238,14 +235,53 @@ describe('Writing results page — free sample revise & resubmit (retry addendum
     expect(screen.queryByTestId('free-sample-revise-cta')).not.toBeInTheDocument();
   });
 
-  it('a free row for a different scenario never adds the free CTA to this letter', async () => {
-    listFreeSamples.mockResolvedValue([{ ...FREE_ROW, contentId: 'other-scenario' }]);
+  it('a free row for a different scenario never adds the completed note to this letter', async () => {
+    listFreeSamples.mockResolvedValue([{ ...FREE_ROW, state: 'completed', contentId: 'other-scenario' }]);
     renderPage();
 
     await screen.findByText(/I am writing to refer this patient/);
     await waitFor(() => expect(listFreeSamples).toHaveBeenCalled());
-    expect(screen.queryByTestId('free-sample-revise-cta')).not.toBeInTheDocument();
     expect(screen.queryByTestId('free-sample-completed')).not.toBeInTheDocument();
+  });
+});
+
+// 15-minute result-release window: this page asks for the submission first and
+// hands an unreleased letter to the grading page before requesting any result.
+describe('Writing results page — release gating', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listFreeSamples.mockResolvedValue([]);
+    getWritingSubmissionGrade.mockResolvedValue(GRADE);
+    getWritingAssessmentV11.mockResolvedValue(null);
+    getTutorReview.mockResolvedValue(null);
+    getWritingAnswerSheet.mockResolvedValue({ answerSheetPdfDownloadPath: null });
+    getWritingSubmissionCaseNotes.mockResolvedValue(null);
+  });
+
+  it('a held letter goes to the grading page and requests no result', async () => {
+    getWritingSubmission.mockResolvedValue({ ...SUBMISSION, status: 'grading', releaseState: 'held' });
+    renderPage();
+
+    await waitFor(() => expect(routerReplace).toHaveBeenCalledWith('/writing/submissions/sub-1/grading'));
+    expect(getWritingSubmissionGrade).not.toHaveBeenCalled();
+    expect(getWritingAssessmentV11).not.toHaveBeenCalled();
+    expect(getWritingAnswerSheet).not.toHaveBeenCalled();
+  });
+
+  it('a released letter renders its result and never redirects', async () => {
+    getWritingSubmission.mockResolvedValue({ ...SUBMISSION, releaseState: 'released' });
+    renderPage();
+
+    expect(await screen.findByText(/I am writing to refer this patient/)).toBeInTheDocument();
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  it('a failed letter stays on this page instead of looping to the grading page', async () => {
+    getWritingSubmission.mockResolvedValue({ ...SUBMISSION, status: 'failed', releaseState: 'processing' });
+    renderPage();
+
+    await waitFor(() => expect(getWritingSubmissionGrade).toHaveBeenCalled());
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 });
 
@@ -332,10 +368,13 @@ describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 
     expect(screen.getByTestId('grounded-model-answer-card')).toContainElement(modelAnswer);
 
     // The AI Estimated Practice Score /500 + grade band is the headline even
-    // though the older /grade data also loaded; raw total stays secondary.
+    // though the older /grade data also loaded; the criteria score stays secondary
+    // and is labelled "Criteria score", never "Raw".
     expect(screen.getByTestId('ai-estimated-score')).toHaveTextContent('380/500');
     expect(screen.getByTestId('ai-grade-band')).toHaveTextContent('Grade B');
     expect(screen.getByText('33/38')).toBeInTheDocument();
+    expect(screen.getByText('writing.submissions.results.highlights.criteriaScore')).toBeInTheDocument();
+    expect(screen.queryByText('writing.submissions.results.highlights.raw')).not.toBeInTheDocument();
     expect(screen.queryByText('writing.submissions.results.estimatedBand')).not.toBeInTheDocument();
 
     // All six criteria render with score/max in ONE list (the v1.1 duplicate list is gone).
@@ -343,12 +382,12 @@ describe('Writing results page — candidate-visible v1.1 report (Addendum Rev8 
     const criteria = within(screen.getByTestId('criteria-list')).getAllByRole('listitem');
     expect(criteria).toHaveLength(6);
     const expected: Array<[string, string]> = [
-      ['C1 Purpose', '3/3'],
-      ['C2 Content', '6/7'],
-      ['C3 Conciseness & Clarity', '6/7'],
-      ['C4 Genre & Style', '6/7'],
-      ['C5 Organisation & Layout', '6/7'],
-      ['C6 Language Accuracy', '6/7'],
+      ['Purpose', '3/3'],
+      ['Content', '6/7'],
+      ['Conciseness & Clarity', '6/7'],
+      ['Genre & Style', '6/7'],
+      ['Organisation & Layout', '6/7'],
+      ['Language', '6/7'],
     ];
     expected.forEach(([name, score], index) => {
       expect(within(criteria[index]).getByText(name)).toBeInTheDocument();
@@ -483,7 +522,7 @@ describe('Writing results page — simplified report order (launch handoff UI-3)
     renderPage();
     const items = within(await screen.findByTestId('criteria-list')).getAllByRole('listitem');
 
-    // C2 Content: errors 1, 3, 7 — error 1 (critical) is the top evidence.
+    // Content: errors 1, 3, 7 — error 1 (critical) is the top evidence.
     expect(within(items[1]).getByText('writing.submissions.results.criteria.findings')).toBeInTheDocument();
     expect(within(items[1]).getByText('“wording 1”')).toBeInTheDocument();
     expect(within(items[1]).getByText('correction 1')).toBeInTheDocument();
@@ -498,7 +537,9 @@ describe('Writing results page — simplified report order (launch handoff UI-3)
 
     const preview = await screen.findByTestId('corrections-preview');
     expect(within(preview).getAllByRole('listitem')).toHaveLength(5);
-    expect(within(preview).getByText('critical')).toHaveClass('text-danger-strong');
+    // Severity reads Critical / Major / Minor; the rule id and category code never show.
+    expect(within(preview).getByText('writing.submissions.results.severity.critical')).toHaveClass('text-danger-strong');
+    expect(preview.textContent).not.toMatch(/R12\./);
 
     const toggle = screen.getByTestId('corrections-view-all');
     expect(toggle).toHaveTextContent('writing.submissions.results.corrections.viewAll');
@@ -524,15 +565,43 @@ describe('Writing results page — simplified report order (launch handoff UI-3)
     expect(screen.queryByTestId('corrections-view-all')).not.toBeInTheDocument();
   });
 
-  it('keeps the legacy rule checks, still disputable, as a collapsed group inside corrections', async () => {
+  it('hides the legacy rule checks while the v1.1 report is visible (one source of corrections)', async () => {
     renderPage();
     await screen.findByTestId('corrections-preview');
+
+    expect(screen.queryByText('writing.submissions.results.canon.heading')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /mark this detection as incorrect/i, hidden: true })).not.toBeInTheDocument();
+  });
+
+  it('keeps the legacy checks for an older result with no visible report: no rule id, still disputable', async () => {
+    getWritingAssessmentV11.mockResolvedValue(null);
+    renderPage();
+    await screen.findByText(/I am writing to refer this patient/);
 
     const corrections = screen.getAllByTestId('result-section').find((s) => s.getAttribute('data-section') === 'corrections')!;
     const ruleChecks = within(corrections).getByText('writing.submissions.results.canon.heading').closest('details');
     expect(ruleChecks).not.toBeNull();
     expect(ruleChecks).not.toHaveAttribute('open');
     expect(within(ruleChecks!).getByRole('button', { name: /mark this detection as incorrect/i, hidden: true })).toBeInTheDocument();
+    expect(corrections.textContent).not.toContain('R06.1');
+  });
+
+  it('lists advisory items after the scored corrections, outside every count', async () => {
+    getWritingAssessmentV11.mockResolvedValue({
+      ...REPORT,
+      errors: [...ERRORS.slice(0, 2), { ...error(8, 'language', 'advisory'), correction: 'optional polish' }],
+    });
+    renderPage();
+
+    const full = await screen.findByTestId('corrections-full-list');
+    expect(within(full).getAllByRole('listitem')).toHaveLength(2);
+    const advisory = screen.getByTestId('advisory-corrections');
+    expect(within(advisory).getByText('writing.submissions.results.severity.advisory')).toBeInTheDocument();
+    expect(within(advisory).getByText('optional polish')).toBeInTheDocument();
+    // Language's card shows its scored finding (wording 2), never the advisory one.
+    const items = within(screen.getByTestId('criteria-list')).getAllByRole('listitem');
+    expect(within(items[5]).getByText('“wording 2”')).toBeInTheDocument();
+    expect(within(items[5]).queryByText('“wording 8”')).not.toBeInTheDocument();
   });
 });
 
@@ -645,75 +714,110 @@ describe('Writing results page — concise cards for a letter with many mixed fi
   });
 });
 
-// Spec review (2 Oct 2026): "What's next?" offers a paid Revise & Resubmit
-// whenever the grade invites a revision of this graded, non-mock letter.
-describe('Writing results page — paid Revise & Resubmit', () => {
-  const INVITED = { ...GRADE, revisionInvite: { shouldOffer: true, reason: 'Significant gains likely on a focused revision.' } };
+// Owner directive (6 Oct 2026): Revise & Resubmit is gone from every result screen,
+// RAW is "Criteria score", and no internal rule label or debug term reaches the candidate.
+describe('Writing results page — no Revise & Resubmit, no internal labels', () => {
+  const LEAKY = {
+    ...ASSESSMENT_V11,
+    // A stale or cached response may still carry internal values: none of them may render.
+    rulePackVersion: '2.4.0-senior-assessor-audit',
+    modelVersion: 'claude-opus-5-5',
+    blockingCodes: ['writing_assessment_release_blocked'],
+    topPriorities: ['AI:OW-007: Include the discharge plan.', 'Include the discharge plan.'],
+    errors: [{
+      id: 'leak-1',
+      location: 'character-offset:3-9',
+      candidateWording: 'the patient have chest pain',
+      correction: 'DH-W-019: Use "has" (see OW-005).',
+      category: 'language',
+      ruleSource: 'BUILTIN.linker_avoid_words',
+      whyItMatters: 'Violates G-W-117 and reads as an error.',
+      severity: 'major',
+      confidence: 'high',
+      primaryCriterionCode: 'language',
+      secondaryCriterionCodes: [],
+      startOffset: 3,
+      endOffset: 9,
+    }],
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     listFreeSamples.mockResolvedValue([]);
     getWritingSubmission.mockResolvedValue(SUBMISSION);
-    getWritingSubmissionGrade.mockResolvedValue(INVITED);
-    getWritingAssessmentV11.mockResolvedValue(null);
+    getWritingSubmissionGrade.mockResolvedValue({ ...GRADE, topThreePriorities: ['Grade list priority must not appear.'] });
+    getWritingAssessmentV11.mockResolvedValue(LEAKY);
     getTutorReview.mockResolvedValue(null);
     getWritingAnswerSheet.mockResolvedValue({ answerSheetPdfDownloadPath: null });
     getWritingSubmissionCaseNotes.mockResolvedValue(null);
   });
 
-  it('links to this letter\'s revise page and keeps "Practice this again"', async () => {
-    renderPage();
+  it('offers no revise control and keeps "Practice this again" as the primary new attempt', async () => {
+    const { container } = renderPage();
+    await screen.findByTestId('corrections-full-list');
 
-    const cta = await screen.findByTestId('revise-and-resubmit');
-    expect(cta).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
-    expect(cta).toHaveTextContent('writing.submissions.results.actions.reviseResubmit');
+    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('free-sample-revise-cta')).not.toBeInTheDocument();
+    expect(container.querySelector('a[href*="/revise"]')).toBeNull();
+    expect(container.textContent).not.toMatch(/revise|resubmit/i);
     expect(screen.getByRole('link', { name: /practiceAgain/i })).toHaveAttribute('href', '/writing/practice/session/scenario-1');
-    expect(reviseWritingSubmission).not.toHaveBeenCalled();
   });
 
-  it('is hidden when the grade does not invite a revision', async () => {
-    getWritingSubmissionGrade.mockResolvedValue(GRADE);
-    renderPage();
+  it('prints no rule id, check id, tag, version or "Blocked by" anywhere', async () => {
+    const { container } = renderPage();
+    await screen.findByTestId('corrections-full-list');
 
-    await screen.findByText(/I am writing to refer this patient/);
-    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/BUILTIN|OW-\d|DH-W|G-W-|\bAI[.:]|linker_avoid|claude|2\.4\.0|Blocked by|release gate|character-offset|\bRaw\b/);
+    // The correction and the explanation survive with the labels removed; the wording stays verbatim.
+    const item = within(screen.getByTestId('corrections-full-list')).getAllByRole('listitem')[0];
+    expect(item).toHaveTextContent('the patient have chest pain');
+    expect(item).toHaveTextContent('writing.submissions.results.severity.major');
+    expect(item).toHaveTextContent('reads as an error');
   });
 
-  it('is hidden on a mock and on a letter that is not graded', async () => {
-    getWritingSubmission.mockResolvedValue({ ...SUBMISSION, mode: 'mock' });
-    const { unmount } = renderPage();
-    await screen.findByText(/I am writing to refer this patient/);
-    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
-    unmount();
-
-    getWritingSubmission.mockResolvedValue({ ...SUBMISSION, status: 'failed' });
+  it('uses the report priorities only: distinct, label-free, never the grade list', async () => {
     renderPage();
-    await screen.findByText(/I am writing to refer this patient/);
-    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+    const heading = await screen.findByRole('heading', { name: 'writing.submissions.results.priorities.heading' });
+    const items = within(heading.closest('section')!).getAllByRole('listitem').map((li) => li.textContent);
+
+    expect(items).toEqual(['#1Include the discharge plan.']);
+    expect(screen.queryByText('Grade list priority must not appear.')).not.toBeInTheDocument();
   });
 
-  it('leaves a free-sample letter to its free retry button', async () => {
-    listFreeSamples.mockResolvedValue([{
-      professionId: 'medicine',
-      contentId: 'scenario-1',
-      state: 'retry_available',
-      route: '/writing/submissions/sub-1/revise',
-      limit: 2,
-      successfulCount: 1,
-      remaining: 1,
-      lastResultRoute: '/writing/submissions/sub-1/results',
-      lastSubmissionId: 'sub-1',
-    }]);
+  it('shows no priorities section when the visible report has none, even if the grade lists some', async () => {
+    getWritingAssessmentV11.mockResolvedValue({ ...ASSESSMENT_V11, topPriorities: [] });
     renderPage();
 
-    expect(await screen.findByTestId('free-sample-revise-cta')).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
-    expect(screen.queryByTestId('revise-and-resubmit')).not.toBeInTheDocument();
+    await screen.findByTestId('grounded-model-answer');
+    expect(screen.queryByRole('heading', { name: 'writing.submissions.results.priorities.heading' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Grade list priority must not appear.')).not.toBeInTheDocument();
+  });
+
+  it('a report that is not candidate-visible shows the truthful 15-minute notice, not internal codes', async () => {
+    getWritingAssessmentV11.mockResolvedValue({ ...LEAKY, status: 'RequiresReview', candidateReportVisible: false });
+    const { container } = renderPage();
+
+    expect(await screen.findByText('writing.release.notice')).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/writing_assessment_release_blocked|Blocked by/);
+  });
+
+  it('ships the owner wording and no internal terms in the Writing bundles', () => {
+    for (const bundle of [enWriting, arWriting] as Array<Record<string, string>>) {
+      for (const [key, value] of Object.entries(bundle)) {
+        expect(key, key).not.toMatch(/\.revise\.|reviseResubmit|whyRevise|reviseThis|highlights\.raw$/);
+        expect(value, key).not.toMatch(/Revise (&|and) Resubmit|under a minute|few minutes|canon engine|grade-ready|\bpolling\b|pipeline runs/i);
+      }
+    }
+    expect((enWriting as Record<string, string>)['writing.release.notice']).toBe(
+      'Your letter is being assessed and reviewed by our mentors. Your final Writing assessment will be available within 15 minutes.',
+    );
+    expect((enWriting as Record<string, string>)['writing.submissions.results.highlights.criteriaScore']).toBe('Criteria score');
   });
 });
 
 // WritingGrade.ConfidenceFlag is a grader band OR a review state set after grading
-// ('jev_review' = queued for a human review, 'tutor_reviewed'). The learner only
-// ever sees neutral copy, never the stored code.
+// ('awaiting_review' = queued for a human review, 'tutor_reviewed'; a stale API may
+// still send 'jev_review'). The learner only ever sees neutral copy, never the stored code.
 describe('Writing results page — confidence flag copy', () => {
   const LOADED = /I am writing to refer this patient/;
 
@@ -732,6 +836,7 @@ describe('Writing results page — confidence flag copy', () => {
     ['high', 'writing.submissions.results.confidence.high'],
     ['medium', 'writing.submissions.results.confidence.medium'],
     ['low', 'writing.submissions.results.confidence.low'],
+    ['awaiting_review', 'writing.submissions.results.confidence.awaitingReview'],
     ['jev_review', 'writing.submissions.results.confidence.awaitingReview'],
     ['tutor_reviewed', 'writing.submissions.results.confidence.tutorReviewed'],
   ])('shows the learner label for %s, never the stored code', async (flag, labelKey) => {
@@ -739,7 +844,7 @@ describe('Writing results page — confidence flag copy', () => {
     const { container } = renderPage();
 
     expect(await screen.findByText(labelKey)).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(/jev_review|tutor_reviewed/);
+    expect(container.textContent).not.toMatch(/jev_review|awaiting_review|tutor_reviewed/);
   });
 
   it('hides the confidence stat for a flag it does not know instead of printing it', async () => {

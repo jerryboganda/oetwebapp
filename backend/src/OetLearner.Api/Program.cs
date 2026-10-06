@@ -2426,6 +2426,13 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionEva
 builder.Services.Configure<OetLearner.Api.Services.Writing.WritingGradeChainOptions>(
     builder.Configuration.GetSection(OetLearner.Api.Services.Writing.WritingGradeChainOptions.SectionName));
 builder.Services.AddHostedService<OetLearner.Api.Services.Writing.WritingGradeShutdownRequeue>();
+// Secondary Writing reviewer (writing.grade.review, GPT-6.1 Sol on the writing-codex-sub route). Scoped like the
+// pipeline that takes it as an optional last constructor parameter; limits bind from Writing:Review with in-class
+// defaults. FeatureFlags writing_ai_reviewer / writing_ai_reviewer_shadow switch it (see WritingGradeReviewer).
+builder.Services.Configure<OetLearner.Api.Services.Writing.Review.WritingReviewOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Services.Writing.Review.WritingReviewOptions.SectionName));
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.Review.IWritingGradeReviewer,
+    OetLearner.Api.Services.Writing.Review.WritingGradeReviewer>();
 // WAI-05: QA-only per-learner grade fault switch (FeatureFlags rows; off by default).
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingQaFault>();
 // Writing AI subscription routing (owner directive 2026-09-29): quota gauge +

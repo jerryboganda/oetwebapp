@@ -59,8 +59,9 @@ public sealed class WritingRetryGradeLeaseTests
 
         Assert.Equal(submissionId, response.Id);
         // Tests construct the service without a scope factory, so grading runs
-        // inline and the response reflects the completed grade.
-        Assert.Equal("graded", response.Status);
+        // inline; the letter was submitted just now, so the response still reads
+        // grading (held inside its 15-minute release window) while the row is graded.
+        Assert.Equal("grading", response.Status);
         Assert.Equal("graded", (await db.WritingSubmissions.AsNoTracking().FirstAsync(s => s.Id == submissionId)).Status);
         Assert.Equal(1, await db.WritingGrades.CountAsync(g => g.SubmissionId == submissionId));
     }

@@ -31,7 +31,6 @@ export interface AnnotationDecoration {
   charEnd: number;
   type: AnnotationDecorationType;
   note: string;
-  ruleId?: string;
 }
 
 export interface AnnotationsExtensionOptions {
@@ -98,7 +97,6 @@ function buildDecorations(
     decorations.push(
       Decoration.inline(from, to, {
         class: `writing-annotation writing-annotation--${a.type}`,
-        'data-rule-id': a.ruleId ?? '',
         'data-note': a.note,
         title: a.note,
       }),

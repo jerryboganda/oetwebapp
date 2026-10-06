@@ -28,11 +28,11 @@ public interface IWritingSubmissionService
     /// <summary>
     /// Resolves the owning scenario's answer-sheet PDF download path for a submitted letter.
     /// Owner-gated and post-submission only — the answer sheet is never exposed on the live
-    /// exam surface, only revealed on the results page after the learner has submitted.
-    /// Returns null when not owned or no answer sheet is attached.
+    /// exam surface, only revealed on the results page once the result is released (not while
+    /// the 15-minute release window is open). Returns null when not owned, not yet released,
+    /// or no answer sheet is attached.
     /// </summary>
     Task<string?> GetAnswerSheetDownloadPathAsync(string userId, Guid submissionId, CancellationToken ct);
-    Task<WritingSubmissionResponse?> ReviseSubmissionAsync(string userId, Guid originalSubmissionId, WritingReviseRequest request, CancellationToken ct);
 
     /// <summary>
     /// Resolves the Case Notes stimulus PDF path + the learner's highlight snapshot for a
@@ -47,7 +47,9 @@ public interface IWritingSubmissionService
 /// Learner-facing submission orchestration. Persists a <see cref="WritingSubmission"/>
 /// via the V2 evaluation pipeline, then returns immediately while grading runs
 /// asynchronously. Ownership is enforced on every method: a learner can only
-/// see/revise their own submissions.
+/// see their own submissions. Every learner read applies the result-release rule
+/// (<see cref="WritingResultRelease"/>): a graded letter reads as still grading, and its
+/// grade stays hidden, until its 15-minute window has elapsed (allowlisted accounts exempt).
 /// </summary>
 public sealed class WritingSubmissionService(
     LearnerDbContext db,
@@ -94,7 +96,7 @@ public sealed class WritingSubmissionService(
         // window) resolve to the existing row and must never see the
         // terminal-state lock for their own attempt; only genuinely NEW
         // content after a terminal attempt throws writing_submission_locked
-        // (which correctly routes to revise).
+        // (the learner starts a fresh attempt via Practice this again).
         var submit = await pipeline.SubmitAsync(new WritingSubmitAttempt(
             UserId: userId,
             ScenarioId: request.ScenarioId,
@@ -121,13 +123,14 @@ public sealed class WritingSubmissionService(
 
         var entity = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId, ct)
             ?? throw new InvalidOperationException("Submission missing after submit.");
+        var unrestricted = await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, userId, ct);
 
         if (!submit.IsNew)
         {
             logger.LogInformation(
                 "Writing submit resolved to existing submission {SubmissionId} for user {UserId} scenario {ScenarioId}; no new grading job.",
                 submissionId, userId, request.ScenarioId);
-            return WritingV2ResponseMapper.ToSubmissionResponse(entity);
+            return WritingV2ResponseMapper.ToSubmissionResponse(entity, learnerUnrestricted: unrestricted);
         }
 
         // Snapshot the learner's Case Notes highlights onto the submission (for the results
@@ -163,13 +166,15 @@ public sealed class WritingSubmissionService(
         await SafeEmitAsync(userId, "submit_clicked", simulationMode, entity.ScenarioId, entity.Id, payload, ct);
         await SafeEmitAsync(userId, "attempt_locked", simulationMode, entity.ScenarioId, entity.Id, payload, ct);
 
-        return WritingV2ResponseMapper.ToSubmissionResponse(entity);
+        return WritingV2ResponseMapper.ToSubmissionResponse(entity, learnerUnrestricted: unrestricted);
     }
 
     public async Task<WritingSubmissionResponse?> GetSubmissionAsync(string userId, Guid submissionId, CancellationToken ct)
     {
         var s = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == submissionId && x.UserId == userId, ct);
-        return s is null ? null : WritingV2ResponseMapper.ToSubmissionResponse(s);
+        if (s is null) return null;
+        return WritingV2ResponseMapper.ToSubmissionResponse(
+            s, learnerUnrestricted: await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, userId, ct));
     }
 
     public async Task<WritingSubmissionResponse> RetryGradeAsync(string userId, Guid submissionId, CancellationToken ct)
@@ -179,6 +184,7 @@ public sealed class WritingSubmissionService(
         {
             throw ApiException.NotFound("writing_submission_not_found", "Submission was not found.");
         }
+        var unrestricted = await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, userId, ct);
 
         if (submission.Status == WritingSubmissionStatuses.Graded)
         {
@@ -186,8 +192,9 @@ public sealed class WritingSubmissionService(
                 .FirstOrDefaultAsync(g => g.SubmissionId == submission.Id, ct);
             if (existingGrade is not null)
             {
-                // Already graded: idempotent no-op, return the submission as-is.
-                return WritingV2ResponseMapper.ToSubmissionResponse(submission);
+                // Already graded: idempotent no-op, return the submission as-is
+                // (a graded letter still inside its release window reads as grading).
+                return WritingV2ResponseMapper.ToSubmissionResponse(submission, learnerUnrestricted: unrestricted);
             }
         }
 
@@ -215,7 +222,7 @@ public sealed class WritingSubmissionService(
         {
             throw ApiException.Conflict(
                 "writing_grade_retry_not_eligible",
-                "Only a failed grading attempt can be retried. Submit a revision to try again with new content.");
+                "Only a failed grading attempt can be retried. To try this task again, start a new attempt from the task page.");
         }
         else if (submission.FailureRetryable == false)
         {
@@ -248,11 +255,14 @@ public sealed class WritingSubmissionService(
         // tracked entity still shows queued after the pipeline's CAS updates.
         var updated = await db.WritingSubmissions.AsNoTracking()
             .FirstAsync(s => s.Id == submission.Id, ct);
-        return WritingV2ResponseMapper.ToSubmissionResponse(updated);
+        return WritingV2ResponseMapper.ToSubmissionResponse(updated, learnerUnrestricted: unrestricted);
     }
 
     public async Task<string?> GetAnswerSheetDownloadPathAsync(string userId, Guid submissionId, CancellationToken ct)
     {
+        // Held until the result is released: the answer sheet is part of the result.
+        if (!await WritingResultRelease.IsReleasedAsync(db, userId, submissionId, DateTimeOffset.UtcNow, ct)) return null;
+
         // Owner-gated, post-submission only: resolve via the submission so the answer sheet is
         // never reachable from the live exam-surface scenario response.
         var scenarioId = await db.WritingSubmissions.AsNoTracking()
@@ -297,8 +307,9 @@ public sealed class WritingSubmissionService(
 
     public async Task<WritingGradeResponseV2?> GetSubmissionGradeAsync(string userId, Guid submissionId, CancellationToken ct)
     {
-        var s = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == submissionId && x.UserId == userId, ct);
-        if (s is null) return null;
+        // Not owned, still processing, or held (graded but inside the 15-minute window) all 404
+        // exactly like an unready result: the grade is never served before its release.
+        if (!await WritingResultRelease.IsReleasedAsync(db, userId, submissionId, DateTimeOffset.UtcNow, ct)) return null;
         var candidateRelease = await db.WritingAssessmentReportsV11.AsNoTracking()
             .AnyAsync(x => x.SubmissionId == submissionId
                 && x.Status == WritingAssessmentV11Status.CandidateReady
@@ -325,45 +336,6 @@ public sealed class WritingSubmissionService(
             .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
 
         return WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText);
-    }
-
-    public async Task<WritingSubmissionResponse?> ReviseSubmissionAsync(string userId, Guid originalSubmissionId, WritingReviseRequest request, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        var original = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == originalSubmissionId && x.UserId == userId, ct);
-        if (original is null) return null;
-        // Profession lock (23 Sep 2026): a letter written before the lock for
-        // another profession's scenario is never revised (or graded) again.
-        var scenarioProfession = await db.WritingScenarios.AsNoTracking()
-            .Where(s => s.Id == original.ScenarioId)
-            .Select(s => (string?)s.Profession)
-            .FirstOrDefaultAsync(ct);
-        await LearnerProfessionGuard.RequireAsync(db, userId, scenarioProfession,
-            "writing_scenario_not_found", "Scenario was not found.", ct);
-        var startedAt = DateTimeOffset.UtcNow.AddSeconds(-Math.Max(0, request.TimeSpentSeconds));
-        // Revise path via the SubmitGrading seam: revisions intentionally
-        // create new rows linked to the original (no content dedupe, no
-        // terminal lock), with the key derived from the original submission.
-        var reviseSubmit = await pipeline.SubmitAsync(new WritingSubmitAttempt(
-            UserId: userId,
-            ScenarioId: original.ScenarioId,
-            Mode: original.Mode,
-            GradingTier: original.GradingTier,
-            InputSource: original.InputSource,
-            LetterContent: request.LetterContent,
-            TimeSpentSeconds: request.TimeSpentSeconds,
-            StartedAt: startedAt,
-            IsRevision: true,
-            OriginalSubmissionId: originalSubmissionId), ct);
-        var newId = reviseSubmit.SubmissionId;
-        await WritingDraftServiceV2.ConsumeAsync(db, userId, original.ScenarioId, "revision", newId, logger, ct);
-        if (reviseSubmit.IsNew)
-        {
-            await RunOrDetachGradingAsync(newId, ct);
-        }
-        var entity = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == newId, ct)
-            ?? throw new InvalidOperationException("Revision submission missing after create.");
-        return WritingV2ResponseMapper.ToSubmissionResponse(entity);
     }
 
     /// <summary>
@@ -505,7 +477,6 @@ public sealed class WritingSubmissionService(
             "timed" => "timed",
             "diagnostic" => "diagnostic",
             "mock" => "mock",
-            "revision" => "revision",
             _ => throw ApiException.Validation("writing_submission_invalid_mode", "Unsupported writing submission mode."),
         };
     }

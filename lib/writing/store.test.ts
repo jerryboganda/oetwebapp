@@ -7,14 +7,11 @@ describe('writing editor store', () => {
     useWritingEditorStore.getState().reset();
   });
 
-  it('keeps coach mode enabled only in coached and revision modes', () => {
+  it('keeps coach mode enabled only in coached mode', () => {
     const store = useWritingEditorStore.getState();
 
     store.setCoachToggled(true);
     store.setMode('coached');
-    expect(useWritingEditorStore.getState().coachToggled).toBe(true);
-
-    store.setMode('revision');
     expect(useWritingEditorStore.getState().coachToggled).toBe(true);
 
     store.setMode('practice');
@@ -46,7 +43,7 @@ describe('writing editor store', () => {
     store.resetDraftRestored();
     expect(useWritingEditorStore.getState().draftRestored).toBe(false);
 
-    store.setMode('revision');
+    store.setMode('coached');
     store.setCoachToggled(true);
     store.setWordCount(200);
     store.tickTimer(30);

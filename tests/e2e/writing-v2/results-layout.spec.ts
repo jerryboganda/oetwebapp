@@ -69,7 +69,6 @@ const RESULT_FIXTURE = {
     modelUsed: 'e2e',
     canonVersion: 'e2e',
     canonViolations: [],
-    revisionInvite: { shouldOffer: false, reason: '' },
     gradedAt: '2026-10-02T09:41:00Z',
   },
   report: {

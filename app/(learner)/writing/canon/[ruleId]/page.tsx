@@ -13,6 +13,8 @@ import { MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { getMyCanonViolationsForRule, getWritingCanonRule } from '@/lib/writing/api';
+import { cleanCandidateText, plainCategoryLabel } from '@/lib/writing/candidate-text';
+import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import type {
   WritingCanonRuleV2Dto,
   WritingCanonViolationDto,
@@ -24,6 +26,9 @@ const SEVERITY_TONE: Record<WritingSeverity, { badge: 'danger' | 'warning' | 'mu
   medium: { badge: 'warning', labelKey: 'writing.canon.detail.severity.medium' },
   low: { badge: 'muted', labelKey: 'writing.canon.detail.severity.low' },
 };
+
+// Rules from the rulebook bridge list "all" or a plain name, not an LT code: only a real code has a translated label.
+const LETTER_TYPE_CODE = /^LT-(?:RR|UR|DG|TR|NM|OT)$/;
 
 export default function WritingCanonRuleDetailPage() {
   const t = useTranslations();
@@ -47,7 +52,7 @@ export default function WritingCanonRuleDetailPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : t('writing.canon.detail.error.load'));
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.canon.detail.error.load')));
       });
     return () => {
       cancelled = true;
@@ -60,16 +65,15 @@ export default function WritingCanonRuleDetailPage() {
   return (
     <>
       <LearnerPageHero
-        eyebrow={t('writing.canon.detail.eyebrow', { version: rule?.version ?? '-' })}
+        eyebrow={t('writing.canon.detail.eyebrow')}
         icon={BookOpen}
         accent="writing"
-        // Rule id is a canonical identifier (e.g. "PURPOSE-01") — keep verbatim.
-        title={rule?.id ?? t('writing.canon.detail.pageTitleFallback')}
-        // Rule text is Dr Ahmed's authored English canon content (spec §32).
-        description={rule?.ruleText ?? t('writing.canon.detail.descriptionLoading')}
+        // The rule id and canon version are internal; the title is the plain category.
+        title={rule ? plainCategoryLabel(rule.category) || t('writing.canon.detail.pageTitleFallback') : t('writing.canon.detail.pageTitleFallback')}
+        // Rule text is Dr Ahmed's authored English guidance (spec §32).
+        description={rule ? cleanCandidateText(rule.ruleText) : t('writing.canon.detail.descriptionLoading')}
         highlights={rule ? [
-          { icon: BookOpen, label: t('writing.canon.detail.fields.category'), value: rule.category },
-          { icon: CheckCircle2, label: t('writing.canon.detail.fields.active'), value: rule.active ? t('writing.canon.detail.fields.activeYes') : t('writing.canon.detail.fields.activeNo') },
+          { icon: BookOpen, label: t('writing.canon.detail.fields.category'), value: plainCategoryLabel(rule.category) },
         ] : []}
       />
 
@@ -84,16 +88,12 @@ export default function WritingCanonRuleDetailPage() {
               <h2 id="meta-heading" className="text-base font-bold text-navy">{t('writing.canon.detail.metadataTitle')}</h2>
               {tone ? <Badge variant={tone.badge} size="sm">{t(tone.labelKey)}</Badge> : null}
             </header>
-            <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-              <div className="min-w-0">
-                <dt className="eyebrow text-muted">{t('writing.canon.detail.fields.detection')}</dt>
-                <dd className="mt-1 font-bold capitalize text-navy">{rule.detectionType}</dd>
-              </div>
+            <dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div className="min-w-0">
                 <dt className="eyebrow text-muted">{t('writing.canon.detail.fields.letterTypes')}</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">
                   {rule.appliesToLetterTypes.length > 0
-                    ? rule.appliesToLetterTypes.map((lt) => <Badge key={lt} variant="muted" size="sm">{lt}</Badge>)
+                    ? rule.appliesToLetterTypes.map((lt) => <Badge key={lt} variant="muted" size="sm">{LETTER_TYPE_CODE.test(lt) ? t(`writing.practice.library.letterType.${lt}`) : plainCategoryLabel(lt)}</Badge>)
                     : <Badge variant="muted" size="sm">{t('writing.canon.detail.fields.all')}</Badge>}
                 </dd>
               </div>
@@ -167,7 +167,7 @@ export default function WritingCanonRuleDetailPage() {
               {violations.slice(0, 5).map((v) => (
                 <li key={v.id} className="py-2.5 text-sm first:pt-0 last:pb-0">
                   <Link href={`/writing/submissions/${encodeURIComponent(v.submissionId)}/results`} className="rounded font-bold text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                    {t('writing.canon.detail.history.submission', { id: v.submissionId.slice(0, 8) })}
+                    {t('writing.canon.detail.history.submission')}
                   </Link>
                   {/* Snippet is verbatim from the learner letter (English). */}
                   <span className="ms-1 text-xs text-muted" dir="ltr">· line {v.lineNumber}: &quot;{v.snippet}&quot;</span>

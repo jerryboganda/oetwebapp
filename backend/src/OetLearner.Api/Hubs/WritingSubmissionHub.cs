@@ -20,8 +20,9 @@ namespace OetLearner.Api.Hubs;
 ///   UnsubscribeFromSubmission(submissionId) — leave the group.
 ///
 /// Server → Client events:
-///   GradeReady(submissionId, gradeId) — grade row persisted; client should
-///     refetch /v1/writing/submissions/{id}/grade.
+///   GradeReady(submissionId, gradeId, gradedAt) — a RELEASED result is ready (never pushed while
+///     the 15-minute release window is open); a pure signal that carries no score or band, the
+///     client refetches /v1/writing/submissions/{id}.
 ///   GradeFailed(submissionId, errorCode, message) — terminal failure.
 ///   GradeProgress(submissionId, stage) — pipeline stage transition.
 /// </summary>
@@ -92,11 +93,10 @@ public sealed class WritingSubmissionHub : Hub
 }
 
 /// <summary>
-/// Strongly typed payload pushed via <see cref="WritingSubmissionHub.GradeReadyEvent"/>.
+/// Strongly typed payload pushed via <see cref="WritingSubmissionHub.GradeReadyEvent"/>. Deliberately
+/// carries no score, band or label: the event is only a redirect signal, so it can never leak a result.
 /// </summary>
 public sealed record WritingGradeReadyHubPayload(
     Guid SubmissionId,
     Guid GradeId,
-    int EstimatedBand,
-    string BandLabel,
     DateTimeOffset GradedAt);

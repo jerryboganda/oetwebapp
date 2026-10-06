@@ -53,6 +53,8 @@ public sealed class WritingMockService(
 {
     private const int ReadingPhaseSeconds = 5 * 60;
     private const int WritingPhaseSeconds = 40 * 60;
+    // ModelUsed of a grade a tutor authored from scratch (WritingTutorReviewService.ApplyTutorGradeAsync).
+    private const string HumanTutorModel = "human_tutor";
 
     public async Task<IReadOnlyList<WritingMockTemplate>> ListAsync(string userId, CancellationToken ct)
     {
@@ -381,7 +383,7 @@ public sealed class WritingMockService(
         {
             if (session.SubmissionId is null) return null;
             var existing = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == session.SubmissionId && s.UserId == userId && s.Mode == "mock", ct);
-            return existing is null ? null : WritingV2ResponseMapper.ToSubmissionResponse(existing);
+            return existing is null ? null : await ToLearnerSubmissionAsync(existing, userId, ct);
         }
         if (session.Status != "writing")
         {
@@ -401,7 +403,7 @@ public sealed class WritingMockService(
             {
                 var existing = await db.WritingSubmissions.AsNoTracking()
                     .FirstOrDefaultAsync(s => s.Id == submittedId && s.UserId == userId && s.Mode == "mock", ct);
-                return existing is null ? null : WritingV2ResponseMapper.ToSubmissionResponse(existing);
+                return existing is null ? null : await ToLearnerSubmissionAsync(existing, userId, ct);
             }
             throw ApiException.Validation("writing_mock_session_locked", "Mock session is already being submitted.");
         }
@@ -463,8 +465,15 @@ public sealed class WritingMockService(
             throw;
         }
         var sub = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submissionId, ct);
-        return sub is null ? null : WritingV2ResponseMapper.ToSubmissionResponse(sub);
+        return sub is null ? null : await ToLearnerSubmissionAsync(sub, userId, ct);
     }
+
+    /// <summary>Learner-facing submission DTO with the result-release view (effective status, release fields).</summary>
+    private async Task<WritingSubmissionResponse> ToLearnerSubmissionAsync(WritingSubmission submission, string userId, CancellationToken ct)
+        => WritingV2ResponseMapper.ToSubmissionResponse(
+            submission,
+            now: clock.GetUtcNow(),
+            learnerUnrestricted: await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, userId, ct));
 
     public async Task<WritingMockResultsResponse?> GetMockResultsAsync(string userId, Guid sessionId, CancellationToken ct)
     {
@@ -478,12 +487,20 @@ public sealed class WritingMockService(
             .OrderByDescending(g => g.AppealedByGradeId != null || g.TutorReviewId != null)
             .ThenByDescending(g => g.GradedAt)
             .FirstOrDefaultAsync(ct);
-        if (grade is null)
+        var now = clock.GetUtcNow();
+        var release = WritingResultRelease.Describe(
+            submission.Status, submission.SubmittedAt, await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, userId, ct), now);
+        // A human examiner's own marks (no AI result behind them) are never held by the release window.
+        var released = release.State == WritingResultRelease.Released || grade?.ModelUsed == HumanTutorModel;
+        if (grade is null || !released)
         {
             return new WritingMockResultsResponse(
                 WritingV2ResponseMapper.ToResponse(session),
                 Grade: null,
-                Status: submission.Status);
+                Status: release.EffectiveStatus,
+                ReleaseState: release.State,
+                ReleaseAt: release.ReleaseAt,
+                ServerNow: now);
         }
         var violations = await db.WritingCanonViolations.AsNoTracking()
             .Where(v => v.SubmissionId == submission.Id)
@@ -493,6 +510,9 @@ public sealed class WritingMockService(
             .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
         return new WritingMockResultsResponse(
             WritingV2ResponseMapper.ToResponse(session),
-            WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText));
+            WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText),
+            ReleaseState: WritingResultRelease.Released,
+            ReleaseAt: release.ReleaseAt,
+            ServerNow: now);
     }
 }

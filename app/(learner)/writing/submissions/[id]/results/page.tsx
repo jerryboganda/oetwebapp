@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { Award, FileText, PenLine, RefreshCw, Share2, Sparkles } from 'lucide-react';
+import { Award, FileText, RefreshCw, Share2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -35,9 +35,20 @@ import {
   oetReportedScoreFromScaled,
   writingRawTotalFromCriterionScores,
 } from '@/lib/scoring';
+import {
+  candidateSeverity,
+  cleanCandidateList,
+  cleanCandidateParagraphs,
+  cleanCandidateText,
+  severityLabel,
+} from '@/lib/writing/candidate-text';
+import { candidatePriorities } from '@/lib/writing/priorities';
+import { isReleased } from '@/lib/writing/release';
+import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { TutorVoiceNotePlayer } from '@/components/domain/writing/TutorVoiceNotePlayer';
 import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import type {
+  WritingCandidateSeverity,
   WritingCaseNotesDto,
   WritingCriteriaScoresDto,
   WritingCriterionCode,
@@ -50,15 +61,15 @@ import type {
 } from '@/lib/writing/types';
 
 const CRITERION_NAMES: Record<WritingCriterionCode, string> = {
-  c1: 'C1 Purpose',
-  c2: 'C2 Content',
-  c3: 'C3 Conciseness & Clarity',
-  c4: 'C4 Genre & Style',
-  c5: 'C5 Organisation & Layout',
-  c6: 'C6 Language Accuracy',
+  c1: 'Purpose',
+  c2: 'Content',
+  c3: 'Conciseness & Clarity',
+  c4: 'Genre & Style',
+  c5: 'Organisation & Layout',
+  c6: 'Language',
 };
 
-// OET writing criterion scales: C1 Purpose is out of 3, the rest out of 7.
+// OET writing criterion scales: Purpose is out of 3, the rest out of 7.
 // Targets are the band-6 style anchor that tints each criterion row.
 const CRITERION_MAX: Record<WritingCriterionCode, number> = { c1: 3, c2: 7, c3: 7, c4: 7, c5: 7, c6: 7 };
 const CRITERION_TARGET: Record<WritingCriterionCode, number> = { c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 };
@@ -76,16 +87,12 @@ const V11_CRITERION_KEY: Record<string, WritingCriterionCode> = {
 /** Complete corrections show this many items until "View all corrections". */
 const CORRECTIONS_PREVIEW = 5;
 
-// The backend stores each priority as "<rule id>: <message>", and AI findings
-// carry "AI.<criterion>" / "AI:<rule id>" ids (WritingAssessmentReportBuilder,
-// BuildTopThreePrioritiesJson). A rule id has no spaces and contains a digit,
-// "." , "_" or "-", so a plain lead-in such as "Purpose: …" is left alone.
-const PRIORITY_RULE_LABEL = /^(?:AI(?:[.:][\w.-]*)?|[\w-]*[\d._-][\w.-]*):\s+/;
-
-/** The candidate-facing priority text: the message without its internal rule label. */
-function priorityText(priority: string): string {
-  return priority.replace(PRIORITY_RULE_LABEL, '').trim();
-}
+const SEVERITY_BADGE: Record<WritingCandidateSeverity, 'danger' | 'warning' | 'info' | 'muted'> = {
+  critical: 'danger',
+  major: 'warning',
+  minor: 'info',
+  advisory: 'muted',
+};
 
 /** A card shows a short excerpt; the complete text stays in "View all corrections". */
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text);
@@ -117,6 +124,7 @@ function assessmentToScores(report: WritingAssessmentV11ReportDto): WritingCrite
 
 export default function WritingSubmissionResultsPage() {
   const t = useTranslations();
+  const router = useRouter();
   const writingPassMark = useWritingPassMark();
   const params = useParams<{ id: string }>();
   const submissionId = String(params?.id ?? '');
@@ -132,8 +140,8 @@ export default function WritingSubmissionResultsPage() {
   const [freeSample, setFreeSample] = useState<FreeSampleOption | null>(null);
   const [showAllCorrections, setShowAllCorrections] = useState(false);
 
-  // Free Writing sample (retry addendum, 23 Sep 2026): the second free result
-  // is a revise & resubmit of the same letter. A failed lookup just hides it.
+  // Free Writing sample: only used to tell the learner the free sample is spent.
+  // A failed lookup just hides the note.
   useEffect(() => {
     let cancelled = false;
     listFreeSamples('writing')
@@ -150,28 +158,44 @@ export default function WritingSubmissionResultsPage() {
 
   useEffect(() => {
     if (!submissionId) return;
-    void Promise.all([
-      getWritingSubmission(submissionId),
-      getWritingSubmissionGrade(submissionId).catch(() => null),
-      getWritingAssessmentV11(submissionId).catch(() => null),
-      // Tutor's review. Per-criterion comments render for mocks only; the
-      // optional overall text note renders in BOTH modes when present.
-      getTutorReview(submissionId).catch(() => null),
-      // Answer-sheet PDF (post-submission only; null when none attached).
-      getWritingAnswerSheet(submissionId).catch(() => ({ answerSheetPdfDownloadPath: null })),
-      // Case Notes PDF + the learner's highlight snapshot (read-only review).
-      getWritingSubmissionCaseNotes(submissionId).catch(() => null),
-      ])
-      .then(([sub, g, report, review, answerSheet, notes]) => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        // The submission comes first: a result that is still being assessed, or
+        // held for the 15-minute release window, belongs to the grading page.
+        // Nothing else is requested until the result is released.
+        const sub = await getWritingSubmission(submissionId);
+        if (cancelled) return;
+        if (!isReleased(sub) && sub.status !== 'failed') {
+          router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/grading`);
+          return;
+        }
+        const [g, report, review, answerSheet, notes] = await Promise.all([
+          getWritingSubmissionGrade(submissionId).catch(() => null),
+          getWritingAssessmentV11(submissionId).catch(() => null),
+          // Tutor's review. Per-criterion comments render for mocks only; the
+          // optional overall text note renders in BOTH modes when present.
+          getTutorReview(submissionId).catch(() => null),
+          // Answer-sheet PDF (post-submission only; null when none attached).
+          getWritingAnswerSheet(submissionId).catch(() => ({ answerSheetPdfDownloadPath: null })),
+          // Case Notes PDF + the learner's highlight snapshot (read-only review).
+          getWritingSubmissionCaseNotes(submissionId).catch(() => null),
+        ]);
+        if (cancelled) return;
         setSubmission(sub);
         setGrade(g);
         setAssessment(report);
         setTutorReview(review);
         setAnswerSheetPath(answerSheet?.answerSheetPdfDownloadPath ?? null);
         setCaseNotes(notes ?? null);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.results.error.load')));
-  }, [submissionId, t]);
+      } catch (err) {
+        if (!cancelled) setError(toCandidateSafeWritingErrorMessage(err, t('writing.submissions.results.error.load')));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [submissionId, router, t]);
 
   const onShowcase = useCallback(async () => {
     if (!submissionId) return;
@@ -180,7 +204,7 @@ export default function WritingSubmissionResultsPage() {
       await publishToShowcase(submissionId);
       setActionStatus(t('writing.submissions.results.actions.showcasePublished'));
     } catch (err) {
-      setActionStatus(err instanceof Error ? err.message : t('writing.submissions.results.actions.showcaseError'));
+      setActionStatus(toCandidateSafeWritingErrorMessage(err, t('writing.submissions.results.actions.showcaseError')));
     }
   }, [submissionId, t]);
 
@@ -190,7 +214,7 @@ export default function WritingSubmissionResultsPage() {
     try {
       await disputeWritingCanonViolation(submissionId, { ruleId, violationId, reason: reason.trim() });
     } catch (err) {
-      setActionStatus(err instanceof Error ? err.message : t('writing.submissions.results.actions.disputeError'));
+      setActionStatus(toCandidateSafeWritingErrorMessage(err, t('writing.submissions.results.actions.disputeError')));
     }
   }, [submissionId, t]);
 
@@ -202,55 +226,48 @@ export default function WritingSubmissionResultsPage() {
   // scores stand in only when no grade loaded.
   const scores = grade ? gradeToScores(grade) : visibleReport ? assessmentToScores(visibleReport) : null;
   const isA = grade?.bandLabel?.startsWith('A');
-  const offerRevision = grade?.revisionInvite?.shouldOffer ?? false;
   // Mock writing is human-marked with zero AI: show the tutor's WRITTEN feedback and
   // voice note, and suppress every AI-flavoured section. Normal writing keeps AI feedback.
   const isMock = submission?.mode === 'mock';
   // The AI Estimated Practice Score (/500) + grade band is the headline result
   // whenever the v1.1 report is candidate-visible (Writing Rule Enforcement
-  // Addendum Rev8 §12.4/§19.4); the raw criteria total stays as secondary
+  // Addendum Rev8 §12.4/§19.4); the criteria score stays as secondary
   // context. A mock keeps its tutor's human grade as the headline (zero AI).
   const practiceScore = assessmentVisible && !(isMock && grade)
     ? assessment?.estimatedPracticeScore == null
       ? null
       : oetReportedScoreFromScaled(assessment.estimatedPracticeScore)
     : null;
-  const freeSampleForThisLetter = freeSample && submission && freeSample.contentId === submission.scenarioId
-    ? freeSample
-    : null;
-  const freeRevisionHref = freeSampleForThisLetter?.state === 'retry_available'
-    ? `/writing/submissions/${encodeURIComponent(freeSampleForThisLetter.lastSubmissionId ?? submissionId)}/revise`
-    : null;
-  // Paid Revise & Resubmit: only on a graded, non-mock letter the grade invites
-  // revising (revisionInvite.shouldOffer). A free-sample letter keeps its own
-  // free retry above instead.
-  const paidRevisionHref = submission?.status === 'graded' && !isMock && offerRevision && !freeSampleForThisLetter
-    ? `/writing/submissions/${encodeURIComponent(submission.id)}/revise`
-    : null;
+  const freeSampleCompleted = freeSample?.state === 'completed'
+    && submission?.scenarioId === freeSample.contentId;
   const practiceRawTotal = assessment
     ? writingRawTotalFromCriterionScores(
         Object.fromEntries(assessment.criteria.map((c) => [c.criterionCode, c.score] as const)),
       )
     : 0;
 
-  // ② The v1.1 report's priorities, else the grade's — never on a mock (zero AI).
+  // ② Top priorities: the v1.1 report's list is authoritative once that report
+  // is visible (even when empty: nothing is borrowed from the grade's list); the
+  // grade's list is used only when no v1.1 report is visible. Never on a mock.
   const priorities = isMock
     ? []
-    : [...new Set(
-        (visibleReport?.topPriorities.length ? visibleReport.topPriorities : grade?.topThreePriorities ?? [])
-          .map(priorityText)
-          .filter(Boolean),
-      )].slice(0, 3);
+    : candidatePriorities(visibleReport ? visibleReport.topPriorities : grade?.topThreePriorities ?? []);
   const modelAnswer = visibleReport?.modelAnswer ?? null;
-  // ⑤ The server sends corrections severity-first (WritingAssessmentV11ResultService),
-  // so the preview is the five most severe and every item stays one tap away.
-  const corrections = visibleReport?.errors ?? [];
+  const modelAnswerNotes = cleanCandidateList(modelAnswer?.whyThisWorks);
+  // ⑤ The server sends corrections severity-first (WritingAssessmentV11ResultService).
+  // Advisory items are coaching only: they never lower the score, never count
+  // toward a criterion's corrections and are listed after the scored ones.
+  const allCorrections = visibleReport?.errors ?? [];
+  const corrections = allCorrections.filter((item) => candidateSeverity(item.severity) !== 'advisory');
+  const advisoryCorrections = allCorrections.filter((item) => candidateSeverity(item.severity) === 'advisory');
   const correctionsCollapsible = corrections.length > CORRECTIONS_PREVIEW;
   const shownCorrections = correctionsCollapsible && !showAllCorrections
     ? corrections.slice(0, CORRECTIONS_PREVIEW)
     : corrections;
-  const canonViolations = grade?.canonViolations ?? [];
-  // ④ Each criterion's findings in that same order, so [0] is its top-severity evidence.
+  // The v1.1 report is the single source of corrections; the legacy style-check
+  // group only stands in for older results that have no visible v1.1 report.
+  const canonViolations = visibleReport ? [] : grade?.canonViolations ?? [];
+  // ④ Each criterion's scored findings in that same order, so [0] is its top-severity evidence.
   const findingsByCriterion: Partial<Record<WritingCriterionCode, WritingAssessmentV11ErrorDto[]>> = {};
   for (const finding of corrections) {
     const code = V11_CRITERION_KEY[finding.primaryCriterionCode];
@@ -259,16 +276,40 @@ export default function WritingSubmissionResultsPage() {
 
   // The stored flag is a grader band or a review state; the learner only ever
   // sees neutral copy. A value this page does not know hides the stat.
-  const confidenceLabels: Record<WritingGradeConfidenceFlag, string> = {
+  const confidenceLabels: Partial<Record<WritingGradeConfidenceFlag, string>> = {
     high: t('writing.submissions.results.confidence.high'),
     medium: t('writing.submissions.results.confidence.medium'),
     low: t('writing.submissions.results.confidence.low'),
+    awaiting_review: t('writing.submissions.results.confidence.awaitingReview'),
     jev_review: t('writing.submissions.results.confidence.awaitingReview'),
     tutor_reviewed: t('writing.submissions.results.confidence.tutorReviewed'),
   };
-  const confidenceLabel = grade ? confidenceLabels[grade.confidenceFlag] : null;
+  const confidenceLabel = grade ? confidenceLabels[grade.confidenceFlag] ?? null : null;
 
   const sectionCard = cardClassName({ padding: 'lg' });
+
+  // One correction: severity, criterion, the wording, the suggested fix and why.
+  // The wording is the candidate's own and stays verbatim; the rest is cleaned.
+  const renderCorrection = (item: WritingAssessmentV11ErrorDto) => {
+    const correction = cleanCandidateText(item.correction);
+    const whyItMatters = cleanCandidateText(item.whyItMatters);
+    return (
+      <li key={item.id} className="min-w-0 break-words py-3 text-sm first:pt-1 last:pb-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={SEVERITY_BADGE[candidateSeverity(item.severity)]} size="sm">{severityLabel(item.severity, t)}</Badge>
+          <span className="font-semibold text-navy">{CRITERION_NAMES[V11_CRITERION_KEY[item.primaryCriterionCode]] ?? cleanCandidateText(item.category)}</span>
+        </div>
+        {item.candidateWording ? <p className="mt-1 text-navy" dir="ltr">“{item.candidateWording}”</p> : null}
+        {correction ? (
+          <p className="mt-1 text-primary">
+            <span className="font-bold">{t('writing.submissions.results.criteria.suggestedFix')}</span>{' '}
+            <span dir="ltr">{correction}</span>
+          </p>
+        ) : null}
+        {whyItMatters ? <p className="mt-1 text-muted">{whyItMatters}</p> : null}
+      </li>
+    );
+  };
 
   return (
     <>
@@ -296,7 +337,7 @@ export default function WritingSubmissionResultsPage() {
             stats={[
               { label: 'Score', value: <span data-testid="ai-estimated-score"><CountUp value={practiceScore} suffix={`/${OET_SCALED_MAX}`} /></span>, tone: 'info', icon: <Award /> },
               ...(assessment.gradeBand ? [{ label: 'Grade band', value: <span data-testid="ai-grade-band">{assessment.gradeBand}</span>, tone: 'info' as const, icon: <Award /> }] : []),
-              { label: t('writing.submissions.results.highlights.raw'), value: <CountUp value={practiceRawTotal} suffix={`/${WRITING_RAW_MAX}`} />, tone: 'default', icon: <FileText /> },
+              { label: t('writing.submissions.results.highlights.criteriaScore'), value: <span data-testid="criteria-score"><CountUp value={practiceRawTotal} suffix={`/${WRITING_RAW_MAX}`} /></span>, tone: 'default', icon: <FileText /> },
               ...(assessment.confidenceLabel ? [{ label: 'Confidence', value: assessment.confidenceLabel, tone: 'default' as const, icon: <Sparkles /> }] : []),
             ]}
           />
@@ -306,13 +347,13 @@ export default function WritingSubmissionResultsPage() {
             icon={Award}
             title={t('writing.submissions.results.estimatedBand', { band: grade.bandLabel })}
             subtitle={t('writing.submissions.results.description')}
-            // The ring fills on the raw /38 scale (estimatedBand is also stored
-            // in raw-total units, never a 0–7 band); bandLabel is the letter.
+            // The ring fills on the criteria score's /38 scale (estimatedBand is
+            // also stored in those units, never a 0–7 band); bandLabel is the letter.
             gaugeValue={gaugePercent(grade.rawTotal, WRITING_RAW_MAX)}
             gaugeCenter={<span className="text-2xl font-black text-navy">{grade.bandLabel}</span>}
-            gaugeLabel={`${grade.rawTotal}/${WRITING_RAW_MAX}`}
+            gaugeLabel={`${t('writing.submissions.results.highlights.criteriaScore')} ${grade.rawTotal}/${WRITING_RAW_MAX}`}
             stats={[
-              { label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/${WRITING_RAW_MAX}`, tone: 'info', icon: <Award /> },
+              { label: t('writing.submissions.results.highlights.criteriaScore'), value: <span data-testid="criteria-score">{`${grade.rawTotal}/${WRITING_RAW_MAX}`}</span>, tone: 'info', icon: <Award /> },
               { label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '-', tone: 'default', icon: <FileText /> },
               // Confidence is an AI signal — hide it on mocks (human-marked, zero AI).
               ...(isMock || !confidenceLabel ? [] : [{ label: t('writing.submissions.results.highlights.confidence'), value: confidenceLabel, tone: 'default' as const, icon: <Sparkles /> }]),
@@ -332,10 +373,7 @@ export default function WritingSubmissionResultsPage() {
       {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
       {actionStatus ? <InlineAlert variant="info">{actionStatus}</InlineAlert> : null}
       {assessment && !assessmentVisible ? (
-        <InlineAlert variant="info">
-          This submission is not yet candidate-visible under the v1.1 release gate.
-          {assessment.blockingCodes.length ? ` Blocked by: ${assessment.blockingCodes.join(', ')}.` : ''}
-        </InlineAlert>
+        <InlineAlert variant="info">{t('writing.release.notice')}</InlineAlert>
       ) : null}
 
       {!submission && !error ? <LearnerSkeleton variant="list" /> : null}
@@ -368,7 +406,7 @@ export default function WritingSubmissionResultsPage() {
                   part of the letter layout (Addendum Rev8 §12.3/§19.2) — never
                   trim, split, or collapse whitespace here. */}
               <p data-testid="grounded-model-answer" className="max-w-3xl whitespace-pre-wrap font-sans text-sm text-navy" dir="ltr">{modelAnswer.modelAnswerText}</p>
-              {modelAnswer.whyThisWorks.length ? <p className="mt-2 text-sm text-muted">{modelAnswer.whyThisWorks.join(' ')}</p> : null}
+              {modelAnswerNotes.length ? <p className="mt-2 text-sm text-muted">{modelAnswerNotes.join(' ')}</p> : null}
             </article>
           </section>
         </MotionSection>
@@ -389,11 +427,13 @@ export default function WritingSubmissionResultsPage() {
                 const findings = findingsByCriterion[code] ?? [];
                 const top = findings[0];
                 const v11 = visibleReport?.criteria.find((c) => V11_CRITERION_KEY[c.criterionCode] === code);
-                const nextStep = v11?.improvementAction;
+                const nextStep = cleanCandidateText(v11?.improvementAction);
+                const summary = cleanCandidateText(v11?.summary);
+                const aiFeedback = cleanCandidateText(ai?.feedback);
                 // The card stays short: a two-sentence summary, ONE suggested fix
                 // (the criterion's most severe finding) and the next step. Every
                 // other correction lives under "View all corrections".
-                const fix = top?.correction ?? (visibleReport ? null : ai?.exemplarFix) ?? null;
+                const fix = cleanCandidateText(top?.correction ?? (visibleReport ? null : ai?.exemplarFix)) || null;
                 return (
                   <li key={code}>
                     <MotionItem delayIndex={Math.min(index, 5)}>
@@ -402,12 +442,12 @@ export default function WritingSubmissionResultsPage() {
                         score={scores[code]}
                         max={CRITERION_MAX[code]}
                         target={CRITERION_TARGET[code]}
-                        feedback={isMock ? tutorReview?.perCriterionComments?.[code] ?? null : v11?.summary ? v11.summary : ai?.quote ? (
+                        feedback={isMock ? cleanCandidateText(tutorReview?.perCriterionComments?.[code]) || null : summary ? summary : ai?.quote ? (
                           <>
                             <mark className="rounded bg-warning/10 px-0.5 text-warning-strong">“{ai.quote}”</mark>{' '}
-                            {ai.feedback}
+                            {aiFeedback}
                           </>
-                        ) : ai?.feedback}
+                        ) : aiFeedback || null}
                         suggestedFix={!isMock && fix ? (
                           <>
                             {top?.candidateWording ? <span className="block text-navy">“{clip(top.candidateWording, CARD_WORDING_MAX)}”</span> : null}
@@ -448,7 +488,7 @@ export default function WritingSubmissionResultsPage() {
         <MotionSection delayIndex={3}>
           <section data-testid="result-section" data-section="corrections" aria-labelledby="corrections-heading" className={sectionCard}>
             <h2 id="corrections-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.corrections.heading')}</h2>
-            {visibleReport && corrections.length === 0 ? (
+            {visibleReport && allCorrections.length === 0 ? (
               <p className="mt-2 text-sm text-muted">{t('writing.submissions.results.corrections.empty')}</p>
             ) : null}
             {corrections.length ? (
@@ -457,18 +497,7 @@ export default function WritingSubmissionResultsPage() {
                 data-testid={correctionsCollapsible && !showAllCorrections ? 'corrections-preview' : 'corrections-full-list'}
                 className="mt-2 divide-y divide-border"
               >
-                {shownCorrections.map((item) => (
-                  <li key={item.id} className="min-w-0 break-words py-3 text-sm first:pt-1 last:pb-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={item.severity.toLowerCase() === 'critical' ? 'danger' : 'warning'} size="sm">{item.severity}</Badge>
-                      <span className="font-semibold text-navy">{CRITERION_NAMES[V11_CRITERION_KEY[item.primaryCriterionCode]] ?? item.primaryCriterionCode}</span>
-                      <span className="text-muted">{item.ruleSource ?? item.category}</span>
-                    </div>
-                    {item.candidateWording ? <p className="mt-1 text-navy" dir="ltr">“{item.candidateWording}”</p> : null}
-                    {item.correction ? <p className="mt-1 text-primary" dir="ltr">{item.correction}</p> : null}
-                    {item.whyItMatters ? <p className="mt-1 text-muted">{item.whyItMatters}</p> : null}
-                  </li>
-                ))}
+                {shownCorrections.map(renderCorrection)}
               </ul>
             ) : null}
             {correctionsCollapsible ? (
@@ -487,7 +516,18 @@ export default function WritingSubmissionResultsPage() {
                   : t('writing.submissions.results.corrections.viewAll', { count: corrections.length })}
               </Button>
             ) : null}
-            {/* Legacy canon-engine rule checks, still disputable, kept below the corrections. */}
+            {/* Coaching only: optional suggestions that never change the score, after the scored corrections. */}
+            {advisoryCorrections.length ? (
+              <div className="mt-4" data-testid="advisory-corrections">
+                <ReferenceDetails summary={t('writing.submissions.results.corrections.advisoryHeading', { count: advisoryCorrections.length })}>
+                  <p className="text-sm text-muted">{t('writing.submissions.results.corrections.advisoryNote')}</p>
+                  <ul className="mt-2 divide-y divide-border">
+                    {advisoryCorrections.map(renderCorrection)}
+                  </ul>
+                </ReferenceDetails>
+              </div>
+            ) : null}
+            {/* Older results only (no visible v1.1 report): the legacy style checks, still disputable. */}
             {canonViolations.length ? (
               <ReferenceDetails summary={t('writing.submissions.results.canon.heading', { count: canonViolations.length })}>
                 <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -506,12 +546,12 @@ export default function WritingSubmissionResultsPage() {
           <section data-testid="result-section" data-section="reference" aria-labelledby="reference-heading" className={sectionCard}>
             <h2 id="reference-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.reference.heading')}</h2>
             <div className="mt-3 space-y-3">
-              {/* "Revise / Review the Letter" for THIS completed attempt is simply
-                  reopening this results page: it re-fetches the saved submission via
-                  GET only (no grading call, no credit deducted, no editable
+              {/* Reviewing THIS completed attempt is simply reopening this
+                  results page: it re-fetches the saved submission via GET only
+                  (no grading call, no credit deducted, no editable
                   resubmission), so the exact original letter belongs in this same
-                  report alongside the score/criteria above (Writing Rule Enforcement
-                  Addendum Rev5, 10 Sep 2026, §13). */}
+                  report alongside the score/criteria above (Writing Rule
+                  Enforcement Addendum Rev5, 10 Sep 2026, §13). */}
               <ReferenceDetails summary="Your submitted letter">
                 <Badge variant="muted" size="sm">Reviewing your saved submission — no credit used</Badge>
                 {/* The submitted letter text is learner-authored English content. */}
@@ -552,7 +592,7 @@ export default function WritingSubmissionResultsPage() {
                   channel, so it starts open there. */}
               {tutorReview?.freeTextFeedback ? (
                 <ReferenceDetails summary="Tutor feedback" defaultOpen={isMock}>
-                  <p className="max-w-3xl whitespace-pre-line text-sm text-navy" dir="ltr">{tutorReview.freeTextFeedback}</p>
+                  <p className="max-w-3xl whitespace-pre-line text-sm text-navy" dir="ltr">{cleanCandidateParagraphs(tutorReview.freeTextFeedback)}</p>
                 </ReferenceDetails>
               ) : null}
 
@@ -566,33 +606,20 @@ export default function WritingSubmissionResultsPage() {
       <section data-testid="result-section" data-section="next-actions" aria-labelledby="actions-heading" className={sectionCard}>
         <h2 id="actions-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.next.heading')}</h2>
         <p className="mt-1 text-sm text-muted">{t('writing.submissions.results.next.description')}</p>
-        {freeSampleForThisLetter?.state === 'completed' ? (
+        {freeSampleCompleted ? (
           <InlineAlert variant="info" className="mt-3">
             <span data-testid="free-sample-completed">{t('freeSample.completed')}</span>
           </InlineAlert>
         ) : null}
         <div className="mt-3 flex flex-wrap gap-2">
-          {freeRevisionHref ? (
-            <Button asChild>
-              <Link href={freeRevisionHref} data-testid="free-sample-revise-cta">
-                <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('freeSample.writing.retryCta')}
-              </Link>
-            </Button>
-          ) : null}
-          {paidRevisionHref ? (
-            <Button asChild>
-              <Link href={paidRevisionHref} data-testid="revise-and-resubmit">
-                <PenLine className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.reviseResubmit')}
-              </Link>
-            </Button>
-          ) : null}
           {/* "Practice this again" is a genuinely new attempt — links to the
               scenario's practice session so it runs the same entitlement
-              gate as any other new attempt (Writing Rule Enforcement
-              Addendum Rev5, 10 Sep 2026, §13). This submission's own
-              letter/score/feedback stay reviewable, unchanged, above. */}
+              gate and normal Writing credit charge as any other new attempt
+              (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026, §13).
+              This submission's own letter/score/feedback stay reviewable,
+              unchanged, above. */}
           {submission ? (
-            <Button asChild variant={freeRevisionHref || paidRevisionHref ? 'outline' : 'primary'}>
+            <Button asChild variant="primary">
               <Link href={`/writing/practice/session/${encodeURIComponent(submission.scenarioId)}`}>
                 <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.practiceAgain')}
               </Link>
@@ -609,12 +636,6 @@ export default function WritingSubmissionResultsPage() {
             </Button>
           ) : null}
         </div>
-        {offerRevision && grade?.revisionInvite?.reason ? (
-          <InlineAlert variant="warning" live="polite" className="mt-4">
-            <span className="font-bold">{t('writing.submissions.results.next.whyRevise')}</span>{' '}
-            <span dir="ltr">{grade.revisionInvite.reason}</span>
-          </InlineAlert>
-        ) : null}
       </section>
     </>
   );

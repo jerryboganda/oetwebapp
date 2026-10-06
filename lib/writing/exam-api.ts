@@ -3,8 +3,8 @@
  *
  * Endpoints for the unified authored task (admin builder + import/export),
  * attempt-event ingestion, tutor marking (annotations, content-checklist
- * verdict, double-marking, moderation), AI pre-assessment, gated learner
- * feedback, rewrite comparison, result-visibility config, and admin analytics.
+ * verdict, double-marking, moderation), AI pre-assessment, result-visibility
+ * config, and admin analytics.
  *
  * As with lib/writing/api.ts, the path strings + shapes here ARE the contract;
  * the backend route handlers MUST conform. Implemented across WS-B2..B5.
@@ -24,8 +24,6 @@ import type {
   WritingTutorReviewSubmitDto,
   WritingModerationDto,
   WritingResultVisibilityDto,
-  WritingSubmissionFeedbackDto,
-  WritingRewriteComparisonDto,
   WritingAdminAnalyticsDto,
   WritingMarkingQualityDto,
   WritingCriterionCode,
@@ -189,18 +187,6 @@ export const finalizeWritingModeration = (submissionId: string, payload: Writing
   apiClient.post<WritingModerationDto>(
     p('/v1/writing/tutor/reviews/{id}/moderation/finalize', { id: submissionId }),
     payload,
-  );
-
-// ── Learner gated feedback + rewrite (spec §15) ───────────────────────────────
-
-export const getWritingSubmissionFeedback = (submissionId: string) =>
-  apiClient.get<WritingSubmissionFeedbackDto>(
-    p('/v1/writing/submissions/{id}/feedback', { id: submissionId }),
-  );
-
-export const getWritingRewriteComparison = (rewriteSubmissionId: string) =>
-  apiClient.get<WritingRewriteComparisonDto>(
-    p('/v1/writing/submissions/{id}/rewrite-comparison', { id: rewriteSubmissionId }),
   );
 
 // ── Result-visibility config (spec §15.1) ─────────────────────────────────────

@@ -105,6 +105,7 @@ Every feature the gateway serves is classified. Defaults:
 | Feature code | Scoring-critical | BYOK default | Platform default | Notes |
 |---|---|---|---|---|
 | `writing.grade` | ✅ | ❌ | ✅ | Mock / practice grading |
+| `writing.grade.review` | ✅ | ❌ | ✅ | Secondary reviewer of a primary Writing grade: pinned to `writing-codex-sub` (GPT-6.1 Sol), never credit-debited (no reservation, no debit), proposals applied only by the deterministic applier; the per-feature kill list switches it off and the primary result then stands |
 | `writing.sample_score` | ✅ | ❌ | ✅ | Sample scoring |
 | `speaking.grade` | ✅ | ❌ | ✅ | Speaking evaluation |
 | `speaking.audio_assess` | ✅ | ❌ | ✅ | Speaking acoustic judge: an OpenAI audio model (provider `openai-audio`, key from the row or `LIVEVOICE__OPENAIAPIKEY`) hears the candidate's clips and judges Intelligibility and fluency evidence; never sent the transcript; never via the grade chain |

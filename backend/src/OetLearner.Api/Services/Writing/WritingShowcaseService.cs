@@ -58,6 +58,12 @@ public sealed class WritingShowcaseService(LearnerDbContext db, TimeProvider clo
         {
             throw ApiException.Validation("writing_showcase_opt_in_required", "Enable Writing community sharing before submitting a showcase post.");
         }
+        // Not while the result is held: the A-grade requirement below would otherwise reveal the band
+        // from eligibility alone, inside the 15-minute release window.
+        if (!await WritingResultRelease.IsReleasedAsync(db, userId, submissionId, clock.GetUtcNow(), ct))
+        {
+            throw ApiException.Conflict("writing_showcase_grade_missing", "Only graded submissions can be submitted to the showcase.");
+        }
         var grade = await db.WritingGrades.AsNoTracking()
             .Where(g => g.SubmissionId == submissionId)
             .OrderByDescending(g => g.AppealedByGradeId != null || g.TutorReviewId != null)

@@ -94,53 +94,8 @@ public sealed class WritingSubmissionProfessionIsolationTests
         Assert.Single(db.WritingSubmissions);
     }
 
-    [Theory]
-    [InlineData("nursing")]
-    [InlineData(null)]
-    public async Task ReviseSubmission_OfAnotherProfessionsScenario_Is404_AndNeverRegrades(string? learnerProfession)
-    {
-        // Profession lock (23 Sep 2026): a letter written before the lock for
-        // another profession's scenario (or by a learner who now has no
-        // profession) must not be revised and graded again.
-        await using var db = NewDb();
-        db.Users.Add(new LearnerUser
-        {
-            Id = "revise-learner",
-            DisplayName = "Revise Learner",
-            Email = "revise-learner@example.test",
-            ActiveProfessionId = learnerProfession,
-            AccountStatus = "active",
-            CreatedAt = DateTimeOffset.UtcNow,
-            LastActiveAt = DateTimeOffset.UtcNow,
-        });
-        var originalId = Guid.NewGuid();
-        db.WritingSubmissions.Add(new WritingSubmission
-        {
-            Id = originalId,
-            UserId = "revise-learner",
-            ScenarioId = MedicineScenarioId,
-            Mode = "practice",
-            LetterContent = "Dear Dr Smith, pre-lock letter.",
-            LetterContentHash = originalId.ToString("N"),
-            WordCount = 5,
-            TimeSpentSeconds = 60,
-            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
-            SubmittedAt = DateTimeOffset.UtcNow,
-            Status = "graded",
-            GradingTier = "express",
-            InputSource = "typed",
-            CreatedAt = DateTimeOffset.UtcNow,
-        });
-        await db.SaveChangesAsync();
-        var service = BuildService(db);
-
-        var ex = await Assert.ThrowsAsync<ApiException>(() => service.ReviseSubmissionAsync(
-            "revise-learner", originalId, new WritingReviseRequest(
-                LetterContent: "Dear Dr Smith, revised letter.", WordCount: 5, TimeSpentSeconds: 60), default));
-
-        Assert.Equal("writing_scenario_not_found", ex.ErrorCode);
-        Assert.Single(db.WritingSubmissions);
-    }
+    // The former Revise path (and its profession-lock test) is gone with Revise & Resubmit: a second try is a
+    // fresh CreateSubmission, which the tests above already hold to the same profession lock.
 
     [Fact]
     public async Task CreateSubmission_ProfessionComparisonIsNormalised()

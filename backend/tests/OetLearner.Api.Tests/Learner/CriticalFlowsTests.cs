@@ -181,6 +181,19 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         Assert.Fail($"Submission {submissionId} did not reach {expectedStatus}; last status was {status}.");
     }
 
+    /// <summary>
+    /// Result release (15-minute window): moves a letter's submit time back so a graded row reads as
+    /// released over HTTP. Allowlisted accounts are never held, but a test user is an ordinary candidate.
+    /// </summary>
+    private async Task BackdateSubmissionAsync(Guid submissionId)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var row = await db.WritingSubmissions.SingleAsync(x => x.Id == submissionId);
+        row.SubmittedAt = DateTimeOffset.UtcNow.AddHours(-1);
+        await db.SaveChangesAsync();
+    }
+
     private async Task<Guid> SubmitV11LetterAsync(HttpClient client, string letterContent)
     {
         var submitResponse = await client.PostAsJsonAsync("/v1/writing/submissions/", new
@@ -282,6 +295,7 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         Assert.Equal(V11ScenarioId, submitJson.RootElement.GetProperty("scenarioId").GetGuid());
         Assert.False(submitJson.RootElement.GetProperty("isRevision").GetBoolean());
 
+        await BackdateSubmissionAsync(submissionId);
         await WaitForSubmissionStatusAsync(client, submissionId, "graded");
 
         // The detached deterministic test provider returns
@@ -383,8 +397,8 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
     public async Task WritingSubmission_SecondCreateWhileLocked_Conflicts()
     {
         // The §17.7 submission lock: a second fresh submit for the same
-        // learner+scenario while one is locked must conflict; revisions are
-        // the supported retry path.
+        // learner+scenario while one is locked must conflict; a new attempt
+        // starts from Practice this again.
         await EnsureV11GradingPrerequisitesAsync();
         var userId = $"writing-lock-{Guid.NewGuid():N}";
         using var client = await CreateGradedClientAsync(userId);
@@ -405,100 +419,32 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
         Assert.Equal("writing_submission_locked", json.RootElement.GetProperty("code").GetString());
     }
 
-    private const string V11RevisionContent =
-        "Dear Dr Green, I am writing to revise my earlier referral for Mrs Vance following her knee replacement review. " +
-        "Her recovery remains satisfactory with a clean wound and stable observations, though evening swelling persists. " +
-        "Physiotherapy continues and she mobilises with a frame at home with family support nearby. " +
-        "Medication is unchanged. I would appreciate an earlier review in four weeks with repeat bloods given the swelling. " +
-        "Thank you for your continued care of this patient.";
-
     [Fact]
-    public async Task WritingRevision_QueuesLinkedEvaluation()
+    public async Task WritingRevise_RouteIsRetired_ReturnsConflict_AndCreatesNothing()
     {
+        // Revise & Resubmit is retired: the route stays mapped only so a stale client gets a clear 409.
+        // It never binds a body, never grades and never charges.
         await EnsureV11GradingPrerequisitesAsync();
-        var userId = $"writing-revision-{Guid.NewGuid():N}";
-        using var client = await CreateGradedClientAsync(userId);
-        var submissionId = await SubmitV11LetterAsync(client, V11LetterContent);
-        await WaitForSubmissionStatusAsync(client, submissionId, "graded");
-
-        var response = await client.PostAsJsonAsync($"/v1/writing/submissions/{submissionId}/revise", new
-        {
-            letterContent = V11RevisionContent,
-            wordCount = 130,
-            timeSpentSeconds = 1200
-        });
-
-        response.EnsureSuccessStatusCode();
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var revisionId = json.RootElement.GetProperty("id").GetGuid();
-        Assert.NotEqual(submissionId, revisionId);
-        Assert.True(json.RootElement.GetProperty("isRevision").GetBoolean());
-        Assert.Equal(submissionId, json.RootElement.GetProperty("originalSubmissionId").GetGuid());
-        await WaitForSubmissionStatusAsync(client, revisionId, "graded");
-
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var revision = await db.WritingSubmissions.SingleAsync(x => x.Id == revisionId);
-        Assert.Equal(userId, revision.UserId);
-        Assert.True(revision.IsRevision);
-        Assert.Equal(submissionId, revision.OriginalSubmissionId);
-        Assert.Equal("graded", revision.Status);
-        Assert.True(await db.WritingGrades.AnyAsync(x => x.SubmissionId == revisionId));
-    }
-
-    [Fact]
-    public async Task WritingRevision_RapidDuplicate_ReusesSingleGradingWorkflow()
-    {
-        await EnsureV11GradingPrerequisitesAsync();
-        var userId = $"writing-revision-idem-{Guid.NewGuid():N}";
-        using var client = await CreateGradedClientAsync(userId);
-        var submissionId = await SubmitV11LetterAsync(client, V11LetterContent);
-        await WaitForSubmissionStatusAsync(client, submissionId, "graded");
-        var body = new
-        {
-            letterContent = V11RevisionContent,
-            wordCount = 130,
-            timeSpentSeconds = 1200
-        };
-
-        var firstResponse = await client.PostAsJsonAsync($"/v1/writing/submissions/{submissionId}/revise", body);
-        firstResponse.EnsureSuccessStatusCode();
-        using var firstJson = JsonDocument.Parse(await firstResponse.Content.ReadAsStringAsync());
-        var revisionId = firstJson.RootElement.GetProperty("id").GetGuid();
-
-        var secondResponse = await client.PostAsJsonAsync($"/v1/writing/submissions/{submissionId}/revise", body);
-        Assert.Equal(HttpStatusCode.Created, secondResponse.StatusCode);
-        using var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync());
-        Assert.Equal(revisionId, secondJson.RootElement.GetProperty("id").GetGuid());
-        await WaitForSubmissionStatusAsync(client, revisionId, "graded");
-
-        await using var scope = _factory.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        Assert.Equal(1, await db.WritingSubmissions.CountAsync(x => x.OriginalSubmissionId == submissionId));
-        Assert.Equal(1, await db.WritingGrades.CountAsync(x => x.SubmissionId == revisionId));
-        Assert.Equal(2, await db.AiCreditReservations.CountAsync(x => x.UserId == userId));
-        Assert.Equal(2, await db.AiUsageRecords.CountAsync(x => x.UserId == userId));
-    }
-
-    [Fact]
-    public async Task WritingRevision_RejectsNonWritingAttempt()
-    {
-        await EnsureV11GradingPrerequisitesAsync();
-        var userId = $"writing-revision-nonwriting-{Guid.NewGuid():N}";
+        var userId = $"writing-revise-retired-{Guid.NewGuid():N}";
         using var client = await CreateClientForUserAsync(userId, walletCredits: 0);
 
         var unknownId = Guid.NewGuid();
         var reviseResponse = await client.PostAsJsonAsync($"/v1/writing/submissions/{unknownId}/revise", new
         {
-            letterContent = "This should not be accepted as a Writing revision.",
+            letterContent = "This must not be accepted or graded.",
             wordCount = 12,
             timeSpentSeconds = 60
         });
         var gradeResponse = await client.GetAsync($"/v1/writing/submissions/{unknownId}/grade");
 
-        Assert.Equal(HttpStatusCode.NotFound, reviseResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, reviseResponse.StatusCode);
+        using var json = JsonDocument.Parse(await reviseResponse.Content.ReadAsStringAsync());
+        Assert.Equal("writing_revise_retired", json.RootElement.GetProperty("code").GetString());
         Assert.Equal(HttpStatusCode.NotFound, gradeResponse.StatusCode);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.False(await db.WritingSubmissions.AnyAsync(x => x.UserId == userId));
     }
 
     [Fact]

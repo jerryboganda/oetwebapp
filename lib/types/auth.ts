@@ -17,6 +17,8 @@ export interface CurrentUser {
   activeProfessionLabel?: string | null;
   /** Relative path of the form `/v1/media/{id}/content`; bearer-authenticated, never load directly in an <img>. */
   avatarUrl?: string | null;
+  /** Server flag, omitted for ordinary candidates: the account is exempt from the Writing result-release window and the copy/paste lock. */
+  writingUnrestricted?: boolean | null;
 }
 
 export interface AuthSession {

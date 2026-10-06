@@ -16,7 +16,6 @@ const writingEditorModeEnum = z.enum([
   'timed',
   'diagnostic',
   'mock',
-  'revision',
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────────

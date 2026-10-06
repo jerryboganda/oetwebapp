@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BarChart3, Calendar, Clock, Flame, Target } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
@@ -26,6 +25,8 @@ import {
   getWritingStatsSkills,
   getWritingStatsTime,
 } from '@/lib/writing/api';
+import { cleanCandidateText, plainCategoryLabel } from '@/lib/writing/candidate-text';
+import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import type {
   WritingReadinessScoreDto,
   WritingStatsBandsDto,
@@ -38,6 +39,9 @@ import type {
   WritingStatsTimeDto,
   WritingSubSkill,
 } from '@/lib/writing/types';
+
+// Only the six catalogue codes have a translated name; any other stored value reads as a plain label (never a missing-message error).
+const LETTER_TYPE_CODE = /^LT-(?:RR|UR|DG|TR|NM|OT)$/;
 
 const SKILL_LABELS: Record<WritingSubSkill, string> = {
   W1: 'W1', W2: 'W2', W3: 'W3', W4: 'W4', W5: 'W5', W6: 'W6', W7: 'W7', W8: 'W8',
@@ -83,7 +87,7 @@ export default function WritingStatsPage() {
       setCalendar(cal);
     }).catch((err) => {
       if (cancelled) return;
-      setError(err instanceof Error ? err.message : t('writing.stats.error.load'));
+      setError(toCandidateSafeWritingErrorMessage(err, t('writing.stats.error.load')));
     }).finally(() => {
       if (!cancelled) setLoaded(true);
     });
@@ -98,7 +102,7 @@ export default function WritingStatsPage() {
       const r = await exportWritingStats();
       if (r.url && typeof window !== 'undefined') window.open(r.url, '_blank', 'noopener,noreferrer');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('writing.stats.error.export'));
+      setError(toCandidateSafeWritingErrorMessage(err, t('writing.stats.error.export')));
     } finally {
       setExporting(false);
     }
@@ -139,7 +143,7 @@ export default function WritingStatsPage() {
         <MotionSection delayIndex={1} className="space-y-4">
           <LearnerSurfaceSectionHeader eyebrow={t('writing.stats.bands.eyebrow')} title={t('writing.stats.bands.title')} description={t('writing.stats.bands.description')} />
           <Card padding="lg">
-            <BandHistoryChart data={(bands?.history ?? []).map((p) => ({ date: p.date, rawTotal: p.rawTotal, estimatedBand: p.estimatedBand, letterType: p.letterType, isRevision: p.isRevision }))} targetBand={bands?.targetBand ?? undefined} />
+            <BandHistoryChart data={(bands?.history ?? []).map((p) => ({ date: p.date, rawTotal: p.rawTotal, estimatedBand: p.estimatedBand, letterType: p.letterType }))} targetBand={bands?.targetBand ?? undefined} />
           </Card>
         </MotionSection>
       ) : null}
@@ -170,7 +174,7 @@ export default function WritingStatsPage() {
                     ) : null}
                     {letterTypes.rows.map((row) => (
                       <tr key={row.letterType} className="border-b border-border/60 last:border-b-0">
-                        <td className="py-2 font-bold text-navy">{row.letterType}</td>
+                        <td className="py-2 font-bold text-navy">{LETTER_TYPE_CODE.test(row.letterType) ? t(`writing.practice.library.letterType.${row.letterType}`) : plainCategoryLabel(row.letterType)}</td>
                         <td className="py-2 text-end tabular-nums text-navy">{row.attempts}</td>
                         <td className="py-2 text-end font-bold tabular-nums text-navy">{row.averageBand.toFixed(1)}</td>
                       </tr>
@@ -192,9 +196,8 @@ export default function WritingStatsPage() {
               {canon.topViolations.slice(0, 8).map((row) => (
                 <li key={row.ruleId} className="flex items-center justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0">
                   <span className="flex min-w-0 flex-wrap items-center gap-2">
-                    <Badge variant="muted" size="sm">{row.ruleId}</Badge>
-                    {/* Rule text is OET-authored English content. */}
-                    <span className="min-w-0 text-navy" dir="ltr">{row.ruleText}</span>
+                    {/* Rule text is OET-authored English content; the rule id is internal and never shown. */}
+                    <span className="min-w-0 text-navy" dir="ltr">{cleanCandidateText(row.ruleText)}</span>
                   </span>
                   <span className="shrink-0 font-bold tabular-nums text-navy">{row.count}×</span>
                 </li>

@@ -107,7 +107,7 @@ export default function WritingAnalyticsPage() {
         icon={TrendingDown}
         accent="writing"
         title="Your weakness map"
-        description="See exactly where you keep losing marks across drills, rewrites and expert feedback. Use this to choose what to practise next."
+        description="See exactly where you keep losing marks across drills and feedback. Use this to choose what to practise next."
         highlights={summary
           ? [
               { icon: AlertTriangle, label: 'Observations (14d)', value: `${summary.totalObservations}` },
@@ -148,7 +148,7 @@ export default function WritingAnalyticsPage() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Top weaknesses"
                 title="Where you keep losing marks"
-                description="Counted across drill grading, expert feedback, and AI rule-engine findings."
+                description="Counted across drill grading, expert feedback, and the corrections in your graded letters."
                 className="mb-5"
               />
               <ul className="divide-y divide-border">

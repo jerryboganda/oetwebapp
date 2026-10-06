@@ -102,17 +102,17 @@ describe('FreeSampleLauncher', () => {
       const card = await screen.findByTestId('free-card');
       expect(card).toHaveAttribute('href', '/writing/practice/session/w-med');
       expect(screen.getByTestId('free-card-status')).toHaveTextContent(
-        'Free sample includes one graded submission + one free revision.',
+        'Free sample includes two graded submissions.',
       );
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(screen.queryByRole('radio')).not.toBeInTheDocument();
     });
 
-    it('retry_available: "Revise & Resubmit" links to the revise page of the graded letter', async () => {
+    it('retry_available: the second free result is a fresh attempt on the server start route, never a revise page', async () => {
       mockList.mockResolvedValue([{
         ...WRITING_AVAILABLE,
         state: 'retry_available',
-        route: '/writing/submissions/sub-1/revise',
+        route: '/writing/practice/session/w-med',
         successfulCount: 1,
         remaining: 1,
         lastResultRoute: '/writing/submissions/sub-1/results',
@@ -121,11 +121,12 @@ describe('FreeSampleLauncher', () => {
       render(<FreeSampleLauncher {...WRITING_PROPS} />);
 
       const card = await screen.findByTestId('free-card');
-      expect(card).toHaveAttribute('href', '/writing/submissions/sub-1/revise');
-      expect(screen.getByTestId('free-card-status')).toHaveTextContent('Revise & Resubmit - 1 Free Revision Remaining');
+      expect(card).toHaveAttribute('href', '/writing/practice/session/w-med');
+      expect(screen.getByTestId('free-card-status')).toHaveTextContent('Practice this again - 1 free attempt remaining');
+      expect(card).not.toHaveTextContent(/revise|resubmit/i);
     });
 
-    it('retry_available without a server route falls back to the revise page of lastSubmissionId', async () => {
+    it('retry_available without a server route is inert: no revise link is ever built from lastSubmissionId', async () => {
       mockList.mockResolvedValue([{
         ...WRITING_AVAILABLE,
         state: 'retry_available',
@@ -136,7 +137,8 @@ describe('FreeSampleLauncher', () => {
       }]);
       render(<FreeSampleLauncher {...WRITING_PROPS} />);
 
-      expect(await screen.findByTestId('free-card')).toHaveAttribute('href', '/writing/submissions/sub-9/revise');
+      const card = await screen.findByTestId('free-card');
+      expect(card).not.toHaveAttribute('href');
     });
 
     it('in_progress: follows the server route (the letter being graded), never the previous result', async () => {

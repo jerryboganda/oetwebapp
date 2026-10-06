@@ -51,6 +51,7 @@ public interface IWritingDraftServiceV2
 public sealed class WritingDraftServiceV2(LearnerDbContext db, TimeProvider clock) : IWritingDraftServiceV2
 {
     private const string PhaseWriting = "writing";
+    private const string RetiredRevisionMode = "revision";
 
     public async Task<WritingDraftV2View?> GetAsync(string userId, Guid scenarioId, string mode, CancellationToken ct)
     {
@@ -64,6 +65,13 @@ public sealed class WritingDraftServiceV2(LearnerDbContext db, TimeProvider cloc
     {
         ArgumentNullException.ThrowIfNull(request);
         var normalizedMode = NormaliseMode(mode);
+        // Revise & Resubmit is retired: a stale client can no longer open or grow an invisible revision draft.
+        if (normalizedMode == RetiredRevisionMode)
+        {
+            throw ApiException.Conflict(
+                "writing_revise_retired",
+                "This option is no longer available. To try this task again, start a new attempt from the task page.");
+        }
         for (var attempt = 1; ; attempt++)
         {
             var entity = await db.WritingDraftsV2
@@ -229,12 +237,23 @@ public sealed class WritingDraftServiceV2(LearnerDbContext db, TimeProvider cloc
 
     private async Task<WritingDraftV2View> ToViewAsync(WritingDraftV2 entity, CancellationToken ct)
     {
-        var submissionStatus = entity.SubmissionId is { } submissionId
-            ? await db.WritingSubmissions.AsNoTracking()
+        string? submissionStatus = null;
+        if (entity.SubmissionId is { } submissionId)
+        {
+            var submission = await db.WritingSubmissions.AsNoTracking()
                 .Where(s => s.Id == submissionId && s.UserId == entity.UserId)
-                .Select(s => s.Status)
-                .FirstOrDefaultAsync(ct)
-            : null;
+                .Select(s => new { s.Status, s.SubmittedAt })
+                .FirstOrDefaultAsync(ct);
+            submissionStatus = submission?.Status;
+            if (submission?.Status == WritingSubmissionStatuses.Graded)
+            {
+                // Effective status: a graded letter still inside its release window reads as grading, so
+                // the practice/paper pages route to the countdown instead of opening a second paid attempt.
+                var unrestricted = await WritingUnrestrictedAccounts.IsUnrestrictedAsync(db, entity.UserId, ct);
+                submissionStatus = WritingResultRelease.Describe(
+                    submission.Status, submission.SubmittedAt, unrestricted, clock.GetUtcNow()).EffectiveStatus;
+            }
+        }
         return new(entity.UserId, entity.ScenarioId, entity.Mode, entity.Content, entity.WordCount, entity.TimeSpentSeconds,
             entity.LastSavedAt, entity.Id, entity.Version, entity.Status, entity.SubmissionId, submissionStatus,
             entity.Phase, entity.ReadingSecondsRemaining, entity.WritingSecondsRemaining, entity.AttemptStartedAt);

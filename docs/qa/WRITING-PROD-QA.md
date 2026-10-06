@@ -118,7 +118,7 @@ S5 draft PUTs answer 503 then abort, then recover, S4 shutdown (empty storage, s
 >= 2 min -> **Retry on the Post Submissions row** -> same id, one row, graded, one debit, replay no-op.
 Reading-window resume (real 60 s, reload) and the L1+L2 fault letter (L3 GPT-6.1 Sol must serve). S8 on a
 zero-credit learner: the free sample fails then retries; the failure burns no use, the retry counts once,
-no ledger movement, `free-sample-revise-cta` shows.
+no ledger movement. The second free result is a fresh attempt ("Practice this again"); there is no revise control.
 
 Timer verdict (away 30 s, tolerances 8 s load / +6 s autosave lag): no reset `after <= window-30`; paused
 (page closed/reloaded) `before-8 <= after <= before+6`; running (page stayed mounted for `e` s)
@@ -141,10 +141,13 @@ Pixel 7 / iPhone 14.
 **Realistic letters (`letters` suite, 5 Oct 2026).** `realistic-letters.json` holds six 200-300 word candidate letters with
 planted critical/major/minor defects (from the Writing regression corpora), each pinned to ONE production scenario and typed
 on a disposable learner of its profession (blank line = Enter, single newline = Shift+Enter). A letter whose scenario is not
-an eligible task is `BLOCKED`, never given another task. Every report must keep: at most 3 distinct top priorities (at most
-one about Purpose), criterion summaries and per-criterion feedback <= 240 chars, no internal rule label / rule id /
-"Exemplar" in any report text, criterion cards <= 900 visible chars with at most one "Suggested fix:" box. The
-evidence keeps numbers only (`facts/*.json` -> `shape`, `cardChars`); a report without mixed severities is `PARTIAL`.
+an eligible task is `BLOCKED`, never given another task. Every report must keep: at most 3 distinct, label-free top
+priorities (at most one about Purpose; none at all when every correction is advisory), criterion summaries and
+per-criterion feedback <= 240 chars, no internal rule label / rule or check id / provider tag / debug term /
+"Exemplar" in any report text, no value left in the neutralised candidate fields (`ruleSource`, `rulePackVersion`,
+`modelVersion`, `blockingCodes`, `modelUsed`, `citedRuleIds` ...), criterion cards <= 900 visible chars with at most
+one "Suggested fix:" box. The evidence keeps numbers only (`facts/*.json` -> `shape`, `cardChars`); a report without
+mixed severities is `PARTIAL`.
 
 ## Test-id contract (single source: `contract.mjs`)
 
@@ -153,7 +156,7 @@ evidence keeps numbers only (`facts/*.json` -> `shape`, `cardChars`); a report w
 | Practice | `writing-editor`, `writing-timer` (`data-phase`, `data-seconds-remaining`), `writing-draft-status` (`data-state` = saved/saving/pending-local/offline/error), `writing-submit`; editor input `div.ProseMirror#practice-editor` |
 | Grading | `writing-grading-steps`, `writing-grading-failed`, `writing-grading-retry` |
 | Post Submissions (`/submissions?subtest=writing`) | `post-submissions-list` (renders only with >= 1 item), `post-submission-row` (`data-submission-id` - absent for drafts, `data-scenario-id`, `data-state` = draft/grading/failed/graded), `post-submission-open/resume/retry/wait/view`, hub banner `resume-writing-banner` |
-| Results | `results-score-panel`, `results-score-stat`, `grade-value`, `result-section[data-section]`, `corrections-preview`, `corrections-view-all`, `corrections-full-list`, `ai-estimated-score`, `grounded-model-answer`, `criteria-list` (6 li), `free-sample-revise-cta` |
+| Results | `results-score-panel`, `results-score-stat`, `grade-value`, `result-section[data-section]`, `corrections-preview`, `corrections-view-all`, `corrections-full-list`, `ai-estimated-score`, `grounded-model-answer`, `criteria-list` (6 li) |
 | Shell | `shell-controls-handle` (>= lg only), `mobile-menu-reload-app`, `mobile-menu-check-updates`, `nav[aria-label="Mobile navigation"]`, `#main-content` |
 
 The first test that reaches a page checks its group on the live DOM; a missing id makes every test that needs

@@ -26,14 +26,15 @@ export interface FreeSampleLauncherProps {
   className?: string;
 }
 
-// Exact owner copy lives in messages/{en,ar}/free-samples.json. Writing keeps its one free revision; a
+// Exact owner copy lives in messages/{en,ar}/free-samples.json. Writing keeps its second free result, but it
+// is a fresh attempt on the same task (the server routes retry_available to the normal start route); a
 // completed Speaking attempt has NO free retry (owner spec 4 Oct 2026): repeating the card is a new paid
 // attempt, and only a failed grade can be re-run for free (the grading_failed state).
 const ALLOWANCE_KEY: Record<FreeSampleSubtest, string> = {
   speaking: 'freeSample.speaking.allowance',
   writing: 'freeSample.writing.allowance',
 };
-const WRITING_REVISION_KEY = 'freeSample.writing.retryCta';
+const WRITING_ANOTHER_ATTEMPT_KEY = 'freeSample.writing.anotherAttempt';
 const GRADING_FAILED_KEY: Record<FreeSampleSubtest, string> = {
   speaking: 'freeSample.speaking.gradingFailed',
   writing: 'freeSample.writing.gradingFailed',
@@ -97,11 +98,9 @@ export function FreeSampleLauncher({
         footer = note(t('freeSample.completed'));
         break;
       }
-      // Server route; Writing falls back to the revise page of the last graded letter.
-      href = option.route ?? (option.lastSubmissionId
-        ? `/writing/submissions/${encodeURIComponent(option.lastSubmissionId)}/revise`
-        : null);
-      footer = note(t(WRITING_REVISION_KEY), 'cta');
+      // The second free Writing result is a fresh attempt: the server route is the normal start route.
+      href = option.route;
+      footer = note(t(WRITING_ANOTHER_ATTEMPT_KEY), 'cta');
       break;
     case 'in_progress':
       // Writing: the server routes the letter being graded to its grading page,

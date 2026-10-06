@@ -6,7 +6,7 @@
  * `lib/writing/api.ts` and TanStack Query.
  *
  * State shape:
- *   editorMode          — which of the 6 modes the editor is currently in
+ *   editorMode          — which of the 5 modes the editor is currently in
  *   coachToggled        — whether the AI Coach panel is currently ON
  *   draftRestored       — true if a saved draft was hydrated this session
  *   wordCount           — last computed live word count (for ARIA + footer)
@@ -55,10 +55,9 @@ export const useWritingEditorStore = create<WritingEditorStore>((set) => ({
   setMode: (mode) =>
     set((s) => ({
       editorMode: mode,
-      // Coach is only meaningful in coached + revision modes; auto-disable
-      // if we transition out of those.
-      coachToggled:
-        mode === 'coached' || mode === 'revision' ? s.coachToggled : false,
+      // Coach is only meaningful in coached mode; auto-disable if we
+      // transition out of it.
+      coachToggled: mode === 'coached' ? s.coachToggled : false,
     })),
   toggleCoach: () => set((s) => ({ coachToggled: !s.coachToggled })),
   setCoachToggled: (value) => set({ coachToggled: value }),

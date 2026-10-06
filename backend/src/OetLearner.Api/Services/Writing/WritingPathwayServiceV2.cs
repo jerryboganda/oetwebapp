@@ -172,9 +172,10 @@ public sealed class WritingPathwayServiceV2(
             return;
         }
 
+        // Released-only: the stage moves on results the learner can already see, never on a held letter.
+        var released = await WritingResultRelease.ReleasedSubmissionsAsync(db, userId, clock.GetUtcNow(), ct);
         var lastFive = await db.WritingGrades.AsNoTracking()
-            .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
-            .Where(x => x.s.UserId == userId)
+            .Join(released, g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
             .OrderByDescending(x => x.g.GradedAt)
             .Take(5)
             .Select(x => new { x.g.RawTotal, x.g.BandLabel })
@@ -211,8 +212,10 @@ public sealed class WritingPathwayServiceV2(
 
     private async Task<(WritingCriterionScores Scores, Guid? SubmissionId)> LoadDiagnosticScoresAsync(string userId, CancellationToken ct)
     {
-        var diagnostic = await db.WritingSubmissions.AsNoTracking()
-            .Where(s => s.UserId == userId && s.Mode == "diagnostic" && s.Status == "graded")
+        // Released-only: the weakness vector derived from these scores is shown to the learner, so a
+        // diagnostic still inside its 15-minute result window is treated as not graded yet.
+        var diagnostic = await (await WritingResultRelease.ReleasedSubmissionsAsync(db, userId, clock.GetUtcNow(), ct))
+            .Where(s => s.Mode == "diagnostic")
             .OrderByDescending(s => s.SubmittedAt)
             .Select(s => new { s.Id })
             .FirstOrDefaultAsync(ct);

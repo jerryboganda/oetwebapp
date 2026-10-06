@@ -24,7 +24,7 @@ interface SubBarSpec {
 const SUB_BARS: SubBarSpec[] = [
   { key: 'mockAverage', label: 'Mock average', weight: 50 },
   { key: 'trajectory', label: 'Trajectory', weight: 20 },
-  { key: 'canonCleanRate', label: 'Canon clean rate', weight: 15 },
+  { key: 'canonCleanRate', label: 'Style accuracy', weight: 15 },
   { key: 'timeMgmt', label: 'Time management', weight: 10 },
   { key: 'typeConsistency', label: 'Type consistency', weight: 5 },
 ];

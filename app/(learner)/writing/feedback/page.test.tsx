@@ -89,9 +89,10 @@ describe('Writing detailed feedback page — rule-cited findings', () => {
   it('shows finding context without exposing the internal rulebook to learners', async () => {
     const { container } = render(<WritingDetailedFeedback />);
 
-    // Severity pill, source label, and suggested-fix block render for learners.
-    expect(await waitFor(() => screen.getByText('critical'))).toBeInTheDocument();
-    expect(screen.getByText(/Rule check/i)).toBeInTheDocument();
+    // Severity pill and suggested-fix block render for learners; where the finding
+    // came from (a rule check or the AI grader) never does.
+    expect(await waitFor(() => screen.getByText('Critical'))).toBeInTheDocument();
+    expect(screen.queryByText(/Rule check|AI feedback/i)).toBeNull();
     expect(screen.getByText(/Suggested fix/i)).toBeInTheDocument();
     expect(screen.getByText(/Move the allergy line/i)).toBeInTheDocument();
 

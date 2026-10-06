@@ -175,7 +175,6 @@ export const LEARNER_FOCUS_ROUTES: ReadonlyArray<{ route: string; title?: string
   { route: '/writing/mocks/session/[id]', titleKey: 'writing.mocks.session.pageTitle' },
   { route: '/writing/paper/session/[id]', titleKey: 'writing.paper.pageTitle' },
   { route: '/writing/practice/session/[scenarioId]', titleKey: 'writing.practice.session.pageTitle' },
-  { route: '/writing/submissions/[id]/revise', titleKey: 'writing.submissions.revise.pageTitle' },
 ];
 
 /** Workspace pages that render without a session (also public in `proxy.ts`). */

@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
-import { FileText, BarChart3, ShieldAlert, ThumbsUp, AlertTriangle, Edit3, Star } from 'lucide-react';
+import { FileText, BarChart3, ShieldAlert, ThumbsUp, AlertTriangle, Star } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
@@ -219,41 +219,6 @@ function WritingResultContent() {
           </CardLink>
         </div>
       </section>
-
-      <MotionSection>
-        <Card padding="lg">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div className="min-w-0">
-              <p className="eyebrow text-primary">Correction workflow</p>
-              <h2 className="mt-2 text-xl font-bold text-navy">Use feedback as a rewrite cycle, not as a final score</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-                The writing module follows the intended teacher-correction path: review the six criteria, inspect anchored comments, rewrite the letter in learning mode, then request tutor review for final readiness decisions.
-              </p>
-            </div>
-            <Badge variant={result.isOfficialScore ? 'success' : 'warning'} size="sm" className="self-start">
-              {result.isOfficialScore ? 'Official score' : 'Practice estimate'}
-            </Badge>
-          </div>
-
-          <ol className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <li className="min-w-0 rounded-xl bg-background-light p-4">
-              <BarChart3 className="h-5 w-5 text-primary" aria-hidden="true" />
-              <h3 className="mt-3 text-sm font-bold text-navy">1. Inspect criteria</h3>
-              <p className="mt-1 text-xs leading-5 text-muted">Read the criterion breakdown before changing the letter, especially Purpose, Content, and Conciseness.</p>
-            </li>
-            <li className="min-w-0 rounded-xl bg-background-light p-4">
-              <Edit3 className="h-5 w-5 text-primary" aria-hidden="true" />
-              <h3 className="mt-3 text-sm font-bold text-navy">2. Rewrite in learning mode</h3>
-              <p className="mt-1 text-xs leading-5 text-muted">Use guided drafting, reader-aware structure, and rulebook support to produce a better second version.</p>
-            </li>
-            <li className="min-w-0 rounded-xl bg-background-light p-4">
-              <Star className="h-5 w-5 text-primary" aria-hidden="true" />
-              <h3 className="mt-3 text-sm font-bold text-navy">3. Request tutor review</h3>
-              <p className="mt-1 text-xs leading-5 text-muted">Use human review for borderline readiness, paid corrections, and final academy decisions.</p>
-            </li>
-          </ol>
-        </Card>
-      </MotionSection>
     </>
   );
 }

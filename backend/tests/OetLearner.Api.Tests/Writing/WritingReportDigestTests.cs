@@ -56,6 +56,13 @@ public sealed class WritingReportDigestTests
     private static WritingDigestFinding ToDigest(RecordedFinding f)
         => new(f.RuleId, f.Severity, f.Message, f.Quote, f.Fix, f.Criterion, null, true);
 
+    // The clean priority text a Purpose finding of the letter would produce (priorities carry no label).
+    private static List<string> PurposeTexts(List<RecordedFinding> findings)
+        => findings
+            .Where(f => f.Criterion == "purpose")
+            .Select(f => WritingReportDigest.Clip(f.Message, WritingReportDigest.PriorityMaxChars))
+            .ToList();
+
     [Fact]
     public void The_recorded_corpus_really_mixes_major_and_minor_findings()
     {
@@ -78,16 +85,14 @@ public sealed class WritingReportDigestTests
             Assert.InRange(priorities.Count, 1, 3);
             Assert.Equal(priorities.Count, priorities.Distinct(StringComparer.OrdinalIgnoreCase).Count());
             // At most one priority is about the Purpose criterion.
-            var purposePriorities = priorities.Count(p => findings.Any(f =>
-                f.Criterion == "purpose" && p.StartsWith(f.RuleId + ": ", StringComparison.Ordinal)));
+            var purposePriorities = priorities.Count(p => PurposeTexts(findings).Contains(p, StringComparer.OrdinalIgnoreCase));
             Assert.True(purposePriorities <= 1, $"{letter}: {purposePriorities} purpose priorities");
-            // No rule id twice.
-            var ruleIds = priorities.Select(p => p.Split(':', 2)[0]).ToList();
-            Assert.Equal(ruleIds.Count, ruleIds.Distinct(StringComparer.OrdinalIgnoreCase).Count());
             foreach (var priority in priorities)
             {
                 Assert.True(priority.Length <= WritingReportDigest.PriorityMaxChars + 20, $"{letter}: priority too long ({priority.Length})");
-                Assert.DoesNotMatch(Leaks, priority.Contains(": ") ? priority[(priority.IndexOf(": ", StringComparison.Ordinal) + 2)..] : priority);
+                // Priorities are plain sentences: no rule label, id or internal token.
+                Assert.DoesNotMatch(Leaks, priority);
+                Assert.False(WritingCandidateText.ContainsInternalToken(priority), $"{letter}: internal token in '{priority}'");
             }
         }
     }
@@ -104,7 +109,7 @@ public sealed class WritingReportDigestTests
 
         var priorities = WritingReportDigest.ComposePriorities(findings.Select(ToDigest));
 
-        Assert.Equal(1, priorities.Count(p => findings.Any(f => f.Criterion == "purpose" && p.StartsWith(f.RuleId + ": ", StringComparison.Ordinal))));
+        Assert.Equal(1, priorities.Count(p => PurposeTexts(findings).Contains(p, StringComparer.OrdinalIgnoreCase)));
         Assert.True(priorities.Count >= 2);
     }
 
@@ -156,9 +161,19 @@ public sealed class WritingReportDigestTests
             Assert.DoesNotMatch(Leaks, e.WhyItMatters);
             Assert.DoesNotMatch(Leaks, e.Correction);
         });
-        Assert.True(response.TopPriorities.Count <= 3);
-        Assert.NotEqual("OA-01: dup", response.TopPriorities.First());
-        Assert.Equal(1, response.TopPriorities.Count(p => p.StartsWith("OA-01: ") || p.StartsWith("DH-W-016: ")));
+        Assert.InRange(response.TopPriorities.Count, 1, 3);
+        // The stored JSON is ignored when finding rows exist, and the projection sends plain sentences only.
+        Assert.DoesNotContain("dup", response.TopPriorities);
+        Assert.All(response.TopPriorities, p => Assert.False(WritingCandidateText.ContainsInternalToken(p), p));
+        Assert.All(response.Errors, e =>
+        {
+            Assert.Null(e.RuleSource);
+            Assert.Null(e.ProvenanceTag);
+            Assert.Null(e.CandidateBehavior);
+            Assert.Contains(e.Severity, new[] { "critical", "major", "minor", "advisory" });
+        });
+        Assert.Empty(response.BlockingCodes);
+        Assert.Equal(string.Empty, response.ModelVersion);
         Assert.All(response.Criteria.Where(c => ruleFindings.Any(f => f.PrimaryCriterionCode == c.CriterionCode)),
             c => Assert.InRange(c.Summary!.Length, 1, WritingReportDigest.SummaryMaxChars));
         Assert.All(response.Criteria.Where(c => ruleFindings.All(f => f.PrimaryCriterionCode != c.CriterionCode)),
@@ -175,11 +190,52 @@ public sealed class WritingReportDigestTests
         [
             F("AI.purpose", "critical", "The purpose is never stated.", "purpose"),
             F("OA-01", "major", "The request is missing. This affects Purpose and Content.", "content"),
-            F("R03.4", "major", "Allergy omitted.", "content", "no allergy line"),
-            F("R03.9", "minor", "Allergy omitted again.", "content", "no allergy line"),
+            F("R03.4", "major", "The allergy history is omitted.", "content", "no allergy line"),
+            F("R03.9", "minor", "The allergy history is omitted again.", "content", "no allergy line"),
         ]);
 
-        Assert.Equal(new[] { "AI.purpose: The purpose is never stated.", "R03.4: Allergy omitted." }, priorities.ToArray());
+        // One Purpose priority at most, a repeat of the same wording collapses, and the text carries no label.
+        Assert.Equal(new[] { "The purpose is never stated.", "The allergy history is omitted." }, priorities.ToArray());
+    }
+
+    [Fact]
+    public void Advisory_and_coaching_findings_never_take_a_priority_slot()
+    {
+        WritingDigestFinding F(string severity, string message, bool scoreBearing)
+            => new("AI:OW-007", severity, message, null, null, "language", null, scoreBearing);
+
+        Assert.Empty(WritingReportDigest.ComposePriorities(
+        [
+            F("info", "Routine linker choices read more formally with a direct sentence.", true),
+            F("advisory", "Blank line spacing differs from the usual house layout.", true),
+            F("major", "The salutation spacing breaks the house layout.", false),
+        ]));
+    }
+
+    [Fact]
+    public void A_grader_cited_rule_id_missing_from_the_registry_is_score_bearing()
+    {
+        Assert.True(WritingReportDigest.IsScoreBearing("AI:OW-007"));
+        Assert.True(WritingReportDigest.IsScoreBearing("AI.language"));
+        Assert.False(WritingReportDigest.IsScoreBearing("AI:OW-007", "info"));
+        // A registered coaching-only check stays advisory even when the grader cites it.
+        Assert.False(WritingReportDigest.IsScoreBearing("BUILTIN.closure_contact_offer"));
+    }
+
+    [Fact]
+    public void Stored_priorities_are_repaired_without_labels_or_repeats()
+    {
+        var repaired = WritingReportDigest.CleanStoredPriorities(
+        [
+            "AI:OW-007: The request to the reader is missing (OW-005). This affects Content.",
+            "BUILTIN.numerical_values_have_units: The request to the reader is missing.",
+            "OA-01: dup",
+            "Purpose: state the reason for writing in the opening line.",
+        ]);
+
+        Assert.Equal(
+            new[] { "The request to the reader is missing.", "Purpose: state the reason for writing in the opening line." },
+            repaired.ToArray());
     }
 
     [Fact]
@@ -196,7 +252,15 @@ public sealed class WritingReportDigestTests
             F("CRIT", "critical", "Discharge medication frequency contradicts the notes.", true, 50, "organisation_layout"),
         ]);
 
-        Assert.Equal(new[] { "CRIT", "SCORE", "COACH" }, priorities.Select(p => p.Split(':')[0]).ToArray());
+        // The coaching-only COACH finding is excluded; order is severity first, then position.
+        Assert.Equal(
+            new[]
+            {
+                "Discharge medication frequency contradicts the notes.",
+                "Penicillin allergy omitted from the opening paragraph.",
+                "Comma missing after however.",
+            },
+            priorities.ToArray());
     }
 
     [Theory]
@@ -208,8 +272,28 @@ public sealed class WritingReportDigestTests
     [InlineData("The action is missing. This affects Purpose and Content (Addendum Five R1: a required action is absent).", "The action is missing.")]
     [InlineData("Wording is informal (PRD-OT-08). Language criterion. Next sentence stays.", "Wording is informal. Next sentence stays.")]
     [InlineData("Detail is excess (OW-027, advisory only) for this reader.", "Detail is excess for this reader.")]
+    [InlineData("BUILTIN.linker_avoid_words: avoid starting a sentence with But.", "avoid starting a sentence with But.")]
+    [InlineData("The dose is correct per G-W-117.", "The dose is correct.")]
+    [InlineData("The wording violates BUILTIN.numerical_values_have_units for the BMI.", "The wording violates the relevant guideline for the BMI.")]
+    // Clinical tokens that only look like ids are left alone.
+    [InlineData("Vitamin B-12 and G-6-PD were checked during the COVID-19 visit.", "Vitamin B-12 and G-6-PD were checked during the COVID-19 visit.")]
     public void Clean_removes_internal_labels_rule_ids_and_criterion_tails(string raw, string expected)
         => Assert.Equal(expected, WritingReportDigest.Clean(raw));
+
+    [Fact]
+    public void Tidy_never_returns_the_original_text()
+    {
+        Assert.Equal("Rewrite it clearly.", WritingReportDigest.Tidy("OA-01 (OW-005)", "Rewrite it clearly."));
+        Assert.Equal(string.Empty, WritingReportDigest.Tidy("BUILTIN.internal_detector_error"));
+    }
+
+    [Theory]
+    [InlineData("Missing the request. See OA2-07.", true)]
+    [InlineData("claude-opus-5-5 graded this letter.", true)]
+    [InlineData("The rulebook requires a Re: line.", true)]
+    [InlineData("Mr Weir has long been overweight (BMI 28.4).", false)]
+    public void ContainsInternalToken_detects_ids_tags_and_internal_words(string text, bool expected)
+        => Assert.Equal(expected, WritingCandidateText.ContainsInternalToken(text));
 
     [Fact]
     public void Clip_keeps_whole_sentences_and_word_clips_an_overlong_first_sentence()

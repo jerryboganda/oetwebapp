@@ -91,6 +91,9 @@ const nextConfig: NextConfig = {
       // Convenience redirects for common shorthand URLs
       { source: '/goal', destination: '/goals', permanent: true },
       { source: '/boost', destination: '/#boost', permanent: false },
+      // Writing "Revise & Resubmit" is retired: old bookmarks and in-flight links
+      // to the revise page land on that letter's result instead of a 404.
+      { source: '/writing/submissions/:id/revise', destination: '/writing/submissions/:id/results', permanent: false },
     ]);
   },
   async headers() {

@@ -543,6 +543,22 @@ public static class OetScoring
             ScaledMax);
     }
 
+    /// <summary>
+    /// Grade letter of the candidate-REPORTED (rounded to 10) scaled score. The candidate projection
+    /// derives its band from the rounded score, so a stored band label must use this too: an unrounded
+    /// 349 reads Grade B to the candidate (350) and must not be stored as C+.
+    /// </summary>
+    public static string OetReportedGradeLetter(double scaled)
+        => OetGradeLetterFromScaled(OetReportedScaledScore(scaled));
+
+    /// <summary>
+    /// Reported Writing score at or above which the secondary reviewer runs ENHANCED verification
+    /// (no critical or major finding, no material omission, strong across all six criteria, only limited
+    /// minor imperfections). A soft guardrail: it triggers a stricter review and a recalibration, and is
+    /// never a cap — a 400+ score that passes verification is published as is.
+    /// </summary>
+    public const int WritingEnhancedVerificationScaled = 400;
+
     // -----------------------------------------------------------------------
     // Speaking REPORTED score — the one candidate-facing number
     // -----------------------------------------------------------------------

@@ -108,6 +108,38 @@ public static class RulebookEndpoints
                 prof);
             var findings = engine.Lint(input);
 
+            // A learner never sees internal rule ids, the raw severity vocabulary or the Jev guard signals:
+            // only a plain severity, the wording, and cleaned message / fix text. Teaching staff keep the
+            // raw engine view below. The guard call is skipped for learners because its result is dropped.
+            if (!http.User.IsInRole(ApplicationUserRoles.Expert) && !http.User.IsInRole(ApplicationUserRoles.Admin))
+            {
+                var learnerFindings = findings.Select(f => new
+                {
+                    severity = OetLearner.Api.Services.Writing.WritingCandidateText.PublicSeverity(
+                        f.Severity.ToString().ToLowerInvariant(),
+                        OetLearner.Api.Services.Writing.WritingReportDigest.IsScoreBearing(f.RuleId)),
+                    message = OetLearner.Api.Services.Writing.WritingCandidateText.Clean(f.Message, "Please review this wording."),
+                    quote = f.Quote,
+                    start = f.Start,
+                    end = f.End,
+                    fixSuggestion = OetLearner.Api.Services.Writing.WritingCandidateText.CleanOrNull(f.FixSuggestion),
+                }).ToList();
+                int CountSeverity(string severity)
+                    => learnerFindings.Count(x => string.Equals(x.severity, severity, StringComparison.OrdinalIgnoreCase));
+                return Results.Ok(new
+                {
+                    findings = learnerFindings,
+                    // ponytail: the "info" total keeps its key for the existing client type and counts advisory findings.
+                    totals = new
+                    {
+                        critical = CountSeverity("critical"),
+                        major = CountSeverity("major"),
+                        minor = CountSeverity("minor"),
+                        info = CountSeverity("advisory"),
+                    },
+                });
+            }
+
             // Jev guard preview (Phase-1 pilot; TypeSafe:WritingGuardEnabled,
             // default OFF). Advisory surface only — the lint verdict and
             // totals are unchanged; the guard result rides alongside as an

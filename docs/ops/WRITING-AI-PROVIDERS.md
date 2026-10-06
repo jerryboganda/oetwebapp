@@ -18,6 +18,13 @@ writing.grade — one grading RUN (first grade, automatic re-queue or manual Ret
         (run deadline 1200 s; under 20 s left = stop; one AiOperation per attempt and hop)
 ```
 
+```
+writing.grade.review — the SECONDARY REVIEWER of the primary grade (§10), NOT a hop of the chain above
+        │   runs after the primary grade (and Jev), before the result can be published
+        ▼
+  oet-writing-codex :8080   codex CLI, gpt-6.1-sol   ×2 attempts, 240 s each, per pass (pinned; never Max, never the API)
+```
+
 The two sidecars are registered as ordinary `AiProvider` rows (plus the existing
 `anthropic` API row for level 2), so routing, usage logging, budgets, and the
 admin AI board all work unchanged. Every attempt is its own `AiOperation` on its own
@@ -130,7 +137,9 @@ grade per letter.
   A stored mode, warn/failover percentage or legacy quota marker is inert: routing never reads it.
   Migration `20270104090000` cleared the live marker and turned a stored `codex` mode back to `auto`.
 - **KPIs (information only):** letters graded today and this week, the Claude weekly usage estimate
-  and reset time, API and Codex calls. The weekly estimate never switches providers.
+  and reset time, API and Codex calls. The weekly estimate never switches providers. Secondary-reviewer
+  calls (feature `writing.grade.review`, also on the Codex row) are excluded from the fallback and
+  per-provider counters and reported separately as `reviewerCallsWeek` / `reviewerSuccessesWeek`.
 
 ---
 
@@ -180,6 +189,10 @@ grade per letter.
   real `failed` row and its Retry are proven (run N+1 grades). A flag that is absent, disabled,
   unreadable or not updated for 24 h is off (fails closed). Code: `WritingQaFault`.
 - Every call records provider, model, outcome and failure class in `AiUsageRecord`.
+- **Reviewer hold:** with the secondary reviewer enforced (§10) a reviewer outage re-queues the letter
+  on the same back-off (`writing_review_unavailable`, shown as `grading_delayed`); the primary result
+  and the credit hold stay on the letter, so the re-queue resumes the review without a second grade.
+  The reviewer never affects Max-first and is never a failover target of the grade chain.
 
 ---
 
@@ -214,6 +227,7 @@ grade per letter.
 | Codex sidecar 502s | `docker logs oet-writing-codex`; `docker exec -u 10002 oet-writing-codex codex login status`; re-login if needed |
 | Backend "BaseUrl must use https://", or "Platform API key missing for ... writing-claude-sub / writing-codex-sub" | `OET_INTERNAL_AI_HOSTS` missing the sidecar hostnames (§3). The seeded marker key is only honoured for a row whose host is on that list, so a missing host now shows up as a missing key |
 | Many grades served by the API or Codex | Max is erroring inside each run (it is still tried first every time): `docker logs oet-writing-claude`, `GET /readyz` (display only: `ready`, `reason`, `queueDepth`, `authOk`, `plan`; routing never reads it) and `/usage` rows with `class=quota_exhausted` / `auth` |
+| Letters stuck at "taking longer than usual" with a persisted `ProviderResultJson` and no grade | Likely a reviewer hold (§10): `docker logs oet-writing-codex`, the `writing-codex-sub` row active, `OET_INTERNAL_AI_HOSTS` on the API slots and `oet-ai-worker`; or switch the reviewer off (FeatureFlags `writing_ai_reviewer` Enabled = false) and Retry/wait for the re-queue |
 | Requests answered `503 lane_busy` | Sidecar lane full: `WRITING_QUEUE_MAX` (40) already waiting, or a request waited `WRITING_QUEUE_WAIT_MS` (420000). That attempt fails over; the sidecar is never switched off. CLI timeout `WRITING_CLI_TIMEOUT_MS` 300000, lane width `WRITING_LANE_CONCURRENCY` 1 |
 | OAuth refresh contention | Two Claude processes sharing `oet_agent_home` — ensure only ONE claude sidecar + the console use it, never a second copy |
 | Speaking grades all fall back to the API route | Gateway log line `AI provider call failed: ... provider=writing-claude-sub ... class=...` says why (§9); check the row is active, `OET_INTERNAL_AI_HOSTS` on **both** the API slots and `oet-ai-worker`, and `docker exec oet-ai-worker curl -sS -m 5 http://oet-writing-claude:8080/healthz` |
@@ -311,3 +325,84 @@ speaking.grade
   error code and duration per failure.
 - **Revert:** set `SPEAKING_GRADING_PINNED_PROVIDER=` (empty) in `/opt/oetwebapp/.env.production`
   and recreate the API slots and `oet-ai-worker`; grading returns to the default route only.
+
+---
+
+## 10. Secondary reviewer (`writing.grade.review`)
+
+**Owner handoff 6 Oct 2026.** After the primary grade (and the Jev hooks) a second model reviews the
+result BEFORE it can be published: it checks every correction, the severity labels, the six criterion
+scores, the /500 estimate and the grade band, the Top Priorities and the candidate-facing wording.
+Code: `WritingGradeReviewer` (service), `WritingReviewApplier` (the deterministic rules),
+`WritingReviewPrompt`, `WritingReviewDecisionParser`, `WritingGradeChain.RunReviewAsync`.
+
+- **Route:** provider `writing-codex-sub`, model `gpt-6.1-sol`, pinned in the request, through
+  `IAiGatewayService` with a grounded prompt (`AiTaskMode.ReviewWriting`), so each physical call is one
+  `AiOperation` and one `AiUsageRecord` under feature code `writing.grade.review`. Never the paid
+  `anthropic` row, never Max, never the Writing selector. Per pass: 2 attempts x 240 s
+  (`Writing__GradeChain__ReviewAttempts` / `ReviewAttemptSeconds`), ceiling 600 s per pass
+  (`ReviewDeadlineSeconds`), and the whole stage is clamped to `ClaimedAt + 25 min lease - 90 s`
+  (`ReviewLeaseMarginSeconds`). A typed quota/auth/invalid-request answer skips the second attempt.
+  Slots: `ResourceType writing_submission_review`, `ResourceVersion = 5,000,000 + epoch*256 + pass*64 + attempt*16`.
+- **Never a credit:** the feature code is not in `ShouldDebitAiCredit`, no reservation is made and the
+  call is sent with `FreeSampleGrant=true` (plan feature list and token counters never refuse it).
+  The one credit hold on the letter is committed once, after the grade is saved.
+- **Activation prerequisites:** the `writing-codex-sub` row ACTIVE, and `OET_INTERNAL_AI_HOSTS` listing
+  `oet-writing-codex` on the API slots **and `oet-ai-worker`** (same as the L3 Codex hop of §3).
+- **Mode (read uncached on every run, fail closed):**
+  1. FeatureFlags `writing_ai_reviewer_shadow` row with `Enabled` = **Shadow**: the reviewer runs and its
+     proposals are recorded in admin notes only; the result is never changed and never held.
+  2. else FeatureFlags `writing_ai_reviewer` row with `Enabled` = false (newest row wins) = **Off**.
+  3. else the `writing-codex-sub` row exists AND is active = **Enforce**; otherwise **Off** (one warning
+     per process; letters are never held just because the reviewer is not enabled).
+  An unreadable flag table = Off. Emergency levers, both instant: the `writing_ai_reviewer` row with
+  `Enabled` = false, or `writing.grade.review` on the per-feature kill list (`AiGlobalPolicy`, the review is
+  then skipped and the primary result stands, audited as `writing.review.skipped`).
+- **Hold policy (Enforce):** a reviewer outage NEVER publishes an unreviewed result. After the in-run
+  attempts the run throws the retryable `writing_review_unavailable` (`grading_delayed`), the letter is
+  re-queued on the usual 2/5/15/30 min back-off and finally `failed` with Retry. The primary result and the
+  credit hold stay in `WritingSubmission.ProviderResultJson`, so a retry never re-grades and never
+  re-charges. A held letter shows a processing state, never a fabricated result.
+- **What the reviewer may change** (all enforced in code by `WritingReviewApplier`; the model only proposes):
+  finding verdicts (confirmed, false positive, severity change, advisory, duplicate), up to 5 added findings
+  anchored in the letter or the case notes, wording rewrites that stay free of internal tokens and invent no
+  figure or drug, criterion scores (at most 2 points per criterion per pass, each change justified by a
+  finding change) and the /500 estimate (at most 60 per pass, 100 if the raw total moved by 3+; a
+  REVIEWER-CHANGED value is held between `10 x raw + 20` and `10 x raw + 100`, open above from raw 36; a
+  /500 the reviewer did not touch is never rewritten). Raw total, estimated band and the grade letter are
+  always recomputed in code (`OetScoring`). Limits bind from `Writing:Review`.
+- **400+ guardrail (no cap):** a reported score of 400 or more triggers ENHANCED verification (no scored
+  Critical/Major, no material omission, Purpose >= 2 and every other criterion >= 5, at most 5 minor
+  findings). A failure triggers a corrective round naming what fails; the reviewer recalibrates the affected
+  criterion and /500 under the same limits. At most 2 enhanced passes; still failing = the reviewer's
+  recalibrated values are published, a tutor-review assignment is raised (`rv_unresolved`) and
+  `enhanced_unresolved` is recorded. A 400+ score is never clipped to 399.
+- **Tutor flags:** removing or downgrading a Critical finding raises `rv_override`; both reasons use the one
+  pending tutor assignment per submission (the existing Jev mechanism).
+- **Persistence (admin only, no migration):** resume state = `ProviderResultJson` (`Review` member, one
+  record per pass, resumed by an input fingerprint so a held letter re-applies stored replies with no provider
+  call); technical notes = the v1.1 report's `FeatureRecordJson` `review` object (read only by
+  `GET /v1/admin/writing/assessment-v11/reports/{submissionId}`); audit = one `AuditEvent` per review
+  (`writing.review.applied` / `.shadow` / `.skipped`, actor `system:writing-reviewer`) saved in the same
+  SaveChanges as the grade and visible on `/admin/writing/audit`. Candidate DTOs never carry any of it.
+- **Reuse key:** `rv:<reviewer version>` while enforced (`rv:off` otherwise) plus a candidate-grading
+  version token, so an identical letter is re-graded after this deploy and a grade is only reused if it was
+  reviewed under the same version.
+- **Capacity warning:** the Codex sidecar is one serial lane (`WRITING_LANE_CONCURRENCY` 1) shared with the L3
+  failover, so review throughput is roughly `3600 / seconds-per-review` per hour and a 400+ letter needs a
+  second call. Measure real latency in Shadow first; at volume the review can push results past the 15-minute
+  release window (the result then simply stays `processing` until the review completes).
+- **Shared circuit:** reviewer failures count against the `writing-codex-sub` provider circuit (5 failures in
+  60 s open it for 5 min), which can also block the primary L3 failover. A dedicated reviewer row is the
+  insulation option if that ever matters.
+- **Same-model review:** when the primary was served by Codex (L3) the reviewer is the same model; the
+  independence loss is visible in the notes (`primaryModel` vs `model`).
+- **Privacy:** every letter and its case notes go to the Codex subscription sidecar (never the learner id).
+  Whether `codex exec` keeps session files on disk is unverified (§6).
+- **Reading the notes:** open the governance report for the submission and read `featureRecordJson.review`:
+  `dispositions` (per finding), `rejected` (proposals the applier refused, with the code), `flags`,
+  `enhancedFailures`, `usageRecordIds` (the `AiUsageRecord` rows of each call) and the primary/final scores.
+- **Rollout:** with the `writing-codex-sub` row already active, a deploy with NO flag rows enforces at once.
+  To calibrate first, create the `writing_ai_reviewer_shadow` row (Enabled) in `/admin/flags` BEFORE the
+  deploy, run the Medicine C / C+ / B letters through real submissions and compare the recorded proposals with
+  the primary, tune the `Writing:Review` limits, then disable or delete the shadow row to enforce.

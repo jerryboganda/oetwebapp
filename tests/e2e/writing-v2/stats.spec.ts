@@ -36,7 +36,7 @@ test.describe('Writing V2 stats dashboard @writing-v2 @smoke', () => {
     // BandHistory section header is always rendered, even with no data.
     await expect(
       page.getByRole('heading', {
-        name: /raw score over time/i,
+        name: /criteria score over time/i,
       }),
     ).toBeVisible({ timeout: 30_000 });
 
@@ -47,7 +47,7 @@ test.describe('Writing V2 stats dashboard @writing-v2 @smoke', () => {
     const candidateHeadings = [
       /criteria . current vs target/i,
       /letter type performance/i,
-      /canon violations . top hits/i,
+      /most frequent writing issues/i,
       /time management/i,
       /sub-skill mastery/i,
       /activity heatmap/i,

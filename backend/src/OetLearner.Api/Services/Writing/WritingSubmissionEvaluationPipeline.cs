@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
@@ -10,6 +11,7 @@ using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.Writing.Events;
+using OetLearner.Api.Services.Writing.Review;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -73,7 +75,7 @@ public interface IWritingSubmissionEvaluationPipeline
     /// logical submit action. Repeats of the same key or the same content
     /// within the race window resolve to the existing row; genuinely new
     /// content after a terminal attempt throws the submission lock (the
-    /// caller must route to revise instead).
+    /// caller must start a new attempt with "Practice this again" instead).
     /// </summary>
     Task<WritingSubmitOutcome> SubmitAsync(WritingSubmitAttempt attempt, CancellationToken ct);
 }
@@ -85,8 +87,14 @@ public interface IWritingSubmissionEvaluationPipeline
 ///   1. Pre-flight (word count / verbatim-copy / format quick check)
 ///   2. AI rubric — <see cref="WritingEvaluationPipeline"/> via "writing.score.v1"
 ///   3. Canon engine — <see cref="IWritingCanonEngine"/> persists violations
-///   4. Aggregation — top priorities + saved-model-answer reuse for display
-///      + revision invite.
+///   4. Aggregation — top priorities + saved-model-answer reuse for display.
+///
+/// Between stage 2 and everything that makes a result visible, the secondary
+/// reviewer (<see cref="IWritingGradeReviewer"/>, feature code writing.grade.review)
+/// checks the primary grade. It always completes BEFORE the submission reads
+/// <c>graded</c>, so a raw <c>graded</c> status means primary grade AND review
+/// are done; the 15-minute result release is derived at read time from SubmittedAt
+/// (<see cref="WritingResultRelease"/>) and has no logic here.
 ///
 /// The saved Model Answer is a DISPLAY-ONLY reference exemplar. It is never
 /// an input to scoring: no similarity, phrase-match, embedding or lexical
@@ -113,7 +121,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IJevWritingPilot? writingPilot = null,
     Microsoft.Extensions.Options.IOptions<WritingGradeChainOptions>? gradeChainOptions = null,
     WritingQaFault? qaFault = null,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null) : IWritingSubmissionEvaluationPipeline
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
+    // Secondary reviewer: optional LAST parameter, so every pipeline built by hand (tests, tools) keeps
+    // compiling and behaves exactly as before (absent = no review).
+    IWritingGradeReviewer? gradeReviewer = null) : IWritingSubmissionEvaluationPipeline
 {
     private readonly WritingGradeChainOptions _chainOptions = gradeChainOptions?.Value ?? new WritingGradeChainOptions();
 
@@ -167,8 +178,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         // Submission lock (§17.7): once a non-revision submission for this learner+scenario
         // has reached a submitted/locked state, reject further creates so a re-submit cannot
-        // overwrite a locked attempt. Revisions go through the revise path intentionally,
-        // and mock sessions run their own lifecycle (CheckTerminalLock: false).
+        // overwrite a locked attempt; the learner starts a NEW attempt with "Practice this again".
+        // Historical revision rows (IsRevision) keep their own path so one that is still queued,
+        // grading or failed at deploy time grades and retries as before, and mock sessions run
+        // their own lifecycle (CheckTerminalLock: false).
         // Mock rows never block practice either: a graded mock must not lock
         // the learner out of practising the same scenario.
         // Repeats never reach here — they resolved above — so a repeat of the same logical
@@ -198,7 +211,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
             {
                 throw ApiException.Conflict(
                     "writing_submission_locked",
-                    "You have already submitted this task. Submitted attempts are locked; use revise to try again.");
+                    "You have already submitted this task. Submitted attempts are locked; use Practice this again to start a new attempt.");
             }
         }
 
@@ -240,8 +253,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
         // the same learner + task + mode is the same logical attempt — reuse
         // it. The seam submission lock already prevents legitimate
         // re-submits after grading; this guard only collapses in-flight races
-        // and immediate retries. Revisions are excluded (they intentionally
-        // create new rows linked to the original).
+        // and immediate retries. Historical revision rows are excluded (they
+        // were created as new rows linked to the original).
         if (!context.IsRevision)
         {
             var recentCutoff = now - DuplicateContentWindow;
@@ -398,7 +411,16 @@ public sealed class WritingSubmissionEvaluationPipeline(
     private async Task<WritingSubmissionGradeOutcome> EvaluateClaimedAsync(WritingSubmission submission, CancellationToken ct)
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct);
-        submission.ReuseKeyHash = BuildReuseKeyHash(submission, scenario, await settingsProvider.GetAsync(ct));
+        var settings = await settingsProvider.GetAsync(ct);
+
+        // Secondary review mode, read ONCE per run (uncached, fail closed to Off). It needs the rule engine too: the
+        // reviewer must see the exact candidate-facing finding list (rule findings + grader findings).
+        var reviewMode = gradeReviewer is not null && assessmentRuleEngine is not null
+            ? await gradeReviewer.GetModeAsync(ct)
+            : WritingReviewMode.Off;
+        // Only a grade produced WITH review under this reviewer version is reusable while review is enforced; a Shadow
+        // run never changes a result, so it keys like Off.
+        submission.ReuseKeyHash = BuildReuseKeyHash(submission, scenario, settings, ReviewTagFor(reviewMode));
         var reused = await TryReuseExistingGradeAsync(submission, ct);
         if (reused is not null)
         {
@@ -521,14 +543,21 @@ public sealed class WritingSubmissionEvaluationPipeline(
         WritingCanonDetectionResult canon;
         try
         {
-            canon = await canonEngine.DetectViolationsAsync(
-                new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
-                    assessmentPreflightResult.LetterType,
-                    assessmentPreflightResult.Profession,
-                    // The grade ran as a credit-funded / free-sample grant (a reservation
-                    // exists exactly then); its canon detection belongs to the same paid grade,
-                    // so a free/starter plan must not silently drop the LLM canon violations.
-                    FreeSampleGrant: reservationId is not null), ct);
+            // A re-run of a letter that already got this far (a held secondary review, a failed save) must not stack
+            // a second set of canon violations on it nor pay for a second LLM detection: the first run's rows stand.
+            var priorViolations = await db.WritingCanonViolations
+                .Where(v => v.SubmissionId == submission.Id)
+                .ToListAsync(ct);
+            canon = priorViolations.Count > 0
+                ? new WritingCanonDetectionResult(submission.Id, priorViolations)
+                : await canonEngine.DetectViolationsAsync(
+                    new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
+                        assessmentPreflightResult.LetterType,
+                        assessmentPreflightResult.Profession,
+                        // The grade ran as a credit-funded / free-sample grant (a reservation
+                        // exists exactly then); its canon detection belongs to the same paid grade,
+                        // so a free/starter plan must not silently drop the LLM canon violations.
+                        FreeSampleGrant: reservationId is not null), ct);
         }
         catch (Exception ex)
         {
@@ -544,10 +573,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         // Candidate-facing grade letter MUST come from the canonical 0-500
         // scaled score, never a linear conversion of the raw /38 total (the
-        // brief's own §5 explicitly forbids this) — OetScoring.OetGradeLetterFromScaled
-        // is the same A/450+ B/350+ C+/300+ C/200+ D/100+ E ladder used
-        // everywhere else in the app. (There is no non-OET "B+" band.)
-        var bandLabel = OetScoring.OetGradeLetterFromScaled(rubric.EstimatedScaledScore);
+        // brief's own §5 explicitly forbids this) — the same A/450+ B/350+ C+/300+
+        // C/200+ D/100+ E ladder used everywhere else in the app. (There is no
+        // non-OET "B+" band.) The letter is read off the candidate-REPORTED (rounded to
+        // 10) score, so the stored band can never disagree with the band the candidate sees.
+        var bandLabel = OetScoring.OetReportedGradeLetter(rubric.EstimatedScaledScore);
         var grade = new WritingGrade
         {
             Id = Guid.NewGuid(),
@@ -583,6 +613,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
         // Every flag only raises a reason; ONE pending assignment + ConfidenceFlag 'jev_review' is
         // staged below. Each Jev call is fail-soft on its own.
         IReadOnlyList<AiGradeFinding>? aiFindings = rubric.AiFindings;
+        // Kept so the advisory radar can be merged again when the secondary review rebuilds the criterion cards.
+        IReadOnlyDictionary<string, double>? jevAdvisoryScores = null;
         if (writingPilot is not null)
         {
             var jevFindings = (aiFindings ?? [])
@@ -644,6 +676,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
             {
                 grade.PerCriterionFeedbackJson = writingPilot.MergeAdvisoryIntoPerCriterionJson(
                     grade.PerCriterionFeedbackJson, advisory.AdvisoryScores);
+                jevAdvisoryScores = advisory.AdvisoryScores;
 
                 try
                 {
@@ -689,6 +722,43 @@ public sealed class WritingSubmissionEvaluationPipeline(
             }
         }
 
+        // Secondary review (writing.grade.review). It runs on the exact candidate-facing finding list (rule findings +
+        // grader findings), strictly BEFORE the grade is added to the context, the report is built or anything below
+        // makes the result visible, so a raw 'graded' status always means primary grade AND review are done. Enforce:
+        // its outcome replaces the primary scores and findings, and an outage throws the retryable hold (the primary
+        // result and the credit hold stay in ProviderResultJson, so the re-queue resumes for free). Shadow: recorded
+        // in the admin notes only. No release-window logic lives here (the release is derived at read time).
+        IReadOnlyList<WritingAssessmentRuleFinding>? candidateFindings = assessmentRuleEngine is null
+            ? null
+            : MergeCandidateFindings(submission, assessmentPreflightResult, assessmentRuleEngine, aiFindings);
+        var reportedScaledScore = rubric.EstimatedScaledScore;
+        WritingReviewOutcome? review = null;
+        if (candidateFindings is not null && reviewMode != WritingReviewMode.Off)
+        {
+            review = await RunReviewStageAsync(submission, assessmentPreflightResult, reviewMode, rubric, candidateFindings, ct);
+            if (review is { Status: WritingReviewStatus.Reviewed })
+            {
+                ApplyReviewToGrade(grade, review.Scores);
+                reportedScaledScore = review.Scores.ScaledScore;
+                candidateFindings = review.Findings.Select(f => f.Finding).ToList();
+                // Cards, priorities and report rows are all rebuilt from the FINAL findings, so the summary, the
+                // criterion cards and the corrections cannot contradict each other.
+                grade.PerCriterionFeedbackJson = RebuildPerCriterionFeedbackJson(review.Scores, ReviewedGraderFindings(review.Findings));
+                if (jevAdvisoryScores is not null && writingPilot is not null)
+                {
+                    grade.PerCriterionFeedbackJson = writingPilot.MergeAdvisoryIntoPerCriterionJson(
+                        grade.PerCriterionFeedbackJson, jevAdvisoryScores);
+                }
+
+                foreach (var reason in review.TutorReasons) FlagJevReview(reason);
+            }
+            else if (review is { Status: WritingReviewStatus.Skipped } && reviewMode == WritingReviewMode.Enforce)
+            {
+                // An admin kill-list skip: this grade was NOT reviewed, so it must not be reusable as a reviewed one.
+                submission.ReuseKeyHash = BuildReuseKeyHash(submission, scenario, settings, ReviewTagFor(WritingReviewMode.Off));
+            }
+        }
+
         if (jevReviewReasons.Count > 0)
         {
             grade.ConfidenceFlag = JevWritingPilot.TutorReviewConfidenceFlag;
@@ -697,15 +767,24 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         db.WritingGrades.Add(grade);
 
-        if (assessmentRuleEngine is not null)
+        if (assessmentRuleEngine is not null && candidateFindings is not null)
         {
             var assessmentReport = BuildAssessmentReport(
                 submission,
                 assessmentPreflightResult,
                 grade,
-                assessmentRuleEngine,
-                rubric.EstimatedScaledScore,
-                aiFindings);
+                candidateFindings,
+                reportedScaledScore);
+            if (review is not null)
+            {
+                // Admin-only: the 'review' technical notes, the grouped duplicates and one audit event, all staged
+                // in the same SaveChanges as the grade (never through a call that saves early).
+                AttachReviewToReport(assessmentReport.Report, review, candidateFindings);
+                StageReviewAudit(submission, review);
+            }
+
+            // The grade-level priorities are the report's list: after Jev and, when it ran, after the review.
+            grade.TopThreePrioritiesJson = assessmentReport.TopPrioritiesJson;
             if (calibrationReleaseService is not null)
             {
                 var release = await calibrationReleaseService.ResolveAsync(
@@ -792,7 +871,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
     /// <summary>
     /// Idempotently stages a pending tutor-review assignment for a submission
     /// a Jev hook flagged (guard block, verify, outcome flip, criteria
-    /// divergence, valid-alternative finding). Stages only — the caller's
+    /// divergence, valid-alternative finding) or the secondary reviewer flagged
+    /// (rv_override, rv_unresolved). Stages only — the caller's
     /// surrounding SaveChanges persists it, mirroring the mock-review pattern
     /// in WritingTutorReviewService. There is at most ONE assignment per
     /// submission (the tutor flow looks it up by submission id), so a re-run
@@ -841,6 +921,9 @@ public sealed class WritingSubmissionEvaluationPipeline(
         WritingJevReviewReasons.CriteriaDivergence,
         WritingJevReviewReasons.VerifyFlag,
         WritingJevReviewReasons.FindingValidAlternative,
+        // Secondary Writing reviewer: removed or downgraded a Critical, or a 400+ that could not be verified.
+        WritingJevReviewReasons.ReviewerOverride,
+        WritingJevReviewReasons.ReviewerUnresolved,
     };
 
     /// <summary>
@@ -987,6 +1070,197 @@ public sealed class WritingSubmissionEvaluationPipeline(
         }
     }
 
+    // -----------------------------------------------------------------
+    // Secondary review (writing.grade.review): pipeline side. The reviewer
+    // service proposes and the deterministic applier decides (Review/*); this
+    // class only hands it the primary result and writes its outcome back.
+    // -----------------------------------------------------------------
+
+    /// <summary>
+    /// Builds the review request from the primary result and runs the reviewer. Enforce: any failure is the retryable
+    /// hold (<c>writing_review_unavailable</c>), never an unreviewed publication. Shadow: never throws, never changes a
+    /// result (null = no usable review).
+    /// </summary>
+    private async Task<WritingReviewOutcome?> RunReviewStageAsync(
+        WritingSubmission submission,
+        WritingAssessmentPreflightResult preflight,
+        WritingReviewMode mode,
+        RubricResult rubric,
+        IReadOnlyList<WritingAssessmentRuleFinding> candidateFindings,
+        CancellationToken ct)
+    {
+        var findings = candidateFindings
+            .Select((f, index) => WritingReviewFinding.From(
+                $"f{index + 1}",
+                WritingCandidateSeverityPolicy.IsGraderRuleId(f.RuleId)
+                    ? WritingReviewFindingOrigin.Ai
+                    : WritingReviewFindingOrigin.Rule,
+                f))
+            .ToList();
+        // Omission evidence is computed in code; the reviewer only rules each missing fact material or not.
+        var factMap = WritingFactMapService.Build(
+            preflight.CaseNotesSnapshot,
+            submission.LetterContent,
+            preflight.TaskUnderstanding?.RecipientCategory ?? "unknown",
+            preflight.LetterType);
+        var missing = factMap.RequiredFacts
+            .Where(x => x.CandidateStatus == "missing")
+            .Select(x => new WritingReviewMissingFact(x.SourceReference, x.FactText))
+            .ToList();
+        var priorities = WritingReportDigest.ComposePriorities(candidateFindings.Select(f => DigestOf(f)));
+
+        TryReadPersistedReview(submission, out var persisted);
+        var request = new WritingReviewRequest(
+            submission.Id,
+            submission.UserId,
+            submission.GradeEpoch,
+            submission.ClaimedAt,
+            submission.Mode,
+            preflight.Profession,
+            preflight.LetterType,
+            preflight.TaskSnapshot,
+            preflight.CaseNotesSnapshot,
+            submission.LetterContent,
+            new WritingReviewScores(rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6, rubric.EstimatedScaledScore),
+            rubric.ModelUsed,
+            findings,
+            missing,
+            priorities,
+            persisted,
+            (stage, token) => PersistReviewStageAsync(submission, stage, token),
+            mode);
+        try
+        {
+            return await gradeReviewer!.ReviewAsync(request, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (ApiException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Writing secondary review failed for submission {SubmissionId} (mode {Mode}).",
+                submission.Id, mode);
+            if (mode == WritingReviewMode.Shadow) return null;
+            throw WritingReviewHold.Unavailable();
+        }
+    }
+
+    /// <summary>
+    /// Writes the reviewed scores onto the grade. Raw total and the estimated band (raw units, like the primary parse)
+    /// are the sums the applier recomputed; the band letter is read off the rounded reported score. ModelUsed is never
+    /// touched: it is the calibration release-gate key.
+    /// </summary>
+    private static void ApplyReviewToGrade(WritingGrade grade, WritingReviewScores scores)
+    {
+        grade.C1Purpose = (short)scores.C1;
+        grade.C2Content = (short)scores.C2;
+        grade.C3Conciseness = (short)scores.C3;
+        grade.C4Genre = (short)scores.C4;
+        grade.C5Organisation = (short)scores.C5;
+        grade.C6Language = (short)scores.C6;
+        grade.RawTotal = (short)scores.RawTotal;
+        grade.EstimatedBand = scores.RawTotal;
+        grade.BandLabel = scores.Band;
+    }
+
+    /// <summary>The grader-origin and reviewer-added findings of a reviewed list, as the criterion cards read them.</summary>
+    private static IReadOnlyList<AiGradeFinding> ReviewedGraderFindings(IEnumerable<WritingReviewFinding> findings)
+        => findings
+            .Where(f => f.Origin != WritingReviewFindingOrigin.Rule)
+            .Select(f => new AiGradeFinding(
+                GraderRuleIdOf(f.Finding.RuleId),
+                f.Finding.Severity,
+                f.Finding.Quote,
+                f.Finding.Message,
+                f.Finding.FixSuggestion,
+                f.Finding.PrimaryCriterionCode))
+            .ToList();
+
+    /// <summary>
+    /// Admin-only record of the review: the technical notes ride in the report's <c>FeatureRecordJson</c> ("review"),
+    /// findings the reviewer judged duplicates are grouped (<see cref="WritingAssessmentError.IsGroupedDuplicate"/>), and
+    /// the report's Top Priorities exclude them. Nothing here reaches a candidate DTO.
+    /// </summary>
+    private static void AttachReviewToReport(
+        WritingAssessmentReportV11 report,
+        WritingReviewOutcome review,
+        IReadOnlyList<WritingAssessmentRuleFinding> candidateFindings)
+    {
+        if (review.Status == WritingReviewStatus.Reviewed && review.DuplicateFingerprints.Count > 0)
+        {
+            var duplicates = review.Findings
+                .Where(f => review.DuplicateFingerprints.Contains(f.Fingerprint))
+                .Select(f => f.Finding)
+                .ToList();
+            foreach (var duplicate in duplicates)
+            {
+                var wording = duplicate.Quote ?? string.Empty;
+                var row = report.Errors.FirstOrDefault(e => !e.IsGroupedDuplicate
+                    && string.Equals(e.RuleSource, duplicate.RuleId, StringComparison.Ordinal)
+                    && (e.CandidateWording ?? string.Empty) == wording
+                    && e.StartOffset == duplicate.StartOffset);
+                if (row is not null) row.IsGroupedDuplicate = true;
+            }
+
+            // A duplicate never takes a Top Priority slot.
+            var distinct = candidateFindings.Where(f => !duplicates.Contains(f)).Select(f => DigestOf(f));
+            report.TopPrioritiesJson = JsonSerializer.Serialize(WritingReportDigest.ComposePriorities(distinct));
+        }
+
+        JsonObject featureRecord;
+        try
+        {
+            featureRecord = string.IsNullOrWhiteSpace(report.FeatureRecordJson)
+                ? new JsonObject()
+                : JsonNode.Parse(report.FeatureRecordJson) as JsonObject ?? new JsonObject();
+        }
+        catch (JsonException)
+        {
+            featureRecord = new JsonObject();
+        }
+
+        featureRecord["review"] = JsonSerializer.SerializeToNode(review.Notes, ReviewNotesJson);
+        report.FeatureRecordJson = featureRecord.ToJsonString();
+    }
+
+    private static readonly JsonSerializerOptions ReviewNotesJson = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
+
+    /// <summary>
+    /// One audit event per review (applied, shadow or skipped), STAGED on the context so it is saved in the same
+    /// SaveChanges as the grade. Never through <see cref="IWritingContentAuditService"/>, whose LogAsync saves at once and
+    /// would flush a half-built graph. Shows on the existing /admin/writing/audit page.
+    /// </summary>
+    private void StageReviewAudit(WritingSubmission submission, WritingReviewOutcome review)
+    {
+        var action = review.Status switch
+        {
+            WritingReviewStatus.Reviewed => "writing.review.applied",
+            WritingReviewStatus.Shadowed => "writing.review.shadow",
+            _ => "writing.review.skipped",
+        };
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = clock.GetUtcNow(),
+            ActorId = "system:writing-reviewer",
+            ActorName = "Writing secondary reviewer",
+            Action = action,
+            ResourceType = "WritingSubmission",
+            ResourceId = submission.Id.ToString(),
+            Details = JsonSerializer.Serialize(review.Notes, ReviewNotesJson),
+        });
+    }
+
     /// <summary>
     /// Attaches the task's ONE pre-generated Model Answer to a submission's
     /// report snapshot. Normal Submit NEVER generates one (no extra provider
@@ -1083,13 +1357,16 @@ public sealed class WritingSubmissionEvaluationPipeline(
         db.WritingAssessmentModelAnswers.Add(modelAnswer);
     }
 
-    private static WritingAssessmentReportBuildResult BuildAssessmentReport(
+    /// <summary>
+    /// The candidate-facing finding list: the deterministic rule-engine findings plus the primary grader's findings
+    /// (deduplicated against the rules that quote the same wording). One method so the secondary reviewer sees EXACTLY
+    /// what the report will carry.
+    /// </summary>
+    private static IReadOnlyList<WritingAssessmentRuleFinding> MergeCandidateFindings(
         WritingSubmission submission,
         WritingAssessmentPreflightResult preflight,
-        WritingGrade grade,
         WritingAssessmentV11RuleEngine ruleEngine,
-        int estimatedPracticeScore,
-        IReadOnlyList<AiGradeFinding>? aiFindings = null)
+        IReadOnlyList<AiGradeFinding>? aiFindings)
     {
         if (!RulebookProfessionParser.TryParse(preflight.Profession, out var profession))
             throw ApiException.Conflict(
@@ -1108,9 +1385,18 @@ public sealed class WritingSubmissionEvaluationPipeline(
             // when the task's source gives no day-level date to put in it.
             DateAnchor: WritingScenarioSourceExceptions.DateAnchor(submission.ScenarioId, preflight.TodayDate, preflight.CaseNotesSnapshot, preflight.TaskSnapshot),
             PatientAgeContradicted: WritingScenarioSourceExceptions.PatientAgeContradicted(submission.ScenarioId)));
-        ruleFindings = ruleFindings
+        return ruleFindings
             .Concat(ToReportFindings(aiFindings, ruleFindings, submission.LetterContent ?? string.Empty))
             .ToList();
+    }
+
+    private static WritingAssessmentReportBuildResult BuildAssessmentReport(
+        WritingSubmission submission,
+        WritingAssessmentPreflightResult preflight,
+        WritingGrade grade,
+        IReadOnlyList<WritingAssessmentRuleFinding> ruleFindings,
+        int estimatedPracticeScore)
+    {
         var factMap = WritingFactMapService.Build(
             preflight.CaseNotesSnapshot,
             submission.LetterContent,
@@ -1285,12 +1571,12 @@ public sealed class WritingSubmissionEvaluationPipeline(
             && !string.Equals(submission.Mode, "mock", StringComparison.OrdinalIgnoreCase))
         {
             // Free Mocks (retry addendum 23 Sep 2026): TWO free AI-graded
-            // results on the learner's pinned scenario — the second is the
-            // "Revise & Resubmit" of the same letter, so revisions qualify
-            // too. The server decides: the scenario must be the claimed one
-            // and fewer than two results may exist. The use is bound to THIS
-            // submission id, so retry-grade re-enters idempotently and a
-            // failed grade never counts.
+            // results on the learner's pinned scenario — the second is a
+            // fresh attempt on the same task ("Practice this again"), not a
+            // same-letter edit. The server decides: the scenario must be the
+            // claimed one and fewer than two results may exist. The use is
+            // bound to THIS submission id, so retry-grade re-enters
+            // idempotently and a failed grade never counts.
             freeSample = await new FreeSamples.FreeSampleService(db).TryClaimAsync(
                 submission.UserId,
                 FreeSamples.FreeSampleService.Writing,
@@ -1333,7 +1619,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
     /// <summary>
     /// The ledger reference this letter is paid under (WAI-01), fixed at its first
     /// run so every automatic and manual retry reuses the same hold. A free sample
-    /// or a revision pays on its own reference; any other letter adopts the start
+    /// or a historical revision row pays on its own reference; any other letter adopts the start
     /// gate's reference — unless another letter already holds it (a new letter
     /// written after the first one failed), which then pays on its own. Saved at
     /// once so a later failure cannot lose it.
@@ -1397,10 +1683,23 @@ public sealed class WritingSubmissionEvaluationPipeline(
         return key.Length <= 128 ? key : ComputeHash(key);
     }
 
+    /// <summary>
+    /// Version of the candidate-facing grading behaviour (severity doctrine, advisory handling, grader wording, reviewer
+    /// hand-off). It rides in the reuse key INSTEAD of a rule-engine bump (<see cref="WritingRuleEngine.ValidatorVersion"/>
+    /// also keys every stored Model Answer), so identical letters are graded afresh after a behaviour change and never
+    /// served a grade produced under the old doctrine. Bump it whenever candidate-facing grading changes.
+    /// </summary>
+    private const string CandidateGradingVersion = "2026-10-06.1";
+
+    /// <summary>Reuse-key tag of the secondary review: only a grade produced WITH review is reusable while it is enforced.</summary>
+    private string ReviewTagFor(WritingReviewMode mode)
+        => mode == WritingReviewMode.Enforce && gradeReviewer is not null ? $"rv:{gradeReviewer.Version}" : "rv:off";
+
     private static string BuildReuseKeyHash(
         WritingSubmission submission,
         WritingScenario? scenario,
-        EffectiveSettings settings)
+        EffectiveSettings settings,
+        string reviewTag = "rv:off")
     {
         var profession = (scenario?.Profession ?? "medicine").Trim().ToLowerInvariant();
         var revision = submission.IsRevision ? submission.OriginalSubmissionId?.ToString("N") ?? "rev" : "orig";
@@ -1417,17 +1716,52 @@ public sealed class WritingSubmissionEvaluationPipeline(
             // Rev8 linker/naming rules) invalidates older grades.
             $"rules:{WritingRuleEngine.ValidatorVersion}",
             "prompt:writing.score.v1",
+            $"cand:{CandidateGradingVersion}",
+            reviewTag,
             "model:canonical",
             settings.Writing.GradeIdempotencyTtlHours.ToString());
         return ComputeHash(material);
     }
 
+    // The primary grader's result plus, once the secondary reviewer has run a pass, its resume state (Review).
+    // Older rows deserialize with Review null. Never in a DTO: it is how a held review resumes without a second
+    // provider call and without a second credit.
     private sealed record PersistedProviderResult(
         int C1, int C2, int C3, int C4, int C5, int C6,
         int EstimatedBand, int EstimatedScaledScore,
         string PerCriterionFeedbackJson, string TopThreePrioritiesJson,
         string ConfidenceFlag, string ModelUsed,
-        IReadOnlyList<AiGradeFinding>? AiFindings = null);
+        IReadOnlyList<AiGradeFinding>? AiFindings = null,
+        WritingReviewStageRecord? Review = null);
+
+    private static bool TryReadPersistedReview(WritingSubmission submission, out WritingReviewStageRecord? review)
+    {
+        review = null;
+        if (string.IsNullOrWhiteSpace(submission.ProviderResultJson)) return false;
+        try
+        {
+            review = JsonSerializer.Deserialize<PersistedProviderResult>(submission.ProviderResultJson)?.Review;
+            return review is not null;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Saves one reviewer pass into the persisted provider result (read-modify-write) BEFORE the grade is added to the
+    /// context, so the save flushes no half-built grade graph. A crash after the provider answered but before this
+    /// save costs one more subscription-metered review call on the next run; it never affects billing.
+    /// </summary>
+    private async Task PersistReviewStageAsync(WritingSubmission submission, WritingReviewStageRecord stage, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(submission.ProviderResultJson)) return;
+        var parsed = JsonSerializer.Deserialize<PersistedProviderResult>(submission.ProviderResultJson);
+        if (parsed is null) return;
+        submission.ProviderResultJson = JsonSerializer.Serialize(parsed with { Review = stage });
+        await db.SaveChangesAsync(ct);
+    }
 
     private async Task<WritingSubmissionGradeOutcome?> TryReuseExistingGradeAsync(WritingSubmission submission, CancellationToken ct)
     {
@@ -1544,7 +1878,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
             C6Language = 0,
             RawTotal = 0,
             EstimatedBand = 0,
-            BandLabel = OetScoring.OetGradeLetterFromScaled(0),
+            BandLabel = OetScoring.OetReportedGradeLetter(0),
             PerCriterionFeedbackJson = BuildBlankPerCriterionFeedbackJson(),
             TopThreePrioritiesJson = JsonSerializer.Serialize(new[]
             {
@@ -1566,7 +1900,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 submission,
                 preflight,
                 grade,
-                assessmentRuleEngine,
+                // A blank letter has no grader findings and needs no secondary review (no provider call at all).
+                MergeCandidateFindings(submission, preflight, assessmentRuleEngine, aiFindings: null),
                 OetScoring.ScaledMin);
             if (calibrationReleaseService is not null)
             {
@@ -1828,7 +2163,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         sb.AppendLine(
             "Score this letter on the six OET Writing criteria and reply with the SINGLE JSON object "
             + "defined in the grounded reply format above (findings, criteriaScores, estimatedScaledScore, "
-            + "estimatedGrade, passed, passRequires, advisory). Cite only rule IDs that appear in the grounded prompt.");
+            + "estimatedGrade, passed, passRequires, advisory). Cite only rule IDs that appear in the grounded prompt, and write them only in the ruleId field, never inside message or fixSuggestion.");
         return sb.ToString();
     }
 
@@ -2121,22 +2456,27 @@ public sealed class WritingSubmissionEvaluationPipeline(
         foreach (var (key, criterion, score) in map)
         {
             var linked = findings.Where(f => CriterionForFinding(f) == criterion).ToList();
+            // The rule ids are the ADMIN copy: the candidate mapper projects them away.
             var cited = linked
                 .Select(f => f.RuleId)
                 .Where(id => !string.IsNullOrWhiteSpace(id))
                 .Select(id => id!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+            // The card speaks only for findings that can lower a score: an advisory (coaching) item never fills it.
+            var scored = linked
+                .Where(f => DigestOfGrader(f, criterion).ScoreBearing)
+                .ToList();
             // A short summary of the most important findings, and the fix of
             // that same top finding (the full list lives in the corrections).
-            var ordered = WritingReportDigest.Ordered(linked.Select(f => new WritingDigestFinding(
-                f.RuleId, f.Severity ?? string.Empty, f.Message, f.Quote, f.FixSuggestion, criterion, null, true))).ToList();
+            var ordered = WritingReportDigest.Ordered(scored.Select(f => DigestOfGrader(f, criterion))).ToList();
             var feedback = WritingReportDigest.CriterionSummary(ordered) ?? string.Empty;
             var top = ordered.Count > 0 ? ordered[0] : (WritingDigestFinding?)null;
-            var exemplar = string.IsNullOrWhiteSpace(top?.Fix) ? null : top!.Value.Fix;
+            // Candidate-facing: cleaned of rule ids and internal labels, worded as a Suggested fix.
+            var suggestedFix = WritingCandidateText.CleanOrNull(top?.Fix);
             // The candidate's own wording for each AI-detected mistake (was
             // parsed but dropped), so the result can show where it occurred.
-            var quotes = linked
+            var quotes = scored
                 .Select(f => f.Quote)
                 .Where(q => !string.IsNullOrWhiteSpace(q))
                 .Select(q => q!)
@@ -2144,13 +2484,15 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 .ToArray();
 
             // Shape consumed by WritingV2ResponseMapper.ToGradeResponse —
-            // keys c1..c6, each { score, feedback, exemplarFix, citedRuleIds,
-            // quote, quotes }.
+            // keys c1..c6, each { score, feedback, exemplarFix, suggestedFix,
+            // citedRuleIds, quote, quotes }. exemplarFix is the legacy key kept
+            // for stored-row readers; both carry the same cleaned text.
             dict[key] = new
             {
                 score,
                 feedback,
-                exemplarFix = exemplar,
+                exemplarFix = suggestedFix,
+                suggestedFix,
                 citedRuleIds = cited,
                 quote = string.IsNullOrWhiteSpace(top?.Quote) ? null : top!.Value.Quote,
                 quotes,
@@ -2160,22 +2502,83 @@ public sealed class WritingSubmissionEvaluationPipeline(
         return JsonSerializer.Serialize(dict);
     }
 
+    /// <summary>
+    /// Grade-level Top Priorities from the grader's findings alone. Only a FALLBACK: when the v1.1 report is built the
+    /// pipeline overwrites <c>TopThreePrioritiesJson</c> with the report's list (after Jev and the secondary review).
+    /// Same identity and score-bearing rule as the report path, label-free text, advisory items never take a slot.
+    /// </summary>
     private static string BuildTopThreePrioritiesJson(IReadOnlyList<RubricAiFinding> findings)
     {
-        var top = WritingReportDigest.ComposePriorities(findings.Select(f => new WritingDigestFinding(
-            f.RuleId,
-            f.Severity ?? string.Empty,
-            f.Message,
-            f.Quote,
-            f.FixSuggestion,
-            CriterionForFinding(f),
-            null,
-            true)));
+        var top = WritingReportDigest.ComposePriorities(findings.Select(f => DigestOfGrader(f, CriterionForFinding(f))));
         return JsonSerializer.Serialize(top);
     }
 
     private static string CriterionForFinding(RubricAiFinding f)
         => !string.IsNullOrWhiteSpace(f.CriterionCode) ? f.CriterionCode! : CriterionFor(f.RuleId, f.Message);
+
+    /// <summary>
+    /// Grader severity words in the stored vocabulary: critical | major | minor, and <c>info</c> for an advisory
+    /// (coaching, zero score effect). A word the pipeline does not know (and a missing one) stays <c>major</c>: a
+    /// finding is never silently demoted.
+    /// </summary>
+    internal static string NormaliseGraderSeverity(string? severity) => severity?.Trim().ToLowerInvariant() switch
+    {
+        "critical" => "critical",
+        "major" => "major",
+        "minor" => "minor",
+        "info" or "advisory" => "info",
+        _ => "major",
+    };
+
+    /// <summary>The stored rule source of a grader finding: <c>AI:&lt;rule id&gt;</c>, or <c>AI.&lt;criterion&gt;</c> when it cited none.</summary>
+    private static string GraderRuleSource(string? ruleId, string criterion)
+        => string.IsNullOrWhiteSpace(ruleId) ? $"AI.{criterion}" : $"AI:{ruleId}";
+
+    /// <summary>The rule id a grader finding cited, from its stored rule source (null for the rule-less <c>AI.&lt;criterion&gt;</c>).</summary>
+    private static string? GraderRuleIdOf(string? ruleSource)
+    {
+        var id = (ruleSource ?? string.Empty).Trim();
+        return id.StartsWith("AI:", StringComparison.OrdinalIgnoreCase) && id.Length > 3 ? id[3..] : null;
+    }
+
+    /// <summary>The report category the grader criterion maps to (shared by the report rows and the digest).</summary>
+    internal static string AiCategoryForCriterion(string criterion) => criterion switch
+    {
+        "purpose" => "purpose",
+        "content" => "content",
+        "conciseness_clarity" => "irrelevant_excess",
+        "genre_style" => "register_jargon",
+        "organisation_layout" => "layout_format",
+        _ => "language",
+    };
+
+    private static WritingDigestFinding DigestOfGrader(RubricAiFinding f, string criterion)
+    {
+        var ruleSource = GraderRuleSource(f.RuleId, criterion);
+        var severity = NormaliseGraderSeverity(f.Severity);
+        return new WritingDigestFinding(
+            ruleSource,
+            severity,
+            f.Message,
+            f.Quote,
+            f.FixSuggestion,
+            criterion,
+            null,
+            WritingReportDigest.IsScoreBearing(ruleSource, severity),
+            AiCategoryForCriterion(criterion));
+    }
+
+    private static WritingDigestFinding DigestOf(WritingAssessmentRuleFinding f)
+        => new(
+            f.RuleId,
+            f.Severity,
+            f.Message,
+            f.Quote,
+            f.FixSuggestion,
+            f.PrimaryCriterionCode,
+            f.StartOffset,
+            WritingReportDigest.IsScoreBearing(f.RuleId, f.Severity),
+            f.Category);
 
     // Heuristic mapping from rule id / message to one of the six OET Writing
     // criteria; used only when the AI did not stamp criterionCode itself. With
@@ -2354,7 +2757,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 if (inferred) criterion = CriterionFor(f.RuleId, f.Message);
                 return new AiGradeFinding(
                     string.IsNullOrWhiteSpace(f.RuleId) ? null : f.RuleId!.Trim(),
-                    string.IsNullOrWhiteSpace(f.Severity) ? "major" : f.Severity!.Trim().ToLowerInvariant(),
+                    // critical | major | minor | info (advisory); an unknown or missing word stays major.
+                    NormaliseGraderSeverity(f.Severity),
                     string.IsNullOrWhiteSpace(f.Quote) ? null : f.Quote!.Trim(),
                     string.IsNullOrWhiteSpace(f.Message) ? null : f.Message!.Trim(),
                     string.IsNullOrWhiteSpace(f.FixSuggestion) ? null : f.FixSuggestion!.Trim(),
@@ -2371,15 +2775,24 @@ public sealed class WritingSubmissionEvaluationPipeline(
     private static string RebuildPerCriterionFeedbackJson(RubricResult rubric, IReadOnlyList<AiGradeFinding> findings)
         => BuildPerCriterionFeedbackJson(
             rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
-            findings.Select(f => new RubricAiFinding
-            {
-                RuleId = f.RuleId,
-                Severity = f.Severity,
-                Quote = f.Quote,
-                Message = f.Message,
-                FixSuggestion = f.FixSuggestion,
-                CriterionCode = f.Criterion,
-            }).ToList());
+            ToRubricFindings(findings));
+
+    /// <summary>The same rebuild with the REVIEWED scores and findings (secondary review).</summary>
+    private static string RebuildPerCriterionFeedbackJson(WritingReviewScores scores, IReadOnlyList<AiGradeFinding> findings)
+        => BuildPerCriterionFeedbackJson(
+            scores.C1, scores.C2, scores.C3, scores.C4, scores.C5, scores.C6,
+            ToRubricFindings(findings));
+
+    private static List<RubricAiFinding> ToRubricFindings(IReadOnlyList<AiGradeFinding> findings)
+        => findings.Select(f => new RubricAiFinding
+        {
+            RuleId = f.RuleId,
+            Severity = f.Severity,
+            Quote = f.Quote,
+            Message = f.Message,
+            FixSuggestion = f.FixSuggestion,
+            CriterionCode = f.Criterion,
+        }).ToList();
 
     /// <summary>Converts AI findings into v1.1 report rows (deduplicated
     /// against deterministic findings that quote the same wording).</summary>
@@ -2405,39 +2818,35 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 if (idx < 0) idx = letter.IndexOf(quote, StringComparison.OrdinalIgnoreCase);
                 if (idx >= 0) start = idx;
             }
-            var severity = f.Severity is "critical" or "major" or "minor" or "info" ? f.Severity : "major";
-            // Ultimate Final §15.1: an AI finding is a genuine detected
-            // mistake (the grounded prompt forbids reporting valid
-            // alternatives), so it defaults to score-bearing under the
-            // criterion the grader cited; when the AI cited a registry rule
-            // id, that rule's own provenance wins.
-            var provenance = WritingRuleProvenance.For(
-                WritingAssessmentV11RuleEngine.ResolveCheckId(f.RuleId));
+            // Ultimate Final §15.1: an AI finding is a genuine detected mistake (the grounded prompt forbids
+            // reporting valid alternatives), so it is score-bearing under the criterion the grader cited. Only a
+            // cited id that is REGISTERED as coaching-only / not applicable is advisory; a cited id the registry
+            // has never heard of (the grader quotes rulebook ids the check registry does not carry) is still a
+            // mistake, never the registry's coaching default.
+            var checkId = string.IsNullOrWhiteSpace(f.RuleId)
+                ? null
+                : WritingAssessmentV11RuleEngine.ResolveCheckId(f.RuleId);
+            var registered = WritingRuleProvenance.TryGet(checkId, out var provenance);
+            // 'advisory' / 'info' stay info (zero score effect); the candidate severity doctrine then caps the rest.
+            var severity = WritingCandidateSeverityPolicy.Calibrate(
+                checkId, NormaliseGraderSeverity(f.Severity), fromGrader: true);
             list.Add(new WritingAssessmentRuleFinding(
-                // The AI's grounded rule id when it cited one; never invented.
-                RuleId: string.IsNullOrWhiteSpace(f.RuleId) ? $"AI.{f.Criterion}" : $"AI:{f.RuleId}",
-                Category: f.Criterion switch
-                {
-                    "purpose" => "purpose",
-                    "content" => "content",
-                    "conciseness_clarity" => "irrelevant_excess",
-                    "genre_style" => "register_jargon",
-                    "organisation_layout" => "layout_format",
-                    _ => "language",
-                },
-                Severity: severity!,
-                Message: f.Message ?? "AI grader finding.",
+                // The AI's grounded rule id when it cited one; never invented. Admin/log only.
+                RuleId: GraderRuleSource(f.RuleId, f.Criterion),
+                Category: AiCategoryForCriterion(f.Criterion),
+                Severity: severity,
+                Message: f.Message ?? WritingReportDigest.PlaceholderMessage,
                 Quote: quote,
                 FixSuggestion: f.FixSuggestion,
                 StartOffset: start,
                 EndOffset: start is { } s ? s + quote!.Length : null,
                 PrimaryCriterionCode: f.Criterion,
-                ProvenanceTag: string.IsNullOrWhiteSpace(f.RuleId)
-                    ? OetLearner.Api.Services.Rulebook.WritingProvenanceTags.OetOfficial
-                    : provenance.Tag,
-                CandidateBehavior: string.IsNullOrWhiteSpace(f.RuleId)
-                    ? OetLearner.Api.Services.Rulebook.WritingCandidateBehaviors.ScoreBearing
-                    : provenance.CandidateBehavior));
+                ProvenanceTag: registered
+                    ? provenance!.Tag
+                    : OetLearner.Api.Services.Rulebook.WritingProvenanceTags.OetOfficial,
+                CandidateBehavior: registered
+                    ? provenance!.CandidateBehavior
+                    : OetLearner.Api.Services.Rulebook.WritingCandidateBehaviors.ScoreBearing));
         }
         return list;
     }

@@ -40,6 +40,7 @@ public sealed class AiCredentialResolver(
     private static readonly HashSet<string> ScoringCriticalFeatures = new(StringComparer.OrdinalIgnoreCase)
     {
         AiFeatureCodes.WritingGrade,
+        AiFeatureCodes.WritingGradeReview,
         AiFeatureCodes.WritingSampleScore,
         AiFeatureCodes.SpeakingGrade,
         AiFeatureCodes.SpeakingAudioAssess,
@@ -64,6 +65,9 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.AdminListeningTranscriptSegment,
         AiFeatureCodes.AdminWritingDraft,
         AiFeatureCodes.WritingModelAnswerPregenerate,
+        // Secondary Writing reviewer: the letter and case notes go to the platform's own
+        // subscription sidecar only; a learner-supplied BYOK key must never see them.
+        AiFeatureCodes.WritingGradeReview,
         AiFeatureCodes.PronunciationScore,
         AiFeatureCodes.PronunciationLinguisticScore,
         AiFeatureCodes.PronunciationFeedback,

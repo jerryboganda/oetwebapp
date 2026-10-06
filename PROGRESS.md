@@ -11,6 +11,13 @@ Last updated: 2026-10-06
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
+## Active checkpoint - Writing AI-Final handoff (2026-10-06)
+
+- Owner handoff implemented in one change set: candidate Writing shows no internal ids, no Revise & Resubmit, "Criteria score N/38", advisory never scores or ranks, Top Priorities distinct and impact-ordered.
+- Secondary reviewer (Codex gpt-6.1-sol, feature code writing.grade.review) runs before publication; deterministic applier, soft uncapped 400+ verification; mode from FeatureFlags writing_ai_reviewer_shadow / writing_ai_reviewer and the writing-codex-sub row; Enforce holds on outage.
+- 15-minute release window derived from SubmittedAt at read time (no schema change); five owner accounts exempt from the delay and from copy/paste; countdown is server-anchored.
+- Hashed regression inputs, ValidatorVersion and the Model Answer lane untouched. Nothing compiled or tested locally: first compile is Build images, then owner QA (Medicine C/C+/B sweep, shadow reviewer first).
+
 ## Active checkpoint - Package sync, linked pricing, mobile multiline fix, website Login CTA (2026-10-06)
 
 - Owner spec 06 Oct 2026. Root causes: overlay merge applied only `featured`; the whole-blob presentation PUT let the Storefront and Packages editors wipe each other; one-per-line textareas re-derived their value from a trimmed array (Enter/space lost on desktop too); the website CTA lived only in the hamburger / >=1500px nav.

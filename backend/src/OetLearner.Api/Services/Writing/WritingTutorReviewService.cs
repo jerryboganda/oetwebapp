@@ -597,7 +597,7 @@ public sealed class WritingTutorReviewService(
             var ruleText = await db.WritingCanonRules.AsNoTracking()
                 .Where(r => ruleIds.Contains(r.Id))
                 .ToDictionaryAsync(r => r.Id, r => r.RuleText, ct);
-            gradeResponse = WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText);
+            gradeResponse = WritingV2ResponseMapper.ToGradeResponse(grade, violations, ruleText, WritingGradeAudience.Staff);
         }
         return new WritingTutorReviewDetailResponse(WritingV2ResponseMapper.ToSubmissionResponse(submission), gradeResponse);
     }

@@ -4,9 +4,10 @@ using OetLearner.Api.Services.Writing;
 namespace OetLearner.Api.Endpoints;
 
 /// <summary>
-/// WS-B4 Section D/E: learner-facing gated feedback + rewrite comparison, the
-/// learner-effective result-visibility read, and the admin result-visibility
-/// get/upsert. Routes ARE the contract (see lib/writing/exam-api.ts §15).
+/// WS-B4 Section D/E: learner-facing gated feedback, the learner-effective
+/// result-visibility read, and the admin result-visibility get/upsert. Routes ARE
+/// the contract (see lib/writing/exam-api.ts §15). The rewrite-comparison route was
+/// retired with Revise &amp; Resubmit.
 ///
 /// Auth mirrors neighbouring endpoints:
 ///  • learner routes  → "LearnerOnly", owner-checked in the service.
@@ -16,7 +17,7 @@ public static class WritingResultVisibilityEndpoints
 {
     public static IEndpointRouteBuilder MapWritingResultVisibilityEndpoints(this IEndpointRouteBuilder app)
     {
-        // ── Learner: gated feedback + rewrite comparison (owner-checked in service) ──
+        // ── Learner: gated feedback (owner-checked in service) ──────────────────────
         var learner = app.MapGroup("/v1/writing/submissions")
             .RequireAuthorization("LearnerOnly")
             .RequireRateLimiting("PerUser");
@@ -31,17 +32,6 @@ public static class WritingResultVisibilityEndpoints
             return Results.Ok(dto);
         })
         .WithName("GetWritingSubmissionFeedback");
-
-        learner.MapGet("/{id:guid}/rewrite-comparison", async (
-            Guid id,
-            HttpContext http,
-            IWritingResultFeedbackService service,
-            CancellationToken ct) =>
-        {
-            var dto = await service.GetRewriteComparisonAsync(http.WritingV2UserId(), id, ct);
-            return Results.Ok(dto);
-        })
-        .WithName("GetWritingRewriteComparison");
 
         // ── Learner: effective result-visibility for a scenario (or global) ─────────
         app.MapGet("/v1/writing/result-visibility", async (
@@ -102,8 +92,7 @@ public sealed record WritingResultVisibilityUpsertRequest(
     bool ShowAnnotatedResponse,
     bool ShowMissingContent,
     bool ShowModelAnswer,
-    bool ShowContentChecklist,
-    bool AllowRewrite)
+    bool ShowContentChecklist)
 {
     public WritingResultVisibilityDto ToDto() => new(
         ScenarioId,
@@ -115,6 +104,5 @@ public sealed record WritingResultVisibilityUpsertRequest(
         ShowMissingContent,
         ShowModelAnswer,
         ShowContentChecklist,
-        AllowRewrite,
         DateTimeOffset.UtcNow);
 }

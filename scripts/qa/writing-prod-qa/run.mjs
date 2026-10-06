@@ -293,9 +293,6 @@ async function submitAndVerify(ctx, firstSession, learner, task, text, t, opts) 
   const ui = await b.resultsUiChecks(session, submissionId, facts, { shotPrefix: shot, mobile: opts.ui?.mobile !== false, desktop: opts.ui?.desktop !== false });
   t.problems.push(...ui.problems);
   t.partials.push(...ui.partials);
-  if (opts.kind === 'free_sample' && !(await page.locator(tid(TEST_IDS.freeSampleReviseCta)).first().isVisible().catch(() => false))) {
-    t.problems.push('the free-sample revise call to action is missing');
-  }
 
   // Post Submissions: API (exactly once, graded) and UI row.
   const work = await session.api(ENDPOINTS.myWork);

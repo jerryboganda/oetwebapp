@@ -14,6 +14,7 @@ import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { cn } from '@/lib/utils';
 import { MistakeCard } from '@/components/domain/writing/MistakeCard';
 import { listMyCommonMistakes } from '@/lib/writing/api';
+import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import type {
   WritingCommonMistakeDto,
   WritingLearnerMistakeStatDto,
@@ -38,7 +39,7 @@ export default function WritingMyMistakesPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : t('writing.mistakes.mine.error.load'));
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.mistakes.mine.error.load')));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
