@@ -147,15 +147,20 @@ function ocrPageTsv(pagePng) {
 }
 
 // ── rebuild one page as vector text at the words' original positions ─────────
-function pagePixelSize(pdfPath, pageIndex) {
-  const info = run('pdfinfo', ['-f', String(pageIndex + 1), '-l', String(pageIndex + 1), pdfPath]);
-  const sizeLine = info.split('\n').find((l) => /^Page\s+\d+ size:/.test(l));
-  const m = /size:\s*([\d.]+)\s*x\s*([\d.]+)\s*pts/.exec(sizeLine ?? '');
-  if (!m) throw new Error(`no page size for page ${pageIndex + 1} of ${pdfPath}`);
-  return { w: Number(m[1]), h: Number(m[2]) }; // in points at 72 dpi
-}
+// Word boxes are PNG pixels at DPI; the canvas is A4 points, so the scale is
+// derived from the RENDERED PNG's dimensions (never the PDF page box, whose
+// points lie about the raster's true pixel geometry).
 
 const RETYPE_DIR = path.join(OUT_DIR, '..', 'retype-work');
+function pngSize(pngPath) {
+  const fd = fs.openSync(pngPath, 'r');
+  const head = Buffer.alloc(24);
+  fs.readSync(fd, head, 0, 24, 0);
+  fs.closeSync(fd);
+  if (head.readUInt32BE(0) !== 0x89504e47) throw new Error(`not a png: ${pngPath}`);
+  return { w: head.readUInt32BE(16), h: head.readUInt32BE(20) };
+}
+
 function buildVectorPdf(pdfPath, outPath, report) {
   const pages = Number((run('pdfinfo', [pdfPath]).match(/^Pages:\s+(\d+)/m) ?? [])[1] ?? 0);
   if (!pages) throw new Error('no pages');
@@ -166,8 +171,9 @@ function buildVectorPdf(pdfPath, outPath, report) {
     const png = path.join(RETYPE_DIR, `page-${p}.png`);
     if (!fs.existsSync(png)) throw new Error(`render missing: ${png}`);
     const words = ocrPageTsv(png);
-    const { w, h } = pagePixelSize(pdfPath, p - 1);
-    pyInputs.push({ png, pageW: w, pageH: h, words });
+    const dims = pngSize(png);
+    if (!dims.w || !dims.h) throw new Error(`no png dimensions for ${png}`);
+    pyInputs.push({ png, pageW: dims.w, pageH: dims.h, words });
     report.wordCount += words.length;
     report.lowConfidence.push(...words.filter((wd) => wd.confidence < MIN_CONFIDENCE).map((wd) => ({ page: p, ...wd })));
   }
