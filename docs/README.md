@@ -51,6 +51,7 @@ Where agent working memory lives. Layers have exclusive ownership — no file ha
 - [ops/REMOTE-WORKER.md](ops/REMOTE-WORKER.md) — the API side of the remote-worker boundary (OET-RWP/1): switches (all default off), bring-up order, state machines, kill switches, diagnostics.
 - [ADMIN-RUNTIME-SETTINGS.md](ADMIN-RUNTIME-SETTINGS.md) — secrets and settings managed from `/admin/settings`.
 - [ops/deploy-gate.md](ops/deploy-gate.md) and [ops/incident-response-runbook.md](ops/incident-response-runbook.md) — deploy approval, rollback and incidents.
+- [ops/LOAD-TESTING.md](ops/LOAD-TESTING.md) — the k6 capacity harness under `tests/load/`: inert manual tools the owner runs from a self-provisioned load generator (no CI runs it, agents never run it); [ops/PROMETHEUS-SCRAPE-TARGETS.md](ops/PROMETHEUS-SCRAPE-TARGETS.md) — what to scrape and how helper-node metrics travel.
 - [security/README.md](security/README.md) — security evidence pack and runbooks.
 
 ## Releases
