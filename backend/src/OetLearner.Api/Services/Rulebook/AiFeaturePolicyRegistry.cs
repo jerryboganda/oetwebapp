@@ -162,6 +162,7 @@ public static class AiFeaturePolicyDefaults
         // Secondary Writing reviewer: it decides the published score. Also matched by the
         // "grade" keyword below; explicit so the intent is searchable.
         AiFeatureCodes.WritingGradeReview,
+        AiFeatureCodes.SpeakingGradeReview,
     };
 
     /// <summary>Feature codes whose operation class does not follow the

@@ -482,9 +482,10 @@ Scoring rules:
 
         // ── Invoke gateway (mirror SpeakingEvaluationPipeline pattern) ──
         AiGatewayResult aiResult;
+        AiGatewayRequest gradeRequest;
         try
         {
-            aiResult = await SpeakingGradeChain.CompleteAsync(aiGateway, new AiGatewayRequest
+            gradeRequest = new AiGatewayRequest
             {
                 Prompt = input.Prompt,
                 UserInput = input.UserInput,
@@ -501,7 +502,8 @@ Scoring rules:
                 // AI marking. Mock Speaking never reaches here (it is human-marked above) — this tag just arms the
                 // gateway's mock_assessment_forbidden backstop if a future caller ever bypasses the guard.
                 AssessmentContext = input.Context,
-            }, gradingOptions?.Value, logger, ct);
+            };
+            aiResult = await SpeakingGradeChain.CompleteAsync(aiGateway, gradeRequest, gradingOptions?.Value, logger, ct);
         }
         catch (PromptNotGroundedException)
         {
@@ -521,7 +523,12 @@ Scoring rules:
         }
 
         // ── Parse, clamp, and validate evidence quotes ──
-        var parsed = ParseAssessment(aiResult.Completion);
+        // GPT-6.1 Sol reviews Claude's grade (bounded +-1 band per criterion; any failure keeps Claude's grade).
+        // Only when the primary grade is itself readable, so an unparseable Claude reply still fails loud below.
+        var completion = ParseAssessment(aiResult.Completion) is null
+            ? aiResult.Completion
+            : await SpeakingGradeReviewer.ReviewAsync(aiGateway, gradeRequest, aiResult, logger, ct);
+        var parsed = ParseAssessment(completion);
         if (parsed is null)
         {
             logger.LogWarning(

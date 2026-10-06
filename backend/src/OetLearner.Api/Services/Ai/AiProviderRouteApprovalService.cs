@@ -53,6 +53,7 @@ public sealed class AiProviderRouteApprovalService(LearnerDbContext db) : IAiPro
         AiFeatureCodes.WritingGradeReview,
         AiFeatureCodes.WritingSampleScore,
         AiFeatureCodes.SpeakingGrade,
+        AiFeatureCodes.SpeakingGradeReview,
         AiFeatureCodes.SpeakingAudioAssess,
         AiFeatureCodes.MockFullGrade,
         AiFeatureCodes.WritingDrillGradeV1,

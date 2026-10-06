@@ -282,7 +282,8 @@ public sealed class AiQuotaService(
         if (freeSampleGrant
             && (string.Equals(featureCode, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(featureCode, AiFeatureCodes.WritingGradeReview, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)))
+                || string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(featureCode, AiFeatureCodes.SpeakingGradeReview, StringComparison.OrdinalIgnoreCase)))
         {
             return new AiQuotaDecision(
                 Allowed: true,

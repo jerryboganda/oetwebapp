@@ -43,6 +43,7 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.WritingGradeReview,
         AiFeatureCodes.WritingSampleScore,
         AiFeatureCodes.SpeakingGrade,
+        AiFeatureCodes.SpeakingGradeReview,
         AiFeatureCodes.SpeakingAudioAssess,
         AiFeatureCodes.MockFullGrade,
         AiFeatureCodes.PronunciationLinguisticScore,
@@ -68,6 +69,7 @@ public sealed class AiCredentialResolver(
         // Secondary Writing reviewer: the letter and case notes go to the platform's own
         // subscription sidecar only; a learner-supplied BYOK key must never see them.
         AiFeatureCodes.WritingGradeReview,
+        AiFeatureCodes.SpeakingGradeReview,
         AiFeatureCodes.PronunciationScore,
         AiFeatureCodes.PronunciationLinguisticScore,
         AiFeatureCodes.PronunciationFeedback,

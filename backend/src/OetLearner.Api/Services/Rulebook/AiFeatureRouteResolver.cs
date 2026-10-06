@@ -213,6 +213,15 @@ public static class AiFeatureRouteDefaults
         SonnetDefault(AiFeatureCodes.WritingScenarioGenerateV1, "Writing scenario generation — grading-adjacent quality."),
         SonnetDefault(AiFeatureCodes.WritingAppealV1, "Writing appeal second opinion — quality-sensitive per owner directive."),
         SonnetDefault(AiFeatureCodes.SpeakingGrade, "Speaking role-play grading — official."),
+        // Secondary Speaking reviewer: pinned in SpeakingGradeReviewer; this entry only documents the route.
+        new SpeakingAiRouteDefault(
+            FeatureCode: AiFeatureCodes.SpeakingGradeReview,
+            PrimaryProviderCode: OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Codex,
+            PrimaryModel: OetLearner.Api.Services.Writing.WritingSubscriptionProviders.CodexModel,
+            FallbackProviderCode: null,
+            FallbackModel: null,
+            PromptCachingEnabled: false,
+            Description: "Speaking secondary grade reviewer (Codex subscription, provider-pinned)."),
         SonnetDefault(AiFeatureCodes.PronunciationScore, "Pronunciation scoring (text) — feeds a score."),
 
         // ── Cheap tier: Claude Haiku ──────────────────────────────────────────
@@ -306,6 +315,7 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.WritingCoachSuggest,
         AiFeatureCodes.WritingCoachExplain,
         AiFeatureCodes.SpeakingGrade,
+        AiFeatureCodes.SpeakingGradeReview,
         AiFeatureCodes.MockRemediationDraft,
         AiFeatureCodes.ConversationOpening,
         AiFeatureCodes.ConversationReply,

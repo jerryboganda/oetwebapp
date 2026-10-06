@@ -310,6 +310,9 @@ public static class AiFeatureCodes
     /// and platform-only — see WritingGradeReviewer and docs/AI-USAGE-POLICY.md.</summary>
     public const string WritingGradeReview = "writing.grade.review";
     public const string SpeakingGrade = "speaking.grade";
+    /// <summary>Secondary reviewer of a Speaking grade (GPT-6.1 Sol on the Codex subscription route, pinned in code,
+    /// bounded +-1 band per criterion, never credit-debited). Scoring-critical and platform-only.</summary>
+    public const string SpeakingGradeReview = "speaking.grade.review";
     /// <summary>The acoustic half of Speaking grading: an OpenAI audio model listens to the candidate's
     /// recording and judges Intelligibility and fluency evidence. Scoring-critical and platform-only;
     /// pinned to the <c>openai-audio</c> provider row, never routed through the grade chain.</summary>
