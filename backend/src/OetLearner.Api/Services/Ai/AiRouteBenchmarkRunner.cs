@@ -173,7 +173,7 @@ public sealed partial class AiRouteBenchmarkRunner(
                               && completion.ToolCalls.All(t => !string.IsNullOrWhiteSpace(t.ToolCode)),
                     _ => !string.IsNullOrWhiteSpace(completion.Text),
                 };
-                var grounded = testCase.Kind == "grounded" ? GroundedCorrect(completion.Text, testCase.ProvidedSourceCount) : null;
+                var grounded = testCase.Kind == "grounded" ? GroundedCorrect(completion.Text, testCase.ProvidedSourceCount) : (bool?)null;
                 var fabricated = testCase.Kind == "grounded" && FabricatedCitation(completion.Text, testCase.ProvidedSourceCount);
                 outcomes.Add(new AiRouteBenchmarkCaseOutcome(
                     testCase.Id, testCase.Kind, valid, grounded, fabricated,
@@ -186,7 +186,7 @@ public sealed partial class AiRouteBenchmarkRunner(
             {
                 outcomes.Add(new AiRouteBenchmarkCaseOutcome(
                     testCase.Id, testCase.Kind, false,
-                    testCase.Kind == "grounded" ? false : null, false, 0, 0, 0m, "timeout"));
+                    testCase.Kind == "grounded" ? false : (bool?)null, false, 0, 0, 0m, "timeout"));
             }
         }
         return outcomes;
