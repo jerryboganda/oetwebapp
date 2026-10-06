@@ -1,0 +1,44 @@
+name: sample-pdf
+
+# Manual only. Builds the vector (real text) retype of the Nursing writing sample "Adam White" (owner order 6-7 Oct 2026:
+# the live raster copy is soft at every zoom). All compute runs here, never on the workstation or the VPS. It only writes
+# an artifact (the PDF plus PNG previews and a font/image report); it never touches production, secrets or storage.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sample-pdf
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the vector PDF
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq fonts-liberation fonts-dejavu-core poppler-utils python3-reportlab
+          mkdir -p out
+          python3 scripts/materials/adam_white_vector_pdf.py out/Adam-White-vector.pdf
+          pdfinfo out/Adam-White-vector.pdf
+          echo "--- fonts (all must be embedded, no raster images) ---"
+          pdffonts out/Adam-White-vector.pdf
+          echo "--- images (expect none) ---"
+          pdfimages -list out/Adam-White-vector.pdf
+          pdftoppm -r 110 -png out/Adam-White-vector.pdf out/preview
+          ls -l out
+
+      - name: Upload the PDF and previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: adam-white-vector-${{ github.run_id }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
