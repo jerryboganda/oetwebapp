@@ -260,12 +260,12 @@ other agent, host or user, and the primary-VPS rule above stands: **the primary 
   and nothing else: its bootstrap is Docker engine + the agent. No checkout, build, test, benchmark, source install or mutable tag
   there, and no agent uses a helper as a workstation or build host. All build compute for the fleet code still runs on GitHub Actions; no test or
   benchmark compute exists anywhere (see "NO AUTOMATED QA ANYWHERE").
-- **(b) Ansible is runtime behaviour.** It runs only **inside the fleet-manager container**, as the provisioning half of enrollment,
-  repair and rollout, **after an owner action in the manager UI**. Never from a workstation, a console session or any agent; no agent runs
-  `ssh`, `docker` or `ansible` against a helper.
-- **(c) Agents never hold helper IPs, SSH keys, node tokens or the vault master key.** They live only in the manager's encrypted store and the
-  helper's 0600 env file (the owner enters them in the manager UI). Never in the repo (`.gitignore` + the `platform/**` secret scan in
-  `pnpm run pipeline:check`), chat, PRs, logs, `SESSION_STATE.md` or `.env*`.
+- **(b) Ansible is runtime behaviour.** The fleet manager runs it inside its own container as the provisioning half of enrollment, repair
+  and rollout. *(Owner revision 2026-10-06: the former ban on agents running `ssh`/`docker`/`ansible` against a helper is removed; an agent may
+  use an owner-designated SSH identity to reach a helper the owner names in chat.)*
+- **(c) Helper IPs, SSH keys, node tokens and the vault master key never go in the repo** (`.gitignore` + the `platform/**` secret scan in
+  `pnpm run pipeline:check`), chat, PRs, logs, `SESSION_STATE.md` or `.env*`. *(Owner revision 2026-10-06: the former "agents never hold helper
+  keys" rule is removed; using an owner-designated key in place on the owner's machine is allowed.)*
 - **(d) The manager has no public ingress.** Isolated compose project `oet-fleet` on the primary: loopback bind reached by SSH tunnel, on no
   production network, owner password + TOTP, lockout, short sessions, external protected volume `oet-fleet_fleet_data`, hard `mem_limit`/`cpus`/`pids_limit`,
   `oom_score_adj` above Postgres and the API, one playbook at a time (running it on the primary is authorized only by this exception). Console agents are denied
