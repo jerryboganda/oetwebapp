@@ -361,7 +361,11 @@ def start_agent(values, digest):
         "--log-opt", "max-size=5m",
         "--log-opt", "max-file=2",
         "--restart", "unless-stopped",
+        "--stop-timeout", "90",
         "--env-file", ENV_FILE,
+        # The agent image creates its user with --no-create-home and runs on a read-only root, so HOME must point at the tmpfs
+        # (the runtime contract of protocol 10.1). Fixed here, never taken from the env file.
+        "--env", "HOME=/tmp",
         "--health-interval", "30s",
         AGENT_REPO + "@" + digest,
     )
