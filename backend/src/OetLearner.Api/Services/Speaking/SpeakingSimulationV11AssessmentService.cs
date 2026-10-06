@@ -219,6 +219,13 @@ Rules:
                 quality?.IssueCode ?? capture.AudioQualityIssueCode ?? "original_audio_unverified",
                 "The original role-play audio could not be verified. No score was generated.", ct);
 
+        // Leading connection-check chatter ("Hi, can you hear me?" / "Yeah, I hear you, go ahead.") is not
+        // part of the assessed performance (owner spec 4 Oct 2026, section 7.2): the classic grader strips
+        // it from the transcript (SpeakingTranscriptEvidence), and this path matches — the grade input, the
+        // phoneme provider and the readiness advisor all see the cleaned turns. Only LEADING chatter goes;
+        // the stored transcript and its hash are untouched.
+        turns = StripLeadingChatterTurns(turns);
+
         var candidates = turns.Where(IsCandidate).ToList();
         if (candidates.Count == 0)
             return await TechnicalAsync(session, card, quality.Status, "candidate_turns_missing",
@@ -1637,6 +1644,32 @@ Rules:
     private static bool IsCandidate(SpeakingSimulationV11TurnEvidence row)
         => string.Equals(row.Speaker, "candidate", StringComparison.OrdinalIgnoreCase)
             || string.Equals(row.Speaker, "learner", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Drops leading turns that are wholly connection-check chatter and trims the chatter off a turn that
+    /// shares it with the real opening — the per-turn twin of
+    /// <see cref="SpeakingTranscriptEvidence.StripConnectivityChatter"/>. Stops at the first turn carrying
+    /// real speech, so nothing said later is ever touched. The rows are read AsNoTracking, so mutating
+    /// <c>Text</c> affects this assessment only, never the stored transcript.
+    /// </summary>
+    private static List<SpeakingSimulationV11TurnEvidence> StripLeadingChatterTurns(
+        List<SpeakingSimulationV11TurnEvidence> turns)
+    {
+        var leading = true;
+        var cleaned = new List<SpeakingSimulationV11TurnEvidence>(turns.Count);
+        foreach (var turn in turns)
+        {
+            if (leading)
+            {
+                var stripped = SpeakingTranscriptEvidence.StripLeadingChatterText(turn.Text);
+                if (stripped.Length == 0) continue;
+                turn.Text = stripped;
+                leading = false;
+            }
+            cleaned.Add(turn);
+        }
+        return cleaned;
+    }
 
     private static int ToInt(long value)
         => value > int.MaxValue ? int.MaxValue : (int)Math.Max(0, value);

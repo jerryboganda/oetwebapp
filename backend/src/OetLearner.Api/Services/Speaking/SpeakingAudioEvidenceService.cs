@@ -284,6 +284,11 @@ public sealed class SpeakingAudioEvidenceService(
         var turns = new List<CandidateTurn>();
         if (string.IsNullOrWhiteSpace(segmentsJson)) return turns;
 
+        // Callers normally pass already-stripped segments (the classic grader does); this strip is the
+        // safety net for the probe and calibration callers, so a clip whose whole turn is connection
+        // chatter never reaches the joined audio. Mirrors SpeakingTranscriptEvidence: only LEADING chatter
+        // goes, and the zone ends at the first segment carrying real speech, whatever its speaker.
+        var leadingChatter = true;
         try
         {
             using var document = JsonDocument.Parse(segmentsJson);
@@ -291,6 +296,14 @@ public sealed class SpeakingAudioEvidenceService(
             foreach (var segment in document.RootElement.EnumerateArray())
             {
                 if (segment.ValueKind != JsonValueKind.Object) continue;
+                var text = ReadString(segment, "text") ?? string.Empty;
+                if (leadingChatter)
+                {
+                    text = SpeakingTranscriptEvidence.StripLeadingChatterText(text);
+                    if (text.Length == 0) continue;
+                    leadingChatter = false;
+                }
+
                 var speaker = ReadString(segment, "speaker");
                 if (!string.Equals(speaker, "candidate", StringComparison.OrdinalIgnoreCase)
                     && !string.Equals(speaker, "learner", StringComparison.OrdinalIgnoreCase))
@@ -300,7 +313,7 @@ public sealed class SpeakingAudioEvidenceService(
 
                 var recordingId = ReadString(segment, "sourceRecordingId");
                 turns.Add(new CandidateTurn(
-                    ReadString(segment, "text") ?? string.Empty,
+                    text,
                     ReadInt(segment, "startMs"),
                     ReadInt(segment, "endMs"),
                     string.IsNullOrWhiteSpace(recordingId) ? null : recordingId.Trim()));

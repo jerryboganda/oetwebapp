@@ -514,6 +514,27 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public void ReadCandidateTurns_DropsLeadingChatterClips_AndKeepsEverythingFromTheRealOpeningOn()
+    {
+        var turns = SpeakingAudioEvidenceService.ReadCandidateTurns(
+            """[{"speaker":"candidate","text":"Hi, can you hear me?","startMs":0,"endMs":1500,"sourceRecordingId":"chatter"},{"speaker":"patient","text":"Yeah, I hear you. Go ahead.","startMs":1600,"endMs":2600},{"speaker":"candidate","text":"Hello, I'm Dr Faisal.","startMs":3000,"endMs":4200,"sourceRecordingId":"real"}]""");
+
+        var turn = Assert.Single(turns);
+        Assert.Equal(("Hello, I'm Dr Faisal.", 3000, 4200, "real"), (turn.Text, turn.StartMs, turn.EndMs, turn.RecordingId));
+    }
+
+    [Fact]
+    public void ReadCandidateTurns_KeepsATurnThatSharesChatterAndTheRealOpening()
+    {
+        var turns = SpeakingAudioEvidenceService.ReadCandidateTurns(
+            """[{"speaker":"candidate","text":"Hi, can you hear me? Hello, I'm Dr Faisal.","startMs":0,"endMs":2000,"sourceRecordingId":"shared"}]""");
+
+        var turn = Assert.Single(turns);
+        Assert.Equal("Hello, I'm Dr Faisal.", turn.Text);
+        Assert.Equal("shared", turn.RecordingId);
+    }
+
+    [Fact]
     public void UserPrompt_AsksOnlyWhatCanBeHeard_AndNamesTheReply()
     {
         var single = SpeakingAudioEvidenceService.BuildUserPrompt(1, 4, 90, "nonce-1");

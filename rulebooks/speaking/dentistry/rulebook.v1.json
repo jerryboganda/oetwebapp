@@ -394,7 +394,7 @@
       "section": "04",
       "severity": "critical",
       "title": "Do not over-diagnose from one reading",
-      "body": "Do NOT make a definitive diagnosis from a single finding. Inform calmly and arrange appropriate investigations. Saying 'You definitely have oral cancer' from one inspection is clinically wrong and costs marks.",
+      "body": "Do NOT make a definitive diagnosis from a single finding. Inform calmly and arrange appropriate investigations. Saying 'You definitely have oral cancer' from one inspection is clinically wrong and lowers the Information Giving criterion.",
       "appliesTo": "all",
       "checkId": "speaking_no_overdiagnosis",
       "forbiddenPatterns": [

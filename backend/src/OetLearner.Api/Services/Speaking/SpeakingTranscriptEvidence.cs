@@ -86,6 +86,21 @@ public static class SpeakingTranscriptEvidence
     }
 
     /// <summary>
+    /// One turn's free text with its LEADING connection-check sentences removed: empty when the whole
+    /// text is chatter, otherwise the text from the first real sentence on. The per-text twin of
+    /// <see cref="StripConnectivityChatter"/> for callers that hold turns, not a segments JSON.
+    /// </summary>
+    public static string StripLeadingChatterText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        var trimmed = text.Trim();
+        var sentences = SentenceBreak.Split(trimmed);
+        var firstReal = 0;
+        while (firstReal < sentences.Length && IsConnectivitySentence(sentences[firstReal])) firstReal++;
+        return firstReal == 0 ? trimmed : string.Join(" ", sentences.Skip(firstReal));
+    }
+
+    /// <summary>
     /// The segments JSON with the LEADING connection-check chatter removed. Returns the input unchanged
     /// (the same string) when there is none, or when it cannot be read — grading must never fail on a
     /// transcript-shape drift.

@@ -392,7 +392,7 @@
       "section": "04",
       "severity": "critical",
       "title": "Do not over-diagnose from one reading",
-      "body": "Do NOT make a definitive diagnosis from a single reading. Pharmacy clinics may measure BP or blood sugar; one high reading is not a diagnosis. Inform calmly and refer for confirmation. Saying 'You have hypertension' from one BP reading is clinically wrong and costs marks.",
+      "body": "Do NOT make a definitive diagnosis from a single reading. Pharmacy clinics may measure BP or blood sugar; one high reading is not a diagnosis. Inform calmly and refer for confirmation. Saying 'You have hypertension' from one BP reading is clinically wrong and lowers the Information Giving criterion.",
       "appliesTo": "all",
       "checkId": "speaking_no_overdiagnosis",
       "forbiddenPatterns": [
