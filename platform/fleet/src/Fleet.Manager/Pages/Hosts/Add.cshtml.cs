@@ -103,6 +103,17 @@ public sealed class AddModel : FleetPageModel
             issues.Add(new ValidationIssue("address", check.Code ?? "address_invalid", check.Message ?? "address is not allowed."));
         }
 
+        // A reference typed under Advanced that already names ANOTHER helper (or a removed one) would be answered with that helper's enrollment,
+        // or refused, only after the authenticator code was spent and the pasted key dropped. Refuse it here, while nothing has been used.
+        if (requestedRef is not null && check.Allowed)
+        {
+            var holder = await _hostStore.FindByNodeRefAsync(requestedRef, cancellationToken);
+            if (holder is not null && !IsSameLiveHost(holder, check.Normalized, port))
+            {
+                issues.Add(new ValidationIssue("nodeRef", "node_ref_in_use", "That node reference already belongs to another helper (or to one that was removed). Choose a different one."));
+            }
+        }
+
         if (hasKey && !OwnerKeyText.TryNormalize(key, out _, allowEncrypted: hasPassphrase))
         {
             issues.Add(new ValidationIssue(
@@ -145,11 +156,7 @@ public sealed class AddModel : FleetPageModel
             {
                 var candidate = NodeRefs.WithSuffix(first, attempt);
                 var existing = await _hostStore.FindByNodeRefAsync(candidate, cancellationToken);
-                var sameHost = existing is not null
-                    && existing.Lifecycle != "Removed"
-                    && existing.SshPort == port
-                    && string.Equals(existing.Address, check.Normalized, StringComparison.Ordinal);
-                if (existing is null || sameHost)
+                if (existing is null || IsSameLiveHost(existing, check.Normalized, port))
                 {
                     nodeRef = candidate;
                 }
@@ -179,7 +186,8 @@ public sealed class AddModel : FleetPageModel
         var path = "/Operations/Detail/" + Escape(result.Operation.Id);
         if (result.AlreadyExisted)
         {
-            return Done(path, "already-added");
+            // A key pasted in this submit is never saved for an existing enrollment (that page has its own key step): say so instead of dropping it silently.
+            return Done(path, hasKey ? "already-added-key-dropped" : "already-added");
         }
 
         if (!hasKey)
@@ -207,6 +215,12 @@ public sealed class AddModel : FleetPageModel
     }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>The stored helper is this very server (same address and port) and has not been removed, so adding it again is the idempotent no-op.</summary>
+    private static bool IsSameLiveHost(HostEntity existing, string address, int port) =>
+        existing.Lifecycle != "Removed"
+        && existing.SshPort == port
+        && string.Equals(existing.Address, address, StringComparison.Ordinal);
 
     private static void AddIssue(List<ValidationIssue> issues, ValidationIssue? issue)
     {

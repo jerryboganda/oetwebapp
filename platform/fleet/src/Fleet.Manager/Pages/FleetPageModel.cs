@@ -23,6 +23,7 @@ public abstract class FleetPageModel : PageModel
         ["added-key-saved"] = "Helper added and the SSH key saved (encrypted, erased after 60 minutes). Compare the host-key fingerprint below to continue.",
         ["added-key-rejected"] = "Helper added, but the SSH key could not be used. Provide it again below.",
         ["already-added"] = "That helper is already in the fleet. Showing its enrollment.",
+        ["already-added-key-dropped"] = "That helper is already in the fleet, so the SSH key you pasted was not saved. Showing its enrollment: provide the key there if it asks for one.",
         ["host-key-confirmed"] = "Host key pinned. Provide the temporary SSH key to continue.",
         ["host-key-confirmed-continuing"] = "Host key pinned. The server is being prepared with the saved key.",
         ["key-saved"] = "SSH key saved. Preparing the server starts as soon as the host key is confirmed.",

@@ -45,6 +45,15 @@ public sealed class SecretFilesTests : IDisposable
     }
 
     [Fact]
+    public void A_secret_file_is_present_when_it_exists_and_is_not_empty_without_being_read()
+    {
+        Assert.True(SecretFile.IsPresent(Write("token", "ofs1_value\n")));
+        Assert.False(SecretFile.IsPresent(Write("none", string.Empty)));
+        Assert.False(SecretFile.IsPresent(Path.Combine(_root, "missing")));
+        Assert.False(SecretFile.IsPresent(_root));
+    }
+
+    [Fact]
     public void Bearer_comparison_is_exact_and_refuses_empty_values()
     {
         Assert.True(SecretFile.FixedTimeEquals("ofs1_secret", "ofs1_secret"));

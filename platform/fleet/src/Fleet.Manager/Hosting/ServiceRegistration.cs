@@ -189,15 +189,20 @@ public static class ServiceRegistration
                         {
                             context.RejectPrincipal();
                             await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                            return;
                         }
-
-                        // A console tab refreshes its live regions by itself. That is not the owner doing anything, so it must not keep the
-                        // 20-minute idle session alive for ever (only a request the owner made slides it; the absolute limit applies either way).
-                        if (IsLivePoll(context.Request))
+                    },
+                    // The handler decides whether to slide the cookie BEFORE OnValidatePrincipal runs (it starts true once more than half the idle
+                    // window has elapsed), and CookieValidatePrincipalContext.ShouldRenew can only force a renewal, never cancel one. So the veto
+                    // lives here: a console tab refreshes its live regions and reconnects its event stream by itself, which is not the owner doing
+                    // anything, so it must not keep the 20-minute idle session alive for ever (the absolute limit applies either way).
+                    OnCheckSlidingExpiration = context =>
+                    {
+                        if (IsBackgroundRequest(context.Request))
                         {
                             context.ShouldRenew = false;
                         }
+
+                        return Task.CompletedTask;
                     },
                     OnRedirectToLogin = context =>
                     {
@@ -254,9 +259,13 @@ public static class ServiceRegistration
     public static bool IsApiPath(PathString path) =>
         path.StartsWithSegments("/api") || path.StartsWithSegments("/metrics") || path.StartsWithSegments("/internal");
 
-    /// <summary>The background refresh of a live region: a GET of a page with <c>?handler=Fragment</c> (the console script's only request besides the event stream).</summary>
-    private static bool IsLivePoll(HttpRequest request) =>
-        HttpMethods.IsGet(request.Method) && request.Query["handler"] == "Fragment";
+    /// <summary>
+    /// A request the console script makes by itself rather than the owner: the background refresh of a live region (a GET of a page with
+    /// <c>?handler=Fragment</c>) or the event stream (<c>EventSource</c> reconnects on its own).
+    /// </summary>
+    private static bool IsBackgroundRequest(HttpRequest request) =>
+        HttpMethods.IsGet(request.Method)
+        && (request.Query["handler"] == "Fragment" || request.Path.Equals("/api/v1/events", StringComparison.OrdinalIgnoreCase));
 
     private static string PartitionKey(HttpContext context) => context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }

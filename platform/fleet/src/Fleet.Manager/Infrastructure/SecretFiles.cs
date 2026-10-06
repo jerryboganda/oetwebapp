@@ -28,6 +28,23 @@ public static class SecretFile
         }
     }
 
+    /// <summary>
+    /// True when the file exists and is not empty. It reads no content: a page that only says "configured or not" (and is polled) must not load the
+    /// secret into managed memory to find out. A file holding only whitespace counts as present here; <see cref="TryRead"/> would call it empty.
+    /// </summary>
+    public static bool IsPresent(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            return info.Exists && info.Length > 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>Constant-time comparison of a presented bearer against an expected secret.</summary>
     public static bool FixedTimeEquals(string? presented, string? expected)
     {

@@ -286,7 +286,7 @@ public sealed partial class DashboardService
             .ToList();
 
         var secrets = _options.Value.Secrets;
-        bool Present(string file) => SecretFile.TryRead(Path.Combine(secrets.Directory, file)) is not null;
+        bool Present(string file) => SecretFile.IsPresent(Path.Combine(secrets.Directory, file));
         var services = new List<ServiceCredentialLine>
         {
             new("Fleet API credential", Present(secrets.ApiCredentialFile), "Authenticates the manager to the OET API. A secret file mounted into the container; replace the file and it is picked up within seconds."),
@@ -323,7 +323,7 @@ public sealed partial class DashboardService
             _state.ApiReachable,
             _state.LastApiError is null ? null : Fmt.Untrusted(_state.LastApiError, 60),
             _state.LastPollAt,
-            SecretFile.TryRead(Path.Combine(secrets.Directory, secrets.ApiCredentialFile)) is not null,
+            SecretFile.IsPresent(Path.Combine(secrets.Directory, secrets.ApiCredentialFile)),
             statusFetched,
             statusError,
             statusFetched ? status!.ProtocolCurrent : null,
@@ -332,8 +332,8 @@ public sealed partial class DashboardService
             nodes.Count,
             nodes.Count(n => n.Status == "Active"),
             nodes.Count(n => n.Health == "Online"),
-            SecretFile.TryRead(Path.Combine(secrets.Directory, secrets.SyncTokenFile)) is not null,
-            SecretFile.TryRead(Path.Combine(secrets.Directory, secrets.MetricsTokenFile)) is not null,
+            SecretFile.IsPresent(Path.Combine(secrets.Directory, secrets.SyncTokenFile)),
+            SecretFile.IsPresent(Path.Combine(secrets.Directory, secrets.MetricsTokenFile)),
             current is null ? null : current.Sha[..Math.Min(12, current.Sha.Length)],
             releases.Count(r => !r.Approved));
 

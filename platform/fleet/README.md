@@ -19,8 +19,10 @@ platform/fleet/
 > The solution pre-registers the two agent projects (`src/Fleet.Agent`, `tests/Fleet.Agent.Tests`) that arrive with the
 > agent layer, so `Fleet.sln` only resolves once that layer is merged; the manager image never builds the solution, it
 > publishes `src/Fleet.Manager/Fleet.Manager.csproj` (see `Dockerfile`). Nothing is compiled or run on the workstation
-> (AGENTS.md): the only automated check on this code is compilation inside the build-only `.github/workflows/fleet.yml`
-> (also delivered with the agent layer).
+> (AGENTS.md). The only automated check this code is meant to get is compilation inside the build-only
+> `.github/workflows/fleet.yml`, which is delivered with the agent layer and does **not exist at this layer**: until the
+> agent layer is merged with or before this one, nothing builds `platform/fleet`, so a Razor or C# error here stays
+> invisible. **Not compiled, not tested - owner QA.**
 
 ## What it does
 
@@ -70,8 +72,9 @@ How it is kept safe:
   fingerprint hint of the public key. Service secrets are files: the console says present or absent, never reads one out.
 * **Live updates.** The script re-fetches server-rendered fragments (`?handler=Fragment`) when the manager's SSE stream (`/api/v1/events`)
   says something changed, and on a timer as a fallback. Fragments never contain a form, so what you are typing is never replaced; a change
-  of state that alters what you can do reloads the page unless something is typed in it. A session that ends shows a sign-in link. The refresh is not
-  the owner doing anything, so it does not extend the 20-minute idle session (the 60-minute absolute limit applies either way).
+  of state that alters what you can do reloads the page unless something is typed in it. A session that ends shows a sign-in link. The refresh (and the
+  event stream's automatic reconnects) is not the owner doing anything, so it does not extend the 20-minute idle session: the cookie's
+  `OnCheckSlidingExpiration` event vetoes the renewal for those requests (the 60-minute absolute limit applies either way).
 * **Notices are fixed text.** A redirect carries a code from a table in `FleetPageModel`, never request text.
 
 A key can be saved in advance (`StageOwnerCredentialAsync`): it is the same encrypted, 60-minute vault credential, but it is only used after
@@ -174,8 +177,9 @@ manual tools too, not a gate.
 **Not tested, owner QA.** `tests/Fleet.Manager.Tests` is a set of inert manual tools (owner directive 2026-10-06, "NO AUTOMATED
 QA ANYWHERE"): no workflow, job or hook runs it, no agent runs it, and nothing here has ever been run, so no result of
 any kind is claimed for this code. The sources stay in git so the owner can run them by hand if wanted; they are
-never wired to CI and `pipeline:check` rejects any workflow that would. The only automated check on the fleet code is
-that it compiles inside the build-only fleet workflow.
+never wired to CI and `pipeline:check` rejects any workflow that would. The only automated check the fleet code is meant to
+get is that it compiles inside the build-only fleet workflow, which arrives with the agent layer (see the note at the top):
+at this layer nothing compiles it either. Any "CI runs them" in an older commit message of this layer is void.
 
 The suite is written to run the real services over a temp SQLite file with a fake outside world (`FleetWorld`: clock,
 OET API, helpers, registry), so a 180-second verification window or a 60-minute credential lifetime would cost no wall time.

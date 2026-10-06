@@ -620,6 +620,35 @@ public sealed class ConsolePagesTests : IDisposable
     }
 
     [Fact]
+    public async Task A_typed_node_reference_that_belongs_to_another_helper_is_refused_before_a_code_is_used_and_a_key_pasted_for_an_existing_helper_is_reported_as_not_saved()
+    {
+        var s = await StartAsync();
+        var helper = s.World.Provisioner.AddHost("203.0.113.10");
+        s.World.Provisioner.AddHost("203.0.113.11");
+        var first = await s.PostExpectingRedirectAsync("/Hosts/Add", Form(("Address", "203.0.113.10"), ("Port", "22"), ("SshUser", "root"), ("Name", "Berlin")));
+        Assert.EndsWith("?notice=added", first);
+
+        // helper-berlin is the first helper's reference: another server asking for it is refused with the form, and no code is spent.
+        using (var clash = await s.PostAsync("/Hosts/Add", Form(("Address", "203.0.113.11"), ("Port", "22"), ("SshUser", "root"), ("NodeRef", "helper-berlin"))))
+        {
+            Assert.Equal(HttpStatusCode.UnprocessableEntity, clash.StatusCode);
+            var text = await TextOfAsync(clash);
+            Assert.Contains("already belongs to another helper", text);
+            Assert.Contains("no authenticator code was used", text);
+        }
+
+        Assert.Single(await s.Get<HostService>().ListHostsAsync(CancellationToken.None));
+
+        // The same server added again with its own reference is still the idempotent no-op; a key pasted with it is not saved, and the page says so.
+        var again = await s.PostExpectingRedirectAsync(
+            "/Hosts/Add",
+            Form(("Address", "203.0.113.10"), ("Port", "22"), ("SshUser", "root"), ("NodeRef", "helper-berlin"), ("PrivateKey", helper.OwnerKeyText)));
+        Assert.EndsWith("?notice=already-added-key-dropped", again);
+        Assert.Equal(IdOf(first), IdOf(again));
+        Assert.Contains("SSH key you pasted was not saved", ConsoleSession.Visible(await s.PageAsync(again)));
+    }
+
+    [Fact]
     public async Task A_helper_that_never_answers_fails_visibly_with_guidance_and_can_be_retried_or_cancelled_from_the_page()
     {
         var s = await StartAsync();
