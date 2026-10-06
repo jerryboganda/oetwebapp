@@ -1919,6 +1919,10 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiExplanationCacheServ
         OetLearner.Api.Services.Ai.AiResultCacheService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiProviderRouteApprovalService,
     OetLearner.Api.Services.Ai.AiProviderRouteApprovalService>();
+// Route-approval benchmark: executes the learner-route corpus through the real registry-backed
+// dispatch path and records the run (DECISION_LOG D-004/D-005).
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiRouteBenchmarkRunner,
+    OetLearner.Api.Services.Ai.AiRouteBenchmarkRunner>();
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiLedgerReconciliationService,
     OetLearner.Api.Services.Ai.AiLedgerReconciliationService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiRawResponseStore,

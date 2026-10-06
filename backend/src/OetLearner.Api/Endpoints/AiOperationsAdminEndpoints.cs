@@ -31,6 +31,8 @@ public static class AiOperationsAdminEndpoints
 
         group.MapGet("/operations", ListOperationsAsync);
         group.MapGet("/benchmark-runs", ListBenchmarkRunsAsync);
+        group.MapPost("/benchmark-runs/run", RunBenchmarkAsync)
+            .RequireRateLimiting("PerUserWrite");
         group.MapGet("/ledger-reconciliation", ListLedgerReconciliationAsync);
         group.MapGet("/vocabulary-duplicates", ListVocabularyDuplicatesAsync);
         group.MapPost("/speaking-duplicates/mark", MarkSpeakingDuplicatesAsync);
@@ -233,6 +235,72 @@ public static class AiOperationsAdminEndpoints
 
         return Results.Ok(new { rows });
     }
+
+    /// <summary>
+    /// Executes the route benchmark corpus against a candidate provider/model through the real
+    /// dispatch path and RECORDS the run (passed or failed) for the route-approval gate. Every
+    /// metric is computed from the observed completions and the providers' admin-configured token
+    /// pricing; nothing is hand-entered. A refused or failed run is recorded as not-passed, so a
+    /// route switch attempt citing it is refused by <c>AiProviderRouteApprovalService</c>.
+    /// Audited: the run row itself plus an explicit audit event.
+    /// </summary>
+    private static async Task<IResult> RunBenchmarkAsync(
+        RunRouteBenchmarkRequest request,
+        IAiRouteBenchmarkRunner runner,
+        LearnerDbContext db,
+        HttpContext http,
+        CancellationToken ct)
+    {
+        if (request is null
+            || string.IsNullOrWhiteSpace(request.FeatureCode)
+            || string.IsNullOrWhiteSpace(request.ProviderCode)
+            || string.IsNullOrWhiteSpace(request.Model))
+        {
+            return new ApiErrorResult(400, "benchmark_request_incomplete", "featureCode, providerCode and model are required.");
+        }
+
+        AiRouteBenchmarkResult result;
+        try
+        {
+            result = await runner.RunAsync(request.FeatureCode.Trim(), request.ProviderCode.Trim().ToLowerInvariant(), request.Model.Trim(), ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new ApiErrorResult(400, "benchmark_not_executable", ex.Message);
+        }
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system",
+            ActorName = http.User.FindFirstValue(ClaimTypes.Name) ?? "admin",
+            Action = "AiRouteBenchmarkExecuted",
+            ResourceType = "AiProviderBenchmarkRun",
+            ResourceId = result.Run.Id,
+            Details = JsonSerializer.Serialize(new
+            {
+                featureCode = result.FeatureCode,
+                providerCode = result.ProviderCode,
+                model = result.Model,
+                passed = result.Evaluation.Passed,
+                failures = result.Evaluation.Failures,
+            }),
+        });
+        await db.SaveChangesAsync(ct);
+
+        return Results.Ok(new
+        {
+            runId = result.Run.Id,
+            passed = result.Evaluation.Passed,
+            failures = result.Evaluation.Failures,
+            metrics = result.Metrics,
+            incumbent = new { provider = result.IncumbentProviderCode, model = result.IncumbentModel },
+            cases = result.Cases,
+        });
+    }
+
+    public sealed record RunRouteBenchmarkRequest(string FeatureCode, string ProviderCode, string Model);
 
     private static async Task<IResult> ListLedgerReconciliationAsync(
         IAiLedgerReconciliationService recon,

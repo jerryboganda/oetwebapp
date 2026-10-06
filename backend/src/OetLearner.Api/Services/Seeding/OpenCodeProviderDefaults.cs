@@ -23,26 +23,30 @@ public static class OpenCodeProviderDefaults
     /// <summary>Go: subscription. Same key shape; entitlement differs from Zen.</summary>
     public const string GoBaseUrl = "https://opencode.ai/zen/go/v1";
 
-    /// <summary>Documented chat-completions model on both Zen and Go, with native function calling.</summary>
-    public const string DefaultModel = "glm-5.3-flash";
+    /// <summary>Owner-directed learner default (DECISION_LOG D-005, 2026-10-07):
+    /// deepseek-v4.1-flash with reasoning_effort=max on the chat-completions protocol.</summary>
+    public const string DefaultModel = "deepseek-v4.1-flash";
 
-    /// <summary>Valid for both curated models (low / high / max). Bounds forced thinking so the
-    /// answer is not starved of output tokens.</summary>
-    public const string DefaultReasoningEffort = "low";
+    /// <summary>Valid for both curated model families (low / high / max). Bounds forced thinking
+    /// so the answer is not starved of output tokens. "max" per owner directive D-005.</summary>
+    public const string DefaultReasoningEffort = "max";
 
     /// <summary>Highest number = last. Combined with the explicit-only guard, so the row can never
     /// win an implicit "first active row" pick.</summary>
     public const int FailoverPriority = 900;
 
-    /// <summary>Documented per-1M-token rates for <see cref="DefaultModel"/> ($0.15 in / $0.50 out),
-    /// expressed per 1K tokens for the pricing columns.</summary>
-    public const decimal DefaultPricePer1kPromptTokens = 0.00015m;
-    public const decimal DefaultPricePer1kCompletionTokens = 0.0005m;
+    /// <summary>Documented per-1M-token rates for <see cref="DefaultModel"/>
+    /// (deepseek-v4.1-flash: $0.14 in / $0.28 out, checked 2026-10-07 — the gateway passes
+    /// DeepSeek's native rates through at zero markup), expressed per 1K tokens for the pricing
+    /// columns. Row-level columns: glm calls are costed at these rates unless an admin adjusts
+    /// them; glm-5.3-flash's own documented rates ($0.15 in / $0.50 out per 1M) are near-identical.</summary>
+    public const decimal DefaultPricePer1kPromptTokens = 0.00014m;
+    public const decimal DefaultPricePer1kCompletionTokens = 0.00028m;
 
     /// <summary>Models served on the chat-completions protocol that this client speaks. Anything
     /// else on the gateway uses /responses, /messages or a Google protocol and would be refused.
     /// Free gateway models may train on submitted data and must never be listed here.</summary>
-    public static readonly string[] CuratedChatModels = ["glm-5.3-flash", "glm-5.3"];
+    public static readonly string[] CuratedChatModels = ["deepseek-v4.1-flash", "glm-5.3-flash", "glm-5.3"];
 
     public static string AllowedModelsCsv => string.Join(',', CuratedChatModels);
 

@@ -80,8 +80,8 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
         Assert.Equal(OpenCodeProviderDefaults.DefaultPricePer1kPromptTokens, seed.PricePer1kPromptTokens);
         Assert.Equal(OpenCodeProviderDefaults.DefaultPricePer1kCompletionTokens, seed.PricePer1kCompletionTokens);
         Assert.Equal(OpenCodeProviderDefaults.AllowedModelsCsv, seed.AllowedModelsCsv);
-        Assert.Equal("low", seed.ReasoningEffort);
         Assert.Equal(OpenCodeProviderDefaults.DefaultReasoningEffort, seed.ReasoningEffort);
+        Assert.Equal("max", seed.ReasoningEffort);
         Assert.False(seed.IsActive);
     }
 
@@ -177,7 +177,8 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
         Assert.Equal(OpenCodeProviderDefaults.ZenBaseUrl, row.BaseUrl);
         Assert.Equal(OpenCodeProviderDefaults.DefaultModel, row.DefaultModel);
         Assert.Equal(900, row.FailoverPriority);
-        Assert.Equal("low", row.ReasoningEffort);
+        Assert.Equal(OpenCodeProviderDefaults.DefaultReasoningEffort, row.ReasoningEffort);
+        Assert.Equal("max", row.ReasoningEffort);
         Assert.Equal(OpenCodeProviderDefaults.AllowedModelsCsv, row.AllowedModelsCsv);
         Assert.Equal(OpenCodeProviderDefaults.DefaultPricePer1kPromptTokens, row.PricePer1kPromptTokens);
         Assert.Equal(OpenCodeProviderDefaults.DefaultPricePer1kCompletionTokens, row.PricePer1kCompletionTokens);
