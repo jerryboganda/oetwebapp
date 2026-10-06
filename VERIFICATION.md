@@ -6,6 +6,9 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-06 16:52 | CI triage | CI triage | 37499168081 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | fe118e785 |
+| 2026-10-06 16:52 | Deploy production | Deploy production | 37499156323 | Resolve the build to deploy=skipped Apply migration SQL (if the API changed)=skipped Roll out to the VPS=skipped | SKIPPED | fe118e785 |
+| 2026-10-06 16:52 | CI triage | CI triage | 37499156267 | Classify the failed run (jev-1.13.0)=failure | FAILURE | fe118e785 |
 | 2026-10-06 14:24 | CI triage | CI triage | 37478641297 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | b3b10fdc8 |
 | 2026-10-06 14:19 | CI triage | CI triage | 37478062742 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | b3b10fdc8 |
 | 2026-10-06 14:19 | Deploy production | Deploy production | 37478062712 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | b3b10fdc8 |
