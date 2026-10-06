@@ -139,37 +139,46 @@ async function uploadPdf(filePath) {
       intendedRole: 'writing-stimulus',
     },
   });
-  const chunk = started.chunkSizeBytes;
+  const uploadId = pickCaseInsensitive(started ?? {}, 'uploadId');
+  const chunk = pickCaseInsensitive(started ?? {}, 'chunkSizeBytes') ?? 5 * 1024 * 1024;
+  if (!uploadId) throw new Error(`upload start returned no uploadId (keys: ${Object.keys(started ?? {}).join(',')})`);
   const totalParts = Math.max(1, Math.ceil(size / chunk));
   for (let part = 1; part <= totalParts; part++) {
     const offset = (part - 1) * chunk;
-    await api('PUT', `/v1/admin/uploads/${started.uploadId}/parts/${part}`, { body: buf.subarray(offset, offset + Math.min(chunk, size - offset)) });
+    await api('PUT', `/v1/admin/uploads/${uploadId}/parts/${part}`, { body: buf.subarray(offset, offset + Math.min(chunk, size - offset)) });
   }
-  const done = await api('POST', `/v1/admin/uploads/${started.uploadId}/complete`, { json: {} });
-  return done; // { mediaAssetId, sha256, deduplicated }
+  const done = await api('POST', `/v1/admin/uploads/${uploadId}/complete`, { json: {} });
+  const mediaAssetId = pickCaseInsensitive(done ?? {}, 'mediaAssetId');
+  if (!mediaAssetId) throw new Error(`upload complete returned no mediaAssetId (keys: ${Object.keys(done ?? {}).join(',')})`);
+  return { mediaAssetId, sha256: pickCaseInsensitive(done, 'sha256'), deduplicated: pickCaseInsensitive(done, 'deduplicated') };
 }
 
 // Every mirrored field of WritingTaskUpsertDto (full-replace protection).
-// The API serialises GET responses in camelCase and binds PUT bodies
-// case-insensitively: mirror by camelCase name, emit the DTO's PascalCase.
+// The API speaks camelCase on BOTH sides and binds the PUT body with its
+// camelCase policy, so mirror case-insensitively off the GET response and
+// emit camelCase keys.
 const UPSERT_FIELDS = [
-  ['internalCode', 'InternalCode'], ['title', 'Title'], ['profession', 'Profession'], ['letterType', 'LetterType'],
-  ['difficulty', 'Difficulty'], ['writerRole', 'WriterRole'], ['todayDate', 'TodayDate'],
-  ['taskPromptMarkdown', 'TaskPromptMarkdown'], ['expectedPurpose', 'ExpectedPurpose'], ['expectedAction', 'ExpectedAction'],
-  ['fixedInstructions', 'FixedInstructions'], ['wordGuideMin', 'WordGuideMin'], ['wordGuideMax', 'WordGuideMax'],
-  ['readingTimeSeconds', 'ReadingTimeSeconds'], ['writingTimeSeconds', 'WritingTimeSeconds'],
-  ['simulationModes', 'SimulationModes'], ['markingMode', 'MarkingMode'], ['sourceProvenance', 'SourceProvenance'],
-  ['integrityAcknowledged', 'IntegrityAcknowledged'], ['stimulusPdfMediaAssetId', 'StimulusPdfMediaAssetId'],
-  ['answerSheetPdfMediaAssetId', 'AnswerSheetPdfMediaAssetId'], ['recipientRawText', 'RecipientRawText'],
-  ['recipientNormalizedJson', 'RecipientNormalizedJson'], ['confirmedPurposeText', 'ConfirmedPurposeText'],
+  'internalCode', 'title', 'profession', 'letterType', 'difficulty', 'writerRole', 'todayDate',
+  'taskPromptMarkdown', 'expectedPurpose', 'expectedAction', 'fixedInstructions', 'wordGuideMin',
+  'wordGuideMax', 'readingTimeSeconds', 'writingTimeSeconds', 'simulationModes', 'markingMode',
+  'sourceProvenance', 'integrityAcknowledged', 'stimulusPdfMediaAssetId', 'answerSheetPdfMediaAssetId',
+  'recipientRawText', 'recipientNormalizedJson', 'confirmedPurposeText',
 ];
+
+function pickCaseInsensitive(obj, field) {
+  if (obj[field] !== undefined) return obj[field];
+  const lower = field.toLowerCase();
+  const key = Object.keys(obj ?? {}).find((k) => k.toLowerCase() === lower);
+  return key === undefined ? undefined : obj[key];
+}
 
 function buildUpsertPayload(task, newStimulusAssetId) {
   const payload = {};
-  for (const [readKey, writeKey] of UPSERT_FIELDS) {
-    if (task[readKey] !== undefined) payload[writeKey] = task[readKey];
+  for (const field of UPSERT_FIELDS) {
+    const value = pickCaseInsensitive(task, field);
+    if (value !== undefined) payload[field] = value;
   }
-  payload.StimulusPdfMediaAssetId = newStimulusAssetId;
+  payload.stimulusPdfMediaAssetId = newStimulusAssetId;
   return payload;
 }
 
@@ -177,9 +186,9 @@ async function swapOne({ task: scenarioId, asset, upload }) {
   const result = { task: scenarioId, uploadedFrom: upload ?? null, dryRun: !APPLY };
   const before = await api('GET', `/v1/admin/writing/tasks/${scenarioId}`, { isWrite: false });
   if (!before?.id) throw new Error(`task ${scenarioId} not found (HTTP response had no id)`);
-  result.title = before.title;
-  result.profession = before.profession;
-  result.before = before.stimulusPdfMediaAssetId;
+  result.title = pickCaseInsensitive(before, 'Title');
+  result.profession = pickCaseInsensitive(before, 'Profession');
+  result.before = pickCaseInsensitive(before, 'StimulusPdfMediaAssetId');
 
   if (APPLY) {
     let assetId = asset ?? null;
@@ -190,19 +199,20 @@ async function swapOne({ task: scenarioId, asset, upload }) {
     }
     if (!assetId) throw new Error('no asset id resolved (--asset or --upload required)');
     result.after = assetId;
-    if (String(before.stimulusPdfMediaAssetId ?? '') === String(assetId)) {
+    if (String(result.before ?? '') === String(assetId)) {
       result.skipped = 'pointer already set';
       return result;
     }
     const payload = buildUpsertPayload(before, assetId);
     const updated = await api('PUT', `/v1/admin/writing/tasks/${scenarioId}`, { json: payload });
-    if (String(updated?.stimulusPdfMediaAssetId ?? '') !== String(assetId)) {
-      throw new Error(`PUT did not move the pointer (got ${updated?.stimulusPdfMediaAssetId})`);
+    const updatedPointer = pickCaseInsensitive(updated ?? {}, 'StimulusPdfMediaAssetId');
+    if (String(updatedPointer ?? '') !== String(assetId)) {
+      throw new Error(`PUT did not move the pointer (got ${updatedPointer})`);
     }
     // Read-back + validate gate for the evidence ledger.
     const reread = await api('GET', `/v1/admin/writing/tasks/${scenarioId}`, { isWrite: false });
-    result.readBack = reread?.stimulusPdfMediaAssetId;
-    result.titleStillIntact = reread?.Title === before.Title;
+    result.readBack = pickCaseInsensitive(reread ?? {}, 'StimulusPdfMediaAssetId');
+    result.titleStillIntact = pickCaseInsensitive(reread ?? {}, 'Title') === result.title;
     if (result.readBack !== assetId) throw new Error('read-back mismatch after PUT');
     try {
       const validation = await api('GET', `/v1/admin/writing/tasks/${scenarioId}/validate`, { isWrite: false });
@@ -211,13 +221,11 @@ async function swapOne({ task: scenarioId, asset, upload }) {
   } else {
     result.after = upload ? '(upload on apply)' : asset;
     const probe = buildUpsertPayload(before, 'dry-run-probe');
-    result.payloadMirror = { fields: Object.keys(probe).length, titlePresent: Boolean(probe.Title), professionPresent: Boolean(profession0(before)) };
-    if (!probe.Title) throw new Error('mirrored payload would drop Title (camelCase read failed) — refusing to apply');
+    result.payloadMirror = { fields: Object.keys(probe).length, titlePresent: Boolean(probe.title) };
+    if (!probe.title) throw new Error('mirrored payload would drop title (case-insensitive read failed) — refusing to apply');
   }
   return result;
 }
-
-const profession0 = (task) => task?.profession;
 
 function parseArgs() {
   const jobs = [];
