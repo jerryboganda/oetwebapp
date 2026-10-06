@@ -47,6 +47,13 @@
           changed_when: false
           check_mode: false
 
+        - name: Read the controller clock (fresh, so the skew check measures clocks, not this run's latency)
+          ansible.builtin.command: date +%s
+          delegate_to: localhost
+          register: fleet_controller_now
+          changed_when: false
+          check_mode: false
+
         - name: Read the host clock
           ansible.builtin.command: date +%s
           register: fleet_epoch
@@ -92,7 +99,7 @@
               {%- elif (fleet_cores.stdout | trim | int) < 2 -%}cpu_below_min
               {%- elif (fleet_mem.stdout | trim | int) < 3800 -%}mem_below_min
               {%- elif (fleet_disk.stdout | trim | int) < 20 -%}disk_below_min
-              {%- elif (((fleet_epoch.stdout | trim | int) - (fleet_controller_epoch | int)) | abs) > 5 -%}time_skew
+              {%- elif (((fleet_epoch.stdout | trim | int) - (fleet_controller_now.stdout | trim | int)) | abs) > 5 -%}time_skew
               {%- elif (fleet_foreign_containers | length) > 0 or (fleet_project_containers.stdout | trim | length) > 0 -%}existing_oet_workload
               {%- endif -%}
 
