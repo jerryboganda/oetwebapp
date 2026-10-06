@@ -189,6 +189,14 @@ public static class ServiceRegistration
                         {
                             context.RejectPrincipal();
                             await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                            return;
+                        }
+
+                        // A console tab refreshes its live regions by itself. That is not the owner doing anything, so it must not keep the
+                        // 20-minute idle session alive for ever (only a request the owner made slides it; the absolute limit applies either way).
+                        if (IsLivePoll(context.Request))
+                        {
+                            context.ShouldRenew = false;
                         }
                     },
                     OnRedirectToLogin = context =>
@@ -245,6 +253,10 @@ public static class ServiceRegistration
 
     public static bool IsApiPath(PathString path) =>
         path.StartsWithSegments("/api") || path.StartsWithSegments("/metrics") || path.StartsWithSegments("/internal");
+
+    /// <summary>The background refresh of a live region: a GET of a page with <c>?handler=Fragment</c> (the console script's only request besides the event stream).</summary>
+    private static bool IsLivePoll(HttpRequest request) =>
+        HttpMethods.IsGet(request.Method) && request.Query["handler"] == "Fragment";
 
     private static string PartitionKey(HttpContext context) => context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }

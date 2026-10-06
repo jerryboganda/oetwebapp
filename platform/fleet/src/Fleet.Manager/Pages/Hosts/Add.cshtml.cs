@@ -122,7 +122,11 @@ public sealed class AddModel : FleetPageModel
 
         if (issues.Count > 0)
         {
-            Fail(StatusCodes.Status422UnprocessableEntity, "The form has problems. Correct them and submit again; no authenticator code was used.", issues);
+            Fail(
+                StatusCodes.Status422UnprocessableEntity,
+                "The form has problems. Correct them and submit again; no authenticator code was used."
+                + (hasKey ? KeyNotEchoed : string.Empty),
+                issues);
             return Page();
         }
 

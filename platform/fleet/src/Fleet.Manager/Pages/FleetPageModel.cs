@@ -51,6 +51,9 @@ public abstract class FleetPageModel : PageModel
         ["refresh-busy"] = "A refresh is already running.",
     };
 
+    /// <summary>Appended to a refused key form: a secret is write-only, so a form that comes back with a problem comes back without it.</summary>
+    protected const string KeyNotEchoed = " The key and its passphrase are never sent back to the browser: paste them again.";
+
     private readonly OwnerAccountService _owner;
 
     protected FleetPageModel(OwnerAccountService owner)

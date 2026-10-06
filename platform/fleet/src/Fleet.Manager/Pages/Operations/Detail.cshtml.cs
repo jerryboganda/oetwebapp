@@ -112,7 +112,7 @@ public sealed class DetailModel : FleetPageModel
 
         if (issues.Count > 0)
         {
-            Fail(StatusCodes.Status422UnprocessableEntity, "The key form has problems. No authenticator code was used.", issues);
+            Fail(StatusCodes.Status422UnprocessableEntity, "The key form has problems. No authenticator code was used." + (string.IsNullOrWhiteSpace(key) ? string.Empty : KeyNotEchoed), issues);
             return await RenderAsync(id, cancellationToken);
         }
 

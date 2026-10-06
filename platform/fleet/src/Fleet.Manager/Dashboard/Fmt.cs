@@ -16,10 +16,14 @@ public static class Fmt
     private static readonly Regex Ansi = new(@"\x1B\[[0-?]*[ -/]*[@-~]|\x1B[@-Z\\-_]", RegexOptions.CultureInvariant);
     private static readonly Regex Control = new(@"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", RegexOptions.CultureInvariant);
 
+    // C1 controls, zero-width characters, the byte-order mark and the bidirectional overrides and isolates: invisible in a browser, but a helper
+    // could use them to make one line of its text read as another (the override characters reverse what follows them).
+    private static readonly Regex Invisible = new(@"[\u0080-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]", RegexOptions.CultureInvariant);
+
     /// <summary>
     /// Untrusted text for display: the manager stores helper-originated text HTML-encoded (so it is safe in any sink), which Razor would
-    /// encode a second time, so it is decoded first; ANSI and control characters are removed, credential shapes are redacted and the length is capped.
-    /// The result is still plain text that Razor encodes.
+    /// encode a second time, so it is decoded first; ANSI, control and invisible direction characters are removed, credential shapes are
+    /// redacted and the length is capped. The result is still plain text that Razor encodes.
     /// </summary>
     public static string Untrusted(string? value, int max = 200)
     {
@@ -31,6 +35,7 @@ public static class Fmt
         var text = WebUtility.HtmlDecode(value);
         text = Ansi.Replace(text, string.Empty);
         text = Control.Replace(text, " ");
+        text = Invisible.Replace(text, string.Empty);
         text = LogScrubber.Scrub(text, 4000);
         return text.Length > max ? text[..max] + "…" : text;
     }

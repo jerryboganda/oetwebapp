@@ -39,6 +39,8 @@
         }
         else
         {
+            var pinnedAlgorithm = HostKeyChoice.PinnedAlgorithm(op.HostKeyCandidates);
+            <p class="hint">The server may offer several keys, but only the one marked below is pinned. Compare and type that one (your provider can show the fingerprint of each key type).</p>
             <div class="table-wrap" role="region" aria-label="Offered host keys" tabindex="0">
                 <table class="data compact">
                     <caption class="sr-only">Host keys the server offers (display only until you confirm)</caption>
@@ -46,6 +48,7 @@
                     <tr>
                         <th scope="col">Algorithm</th>
                         <th scope="col">SHA256 fingerprint</th>
+                        <th scope="col">Pinned if you confirm</th>
                     </tr>
                     </thead>
                     <tbody>
@@ -54,6 +57,7 @@
                         <tr>
                             <td>@Fmt.Untrusted(candidate.Algorithm, 30)</td>
                             <td><code class="break">@Fmt.Untrusted(candidate.Fingerprint, 80)</code></td>
+                            <td>@(candidate.Algorithm == pinnedAlgorithm ? "Yes: compare this one" : "No")</td>
                         </tr>
                     }
                     </tbody>
