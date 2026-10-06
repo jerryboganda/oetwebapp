@@ -657,6 +657,12 @@ kill switch below is the lever if it misbehaves.
   `speaking_live_queue_full` instead of a wait the server could not honour; the page's estimate is capped at the maximum wait.
   The sweeper (`SpeakingExamAutoAdvanceWorker.SweepAdmissionsAsync`) only tidies the table (expires, purges rows older than 7
   days); correctness never depends on it.
+- **A queued exam is not idle.** A waiting exam stays in `intro` and is never touched while it queues, so `IntroStartedAt` is
+  its only clock, and the 2 h `SpeakingExamService.IdleExpiry` equals the queue's 2 h maximum wait, which is counted from
+  joining the line (after the intro). The same sweeper therefore skips the idle expiry of an `intro` exam that
+  `SpeakingLiveAdmissionService.GetWaitingViewAsync` still reads as waiting (fresh heartbeat, inside the maximum wait), so the
+  tail of a long line is never swept to `expired` from under its page; a waiter that stops polling loses the line after 90 s and
+  the next 20 s sweep expires its exam as before.
 - **Degrade path (explicit).** With **no healthy live provider** (`liveVoiceAvailable` false) the learner uses the recorder
   fallback, which consumes no live capacity: the gate is **bypassed**, never queued, and writes no row. If the gate itself fails
   (a database fault, a missing table, a lock wait that timed out) it **fails open**: the learner is let through and an Error is
@@ -675,7 +681,7 @@ kill switch below is the lever if it misbehaves.
   `GET /v1/admin/ai/live-voice/health` as `admission`, and in `GET /v1/admin/ops/snapshot` (job queue depth by type, database
   connections by `application_name` from `pg_stat_activity`, admitted and queued counts, and a placeholder for remote workers;
   `AdminSystemAdmin`, read-only, counts only; connections are grouped by the process's Npgsql `Application Name`: `oet-api-blue`, `oet-api-green`, `oet-ai-worker`, and
-  `(unset)` for any connection that sets none; see [../ops/db-connection-budget.md](../ops/db-connection-budget.md)).
+  `(unset)` for any client connection of this database that sets none, such as an admin `psql` shell; the server's own background workers have no database and are not counted; see [../ops/db-connection-budget.md](../ops/db-connection-budget.md)).
 - **Not capacity controls** (verified dead 5 Oct 2026): `SpeakingSimulationV11TurnTelemetryService.ActiveTurnCount` and the
   statics in `ConversationHub.SpeakingRoleplay.cs`. Every entry point of that legacy hub rejects typed sessions first, so they
   never leave zero; they are marked as dead in code.

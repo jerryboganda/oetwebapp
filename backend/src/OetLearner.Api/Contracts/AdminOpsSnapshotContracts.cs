@@ -22,8 +22,10 @@ public sealed record AdminOpsJobsSnapshot(
 
 /// <summary>Database connections of one <c>application_name</c> and <c>state</c> (from <c>pg_stat_activity</c>).
 /// <c>ApplicationName</c> is the process's Npgsql <c>Application Name</c> (<c>oet-api-blue</c>, <c>oet-api-green</c>,
-/// <c>oet-ai-worker</c> in <c>docker-compose.production.yml</c>); <c>(unset)</c> for any connection that sets none
-/// (the database's own workers, an admin shell).</summary>
+/// <c>oet-ai-worker</c> in <c>docker-compose.production.yml</c>); <c>(unset)</c> for any client connection of this
+/// database that sets none (an admin <c>psql</c> shell). Only this database's connections are counted
+/// (<c>datname = current_database()</c>): the server's own background workers have no database and never appear, so
+/// <c>Total</c> against <c>MaxConnections</c> slightly understates whole-server use.</summary>
 public sealed record AdminOpsConnectionRow(string ApplicationName, string? State, int Count);
 
 /// <summary><c>Available</c> is false off Postgres or when the catalog cannot be read; <c>Note</c> says why.</summary>
