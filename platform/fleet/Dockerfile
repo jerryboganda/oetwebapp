@@ -27,7 +27,11 @@ RUN apt-get update \
 
 COPY --from=build /out /app
 COPY ansible /opt/fleet/ansible
-RUN chmod -R a+rX /opt/fleet /app
+# The one command fleet.yml's pull-only `sync` job runs with `docker exec -i`: the CI sync document (release record plus the
+# job-scoped registry token) arrives on stdin and is forwarded to the running manager by the `sync-stdin` CLI command.
+RUN printf '#!/bin/sh\nexec dotnet /app/Fleet.Manager.dll sync-stdin\n' > /app/ingest-release \
+    && chmod 0755 /app/ingest-release \
+    && chmod -R a+rX /opt/fleet /app
 
 ENV DOTNET_EnableDiagnostics=0 \
     DOTNET_gcServer=0 \

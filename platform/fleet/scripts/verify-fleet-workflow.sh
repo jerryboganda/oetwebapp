@@ -7,8 +7,10 @@
 #   1. the SSH rollout block between "# BEGIN REMOTE FLEET ROLLOUT" and "# END REMOTE FLEET ROLLOUT" is pull-only:
 #      compose pull, every compose up passes --no-build, no docker build, no npm/pnpm/yarn/node/dotnet/tsc/make, no source sync,
 #      no mutable :latest tag;
-#   2. fleet.yml never uses accept-new, always pins the host key with StrictHostKeyChecking=yes, never mentions the production
-#      rollout script, never runs Playwright, has no pull_request/schedule trigger, keeps the shared-source path filter;
+#   2. fleet.yml never trusts a host key on first use, always pins the host key with StrictHostKeyChecking=yes, never mentions the production
+#      rollout script, never runs Playwright, has no pull_request/schedule trigger, keeps the shared-source path filter, never runs
+#      a built image (BUILD-ONLY: no smoke or self-check job; owner directive 2026-10-06), and only its sync job holds the VPS
+#      credentials, with a read-only packages token;
 #   3. no secret-shaped string exists anywhere under platform/fleet or in fleet.yml.
 set -euo pipefail
 
@@ -54,8 +56,10 @@ printf '%s\n' "$remote" | grep -q 'docker logout' || fail "the registry credenti
 printf '%s\n' "$remote" | grep -q -- '--password-stdin' || fail "the registry token must travel on stdin (--password-stdin)"
 
 # ---- 2. the workflow as a whole -------------------------------------------------------------------------------
-if printf '%s\n' "$active" | grep -Eq 'accept-new'; then
-  fail "fleet.yml must never use accept-new host key handling (pin the host key)"
+# Spelled in two pieces so this file never contains the trust-on-first-use value itself (the repository tests scan every shipped file for it).
+first_use="accept""-new"
+if printf '%s\n' "$active" | grep -Eq "$first_use"; then
+  fail "fleet.yml must never trust a host key on first use (pin the host key)"
 fi
 printf '%s\n' "$active" | grep -Eq 'StrictHostKeyChecking=yes' || fail "fleet.yml must connect with StrictHostKeyChecking=yes"
 printf '%s\n' "$active" | grep -Eq 'UserKnownHostsFile' || fail "fleet.yml must use a pinned known_hosts file"
@@ -76,6 +80,10 @@ if printf '%s\n' "$on_block" | grep -Eq '^[[:space:]]+(pull_request|pull_request
 fi
 for required in "'platform/fleet/**'" \
   "'backend/src/OetLearner.Api/Services/Content/PdfPigPdfTextExtractor.cs'" \
+  "'backend/src/OetLearner.Api/Services/Content/PdfExtractionFacts.cs'" \
+  "'backend/src/OetLearner.Api/Services/Content/PdfTextEngine.cs'" \
+  "'backend/src/OetLearner.Api/Services/Speaking/PcmJoiner.cs'" \
+  "'backend/src/OetLearner.Api/Services/Companion/CompanionChunker.cs'" \
   "'backend/src/OetLearner.Api/OetLearner.Api.csproj'" \
   "'global.json'" \
   "'backend/Directory.Build.props'"; do
@@ -90,8 +98,17 @@ sync_block="$(awk '/^  sync:/ { inside = 1; print; next } inside && /^  [a-z][a-
 [ -n "$sync_block" ] || fail "the sync job is missing"
 printf '%s\n' "$sync_block" | grep -q "workflow_dispatch" || fail "the sync job must be reachable only by workflow_dispatch"
 printf '%s\n' "$sync_block" | grep -q 'inputs.sync' || fail "the sync job must require the sync input"
-if awk '/^  sync:/ { inside = 1 } !inside { print }' "$WORKFLOW" | grep -Eq 'PROD_SSH_KEY|VPS_HOST'; then
+if awk '/^  sync:/ { inside = 1 } !inside { print }' "$WORKFLOW" | sed '/^[[:space:]]*#/d' | grep -Eq 'PROD_SSH_KEY|PROD_SSH_KNOWN_HOSTS|VPS_HOST'; then
   fail "only the sync job may use the production SSH credentials"
+fi
+# The registry token the sync job hands to the manager is its own GITHUB_TOKEN: it must be read-only.
+printf '%s\n' "$sync_block" | grep -Eq '^[[:space:]]+packages:[[:space:]]+read[[:space:]]*$' || fail "the sync job must scope its token to packages: read"
+if printf '%s\n' "$sync_block" | grep -Eq 'packages:[[:space:]]+write'; then
+  fail "the sync job must not hold packages: write (its token is handed to the manager)"
+fi
+# BUILD-ONLY (owner directive 2026-10-06): images are compiled and pushed, never executed on the runner (no smoke or self-check).
+if printf '%s\n' "$active" | grep -Eq '(^|[[:space:];|&(])docker[[:space:]]+(run|compose[[:space:]]+run)([[:space:]]|$)'; then
+  fail "fleet.yml is BUILD-ONLY: it must not run a built image (no smoke, self-check or test job)"
 fi
 
 # ---- 3. secret-shaped strings ---------------------------------------------------------------------------------

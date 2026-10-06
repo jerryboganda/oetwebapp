@@ -4,3 +4,4 @@ ansible/**/*.yml text eol=lf
 ansible/ansible.cfg text eol=lf
 Dockerfile text eol=lf
 *.cshtml text eol=lf
+scripts/*.sh text eol=lf
