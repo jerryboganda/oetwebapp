@@ -6,6 +6,19 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-06 21:52 | CI triage | CI triage | 37536899404 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 0466c3a22 |
+| 2026-10-06 21:52 | Deploy production | Deploy production | 37536892989 | Resolve the build to deploy=skipped Apply migration SQL (if the API changed)=skipped Roll out to the VPS=skipped | SKIPPED | 0466c3a22 |
+| 2026-10-06 21:52 | CI triage | CI triage | 37536893022 | Classify the failed run (jev-1.13.0)=failure | FAILURE | 0466c3a22 |
+| 2026-10-06 21:52 | Fleet (build + rollout) | Fleet (build + rollout) | 37536884725 | Guards=failure Build manager image=skipped Build agent image=skipped Release record=skipped Roll out the manager on the VPS (pull-only, opt-in)=skipped | FAILURE | 0466c3a22 |
+| 2026-10-06 21:44 | CI triage | CI triage | 37535951956 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | a4cdc93ec |
+| 2026-10-06 21:40 | CI triage | CI triage | 37535560987 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | a4cdc93ec |
+| 2026-10-06 21:40 | Deploy production | Deploy production | 37535560788 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | a4cdc93ec |
+| 2026-10-06 21:35 | Build images | Build images | 37534937003 | Deployment contract guards=success Detect what changed=success Syntax gate (seconds)=success Writing grader regression (on change)=skipped build-api=success Retag unchanged web=success Retag unchanged agent-gateway=success Retag unchanged db-backup=success build-web=skipped build-backup=skipped build-agent-gateway=skipped Publish verified release provenance=success Writing model-answer gate (on ch | SUCCESS | a4cdc93ec |
+| 2026-10-06 21:35 | Fleet (build + rollout) | Fleet (build + rollout) | 37534936933 | Guards=success Build agent image=success Build manager image=success Release record=success Roll out the manager on the VPS (pull-only, opt-in)=skipped | SUCCESS | a4cdc93ec |
+| 2026-10-06 21:07 | CI triage | CI triage | 37531547673 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 9b72e5495 |
+| 2026-10-06 21:03 | CI triage | CI triage | 37531078963 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 9b72e5495 |
+| 2026-10-06 21:03 | Deploy production | Deploy production | 37531078948 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 9b72e5495 |
+| 2026-10-06 20:56 | Build images | Build images | 37530286350 | Deployment contract guards=success Detect what changed=success Syntax gate (seconds)=success Writing grader regression (on change)=success build-api=success Retag unchanged web=success Retag unchanged db-backup=success Retag unchanged agent-gateway=success build-web=skipped build-agent-gateway=skipped build-backup=skipped Writing model-answer gate (on change)=success Publish verified release prove | SUCCESS | 9b72e5495 |
 | 2026-10-06 16:52 | CI triage | CI triage | 37499168081 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | fe118e785 |
 | 2026-10-06 16:52 | Deploy production | Deploy production | 37499156323 | Resolve the build to deploy=skipped Apply migration SQL (if the API changed)=skipped Roll out to the VPS=skipped | SKIPPED | fe118e785 |
 | 2026-10-06 16:52 | CI triage | CI triage | 37499156267 | Classify the failed run (jev-1.13.0)=failure | FAILURE | fe118e785 |
