@@ -8,21 +8,44 @@ the production release graph (`platform/**` matches no path of `build-images.yml
 
 ```
 platform/fleet/
-  Fleet.sln                         pre-registers the agent projects (src/Fleet.Agent, tests/Fleet.Agent.Tests) built on another branch
+  Fleet.sln                         the five projects below
   src/Fleet.Core/                   pure domain: state machines, validation, policy, placement, audit chain, vault + auth crypto, SSH rules
   src/Fleet.Manager/                ASP.NET Core 10: services, SQLite (EF Core), Ansible/SSH provisioner, owner auth, JSON API, SSE, /metrics
+  src/Fleet.Agent/                  the helper agent (OET-RWP/1): a stateless fenced-job executor that runs on a helper as a prebuilt image
   tests/Fleet.Manager.Tests/        inert xUnit sources for the owner's manual use; no workflow runs them (see "Tests")
+  tests/Fleet.Agent.Tests/          inert xUnit sources for the agent (protocol conformance, executors, the corpus tool); same rule
   ansible/                          playbooks (S1-S7), the helper-side gate and ctl, ansible.cfg, a data-only inventory template
-  Dockerfile, docker-compose.fleet.yml
+  scripts/verify-fleet-workflow.sh  the static contract of .github/workflows/fleet.yml (read-only; run by its guards job)
+  Dockerfile, docker-compose.fleet.yml   the manager image and its compose project (the agent image: src/Fleet.Agent/Dockerfile)
 ```
 
-> The solution pre-registers the two agent projects (`src/Fleet.Agent`, `tests/Fleet.Agent.Tests`) that arrive with the
-> agent layer, so `Fleet.sln` only resolves once that layer is merged; the manager image never builds the solution, it
-> publishes `src/Fleet.Manager/Fleet.Manager.csproj` (see `Dockerfile`). Nothing is compiled or run on the workstation
-> (AGENTS.md). The only automated check this code is meant to get is compilation inside the build-only
-> `.github/workflows/fleet.yml`, which is delivered with the agent layer and does **not exist at this layer**: until the
-> agent layer is merged with or before this one, nothing builds `platform/fleet`, so a Razor or C# error here stays
-> invisible. **Not compiled, not tested - owner QA.**
+> **Pipeline.** `.github/workflows/fleet.yml` is BUILD-ONLY (owner directive 2026-10-06, "NO AUTOMATED QA ANYWHERE"): its `guards`
+> job runs the static contract checks, `build-agent` publishes `Fleet.Agent` on the Actions host and builds its image, `build-manager`
+> builds the manager image (the Dockerfile restores and publishes inside the build), `record` writes `fleet-release.json` (digests only)
+> and the opt-in `sync` job (dispatch with `sync=true`, main only) rolls the manager out pull-only. The only automated correctness
+> check this code gets is that those builds compile; there is no test, load, parity or benchmark job. Nothing is compiled or run on
+> the workstation (AGENTS.md). **Not tested - owner QA.**
+
+## The helper agent (src/Fleet.Agent)
+
+Claims fenced jobs from the OET API over HTTPS with a per-node token (`/v1/internal/remote-worker`), runs each in an isolated
+child process with a heap limit, and reports a result whose hashes the API re-checks. It holds no database, storage, AI-provider
+or docker-socket credential and makes no AI call. Kinds: `pdf.extract`, `companion.index-prep`, `media.audio-extract`,
+`media.speaking-join`; a kind is offered only when its engine version is known.
+
+* **One engine, link-compiled.** `PdfPigPdfTextExtractor.cs`, `PdfExtractionFacts.cs`, `PdfTextEngine.cs`, `CompanionChunker.cs` and
+  `PcmJoiner.cs` are compiled into the agent from `backend/src/OetLearner.Api/Services/**` (never copied), so output bytes AND the engine
+  version strings (`PdfTextEngine.EngineVersion`, `CompanionChunker.Version`) are the API's own. All five are listed in the `fleet.yml`
+  push paths; a moved or renamed file fails the agent build instead of silently dropping a kind. The two shims in `Shim/` mirror the
+  interface and record the API keeps beside its EF-bound services.
+* **The safeguard against a lying helper is at runtime**, not in CI: the API's `RemoteJobShadowComparer` compares hash-only shadow jobs
+  with a fresh in-process extraction and, when `RemoteJobs:VerifySampleRate` is set, re-extracts a sample of applied jobs; a node that
+  disagrees is struck and the in-process result wins (`PdfParity`). `Fleet.Agent.Tests` (including the corpus
+  tool `CorpusParityTests`, which needs `FLEET_PARITY_LIST`, optionally `FLEET_ORACLE_API_DLL` and `FLEET_AGENT_DLL`) are inert manual
+  tools: the owner may run them by hand; no workflow does and nothing here claims they passed.
+* **Image** (`src/Fleet.Agent/Dockerfile`): linux/amd64 only, the Debian-family dotnet runtime of the API's major version, ffmpeg, uid
+  10001, read-only root. It is built from a publish directory produced on the Actions host and is pulled by digest only; the helper runs it
+  with the fixed flags of `oet-fleet-ctl run` (tmpfs `/scratch` and `/tmp`, `HOME=/tmp`, no capabilities, no mounts).
 
 ## What it does
 
@@ -125,18 +148,29 @@ newer than the build, or without `schema_info`, is refused. EF Core migrations a
 
 ## First deployment (owner steps; the pipeline does the rest)
 
-1. On the primary: create the secrets directory owned by uid 10020 (`chmod 0400` files): `fleet_master_key`
+1. On the primary: create `/opt/oetwebapp/.deploy/fleet-secrets` owned by uid 10020 (`chmod 0400` files): `fleet_master_key`
    (`openssl rand -hex 32`), `fleet_api_credential` (the `ofs1_...` value shown once by
-   `POST /v1/admin/remote-workers/fleet-credential`).
-2. `docker volume create oet-fleet_fleet_data` (the compose file pins it `external: true`).
-3. Deploy the image with `docker compose ... up -d --no-build --wait` (the build-only fleet workflow's pull-only rollout).
-4. Create the owner (password on stdin, one line):
+   `POST /v1/admin/remote-workers/fleet-credential`) and `fleet_sync_token` (`openssl rand -hex 32`; without it the CI hand-over of
+   the release record is disabled). Optional: `fleet_metrics_token`, `fleet_master_key_prev`.
+2. In `/opt/oetwebapp/.env.production` set `FLEET_MANAGER_ENABLED=true` (the rollout refuses to run until it is). Optional knobs
+   `FLEET_API_BASE_URL`, `FLEET_IMAGE_MODE`, `FLEET_DOCKER_SOURCE`, `FLEET_MANAGER_PORT` live there too: the rollout copies only
+   well-formed values into the generated `/opt/oetwebapp/.deploy/fleet.env`, which it rewrites on every run (never edit it).
+3. In the GitHub environment `production`, add the secret `PROD_SSH_KNOWN_HOSTS`: the pinned SSH host-key line of the primary,
+   verified out-of-band. `fleet.yml` refuses to connect without it (`StrictHostKeyChecking=yes`, never `accept-new`).
+4. Dispatch `fleet.yml` on `main` with `sync=true` (the build-only workflow's pull-only rollout). The `sync` job creates the external
+   volume `oet-fleet_fleet_data` once, pulls the manager image by digest, runs `docker compose ... up -d --no-build --wait`, checks the
+   container is loopback-only and on no production network, then hands the release record plus the job-scoped registry token to the manager
+   through `/app/ingest-release` on stdin. It then keeps the job open for `hold_minutes` (default 15): `GITHUB_TOKEN` is revoked when its
+   job ends, so operations waiting in `ImageAwaitingSync` pull inside that window (or make the agent package public and set
+   `FLEET_IMAGE_MODE=public`).
+5. Create the owner (password on stdin, one line):
    `docker exec -i oet-fleet-manager dotnet /app/Fleet.Manager.dll owner-init` and add the printed TOTP secret to an
    authenticator app. `--reset` replaces an existing owner.
-5. Tunnel and sign in: `ssh -L 8480:127.0.0.1:8480 <primary>` then `http://127.0.0.1:8480`.
+6. Tunnel and sign in: `ssh -L 8480:127.0.0.1:8480 <primary>` then `http://127.0.0.1:8480`.
+7. Approve the recorded agent digest in the console (Operations) before any helper may run it.
 
 CLI: `owner-init [--reset]`, `healthcheck`, `sync-stdin` (CI sync document on stdin, authenticated by
-`fleet_sync_token`), `vault-rewrap` (after rotating the master key: put the new key in `fleet_master_key` and the old one
+`fleet_sync_token`; the image ships `/app/ingest-release`, a two-line wrapper around it that `fleet.yml` calls), `vault-rewrap` (after rotating the master key: put the new key in `fleet_master_key` and the old one
 in `fleet_master_key_prev`, run it, then delete the old key), `verify-chain`.
 
 ## Container hardening (the actual profile)
@@ -177,9 +211,9 @@ manual tools too, not a gate.
 **Not tested, owner QA.** `tests/Fleet.Manager.Tests` is a set of inert manual tools (owner directive 2026-10-06, "NO AUTOMATED
 QA ANYWHERE"): no workflow, job or hook runs it, no agent runs it, and nothing here has ever been run, so no result of
 any kind is claimed for this code. The sources stay in git so the owner can run them by hand if wanted; they are
-never wired to CI and `pipeline:check` rejects any workflow that would. The only automated check the fleet code is meant to
-get is that it compiles inside the build-only fleet workflow, which arrives with the agent layer (see the note at the top):
-at this layer nothing compiles it either. Any "CI runs them" in an older commit message of this layer is void.
+never wired to CI and `pipeline:check` rejects any workflow that would. The only automated check the fleet code gets is
+that it compiles inside the build-only fleet workflow (see "Pipeline" at the top). The same holds for `tests/Fleet.Agent.Tests`.
+Any "CI runs them" in an older commit message of this folder is void.
 
 The suite is written to run the real services over a temp SQLite file with a fake outside world (`FleetWorld`: clock,
 OET API, helpers, registry), so a 180-second verification window or a 60-minute credential lifetime would cost no wall time.
@@ -202,10 +236,11 @@ OET API, helpers, registry), so a 180-second verification window or a 60-minute 
   kinds as strings or objects) because the spec does not fix their envelope.
 * `repair` and `uninstall` are additions: the operation kinds listed in 8.1 needed concrete steps.
 * The helper-side Ansible in `ansible/` (flat playbooks, a Python `oet-fleet-ctl`/`oet-fleet-gate`, vars such as
-  `fleet_manager_pubkey`) is the tree `AnsibleProvisioner` drives and the manual repository tests are written against. The `feat/fleet-agent*`
-  branches ship a second, role-based tree under the same path (`roles/`, `bootstrap.yml`, a bash ctl, other variable names,
-  `requirements.yml`). Exactly one of the two must survive the merge: this README and `FleetRepositoryTests` assume this one
-  (builtin modules only, no `requirements.yml`, a single inventory template).
+  `fleet_manager_pubkey`) is the tree `AnsibleProvisioner` drives and the manual repository tests are written against. The agent
+  branches had built a second, role-based tree under the same path (`roles/`, `bootstrap.yml`, a bash ctl, `requirements.yml` with Galaxy
+  collections, node-exporter and cAdvisor roles); exactly one tree could survive and it is this one (builtin modules only, which is all the
+  manager image carries). From that work only the agent run flags were carried over (`--env HOME=/tmp`, `--stop-timeout 90` in
+  `oet-fleet-ctl run`); the exporter roles were not, because nothing consumes helper-side metrics yet.
 * JSON enums (for example a placement decision's `kind`) go over the wire by name (`"Remote"`, `"Wait"`), never as numbers.
 * The operator CLI prints only its result on stdout; informational logs are suppressed and warnings go to stderr, so the
   one-time TOTP secret of `owner-init` is never interleaved with log lines.

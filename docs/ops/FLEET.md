@@ -269,10 +269,10 @@ Ansible itself is never "automatic" in the sense of a schedule: it runs only as 
   `platform/**` deploys nothing, so `pnpm run ship` ends with `SHIP-WATCH_NOTHING_TO_DEPLOY`; that is success for the production pipeline, not proof
   that the fleet workflow passed. Console-authored fleet PRs merge through the Ship executor and are verified the same way.
 - `scripts/deploy/verify-pipeline-contract.mjs` (`pnpm run pipeline:check`; the `guards` job of `Build images`; `pnpm run ship:gate`) enforces:
-  - the SSH allow-list `PROD_SSH_WORKFLOWS` (the seven workflows that hold `PROD_SSH_KEY` today: `agent-console`, `mobile-release`,
-    `production-deploy`, `publish-existing-desktop-to-vps`, `publish-existing-mobile-to-vps`, `tauri-desktop-release`, `writing-ai`): any other workflow
-    holding a production or VPS SSH credential fails, so an eighth SSH workflow (the one that adds `fleet.yml`) needs a visible edit of that list in the
-    same commit plus the `AGENTS.md` exception;
+  - the SSH allow-list `PROD_SSH_WORKFLOWS` (the eight workflows that hold an SSH credential: `agent-console`, `fleet` (its dispatch-only `sync`
+    job), `mobile-release`, `production-deploy`, `publish-existing-desktop-to-vps`, `publish-existing-mobile-to-vps`, `tauri-desktop-release`,
+    `writing-ai`): any other workflow holding a production or VPS SSH credential fails, so a ninth SSH workflow needs a visible edit of that list in
+    the same commit plus the `AGENTS.md` exception;
   - once `fleet.yml` exists: the name `Fleet (build + rollout)`, concurrency `group: fleet` with `cancel-in-progress: false`, the `main`-only deploy with
     `environment: production`, its own `guards` job running `node scripts/deploy/verify-pipeline-contract.mjs` and
     `bash scripts/deploy/verify-compute-offload.sh`, no `schedule` or `pull_request_target` trigger, no `:latest`, no reference to
@@ -314,7 +314,10 @@ Ansible itself is never "automatic" in the sense of a schedule: it runs only as 
 
 - [ ] `AGENTS.md` carries the Owner Fleet exception, and `pnpm run pipeline:check` passed in the `Build images` guards job for the merge.
 - [ ] The dockerproxy deny rule is live: a console session cannot list or inspect `oet-fleet*`.
-- [ ] The manager is deployed through `fleet.yml`, listens on `127.0.0.1` only, and is on no production network (`docker inspect` through SSH).
+- [ ] The environment `production` holds the secret `PROD_SSH_KNOWN_HOSTS` (the primary's pinned host-key line, verified out-of-band); `fleet.yml sync`
+      refuses to connect without it. `FLEET_MANAGER_ENABLED=true` is set in `.env.production` and `fleet_sync_token` exists beside the other fleet secrets.
+- [ ] The manager is deployed through `fleet.yml` (`sync=true`), listens on `127.0.0.1` only, and is on no production network (`docker inspect` through SSH;
+      the rollout also asserts both).
 - [ ] The vault master key and the fleet-service credential are in root-only files (0400, directory 0700) that the console's read-only view of
       `/opt/oetwebapp` cannot read; neither is in any env file or repository.
 - [ ] The API remote endpoints are deployed with every `remote_*` flag still off; the manager's service-plane test call answers.
