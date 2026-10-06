@@ -454,12 +454,19 @@ export default function AiProvidersPage() {
         return { ...prev, defaultModel: nextDefault };
       });
       setToast({ variant: 'success', message: `Discovered ${models.length} model(s).` });
-    } catch (e) {
-      setToast({ variant: 'error', message: `Discover failed: ${(e as Error).message}` });
+    } catch {
+      setToast({ variant: 'error', message: 'Could not discover models from the provider.' });
     } finally {
       setDiscoveringModels(false);
     }
   };
+
+  // Auto-discover models when entering the edit modal for an OpenAI-compatible provider.
+  useEffect(() => {
+    if (editing && !creating && editing.dialect === 'OpenAiCompatible' && editing.baseUrl) {
+      void discoverModels();
+    }
+  }, [editing?.code]);
 
   const applyPreset = (key: string) => {
     const preset = PRESETS[key];
