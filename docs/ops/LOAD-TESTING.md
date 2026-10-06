@@ -284,11 +284,12 @@ never registered on the public repository for it.
    users, at least 8 vCPU and 16 GB each for 1,000 learners (16 vCPU for 1,500). Raise the open-file and
    ephemeral-port limits (`ulimit -n 65535`).
 2. Install k6 and Node 22 and check out the branch.
-3. On each VM run its leg of the same script:
+3. On each VM run its leg of the same script. Four legs serve the default 1,000 learners, so `K6_LEG_INDEX`
+   runs 0 to 3, one value per generator (5 or 6 legs for the 1,500-learner overload):
 
 ```bash
 export K6_API_URL=https://api.staging.example K6_WEB_URL=https://app.staging.example \
-       K6_PROFILE=steady K6_LEG_COUNT=2 K6_LEG_INDEX=0 OET_LOAD_PASSWORD=... \
+       K6_PROFILE=steady K6_LEG_COUNT=4 K6_LEG_INDEX=0 OET_LOAD_PASSWORD=... \
        K6_SUMMARY_PATH=leg0.json K6_VERSION_STRING="$(k6 version)"
 k6 run tests/load/fleet-1000.k6.js        # exit 99 = a threshold failed
 ```
@@ -308,7 +309,7 @@ k6 run tests/load/fleet-1000.k6.js        # exit 99 = a threshold failed
 | `K6_LEARNERS` | profile default | base learners (global, across legs) |
 | `K6_SIGNIN_PER_MIN` | 60 | sign-ins per minute **per leg** (the IP limit is 100) |
 | `K6_STEADY_MINUTES`, `K6_STAGE_HOLD_MINUTES`, `K6_SURGE_*`, `K6_RECOVERY_MINUTES` | 60, 10, 500 / 20, 10 | phase lengths |
-| `K6_THINK_SCALE` | 1 | multiplies every think time (smoke uses 0.15) |
+| `K6_THINK_SCALE` | 1 (0.15 for `smoke`) | multiplies every think time |
 | `K6_HUB_MODE` | `longpoll` | `longpoll` or `off` |
 | `K6_SPEAKING_TURNS`, `K6_SPEAKING_ASSESS_EVERY`, `K6_SPEAKING_MAX_WAIT_S`, `K6_ROOM_SECONDS` | 12, 5, 600, 300 | live-session shape |
 | `K6_READING_SAVES`, `K6_WRITING_SAVES`, `K6_LISTENING_SAVES` | 20, 8, 10 | exam autosaves per attempt |

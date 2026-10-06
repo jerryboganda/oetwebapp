@@ -52,7 +52,8 @@ export const CFG = Object.freeze({
   accountPrefix: read('OET_LOAD_ACCOUNT_PREFIX', 'loadtest'),
   emailDomain: read('OET_LOAD_EMAIL_DOMAIN', 'load.oet.test'),
   hubMode,
-  thinkScale: number('K6_THINK_SCALE', 1),
+  // Smoke compresses think time to 15 % so a ~140 s learner reaches the exam flows (the old workflow set this).
+  thinkScale: number('K6_THINK_SCALE', profile === 'smoke' ? 0.15 : 1),
   speakingTurns: Math.max(1, Math.floor(number('K6_SPEAKING_TURNS', 12))),
   speakingMaxWaitS: number('K6_SPEAKING_MAX_WAIT_S', 600),
   speakingAssessEvery: Math.max(0, Math.floor(number('K6_SPEAKING_ASSESS_EVERY', 5))),

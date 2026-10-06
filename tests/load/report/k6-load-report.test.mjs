@@ -28,6 +28,7 @@ function leg(overrides = {}) {
     oet_lost_ack_save: counter(lost),
     oet_idempotency_violation: counter(idempotency),
     oet_credit_consumed_while_queued: counter(0),
+    oet_timer_started_while_queued: counter(0),
     'oet_flow_started{flow:browse}': counter(200),
     'oet_flow_completed{flow:browse}': counter(200),
     'oet_flow_skipped{flow:browse}': counter(0),

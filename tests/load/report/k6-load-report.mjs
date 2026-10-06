@@ -129,6 +129,7 @@ export function buildTargetRows(summaries, profile) {
     counterRow(summaries, { id: 'lost-saves', label: 'Lost acknowledged saves', name: 'oet_lost_ack_save' }),
     counterRow(summaries, { id: 'idempotency', label: 'Duplicate submit / charge (idempotency violations)', name: 'oet_idempotency_violation' }),
     counterRow(summaries, { id: 'queued-credit', label: 'Credits consumed while queued', name: 'oet_credit_consumed_while_queued' }),
+    counterRow(summaries, { id: 'queued-timer', label: 'Session timers started while queued', name: 'oet_timer_started_while_queued' }),
   );
   if (profile === 'overload') {
     rows.push(
@@ -235,11 +236,11 @@ export function renderReport(model, options = {}) {
     ['Generator legs', model.legs],
     ['Learners (planned)', meta.totalLearners ?? 'n/a'],
     ['Duration', `${Math.round(model.durationMs / 60000)} min`],
-    ['Target', meta.targetLabel ?? 'n/a (non-production stack)'],
-    ['k6', meta.k6Version ?? 'n/a'],
-    ['Run', meta.runId ?? 'n/a'],
-    ['Commit', meta.sha ?? 'n/a'],
-    ['Provider simulators', meta.simulators ?? 'configured latency (see docs/ops/LOAD-TESTING.md)'],
+    ['Target', meta.targetLabel || 'n/a (non-production stack)'],
+    ['k6', meta.k6Version || 'n/a'],
+    ['Run', meta.runId || 'n/a'],
+    ['Commit', meta.sha || 'n/a'],
+    ['Provider simulators', meta.simulators || 'configured latency (see docs/ops/LOAD-TESTING.md)'],
     ['Generated', stamp],
   ]));
   lines.push('');
