@@ -22,7 +22,8 @@ namespace OetLearner.Api.Tests.Speaking;
 /// rules; these prove what only the real server can: the hand-authored migration SQL applies (and re-runs), the
 /// Postgres advisory lock serialises genuinely concurrent callers so the cap is NEVER exceeded and tickets are
 /// strictly FIFO, the subject-state EXISTS subqueries translate, and the ops snapshot's raw
-/// <c>pg_stat_activity</c> query maps. Skips without <c>OET_TEST_POSTGRES_CONNECTION</c> (qa-smoke runs it).
+/// <c>pg_stat_activity</c> query maps. Skips without <c>OET_TEST_POSTGRES_CONNECTION</c>. An inert manual tool: no
+/// CI lane runs it (owner directive 2026-10-06, no automated QA anywhere) and it has not been run for this change.
 /// </summary>
 [Collection(PostgreSqlExclusiveCollection.Name)]
 public sealed class SpeakingLiveAdmissionPostgreSqlTests
@@ -246,7 +247,7 @@ public sealed class SpeakingLiveAdmissionPostgreSqlTests
         watch.Stop();
 
         // The lock wait is bounded (lock_timeout of five seconds), so the learner is let through instead of holding a
-        // pooled connection for as long as the holder lives. (Generous bound: a cold CI box, never an endless wait.)
+        // pooled connection for as long as the holder lives. (Generous bound: a cold machine, never an endless wait.)
         Assert.Equal(SpeakingLiveAdmissionOutcome.Bypassed, result.Outcome);
         Assert.Equal(SpeakingLiveAdmissionBypassReasons.AdmissionUnavailable, result.BypassReason);
         Assert.True(watch.Elapsed < TimeSpan.FromSeconds(15), $"The call waited {watch.Elapsed.TotalSeconds:0.0} s.");

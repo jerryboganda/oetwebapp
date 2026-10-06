@@ -585,6 +585,14 @@ and is started when a place frees. Source: `SpeakingLiveAdmissionService`, table
 `SpeakingLiveAdmissionSettings` (migration `20270109113000_AddSpeakingLiveAdmission`), options `Speaking:LiveAdmission`
 (`SpeakingLiveAdmissionOptions`). Provider health above decides **which** provider; this decides **whether a session starts now**.
 
+**Verification status: not tested - owner QA** (owner directive 2026-10-06: no automated QA runs anywhere). The only automated
+check on this layer is compilation inside `Build images` (`dotnet publish`, `next build`) plus the EF pending-model-changes
+check on the hand-authored snapshot entries; nothing here was built, benchmarked or run locally. The test sources that describe
+the intended behaviour (`SpeakingLiveAdmission*Tests.cs`, `AdminOpsSnapshotServiceTests.cs`, `SpeakingAdmissionWait.test.tsx`,
+`speaking-admission.test.ts`, the exam and role-play page tests) stay in git as inert manual tools: no CI lane runs them and none
+has been run for this change. The first real proof is the owner's own testing of the wait queue on production, and the admin
+kill switch below is the lever if it misbehaves.
+
 - **Where.** At the two unscored gates that precede every credit hold and every clock: an AI **exam** at
   `POST /v1/speaking/exams/{id}/finish-intro` (one place for both cards; Card B's reveal is not gated) and an AI **practice
   card** at `POST /v1/speaking/sessions/{id}/finish-warmup` (the free sample too: it uses live voice). Live-tutor exams and
