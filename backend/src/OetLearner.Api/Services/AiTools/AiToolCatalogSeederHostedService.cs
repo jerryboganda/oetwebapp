@@ -70,6 +70,13 @@ public sealed class AiToolCatalogSeederHostedService(
         "companion_get_study_plan",
         "companion_preview_study_plan",
         "companion_create_study_plan",
+        "companion_record_scores",
+        "companion_confirm_scores",
+        "companion_set_availability",
+        "companion_start_journey",
+        "companion_next_best_action",
+        "companion_train_mistakes",
+        "companion_why_score_change",
     ];
 
     /// <summary>

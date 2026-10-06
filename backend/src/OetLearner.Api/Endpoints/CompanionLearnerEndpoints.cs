@@ -56,6 +56,8 @@ public static class CompanionLearnerEndpoints
 
         group.MapGet("/session", GetSessionAsync);
         group.MapGet("/memory", GetMemoryAsync);
+        group.MapGet("/memory/errors", GetMemoryErrorsAsync);
+        group.MapDelete("/memory/entries/{entryId}", DeleteMemoryEntryAsync);
         group.MapDelete("/memory/notes/{noteId}", DeleteNoteAsync);
         group.MapDelete("/memory/bookmarks/{bookmarkId}", DeleteBookmarkAsync);
         group.MapDelete("/memory", ResetMemoryAsync);
@@ -298,10 +300,16 @@ public static class CompanionLearnerEndpoints
     private static async Task<IResult> GetMemoryAsync(
         HttpContext http,
         LearnerDbContext db,
+        OetLearner.Api.Services.Companion.ICompanionMemoryService memory,
+        OetLearner.Api.Services.Companion.ICompanionJourneyService journeys,
         CancellationToken ct)
     {
         var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+        var memoryEntries = await memory.GetCurrentAsync(userId, OetLearner.Api.Domain.CompanionMemoryLayers.Learning, ct);
+        var journeyEntries = await memory.GetCurrentAsync(userId, OetLearner.Api.Domain.CompanionMemoryLayers.Journey, ct);
+        var currentJourney = await journeys.GetCurrentAsync(userId, ct);
 
         var notes = await db.UserNotes
             .AsNoTracking()
@@ -336,7 +344,71 @@ public static class CompanionLearnerEndpoints
             .Take(200)
             .ToListAsync(ct);
 
-        return Results.Ok(new { notes, bookmarks });
+        return Results.Ok(new
+        {
+            notes,
+            bookmarks,
+            memories = memoryEntries.Select(m => new
+            {
+                id = m.Id,
+                layer = m.Layer,
+                kind = m.Kind,
+                subtest = m.Subtest,
+                content = m.Content,
+                confirmedAt = m.ConfirmedAt,
+                recordedAt = m.RecordedAt,
+                provenanceType = m.ProvenanceType,
+            }),
+            journeyMemories = journeyEntries.Select(m => new
+            {
+                id = m.Id,
+                kind = m.Kind,
+                content = m.Content,
+                recordedAt = m.RecordedAt,
+            }),
+            currentJourney = new { id = currentJourney.Id, label = currentJourney.Label, startedAt = currentJourney.StartedAt },
+        });
+    }
+
+    /// <summary>The learner’s evidenced recurring errors (Error DNA), for the
+    /// transparent weakness view. Evidence counts and mastery are shown so a
+    /// learner can see WHY something is listed.</summary>
+    private static async Task<IResult> GetMemoryErrorsAsync(
+        HttpContext http,
+        OetLearner.Api.Services.Companion.IErrorDnaService errorDna,
+        CancellationToken ct)
+    {
+        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+        var weaknesses = await errorDna.TopWeaknessesAsync(userId, 30, ct);
+        return Results.Ok(new
+        {
+            errors = weaknesses.Select(w => new
+            {
+                id = w.Id,
+                category = w.Category,
+                subtest = w.Subtest,
+                pattern = w.Pattern,
+                evidenceCount = w.EvidenceCount,
+                mastery = w.MasteryScore,
+                lastSeenAt = w.LastSeenAt,
+                nextReviewAt = w.NextReviewAt,
+            }),
+        });
+    }
+
+    /// <summary>Deletes ONE memory entry (scoped memory control, F-047). Nothing
+    /// else is touched — scores, exam dates and history in other entries stay.</summary>
+    private static async Task<IResult> DeleteMemoryEntryAsync(
+        HttpContext http,
+        string entryId,
+        OetLearner.Api.Services.Companion.ICompanionMemoryService memory,
+        CancellationToken ct)
+    {
+        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+        var deleted = await memory.DeleteAsync(userId, entryId, ct);
+        return deleted ? Results.Ok(new { deleted = true }) : Results.NotFound();
     }
 
     /// <summary>
@@ -349,10 +421,17 @@ public static class CompanionLearnerEndpoints
     private static async Task<IResult> ExportMemoryAsync(
         HttpContext http,
         LearnerDbContext db,
+        OetLearner.Api.Services.Companion.ICompanionMemoryService memory,
+        OetLearner.Api.Services.Companion.IErrorDnaService errorDna,
+        OetLearner.Api.Services.Companion.ICompanionJourneyService journeys,
         CancellationToken ct)
     {
         var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+        var allMemories = await memory.ExportAsync(userId, ct);
+        var errorEntries = await errorDna.TopWeaknessesAsync(userId, 200, ct);
+        var journeyRows = await journeys.GetHistoryAsync(userId, ct);
 
         var notes = await db.UserNotes
             .AsNoTracking()
@@ -396,6 +475,35 @@ public static class CompanionLearnerEndpoints
             // and a file that identifies them is a file that leaks if forwarded.
             notes,
             bookmarks,
+            memories = allMemories.Select(m => new
+            {
+                layer = m.Layer,
+                kind = m.Kind,
+                subtest = m.Subtest,
+                content = m.Content,
+                confirmedAt = m.ConfirmedAt,
+                supersededAt = m.SupersededAt,
+                recordedAt = m.RecordedAt,
+                provenanceType = m.ProvenanceType,
+            }),
+            errorDna = errorEntries.Select(w => new
+            {
+                category = w.Category,
+                subtest = w.Subtest,
+                pattern = w.Pattern,
+                evidenceCount = w.EvidenceCount,
+                mastery = w.MasteryScore,
+                firstSeenAt = w.FirstSeenAt,
+                lastSeenAt = w.LastSeenAt,
+            }),
+            journeys = journeyRows.Select(j => new
+            {
+                label = j.Label,
+                startedAt = j.StartedAt,
+                endedAt = j.EndedAt,
+                outcome = j.Outcome,
+                isActive = j.IsActive,
+            }),
         }, new JsonSerializerOptions { WriteIndented = true });
 
         return Results.File(payload, "application/json", "companion-memory.json");

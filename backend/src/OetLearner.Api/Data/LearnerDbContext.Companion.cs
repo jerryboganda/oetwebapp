@@ -12,6 +12,10 @@ public partial class LearnerDbContext
     public DbSet<CompanionChunk> CompanionChunks => Set<CompanionChunk>();
     public DbSet<CompanionKnowledgeRelease> CompanionKnowledgeReleases => Set<CompanionKnowledgeRelease>();
     public DbSet<CompanionPreference> CompanionPreferences => Set<CompanionPreference>();
+    public DbSet<CompanionMemoryEntry> CompanionMemoryEntries => Set<CompanionMemoryEntry>();
+    public DbSet<ErrorDnaEntry> ErrorDnaEntries => Set<ErrorDnaEntry>();
+    public DbSet<CompanionJourney> CompanionJourneys => Set<CompanionJourney>();
+    public DbSet<CompanionAvailability> CompanionAvailabilities => Set<CompanionAvailability>();
 
     partial void OnModelCreatingCompanion(ModelBuilder modelBuilder)
     {
@@ -71,6 +75,39 @@ public partial class LearnerDbContext
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.ReleaseVersion).IsUnique();
             e.HasIndex(x => x.Status);
+        });
+
+        // Companion memory spine (SAMI Wave 1): three layers on one namespaced
+        // table. Current reads filter SupersededAt == null; history stays for
+        // the journey view and audit. The (user, layer, kind, subtest) index
+        // serves "the current value of this kind of fact for this learner".
+        modelBuilder.Entity<CompanionMemoryEntry>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.Layer, x.Kind, x.Subtest });
+            e.HasIndex(x => new { x.UserId, x.JourneyId });
+            e.HasIndex(x => x.ConfirmedAt);
+        });
+
+        // Error DNA: upsert matching is by (user, patternKey); spaced review
+        // scans by (user, nextReviewAt).
+        modelBuilder.Entity<ErrorDnaEntry>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.PatternKey }).IsUnique();
+            e.HasIndex(x => new { x.UserId, x.NextReviewAt });
+            e.HasIndex(x => new { x.UserId, x.Category });
+        });
+
+        modelBuilder.Entity<CompanionJourney>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.IsActive });
+        });
+
+        modelBuilder.Entity<CompanionAvailability>(e =>
+        {
+            e.HasKey(x => x.UserId);
         });
     }
 }

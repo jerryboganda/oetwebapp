@@ -2254,6 +2254,34 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.CompanionCreateStudyPlanTool>();
 
+// ── SAMI Wave 1: memory spine, Error DNA, journeys, availability, next-best-action ──
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionMemoryService,
+    OetLearner.Api.Services.Companion.CompanionMemoryService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.IErrorDnaService,
+    OetLearner.Api.Services.Companion.ErrorDnaService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionJourneyService,
+    OetLearner.Api.Services.Companion.CompanionJourneyService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionAvailabilityService,
+    OetLearner.Api.Services.Companion.CompanionAvailabilityService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.INextBestActionService,
+    OetLearner.Api.Services.Planner.NextBestActionService>();
+// Score-import proposal store (singleton, in-memory, per user+thread): preview → confirm later turn.
+builder.Services.AddSingleton<OetLearner.Api.Services.AiTools.Tools.CompanionScoreProposalStore>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionRecordScoresTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionConfirmScoresTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionSetAvailabilityTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionStartJourneyTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionNextBestActionTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionTrainMistakesTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionWhyScoreChangeTool>();
+
 // External-network tool HTTP client — strict timeout, no auto-redirect, no
 // proxy passthrough. The tool itself enforces host allowlist + max-bytes.
 builder.Services.AddHttpClient(

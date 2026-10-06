@@ -33,7 +33,10 @@ public interface ICompanionPromptComposer
 /// it is Sami — but the key stays so a rename never needs a code change again.
 /// </para>
 /// </summary>
-public sealed class CompanionPromptComposer(IConfiguration configuration) : ICompanionPromptComposer
+public sealed class CompanionPromptComposer(
+    IConfiguration configuration,
+    ICompanionMemoryService? memory = null,
+    IErrorDnaService? errorDna = null) : ICompanionPromptComposer
 {
     /// <summary>
     /// Configuration key for the persona name. Set via <c>Companion__PersonaName</c>
@@ -62,6 +65,16 @@ public sealed class CompanionPromptComposer(IConfiguration configuration) : ICom
         sb.AppendLine();
 
         AppendLearnerContext(sb, context);
+        if (memory is not null && !string.IsNullOrEmpty(context.UserId))
+        {
+            var memorySummary = await memory.BuildPromptSummaryAsync(context.UserId, ct);
+            if (memorySummary.Length > 0) sb.AppendLine(memorySummary);
+        }
+        if (errorDna is not null && !string.IsNullOrEmpty(context.UserId))
+        {
+            var errorSummary = await errorDna.BuildPromptSummaryAsync(context.UserId, ct);
+            if (errorSummary.Length > 0) sb.AppendLine(errorSummary);
+        }
         AppendEvidence(sb, retrieval);
         AppendGroundingRules(sb, retrieval);
         AppendActionRules(sb, context);
