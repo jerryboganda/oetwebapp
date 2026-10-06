@@ -358,11 +358,21 @@ Code: `WritingGradeReviewer` (service), `WritingReviewApplier` (the deterministi
   An unreadable flag table = Off. Emergency levers, both instant: the `writing_ai_reviewer` row with
   `Enabled` = false, or `writing.grade.review` on the per-feature kill list (`AiGlobalPolicy`, the review is
   then skipped and the primary result stands, audited as `writing.review.skipped`).
-- **Hold policy (Enforce):** a reviewer outage NEVER publishes an unreviewed result. After the in-run
-  attempts the run throws the retryable `writing_review_unavailable` (`grading_delayed`), the letter is
-  re-queued on the usual 2/5/15/30 min back-off and finally `failed` with Retry. The primary result and the
-  credit hold stay in `WritingSubmission.ProviderResultJson`, so a retry never re-grades and never
-  re-charges. A held letter shows a processing state, never a fabricated result.
+- **Hold policy (Enforce) — BOUNDED (owner handoff 6 Oct 2026, replaces the original "never publishes
+  unreviewed" hold):** a reviewer failure must never leave a letter Queued. After the in-run attempts the
+  run throws the retryable `writing_review_unavailable` (`grading_delayed`) and the letter is re-queued on
+  the usual 2/5/15/30 min back-off, but only while `AutoRetryCount < Writing__GradeChain__ReviewMaxHolds`
+  (default 2) AND the letter is younger than `Writing__GradeChain__ReviewGiveUpMinutes` (default 9). The next
+  failed review then COMPLETES the letter on its primary result: no provider call, no credit movement, one
+  tutor-review assignment (`rv_unresolved`), an `AuditEvent` `writing.review.skipped` and
+  `featureRecordJson.review` carrying `status skipped`, `reason review_unavailable` and the flag
+  `review_unavailable` (the grade is keyed `rv:off`, so it is never reused as a reviewed one). A letter that
+  has been re-queued MORE than `ReviewMaxHolds` times (failing for another reason) skips the review stage
+  entirely, so nothing can loop. The primary result and the credit hold stay in
+  `WritingSubmission.ProviderResultJson`, so a retry never re-grades and never re-charges. A letter still
+  inside its hold shows a processing state, never a fabricated result. To prove the reviewer is healthy
+  read `reviewerCallsWeek` / `reviewerSuccessesWeek` on `/admin/writing-ai` and the `writing.review.applied`
+  vs `writing.review.skipped` audit events.
 - **What the reviewer may change** (all enforced in code by `WritingReviewApplier`; the model only proposes):
   finding verdicts (confirmed, false positive, severity change, advisory, duplicate), up to 5 added findings
   anchored in the letter or the case notes, wording rewrites that stay free of internal tokens and invent no

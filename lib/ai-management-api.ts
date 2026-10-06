@@ -344,6 +344,9 @@ export interface WritingAiProviderStatus {
   gradedToday: number;
   gradedWeek: number;
   fallbackCountWeek: number;
+  /** Secondary reviewer (writing.grade.review, GPT-6.1 Sol on the Codex route): provider calls and successes in the last 7 days. */
+  reviewerCallsWeek?: number;
+  reviewerSuccessesWeek?: number;
   claude: { callsWeek: number; tokensWeek: number };
   /** Level 2 — pay-as-you-go Anthropic API (real $ spend). */
   claudeApi: { callsWeek: number; tokensWeek: number; costWeekUsd: number };

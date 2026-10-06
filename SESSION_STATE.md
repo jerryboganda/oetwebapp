@@ -1,11 +1,11 @@
 # SESSION STATE
 
-Session: writing-ai-final
-Goal: Implement the 6 Oct 2026 Writing AI-Final handoff: candidate-facing cleanup, severity/priority rules, secondary reviewer with soft 400+ guardrail, 15-minute release window and the five-account owner allowlist.
-Mode: verify
-Updated: 2026-10-06T15:05:00Z
+Session: writing-ai-p0-queue
+Goal: Fix the 6 Oct 2026 Writing P0 (letters stay Queued / no result): bound the secondary-reviewer hold, keep the 15-minute release honest, prove nothing is lost or double-charged, and unblock sample-PDF clarity.
+Mode: execute
+Updated: 2026-10-07T00:30:00Z
 Branch: work/2026-10-05
-HEAD: 48ea43a39
+HEAD: fe118e785
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -26,49 +26,53 @@ Rules
 
 ## Objective
 
-Implement the owner's 6 Oct 2026 "Writing AI-Final" handoff before remaining-profession testing: no internal identifiers, Revise & Resubmit or RAW label in candidate Writing; advisory/severity/Top-Priority rules; a secondary reviewer (GPT-6.1 Sol / Codex route) with a soft, uncapped 400+ guardrail; a server-anchored 15-minute release window with five permanent owner accounts exempt from the delay and from copy/paste limits. No schema change, no hashed prompt/regression input change.
+Owner P0 (6 Oct 2026 PDF "Live grading, timed release, reviewer verification & sample clarity"): live Writing grading returns no result. Root cause (code-proven, production rows not readable by the agent): b3b10fdc8 made the Codex GPT-6.1 Sol reviewer a mandatory, default-Enforce, UNBOUNDED hold on every letter; any reviewer failure re-queues the letter (2/5/15/30 min) and finally fails it, so the learner sees "Queued / taking longer than usual". Fix: bound the hold, complete on the primary grade flagged for a tutor, never loop. Also make the 00:00 state honest, refresh Past submissions, stop a stale service-worker timer, and report the sample-PDF source problem.
 
 ## Acceptance criteria
 
-- [ ] AC-1 Candidates never see BUILTIN/AI/DH/OW/G-W/OA/R-label/validator/provider tags (server projection + client defence).
-- [ ] AC-2 Revise & Resubmit is gone everywhere; Practice this again is a fresh charged attempt; Retry grading never recharges.
-- [ ] AC-3 "Criteria score N/38" replaces RAW; advisory never lowers a score or enters Top Priorities; He/She paragraph start is not auto-Major.
-- [ ] AC-4 Reviewer runs before publication, soft 400+ enhanced verification, no hard cap, admin-only notes.
-- [ ] AC-5 Normal candidates see a 15:00 server-anchored countdown with the exact notice; the five owner accounts are instant with copy/paste.
-- [ ] AC-6 Post Submissions persistence, autosave/resume, failover and no double charge unchanged. Owner QA (not tested here) covers Medicine C/C+/B.
+- [ ] AC-1 A reviewer outage can no longer leave a letter Queued: at most ReviewMaxHolds (2) re-queues, then the letter completes on its primary result, flagged rv_unresolved + audited; a letter re-queued more often skips the review stage.
+- [ ] AC-2 The 15-minute window stays server-anchored (SubmittedAt+15:00); at 00:00 a still-processing letter shows the real status ("still being assessed"), never "finalising" and never a new timer; Past submissions refreshes while a letter is processing.
+- [ ] AC-3 No new provider call, AiUsageRecord or credit movement on the fallback; Max untouched; no migration; no hashed input change.
+- [ ] AC-4 Production proof (owner QA, not agent-verifiable): owner account instant result; normal account 15:00 to 00:00 release; GPT-6.1 Sol reviewer calls visible on /admin/writing-ai (reviewerCallsWeek / reviewerSuccessesWeek) and writing.review.applied audit events.
+- [ ] AC-5 Nursing Free Sample (Adam White) sharp on a phone: BLOCKED on an owner decision (original source or approved vector retype); other samples need the owner's visual QA.
 
 ## Decisions (do not revisit)
 
-- D-1 No EF migration/column: release time is derived from SubmittedAt+15 min at read time; reviewer state rides in ProviderResultJson, FeatureRecordJson and AuditEvent.
-- D-2 Hashed regression inputs (CandidateGradingRules, DescriptorEngine, rulebooks, numbered AiGatewayService lines) and WritingRuleEngine.ValidatorVersion are untouched; every rule-engine relaxation is guarded by !IsModelAnswer so the Model Answer gate is unaffected.
-- D-3 Reviewer route is writing-codex-sub gpt-6.1-sol via IAiGatewayService under new feature code writing.grade.review; Max is never touched. Mode: shadow flag => Shadow; writing_ai_reviewer row Enabled=false => Off; else Enforce when the Codex row is active; else Off. Enforce HOLDS on outage (retryable, existing 2/5/15/30 back-off) and never publishes unreviewed.
-- D-4 Reviewer changes are applied by a pure deterministic applier: finding-justified criterion deltas, capped /500 moves, corridor only for reviewer-changed scores, unjustified /500 opinions rejected below 400, 400+ recalibrated never clipped.
-- D-5 Learner canon pages stay (ids hidden in visible text); revise endpoint is a hard 409 stub; wire keys of neutralised DTO fields stay for one release.
-- D-6 lib/catalog-website-packages.ts (another session's file) still says "instant" for Writing packages; left untouched and reported.
+- D-1 No EF migration/column: release time = SubmittedAt+15 min at read time; reviewer state rides in ProviderResultJson, FeatureRecordJson and AuditEvent.
+- D-2 Hashed regression inputs and WritingRuleEngine.ValidatorVersion untouched; every rule-engine relaxation is guarded by !IsModelAnswer.
+- D-3 (REVISED 7 Oct 2026, supersedes "Enforce HOLDS on outage / never publishes unreviewed") Reviewer route stays writing-codex-sub gpt-6.1-sol via IAiGatewayService (writing.grade.review), Max never touched. The Enforce hold is BOUNDED: ReviewMaxHolds 2 and ReviewGiveUpMinutes 9, and never past what the release window allows; then WritingGradeReviewer.HoldExhausted completes the letter on its primary result (rv:off key, rv_unresolved tutor flag, writing.review.skipped audit). The owner PDF requires reviewer retry/fallback and "never permanently Queued"; "never publish unreviewed" was an implementer decision, not an AGENTS.md rule.
+- D-4 Reviewer changes are applied by the pure deterministic applier (unchanged).
+- D-5 Learner canon pages stay; revise endpoint is a hard 409 stub (unchanged).
+- D-6 lib/catalog-website-packages.ts (another session's file) still says "instant" for Writing packages; left untouched.
+- D-7 Not changed on purpose (reported, p2): early learner Retry for auto-retrying rows (needs the lost-claim fall-through fix first), dedicated reviewer provider row for circuit isolation, typed Codex sidecar errors, tutor/mock-human output not window-held, detail page does not auto-open at 00:00.
 
 ## Touched files
 
 | Path | Change |
 | --- | --- |
-| backend/src/OetLearner.Api/Services/Writing/** (Review/*, WritingCandidateText, WritingCandidateSeverityPolicy, WritingResultRelease, pipeline, digest, builder, mapper, release-gated services) | reviewer layer, sanitiser, severity policy, release window, revise removal |
-| backend/src/OetLearner.Api/Services/Rulebook/WritingRuleEngine*.cs, WritingRuleProvenance.cs, AiGatewayService.cs | candidate-lane false-positive fixes, TryGet, guardrail wording, ReviewWriting mode |
-| backend/src/OetLearner.Api/{Contracts,Endpoints,Hubs,Domain,Services}/** (AI feature-code registries, auth flag, free sample, coach, lint) | contracts, 409 revise stub, hub payload, allowlist flag, governance |
-| app/(learner)/writing/**, components/domain/writing/**, lib/writing/**, lib/paste-exempt.ts, next.config.ts, messages/{en,ar}/*.json | result screens, countdown, allowlist, copy, redirect, key bundles |
-| docs/AI-USAGE-POLICY.md, docs/ops/WRITING-AI-PROVIDERS.md, scripts/qa/writing-prod-qa/** | reviewer docs, inert QA harness updates |
+| backend/src/OetLearner.Api/Services/Writing/WritingGradeChain.cs | ReviewMaxHolds, ReviewGiveUpMinutes options |
+| backend/src/OetLearner.Api/Services/Writing/Review/WritingGradeReviewer.cs, WritingReviewContracts.cs | HoldExhausted fallback outcome, doc comment |
+| backend/src/OetLearner.Api/Services/Writing/WritingSubmissionEvaluationPipeline.cs | bounded hold + window-aware give-up, retry-cap bypass (flagged), Skipped branch flags tutor |
+| backend/src/OetLearner.Api/Services/Writing/Crons/WritingCrons.cs | one DI scope per due row, heartbeat log |
+| components/domain/writing/WritingReleaseCountdown.tsx, WritingMyWorkList.tsx, WritingStimulusViewer.tsx; app/(learner)/writing/submissions/[id]/grading/page.tsx (+test); messages/{en,ar}/writing.json | stillProcessing copy, polling, canvas oversampling, no false Queued flash |
+| public/sw.js | bypass cached release-bearing GETs, cache v9 |
+| lib/ai-management-api.ts, app/admin/writing-ai/page.tsx, docs/ops/WRITING-AI-PROVIDERS.md | reviewer KPI tile, bounded-hold policy |
 
 ## Verification gates
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| Build images: API + web compiled, Writing grader regression + Writing model-answer gate green (attempt 2 after a NuGet-mutex CI flake in attempt 1) | build-images.yml | 37476424300 | PASS |
-| Deploy production: migration SQL applied, blue/green roll-out, live X-Oet-Release b3b10fdc8 on slot green, health 200 | production-deploy.yml | 37478062712 | PASS |
+| ship-gate (previous release b3b10fdc8) | pnpm run ship:gate | local:ship:gate | PASS |
+| Build images (previous release b3b10fdc8): API + web compiled, Writing gates green | build-images.yml | 37476424300 | PASS |
+| Deploy production (previous release b3b10fdc8): live X-Oet-Release b3b10fdc8 slot green | production-deploy.yml | 37478062712 | PASS |
 
 ## Blockers
 
-- None for shipping. Not tested by the agent (owner directive): everything is verified only by compilation in Build images plus the live health/serving proof. Owner QA needed: Medicine C/C+/B sweep (create FeatureFlags writing_ai_reviewer_shadow first if shadow calibration is wanted), normal vs allowlisted accounts, reviewer outage behaviour.
-- lib/catalog-website-packages.ts (another session's file) still promises "instant" Writing feedback in package copy (lines ~974-1016); not edited here.
+- Production rows/logs are not readable by the agent (no SSH/credentials by rule): whether the Codex route is down, the circuit open or the code throws is unconfirmed; the fix is correct for every cause. Not tested by the agent (owner directive): verified only by compilation in Build images plus live health/serving proof.
+- Live acceptance checks 1-5 of the owner PDF need logged-in production sessions (owner QA or an owner-approved driven session).
+- Adam White (Nursing Free Sample): only original on disk is a 960x540 JPEG; needs the owner's true original or an approved verbatim vector retype (CI-generated).
+- lib/catalog-website-packages.ts still promises "instant" Writing feedback (another session's file).
 
 ## Next action
 
-1. Owner QA on production: normal candidate (15:00 countdown, held reads), the five allowlisted accounts (instant, copy/paste), then Medicine C/C+/B and the remaining professions.
+1. Commit explicit paths, `pnpm run ship`, confirm Build images + Deploy production green for this SHA and live X-Oet-Release; then ax:record. 2. Owner: submit one letter on an allowlisted and one normal account, read /admin/writing-ai reviewer tile and writing.review.* audit events; decide the Adam White source.

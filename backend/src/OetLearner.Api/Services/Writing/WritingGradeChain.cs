@@ -38,6 +38,17 @@ public sealed class WritingGradeChainOptions
 
     /// <summary>Kept clear of <see cref="WritingGradeTimings.StaleClaimLease"/> so the cron never reclaims a live review.</summary>
     public int ReviewLeaseMarginSeconds { get; set; } = 90;
+
+    /// <summary>
+    /// A reviewer outage holds (re-queues) a letter at most this many times; the next failed review completes the letter on
+    /// its primary result, flagged for a tutor, instead of re-queuing it again (owner handoff 6 Oct 2026: a reviewer failure must
+    /// never leave a letter Queued). It also bounds the whole review stage: a letter that has been re-queued MORE than this many
+    /// times skips the review stage entirely. 0 = the first failed review already falls back.
+    /// </summary>
+    public int ReviewMaxHolds { get; set; } = 2;
+
+    /// <summary>Minutes after submission past which a failed review no longer holds the letter (the 15-minute release window is near).</summary>
+    public int ReviewGiveUpMinutes { get; set; } = 9;
 }
 
 /// <summary>The three routes of one grading run, in order.</summary>

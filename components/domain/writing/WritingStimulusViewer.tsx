@@ -71,6 +71,9 @@ interface LoadedPdf {
 
 const DEFAULT_ZOOM = 100;
 
+/** Per-canvas pixel ceiling: under the iOS Safari limit (16,777,216) with room for the other page's canvas. */
+const MAX_CANVAS_PIXELS = 12_000_000;
+
 /** Clamp a zoom value to the 50–200% range. */
 function clampZoom(value: number): number {
   return Math.max(50, Math.min(200, value));
@@ -289,18 +292,26 @@ export function WritingStimulusViewer({
         const page = await pdf.getPage(info.pageNumber);
         if (cancelled) return;
         // Render at device-pixel density so the canvas isn't upscaled (blurry) on
-        // hi-DPI / Retina / 4K screens. Cap the ratio at 3 to bound memory at max
-        // zoom; the CSS size stays logical so the %-based yellow-highlight overlay
-        // and getBoundingClientRect() pointer math are unaffected. (Kept in sync
-        // with reading-pdf-viewer.tsx per the header note.)
+        // hi-DPI / Retina / 4K screens, with 1.5x headroom so a browser pinch or an
+        // OS display zoom still has detail to show (a bitmap exactly 1:1 with device
+        // pixels blurs the moment it is magnified). The density is clamped by a
+        // canvas-area ceiling (iOS Safari draws nothing above 16,777,216 px, which
+        // the old dpr-3 / 200% combination exceeded) and capped at 4. The CSS size
+        // is the exact logical page size (the same numbers as the wrapper), so the
+        // %-based yellow-highlight overlay and getBoundingClientRect() pointer math
+        // are unaffected. A scanned source still cannot show more detail than it holds.
         const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 3);
-        const viewport = page.getViewport({ scale: (zoom / 100) * dpr });
+        const cssScale = zoom / 100;
+        const cssWidth = info.width * cssScale;
+        const cssHeight = info.height * cssScale;
+        const density = Math.max(1, Math.min(dpr * 1.5, 4, Math.sqrt(MAX_CANVAS_PIXELS / (cssWidth * cssHeight))));
+        const viewport = page.getViewport({ scale: cssScale * density });
         const ctx = canvas.getContext('2d');
         if (!ctx) continue;
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
-        canvas.style.width = `${Math.floor(viewport.width / dpr)}px`;
-        canvas.style.height = `${Math.floor(viewport.height / dpr)}px`;
+        canvas.style.width = `${cssWidth}px`;
+        canvas.style.height = `${cssHeight}px`;
         await page.render({ canvasContext: ctx, viewport }).promise;
         if (cancelled) return;
       }

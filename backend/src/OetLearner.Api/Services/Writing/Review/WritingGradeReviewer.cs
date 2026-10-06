@@ -351,6 +351,34 @@ public sealed class WritingGradeReviewer(
         return claimed + lease - now;
     }
 
+    /// <summary>
+    /// The bounded fallback of an Enforce reviewer outage (owner handoff 6 Oct 2026: a reviewer failure must never leave a letter
+    /// Queued). The primary result stands, the letter is flagged for a tutor (rv_unresolved) and the admin notes say why. The
+    /// pipeline stages the audit event; no provider call, no credit movement.
+    /// </summary>
+    internal static WritingReviewOutcome HoldExhausted(WritingReviewRequest request)
+    {
+        var notes = new WritingReviewAdminNotes
+        {
+            Version = WritingReviewPrompt.Version,
+            Mode = request.Mode.ToString().ToLowerInvariant(),
+            Status = "skipped",
+            Reason = "review_unavailable",
+            PrimaryModel = request.PrimaryModel,
+            Primary = request.Primary,
+            Final = request.Primary,
+        };
+        notes.Flags.Add("review_unavailable");
+        return new WritingReviewOutcome(
+            WritingReviewStatus.Skipped,
+            request.Primary,
+            request.Findings,
+            [],
+            [WritingJevReviewReasons.ReviewerUnresolved],
+            notes,
+            []);
+    }
+
     private WritingReviewOutcome Skipped(WritingReviewRequest request, string reason)
     {
         var notes = new WritingReviewAdminNotes

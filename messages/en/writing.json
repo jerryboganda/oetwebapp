@@ -373,6 +373,7 @@
   "writing.release.notice": "Your letter is being assessed and reviewed by our mentors. Your final Writing assessment will be available within 15 minutes.",
   "writing.release.countdownLabel": "Time until your assessment is ready",
   "writing.release.finalising": "Your assessment is being finalised. This page updates automatically when it is ready.",
+  "writing.release.stillProcessing": "Your letter is saved and is still being assessed. This page updates automatically when your result is ready.",
   "writing.release.savedNote": "Your letter is saved in Past submissions. You can leave this page.",
   "writing.submissions.results.pageTitle": "Submission Results",
   "writing.submissions.results.title": "Submission results",

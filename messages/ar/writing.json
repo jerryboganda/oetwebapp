@@ -373,6 +373,7 @@
   "writing.release.notice": "جارٍ تقييم رسالتك ومراجعتها من قِبل مرشدينا. سيكون تقييم الكتابة النهائي متاحًا خلال 15 دقيقة.",
   "writing.release.countdownLabel": "الوقت المتبقي حتى يصبح تقييمك جاهزًا",
   "writing.release.finalising": "جارٍ إنهاء تقييمك. ستُحدَّث هذه الصفحة تلقائيًا عندما يصبح جاهزًا.",
+  "writing.release.stillProcessing": "رسالتك محفوظة وما زال تقييمها جاريًا. ستُحدَّث هذه الصفحة تلقائيًا عندما تصبح نتيجتك جاهزة.",
   "writing.release.savedNote": "رسالتك محفوظة في التقديمات السابقة. يمكنك مغادرة هذه الصفحة.",
   "writing.submissions.results.pageTitle": "نتائج الإرسال",
   "writing.submissions.results.title": "نتائج الإرسال",

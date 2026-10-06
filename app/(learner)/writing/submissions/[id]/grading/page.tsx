@@ -125,7 +125,15 @@ export default function WritingSubmissionGradingPage() {
   // finalising line at zero, so no stale promise outlives the window and an
   // account without a hold never sees it (not even before the first load).
   const counting = Boolean(submission?.releaseAt);
-  const heroDescription = showFailure || !submission || counting ? undefined : t('writing.release.finalising');
+  // Real status only: 'finalising' is for a finished letter waiting out its window; a letter still being assessed says so.
+  const heroDescription = showFailure || !submission || counting
+    ? undefined
+    : t(submission.releaseState === 'held' ? 'writing.release.finalising' : 'writing.release.stillProcessing');
+  // A re-queued run is being assessed again, not waiting in line: never label it "Queued".
+  // Before the first response there is no real status yet: never flash "Queued" for a letter that may be graded.
+  const statusLabel = !submission
+    ? t('writing.submissions.grading.connecting')
+    : t(`writing.submissions.detail.status.${delayed && submission.status === 'queued' ? 'grading' : submission.status}`);
 
   return (
     <>
@@ -139,7 +147,7 @@ export default function WritingSubmissionGradingPage() {
           {
             icon: Award,
             label: t('writing.submissions.grading.highlights.status'),
-            value: t(`writing.submissions.detail.status.${submission?.status ?? 'queued'}`),
+            value: statusLabel,
           },
         ]}
       />

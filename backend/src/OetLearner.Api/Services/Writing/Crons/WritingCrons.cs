@@ -81,14 +81,21 @@ public sealed class WritingBatchGradingCron(
     {
         using var scope = ScopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var pipeline = scope.ServiceProvider.GetRequiredService<IWritingSubmissionEvaluationPipeline>();
         var now = clock.GetUtcNow();
         var reclaimed = await WritingGradeRecovery.ReclaimStaleGradingAsync(db, now, ct);
         if (reclaimed > 0) Logger.LogWarning("Reclaimed {Count} stale Writing grading claim(s).", reclaimed);
 
         var ids = await WritingGradeRecovery.DueQueuedIdsAsync(db, now, WritingGradeRecovery.SweepBatchSize, ct);
+        if (reclaimed > 0 || ids.Count > 0)
+        {
+            Logger.LogInformation("Writing grading sweep: reclaimed {Reclaimed}, due {Due}.", reclaimed, ids.Count);
+        }
+
         foreach (var id in ids)
         {
+            // One scope (one DbContext) per letter: a failed save of one letter can never leak tracked entities into the next.
+            using var rowScope = ScopeFactory.CreateScope();
+            var pipeline = rowScope.ServiceProvider.GetRequiredService<IWritingSubmissionEvaluationPipeline>();
             try { await pipeline.EvaluateAsync(id, ct); }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex) { Logger.LogWarning(ex, "Batch grading failed for submission {Id}", id); }

@@ -418,6 +418,20 @@ public sealed class WritingSubmissionEvaluationPipeline(
         var reviewMode = gradeReviewer is not null && assessmentRuleEngine is not null
             ? await gradeReviewer.GetModeAsync(ct)
             : WritingReviewMode.Off;
+        var reviewBypassed = false;
+        if (reviewMode != WritingReviewMode.Off && submission.AutoRetryCount > _chainOptions.ReviewMaxHolds)
+        {
+            reviewBypassed = true;
+            // Last resort (owner handoff 6 Oct 2026: nothing may leave a letter Queued). A bounded reviewer outage already
+            // completes the letter on its primary result (RunReviewStageAsync); a letter that has been re-queued MORE
+            // often than that failed for another reason, so this run skips the review stage and finishes on the primary
+            // grade, which is the path that ran before the reviewer existed.
+            logger.LogWarning(
+                "Writing submission {SubmissionId} was re-queued {Count} times; the secondary review is skipped for this run.",
+                submission.Id, submission.AutoRetryCount);
+            reviewMode = WritingReviewMode.Off;
+        }
+
         // Only a grade produced WITH review under this reviewer version is reusable while review is enforced; a Shadow
         // run never changes a result, so it keys like Off.
         submission.ReuseKeyHash = BuildReuseKeyHash(submission, scenario, settings, ReviewTagFor(reviewMode));
@@ -754,9 +768,16 @@ public sealed class WritingSubmissionEvaluationPipeline(
             }
             else if (review is { Status: WritingReviewStatus.Skipped } && reviewMode == WritingReviewMode.Enforce)
             {
-                // An admin kill-list skip: this grade was NOT reviewed, so it must not be reusable as a reviewed one.
+                // An admin kill-list skip or a bounded reviewer outage: this grade was NOT reviewed, so it must not be
+                // reusable as a reviewed one. An outage also asks a tutor to look (rv_unresolved); a kill-list skip has no reasons.
                 submission.ReuseKeyHash = BuildReuseKeyHash(submission, scenario, settings, ReviewTagFor(WritingReviewMode.Off));
+                foreach (var reason in review.TutorReasons) FlagJevReview(reason);
             }
+        }
+        else if (reviewBypassed && candidateFindings is not null)
+        {
+            // The retry cap skipped the review stage for this run and nothing audited it: ask a tutor to look.
+            FlagJevReview(WritingJevReviewReasons.ReviewerUnresolved);
         }
 
         if (jevReviewReasons.Count > 0)
@@ -1129,6 +1150,17 @@ public sealed class WritingSubmissionEvaluationPipeline(
             persisted,
             (stage, token) => PersistReviewStageAsync(submission, stage, token),
             mode);
+
+        // A re-queued letter that reaches the review with under 5 minutes left in its release window cannot finish a
+        // review (a pass can take 8 minutes) before the window ends: complete it on the primary grade instead of
+        // starting a review that would only push the result past the window.
+        if (mode == WritingReviewMode.Enforce
+            && submission.AutoRetryCount > 0
+            && submission.SubmittedAt + WritingGradeTimings.ResultReleaseWindow - clock.GetUtcNow() < TimeSpan.FromMinutes(5))
+        {
+            return CompleteWithoutReview(submission, request);
+        }
+
         try
         {
             return await gradeReviewer!.ReviewAsync(request, ct);
@@ -1136,6 +1168,12 @@ public sealed class WritingSubmissionEvaluationPipeline(
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
+        }
+        catch (ApiException hold) when (mode == WritingReviewMode.Enforce
+                                        && hold.ErrorCode == WritingReviewHold.UnavailableCode
+                                        && ReviewHoldExhausted(submission))
+        {
+            return CompleteWithoutReview(submission, request);
         }
         catch (ApiException)
         {
@@ -1148,8 +1186,40 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 "Writing secondary review failed for submission {SubmissionId} (mode {Mode}).",
                 submission.Id, mode);
             if (mode == WritingReviewMode.Shadow) return null;
+            if (ReviewHoldExhausted(submission)) return CompleteWithoutReview(submission, request);
             throw WritingReviewHold.Unavailable();
         }
+    }
+
+    /// <summary>
+    /// A reviewer outage holds (re-queues) a letter only while this returns false: at most
+    /// <see cref="WritingGradeChainOptions.ReviewMaxHolds"/> re-queues, and never once the 15-minute release window is
+    /// close (<see cref="WritingGradeChainOptions.ReviewGiveUpMinutes"/> after submission).
+    /// </summary>
+    private bool ReviewHoldExhausted(WritingSubmission submission)
+    {
+        if (submission.AutoRetryCount >= _chainOptions.ReviewMaxHolds) return true;
+        var now = clock.GetUtcNow();
+        if (now >= submission.SubmittedAt + TimeSpan.FromMinutes(_chainOptions.ReviewGiveUpMinutes)) return true;
+
+        // Another hold must leave room for its back-off plus one more review attempt inside the release window.
+        var steps = _chainOptions.BackoffMinutes;
+        var backoff = steps is { Length: > 0 } ? steps[Math.Min(submission.AutoRetryCount, steps.Length - 1)] : 2;
+        return now + TimeSpan.FromMinutes(Math.Max(1, backoff) + 4) >= submission.SubmittedAt + WritingGradeTimings.ResultReleaseWindow;
+    }
+
+    /// <summary>
+    /// The bounded fallback (owner handoff 6 Oct 2026: a reviewer failure must never leave a letter Queued): the primary
+    /// result stands, a tutor is asked to look (rv_unresolved) and the admin notes carry <c>review_unavailable</c>.
+    /// No provider call and no credit movement: the one credit hold commits with the graded save as usual.
+    /// </summary>
+    private WritingReviewOutcome CompleteWithoutReview(WritingSubmission submission, WritingReviewRequest request)
+    {
+        logger.LogWarning(
+            "Writing secondary review is unavailable for submission {SubmissionId} after {Holds} re-queue(s); " +
+            "completing on the primary grade and flagging it for tutor review.",
+            submission.Id, submission.AutoRetryCount);
+        return WritingGradeReviewer.HoldExhausted(request);
     }
 
     /// <summary>

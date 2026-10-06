@@ -22,9 +22,12 @@
  * v7 purges cached Writing draft bodies (letter text) now that drafts bypass the SW.
  * v8 purges the SignalR long-poll responses that v7 wrote into the API cache (one
  * entry per poll, keyed by a unique `_=` URL) now that hub traffic bypasses the SW.
+ * v9 purges cached Writing submission / Past-submissions / mock-session bodies: their
+ * release countdown is anchored to the response's own `serverNow`, so a cached copy
+ * served offline would restore an old remaining time (10:00 on a return at 06:00).
  */
 
-const CACHE_VERSION = 'oet-v8';
+const CACHE_VERSION = 'oet-v9';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const API_CACHE = `${CACHE_VERSION}-api`;
 const CURRENT_CACHES = [STATIC_CACHE, API_CACHE];
@@ -63,6 +66,11 @@ const EXAM_MEDIA_API = /^\/v1\/(media\/[^/]+\/content|listening\/audio\/)/i;
 // old) could restore older text and a stale version over newer work. Unanchored
 // because the browser reaches the API through the /api/backend proxy.
 const WRITING_DRAFT_API = /\/v1\/writing\/drafts\//i;
+
+// Writing result-release state (15-minute countdown): the deadline is derived from
+// the response's own `releaseAt` / `serverNow`, so it must always be fresh. A cached
+// GET served offline would show the old remaining time and reset the timer.
+const WRITING_RELEASE_API = /\/v1\/writing\/(submissions|my-work|mocks\/sessions)(\/|\?|$)/i;
 
 // SignalR hubs (/v1/notifications/hub, /v1/ai-assistant/hub, /hubs/writing-today, ...)
 // are long-lived and stream long-poll responses. Every poll carries a unique `_=` URL,
@@ -125,6 +133,7 @@ self.addEventListener('fetch', (event) => {
     VIDEO_PLAYBACK_API.test(url.pathname) ||
     EXAM_MEDIA_API.test(url.pathname) ||
     WRITING_DRAFT_API.test(url.pathname) ||
+    WRITING_RELEASE_API.test(url.pathname) ||
     SIGNALR_HUB.test(url.pathname) ||
     CATALOG_API.test(url.pathname)
   ) {

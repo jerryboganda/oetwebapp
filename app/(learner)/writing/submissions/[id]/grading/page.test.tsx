@@ -95,7 +95,7 @@ describe('Writing grading progress and failure recovery', () => {
     await flush();
 
     expect(screen.queryByRole('timer')).not.toBeInTheDocument();
-    expect(screen.getByTestId('hero-description')).toHaveTextContent('writing.release.finalising');
+    expect(screen.getByTestId('hero-description')).toHaveTextContent('writing.release.stillProcessing');
   });
 
   it('keeps a finished but held result hidden, then opens it once the server releases it', async () => {
@@ -129,7 +129,7 @@ describe('Writing grading progress and failure recovery', () => {
     expect(screen.getByText('writing.release.finalising')).toBeInTheDocument();
   });
 
-  it('a letter still processing past the window shows finalising and leaves the refetching to the normal poll', async () => {
+  it('a letter still processing past the window says it is still being assessed (never finalising) and leaves the refetching to the normal poll', async () => {
     getWritingSubmission.mockResolvedValue(windowed('processing', 1));
     render(<WritingSubmissionGradingPage />);
     await flush();
@@ -138,7 +138,8 @@ describe('Writing grading progress and failure recovery', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
 
     expect(getWritingSubmission.mock.calls.length).toBe(callsBefore);
-    expect(screen.getByText('writing.release.finalising')).toBeInTheDocument();
+    expect(screen.getByText('writing.release.stillProcessing')).toBeInTheDocument();
+    expect(screen.queryByText('writing.release.finalising')).not.toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
   });
 

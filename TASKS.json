@@ -182,6 +182,46 @@
       "verify": "owner manual QA",
       "evidence": [],
       "files": []
+    },
+    {
+      "id": "WAI-07",
+      "title": "P0: bound the reviewer hold so a letter is never left Queued (HoldExhausted fallback, retry-cap bypass, window-aware give-up, cron per-row scope)",
+      "status": "in_progress",
+      "owner": "writing-ai-p0-queue",
+      "blockedBy": [],
+      "verify": "build-images.yml compiles API; Deploy production; owner QA",
+      "evidence": ["Four independent static reviews (compile, fallback semantics, frontend, timer trace) found no blocker; not compiled or tested locally."],
+      "files": ["backend/src/OetLearner.Api/Services/Writing/WritingSubmissionEvaluationPipeline.cs","backend/src/OetLearner.Api/Services/Writing/Review/WritingGradeReviewer.cs","backend/src/OetLearner.Api/Services/Writing/WritingGradeChain.cs","backend/src/OetLearner.Api/Services/Writing/Crons/WritingCrons.cs"]
+    },
+    {
+      "id": "WAI-08",
+      "title": "Honest 00:00 state, Past submissions refresh, stale service-worker timer, no false Queued flash, canvas oversampling, reviewer KPI tile",
+      "status": "pending",
+      "owner": "writing-ai-p0-queue",
+      "blockedBy": ["WAI-07"],
+      "verify": "build-images.yml compiles web; owner QA on phone",
+      "evidence": ["Static review only; not tested - owner QA."],
+      "files": ["components/domain/writing/WritingReleaseCountdown.tsx","components/domain/writing/WritingMyWorkList.tsx","public/sw.js","app/admin/writing-ai/page.tsx"]
+    },
+    {
+      "id": "WAI-09",
+      "title": "Nursing Free Sample (Adam White) and every Writing sample sharp on a phone",
+      "status": "blocked",
+      "owner": "writing-ai-p0-queue",
+      "blockedBy": [],
+      "verify": "owner visual QA on a phone at 100% and 200%",
+      "evidence": ["Only original on disk is a 960x540 JPEG (OET/Materials/.../Adam White.jpg); live PDF is a 2-page raster built from it; owner must supply the true original or approve a verbatim vector retype. 31 Nursing, ~12 Pharmacy and part of Medicine samples are raster-derived and need the owner's visual QA."],
+      "files": []
+    },
+    {
+      "id": "WAI-10",
+      "title": "Live acceptance: owner account instant, normal account 15:00 to 00:00, GPT-6.1 Sol reviewer evidence, no duplicate charge",
+      "status": "blocked",
+      "owner": "writing-ai-p0-queue",
+      "blockedBy": ["WAI-07","WAI-08"],
+      "verify": "owner manual QA; /admin/writing-ai reviewer tile and writing.review.* audit events",
+      "evidence": [],
+      "files": []
     }
   ]
 }

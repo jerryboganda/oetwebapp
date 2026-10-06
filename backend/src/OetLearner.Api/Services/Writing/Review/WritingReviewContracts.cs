@@ -7,8 +7,9 @@ namespace OetLearner.Api.Services.Writing.Review;
 /// Secondary reviewer of a primary Writing grade (owner handoff 6 Oct 2026, feature code
 /// <c>writing.grade.review</c>). <see cref="Off"/> = never runs; <see cref="Shadow"/> = runs and records what it
 /// WOULD change in admin notes only (the result is never changed and never held); <see cref="Enforce"/> = the
-/// reviewed result is what the candidate gets, and a reviewer outage HOLDS the letter (it is never published
-/// unreviewed).
+/// reviewed result is what the candidate gets, and a reviewer outage HOLDS the letter for a BOUNDED number of
+/// re-queues (<c>WritingGradeChainOptions.ReviewMaxHolds</c>), after which it completes on its primary result,
+/// flagged for a tutor (<c>WritingGradeReviewer.HoldExhausted</c>), so a letter is never left Queued.
 /// </summary>
 public enum WritingReviewMode
 {

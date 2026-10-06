@@ -88,6 +88,36 @@ export function WritingMyWorkList({ onCountChange }: WritingMyWorkListProps) {
     onCountChange?.(items ? items.length : null);
   }, [items, onCountChange]);
 
+  // A letter still being assessed never refetches itself: while any row is, poll and refetch when the tab returns, so
+  // its badge flips to Graded and Open result appears (at or after the release instant) without a manual reload. Rows are
+  // refreshed in place by key, so rows added by "Load more" survive.
+  const anyProcessing = items?.some((item) => item.state === 'grading') ?? false;
+  useEffect(() => {
+    if (!anyProcessing) return;
+    let cancelled = false;
+    const refresh = () => {
+      getWritingMyWork({ limit: PAGE_SIZE })
+        .then((page) => {
+          if (cancelled) return;
+          const fresh = new Map(page.items.map((item) => [item.key, { ...item, serverNow: page.serverNow }] as const));
+          setItems((prev) => (prev ? prev.map((item) => fresh.get(item.key) ?? item) : prev));
+        })
+        .catch(() => {
+          // Best effort: the next tick or visibility change tries again.
+        });
+    };
+    const timer = window.setInterval(refresh, 10_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [anyProcessing]);
+
   const reload = () => {
     setLoadFailed(false);
     setReloadToken((n) => n + 1);

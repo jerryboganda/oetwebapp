@@ -101,7 +101,11 @@ export function WritingReleaseCountdown({
   return (
     <div data-testid="writing-release-countdown" data-release-state={releaseState ?? undefined} className={cn('space-y-2', className)}>
       {elapsed ? (
-        <p role="status" className="text-sm font-semibold text-navy">{t('writing.release.finalising')}</p>
+        // 'held' = graded and waiting for the release instant; 'processing' = the grade is genuinely not finished
+        // yet, so say so (never a false "finalising", and never a new timer).
+        <p role="status" className="text-sm font-semibold text-navy">
+          {t(releaseState === 'processing' ? 'writing.release.stillProcessing' : 'writing.release.finalising')}
+        </p>
       ) : (
         <div>
           <p className="tile-label text-muted">{label}</p>

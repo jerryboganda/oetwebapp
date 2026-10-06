@@ -112,6 +112,13 @@ export default function WritingAiProviderPage() {
               />
               <KpiTile label="Fallback calls (7d)" value={fmt(status.fallbackCountWeek)} icon={<RefreshCw className="w-4 h-4" />} />
               <KpiTile
+                label="Reviewer calls (7d)"
+                value={fmt(status.reviewerCallsWeek ?? 0)}
+                icon={<ShieldCheck className="w-4 h-4" />}
+                hint={`GPT-6.1 Sol · ${fmt(status.reviewerSuccessesWeek ?? 0)} succeeded`}
+                tone={(status.reviewerCallsWeek ?? 0) > 0 && (status.reviewerSuccessesWeek ?? 0) === 0 ? 'warning' : 'default'}
+              />
+              <KpiTile
                 label="Claude API cost (7d)"
                 value={fmtUsd(status.claudeApi?.costWeekUsd ?? 0)}
                 hint="level 2 — pay-as-you-go"
