@@ -148,15 +148,12 @@ internal static class AiProviderPayloadBuilder
         if (document is null || string.IsNullOrWhiteSpace(document.Text)) return string.Empty;
         var name = string.IsNullOrWhiteSpace(document.FileName) ? "document" : document.FileName;
         var mime = string.IsNullOrWhiteSpace(document.MimeType) ? "text/plain" : document.MimeType;
-        return "
-
-[UPLOADED DOCUMENT: " + name + " (" + mime + ")]
-" +
-               "The learner uploaded the document below this turn. Treat its text as the attachment's verbatim content: quote and reason from it, never invent parts that are not present.
-" +
-               "--- BEGIN " + name + " ---
-" + document.Text + "
---- END " + name + " ---";
+        return string.Concat(
+            "\n\n[UPLOADED DOCUMENT: ", name, " (", mime, ")]\n",
+            "The learner uploaded the document below this turn. Treat its text as the attachment's verbatim content: quote and reason from it, never invent parts that are not present.\n",
+            "--- BEGIN ", name, " ---\n",
+            document.Text,
+            "\n--- END ", name, " ---");
     }
 
     internal static List<object?> BuildOpenAiAudioParts(AiProviderRequest request)
