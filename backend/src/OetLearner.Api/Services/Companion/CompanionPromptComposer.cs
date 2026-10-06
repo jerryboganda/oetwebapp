@@ -83,10 +83,13 @@ public sealed class CompanionPromptComposer(
             var minutes = JsonSerializer.Deserialize<int[]>(row.DailyMinutesJson);
             if (minutes is { Length: 7 })
             {
-                sb.AppendLine($"- Study availability (Mon..Sun minutes): {string.Join(", ", minutes)}");
+                var minutesText = string.Join(", ", minutes);
+                sb.AppendLine("- Study availability (Mon..Sun minutes): " + minutesText);
                 var nights = JsonSerializer.Deserialize<int[]>(row.NightShiftDaysJson) ?? [];
-                if (nights.Length > 0) sb.AppendLine($"- Night-shift days (no study): {string.Join(',', nights.Select(i => "MonTueWedThuFriSatSun"[i * 3..(i * 3) + 3]))}");
-                if (row.TravelMode) sb.AppendLine($"- Travel mode until {row.TravelUntil?.ToString("yyyy-MM-dd") ?? "further notice"}: ~{row.TravelModeMinutesPerDay} min/day, favour review over new content");
+                const string dayNames = "MonTueWedThuFriSatSun";
+                if (nights.Length > 0) sb.AppendLine("- Night-shift days (no study): " + string.Join(",", nights.Select(i => dayNames.Substring(i * 3, 3))));
+                var travelUntil = row.TravelUntil?.ToString("yyyy-MM-dd") ?? "further notice";
+                if (row.TravelMode) sb.AppendLine("- Travel mode until " + travelUntil + ": ~" + row.TravelModeMinutesPerDay + " min/day, favour review over new content");
             }
         }
         AppendEvidence(sb, retrieval);
