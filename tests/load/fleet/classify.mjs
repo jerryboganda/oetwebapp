@@ -63,6 +63,20 @@ export function retryAfterSeconds(value, fallback = 5) {
   return Math.min(120, Math.max(1, Math.ceil(seconds)));
 }
 
+/**
+ * The live AI Speaking admission line. While the live-session cap is full, finish-warmup answers HTTP 200
+ * with the session still in warm-up and `admission: { status: 'waiting', position, queueLength,
+ * estimatedWaitSeconds, pollAfterSeconds }` (backend Contracts/SpeakingLiveAdmissionContracts.cs,
+ * SpeakingSessionService.FinishWarmupAsync): nothing is held or timed, and the caller repeats the call.
+ * Returns the seconds to wait before repeating it, or null when the body is not a waiting answer.
+ */
+export function admissionWaitSeconds(json, fallback = 5) {
+  const view = json !== null && typeof json === 'object' ? json.admission : null;
+  if (view === null || view === undefined || typeof view !== 'object') return null;
+  if (String(view.status ?? '').toLowerCase() !== 'waiting') return null;
+  return retryAfterSeconds(view.pollAfterSeconds, fallback);
+}
+
 /** Case-insensitive header lookup over a k6 `res.headers` object (or any plain object). */
 export function headerOf(headers, name) {
   if (!headers) return null;

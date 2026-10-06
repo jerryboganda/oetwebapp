@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classifyResponse, errorCodeOf, headerOf, retryAfterSeconds } from './classify.mjs';
+import {
+  admissionWaitSeconds, classifyResponse, errorCodeOf, headerOf, retryAfterSeconds,
+} from './classify.mjs';
 
 const read = { ok: [200] };
 
@@ -68,6 +70,18 @@ test('retryAfterSeconds clamps and falls back', () => {
   assert.equal(retryAfterSeconds('Wed, 21 Oct 2026 07:28:00 GMT'), 5);
   assert.equal(retryAfterSeconds(null), 5);
   assert.equal(retryAfterSeconds(undefined, 9), 9);
+});
+
+test('a waiting admission answer (HTTP 200, session still in warm-up) names the poll interval; an admitted one does not', () => {
+  const waiting = { state: 'warmup', admission: { status: 'waiting', position: 3, queueLength: 7, estimatedWaitSeconds: 90, pollAfterSeconds: 8 } };
+  assert.equal(admissionWaitSeconds(waiting), 8);
+  assert.equal(admissionWaitSeconds({ ...waiting, admission: { status: 'Waiting' } }), 5);
+  assert.equal(admissionWaitSeconds({ ...waiting, admission: { status: 'waiting', pollAfterSeconds: 9999 } }), 120);
+  // admitted: the normal next state and no admission block at all
+  assert.equal(admissionWaitSeconds({ state: 'prep', admission: null }), null);
+  assert.equal(admissionWaitSeconds({ state: 'prep' }), null);
+  assert.equal(admissionWaitSeconds(null), null);
+  assert.equal(admissionWaitSeconds('text'), null);
 });
 
 test('headerOf is case-insensitive', () => {

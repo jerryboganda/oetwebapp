@@ -62,10 +62,10 @@ function headersFor(sess, spec, method, options) {
     // The Next.js BFF rejects a state-changing request without a same-origin Origin, and (once the
     // refresh cookie is in the jar, i.e. after sign-in) without the double-submit CSRF header
     // (validateProxyCsrf in lib/backend-proxy.ts). Exempt from the header there: the auth bootstrap
-    // calls and the hubs in SIGNALR_HUB_PATH_PATTERN (contract.js CSRF_EXEMPT_HUBS). Any other hub,
-    // today the tutor-room hub, is NOT exempt, so its negotiate / send / close POSTs carry the header
-    // here; a browser's SignalR client sends none and would be refused with 403 (a known finding,
-    // docs/ops/LOAD-TESTING.md section 11). A hub request with no `hubPath` gets the header too.
+    // calls and the hubs in SIGNALR_HUB_PATH_PATTERN (contract.js CSRF_EXEMPT_HUBS: notifications and
+    // the tutor-room hub). Any other hub would NOT be exempt, so its negotiate / send / close POSTs
+    // carry the header here; a browser's SignalR client sends none (docs/ops/LOAD-TESTING.md section 2).
+    // A hub request with no `hubPath` gets the header too.
     headers.Origin = CFG.webUrl;
     const exempt = spec.auth || (spec.hub && isCsrfExemptHub(options.hubPath));
     if (!exempt) {

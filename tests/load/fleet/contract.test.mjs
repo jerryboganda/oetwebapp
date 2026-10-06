@@ -56,7 +56,8 @@ test('the CSRF exemption list mirrors the web proxy (lib/backend-proxy.ts)', () 
       );
     }
   }
-  assert.deepEqual([...CSRF_EXEMPT_HUBS], [HUBS.notifications]);
+  // the tutor-room hub joined the proxy's exemption list with the BFF changes (it used to be refused with 403)
+  assert.deepEqual([...CSRF_EXEMPT_HUBS], [HUBS.notifications, HUBS.speakingLiveRoom]);
 });
 
 test('http.js decides the CSRF header per hub, and every mutating hub request names its hub', () => {

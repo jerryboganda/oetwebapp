@@ -11,7 +11,7 @@ import { sleep } from 'k6';
 import exec from 'k6/execution';
 import { CFG, PARAMS, TIMELINE, roomByOrdinal } from './config.js';
 import { ACTIONS, HUBS, fill } from './contract.js';
-import { retryAfterSeconds } from './classify.mjs';
+import { admissionWaitSeconds, retryAfterSeconds } from './classify.mjs';
 import { extractQuestionIds } from './extract.mjs';
 import {
   call, elapsedSeconds, newSession, signInSession, sleepUntil, beginIteration,
@@ -361,9 +361,19 @@ function wavBytes(seconds) {
 }
 let cachedWav = null;
 
-function looksQueued(r) {
-  if (r.shed) return true;
-  return r.status === 202 && (r.retryAfter !== null || /queue|wait/i.test(r.text));
+/**
+ * Seconds to wait before repeating an admission-gated call, or null when the platform did not queue the
+ * learner. The real gate (SpeakingLiveAdmissionService) answers finish-warmup with HTTP 200, the session
+ * still in warm-up and `admission.status` 'waiting'; a graceful shed in front of it (429 / 503, or a 202,
+ * with Retry-After) is waited out the same way.
+ */
+function queuedWaitSeconds(r) {
+  if (r.ok) {
+    const line = admissionWaitSeconds(r.json());
+    if (line !== null) return line;
+  }
+  const shed = r.shed || (r.status === 202 && (r.retryAfter !== null || /queue|wait/i.test(r.text)));
+  return shed ? retryAfterSeconds(r.retryAfter, 5) : null;
 }
 
 function checkQueuedInvariants(sess, sessionId) {
@@ -393,20 +403,21 @@ function wait(sess, seconds) {
   else sleep(seconds);
 }
 
-/** Call an admission-gated route; while the platform queues the learner (429/503/202 + Retry-After) wait and retry. */
+/** Call an admission-gated route; while the platform queues the learner (admission 'waiting', or 429/503/202 + Retry-After) wait and retry. */
 function admit(sess, spec, options, sessionId) {
   const startedMs = Date.now();
   let queued = false;
   for (;;) {
     const r = call(sess, spec, options);
-    if (looksQueued(r)) {
+    const waitS = queuedWaitSeconds(r);
+    if (waitS !== null) {
       if (!queued) {
         queued = true;
         M.liveQueuedSessions.add(1);
         checkQueuedInvariants(sess, sessionId);
       }
       if (Date.now() - startedMs > CFG.speakingMaxWaitS * 1000) return null;
-      wait(sess, retryAfterSeconds(r.retryAfter, 5) + Math.random());
+      wait(sess, waitS + Math.random());
       continue;
     }
     if (queued) M.liveQueueWaitMs.add(Date.now() - startedMs);
@@ -432,7 +443,11 @@ function speakingCycle(sess, content, cycle) {
 
   // The admission gate sits before any credit hold or timer: finish-warmup is where a learner queues.
   const finishWarmup = admit(sess, ACTIONS.speakingFinishWarmup, { path: idPath(ACTIONS.speakingFinishWarmup) }, sessionId);
-  if (finishWarmup === null) return skip('speaking', 'queue_timeout');
+  if (finishWarmup === null) {
+    // the learner gives up on the line: release the waiting place at once, as the page's "Leave the queue" does
+    call(sess, ACTIONS.speakingLeaveQueue, { path: idPath(ACTIONS.speakingLeaveQueue) });
+    return skip('speaking', 'queue_timeout');
+  }
   if (!finishWarmup.ok) return skip('speaking', 'finish_warmup_refused');
   think(sess, 1, 3);
   const roleplay = admit(sess, ACTIONS.speakingStartRoleplay, { path: idPath(ACTIONS.speakingStartRoleplay) }, sessionId);

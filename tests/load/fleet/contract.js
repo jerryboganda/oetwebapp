@@ -94,6 +94,8 @@ export const ACTIONS = Object.freeze({
   speakingStartRoleplay: act('speaking-start-roleplay', 'POST', '/v1/speaking/sessions/:id/start-roleplay', 'live-setup', {
     shedOk: true, domain: [409],
   }),
+  // A learner who gives up on the admission line releases the card's waiting place at once (204; a no-op when not waiting).
+  speakingLeaveQueue: act('speaking-leave-queue', 'POST', '/v1/speaking/sessions/:id/leave-queue', 'other', { ok: [204], domain: [404] }),
   speakingGet: act('speaking-get', 'GET', '/v1/speaking/sessions/:id', 'other'),
   livePreflight: act('live-preflight', 'GET', '/v1/speaking/realtime/sessions/:id/preflight', 'live-setup', { shedOk: true, domain: [409, 503] }),
   liveOpenAiOffer: act('live-openai-offer', 'POST', '/v1/speaking/realtime/sessions/:id/openai/offer', 'live-setup', { ok: [200, 202], shedOk: true, domain: [409] }),
@@ -125,10 +127,10 @@ export const HUBS = Object.freeze({
 /**
  * The hubs the web origin's /api/backend proxy exempts from its double-submit CSRF check. This mirrors
  * SIGNALR_HUB_PATH_PATTERN in lib/backend-proxy.ts (notifications, conversations, ai-assistant,
- * owner-agent) restricted to the hubs this harness uses; contract.test.mjs reads that file and fails
- * when the two disagree. The live-room hub is NOT in the proxy's list today.
+ * owner-agent, speaking/live-rooms) restricted to the hubs this harness uses; contract.test.mjs reads
+ * that file and fails when the two disagree (a manual check: no CI runs it).
  */
-export const CSRF_EXEMPT_HUBS = Object.freeze([HUBS.notifications]);
+export const CSRF_EXEMPT_HUBS = Object.freeze([HUBS.notifications, HUBS.speakingLiveRoom]);
 
 export const isCsrfExemptHub = (hubPath) => CSRF_EXEMPT_HUBS.includes(hubPath);
 
