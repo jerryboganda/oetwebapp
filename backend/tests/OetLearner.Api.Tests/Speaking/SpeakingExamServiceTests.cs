@@ -521,6 +521,24 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public void PickRotatingPair_AvoidsSeenCards_ThenStartsNewCycle()
+    {
+        string[] cards = ["A", "B", "C", "D", "E"];
+        var recent = new HashSet<string> { "C", "D" };
+
+        // A..D seen this cycle: only E is unused, so E leads and the partner is any other card, never E twice.
+        var p = SpeakingExamService.PickRotatingPair(cards, ["A", "B", "C", "D"], recent, _ => 0);
+        Assert.Equal("E", p.First);
+        Assert.NotEqual(p.First, p.Second);
+        Assert.DoesNotContain(p.Second, recent); // new cycle avoids the last mock's cards
+
+        // All five seen: cycle resets, everything eligible, still A != B.
+        var q = SpeakingExamService.PickRotatingPair(cards, ["A", "B", "C", "D", "E"], recent, _ => 0);
+        Assert.NotEqual(q.First, q.Second);
+        Assert.DoesNotContain(q.First, recent);
+    }
+
+    [Fact]
     public void SampleTwo_DoesNotMutateTheMaterializedSource()
     {
         string[] cards = ["A", "B", "C"];

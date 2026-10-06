@@ -87,7 +87,7 @@ public sealed class SpeakingExamService(
         // The exam always uses the caller's OWN registered profession; a
         // client-supplied ProfessionId is ignored.
         var ownProfession = await ResolveOwnProfessionAsync(userId, ct);
-        var (cardA, cardB, professionId) = await ResolveCardsAsync(req.MockSetId, ownProfession, ct);
+        var (cardA, cardB, professionId) = await ResolveCardsAsync(userId, req.MockSetId, ownProfession, ct);
 
         // A MockAttemptId only pre-pays the exam when it is the caller's own
         // active mock attempt that includes Speaking; anything else is
@@ -187,7 +187,7 @@ public sealed class SpeakingExamService(
             ? "medicine"
             : booking.ProfessionTrack!.Trim().ToLowerInvariant();
 
-        var (cardA, cardB, resolvedProfession) = await ResolveCardsAsync(mockSetId: null, profession, ct);
+        var (cardA, cardB, resolvedProfession) = await ResolveCardsAsync(userId, mockSetId: null, profession, ct);
 
         var exam = new SpeakingExamSession
         {
@@ -987,7 +987,7 @@ public sealed class SpeakingExamService(
     /// <c>speaking_simulation_v11_persona_missing</c> mid-exam.
     /// </summary>
     private async Task<(RolePlayCard A, RolePlayCard B, string ProfessionId)> ResolveCardsAsync(
-        string? mockSetId, string professionId, CancellationToken ct)
+        string userId, string? mockSetId, string professionId, CancellationToken ct)
     {
         var profession = professionId.Trim().ToLowerInvariant();
         if (!string.IsNullOrWhiteSpace(mockSetId))
@@ -1029,11 +1029,27 @@ public sealed class SpeakingExamService(
                 "There aren't enough published role-play cards for this profession to run an exam.");
         }
 
-        // The matching ids are already materialized above. Select the first two
-        // positions of a partial Fisher-Yates shuffle without sorting the full
-        // list. RandomNumberGenerator.GetInt32 uses rejection sampling, so each
-        // ordered pair of distinct cards is equally likely.
-        var selected = SampleTwo(published, RandomNumberGenerator.GetInt32);
+        // Server-side no-repeat rotation (owner spec 7 Oct 2026): history is the
+        // candidate's own earlier exams, so it follows them across devices and logins.
+        var past = await db.SpeakingExamSessions.AsNoTracking()
+            .Where(e => e.UserId == userId && e.ProfessionId == profession)
+            .OrderBy(e => e.CreatedAt)
+            .Select(e => new { e.CardAId, e.CardBId, ASeen = e.SessionAId != null, BSeen = e.SessionBId != null })
+            .ToListAsync(ct);
+        var history = new List<string>();
+        foreach (var e in past)
+        {
+            if (e.ASeen) history.Add(e.CardAId);
+            if (e.BSeen) history.Add(e.CardBId);
+        }
+        var recent = new HashSet<string>(StringComparer.Ordinal);
+        if (past.Count > 0)
+        {
+            var last = past[^1];
+            if (last.ASeen) recent.Add(last.CardAId);
+            if (last.BSeen) recent.Add(last.CardBId);
+        }
+        var selected = PickRotatingPair(published, history, recent, RandomNumberGenerator.GetInt32);
         var cardA = await db.RolePlayCards.AsNoTracking().FirstAsync(c => c.Id == selected.First, ct);
         var cardB = await db.RolePlayCards.AsNoTracking().FirstAsync(c => c.Id == selected.Second, ct);
         return (cardA, cardB, profession);
@@ -1067,6 +1083,41 @@ public sealed class SpeakingExamService(
             .Select(s => s.SubtestCode)
             .ToListAsync(ct);
         return sectionSubtests.Any(code => string.Equals(code, "speaking", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Two DIFFERENT cards, preferring ones the candidate has not seen in the current cycle.
+    /// The cycle is replayed from <paramref name="historyOldestFirst"/>: it resets each time every
+    /// published card has been used, so once the pool is exhausted all cards become eligible again,
+    /// and the most recent exam's cards (<paramref name="recent"/>) are avoided where possible.
+    /// </summary>
+    internal static (string First, string Second) PickRotatingPair(
+        IReadOnlyList<string> published,
+        IReadOnlyList<string> historyOldestFirst,
+        ISet<string> recent,
+        Func<int, int> nextIndex)
+    {
+        var pool = new HashSet<string>(published, StringComparer.Ordinal);
+        var used = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in historyOldestFirst)
+        {
+            if (!pool.Contains(id)) continue; // since unpublished
+            used.Add(id);
+            if (used.Count == pool.Count) used.Clear(); // cycle complete: new cycle
+        }
+
+        string Draw(IEnumerable<string> candidates, string? forbid)
+        {
+            var list = candidates.Where(c => c != forbid).ToList();
+            var preferred = list.Where(c => !recent.Contains(c)).ToList();
+            var from = preferred.Count > 0 ? preferred : list;
+            return from[nextIndex(from.Count)];
+        }
+
+        var unused = published.Where(c => !used.Contains(c)).ToList();
+        var first = Draw(unused, null);
+        var second = Draw(unused.Count > 1 ? unused : published, first);
+        return (first, second);
     }
 
     internal static (T First, T Second) SampleTwo<T>(
