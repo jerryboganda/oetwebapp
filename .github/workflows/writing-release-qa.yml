@@ -1,0 +1,49 @@
+name: writing-release-qa
+
+# Writing 15-minute release acceptance (owner patch 7 Oct 2026): one disposable NON-allowlisted
+# learner submits the free sample through the real UI and the run proves 15:00 -> 00:00 live:
+# countdown visible, reload/reopen/Post Submissions never reset it, result released at the
+# release instant with no interaction. Manual only; admin secrets stay in Actions.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: writing-release-qa
+  cancel-in-progress: false
+
+jobs:
+  release-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install browser dependencies
+        run: |
+          cd scripts/qa
+          npm init -y >/dev/null 2>&1 || true
+          npm install playwright@latest --no-fund --no-audit
+          npx playwright install chromium --with-deps
+
+      - name: Run the release acceptance
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          QA_OUT_DIR: release-qa-out
+        run: node scripts/qa/writing-release-qa.mjs
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: writing-release-qa-${{ github.run_id }}
+          path: release-qa-out
+          retention-days: 30
