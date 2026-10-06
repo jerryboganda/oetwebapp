@@ -130,6 +130,19 @@ public sealed class SpeakingTranscriptEvidenceTests
     public void Strip_NeverFailsOnAnUnreadableTranscript(string? input, string expected)
         => Assert.Equal(expected, SpeakingTranscriptEvidence.StripConnectivityChatter(input));
 
+    [Theory]
+    [InlineData("Hi, can you hear me?", "")]
+    [InlineData("Yeah, I hear you. Go ahead.", "")]
+    [InlineData("Testing, testing.", "")]
+    [InlineData("Hi, can you hear me? Hello, I'm Dr Faisal and I'll be looking after you today.", "Hello, I'm Dr Faisal and I'll be looking after you today.")]
+    [InlineData("  Testing, testing. Good morning, how are you today?  ", "Good morning, how are you today?")]
+    [InlineData("Hello, I'm Dr Faisal.", "Hello, I'm Dr Faisal.")]
+    [InlineData("Hello, I'm Dr Faisal. Can you hear me?", "Hello, I'm Dr Faisal. Can you hear me?")]
+    [InlineData(null, "")]
+    [InlineData("", "")]
+    public void StripLeadingChatterText_RemovesOnlyTheLeadingConnectionCheck(string? input, string expected)
+        => Assert.Equal(expected, SpeakingTranscriptEvidence.StripLeadingChatterText(input));
+
     private static string Segment(string speaker, string text, int startMs)
         => JsonSerializer.Serialize(new { speaker, startMs, endMs = startMs + 1000, text });
 

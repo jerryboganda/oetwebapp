@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Amazon.S3;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;

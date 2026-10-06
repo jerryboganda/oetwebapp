@@ -393,7 +393,7 @@
       "section": "04",
       "severity": "critical",
       "title": "Do not over-diagnose from one reading",
-      "body": "Do NOT diagnose hypertension from a single reading. Inform calmly and ask about prior history. Saying 'You have hypertension' from one reading is clinically wrong and costs marks.",
+      "body": "Do NOT diagnose hypertension from a single reading. Inform calmly and ask about prior history. Saying 'You have hypertension' from one reading is clinically wrong and lowers the Information Giving criterion.",
       "appliesTo": "all",
       "checkId": "speaking_no_overdiagnosis",
       "forbiddenPatterns": [
