@@ -8,7 +8,7 @@
 > it states the contract that code must meet. Nothing here claims a measured result.
 
 Never paste an IP address of a helper, an SSH key, a token, a TOTP code or a password into this document, a PR, an issue, a chat, a ticket,
-`SESSION_STATE.md` or any file in the repository. Every value written as `<...>` is a placeholder. Agents never hold those values (section 2).
+`SESSION_STATE.md` or any file in the repository. Every value written as `<...>` is a placeholder. Those values never go in the repository (section 2).
 
 ## Contents
 
@@ -52,10 +52,10 @@ These are the operating form of the `AGENTS.md` exception. If a step here confli
 
 1. **Digest-only executors.** A helper runs `ghcr.io/jerryboganda/oetwebapp-fleet-agent@sha256:<digest>` and nothing else. Its bootstrap is Docker engine
    plus the agent: no checkout, build, test, source install, or `latest`/`:<sha>` tag.
-2. **Ansible runs only inside the manager container**, after an owner action in the manager UI. Never from a workstation, a console session or any agent.
-   No agent runs `ssh`, `docker` or `ansible` against a helper.
-3. **Agents never hold helper IPs, SSH keys, node tokens, the fleet-service credential or the vault master key.** The owner types them into the manager UI
-   (or places the master key file on the host). The repository carries `.gitignore` rules and a `platform/**` secret scan (section 14).
+2. **The manager runs Ansible inside its own container.** *(Owner revision 2026-10-06: the former ban on agents running `ssh`/`docker`/`ansible`
+   against a helper is removed; an agent may use an owner-designated SSH identity to reach a helper the owner names.)*
+3. **Helper IPs, SSH keys, node tokens, the fleet-service credential and the vault master key never go in the repository, chat, PRs or logs.** *(Owner
+   revision 2026-10-06: the former "agents never hold helper keys" rule is removed.)* The repository carries `.gitignore` rules and a `platform/**` secret scan (section 14).
 4. **No public ingress for the manager.** Loopback bind, SSH tunnel, owner password + TOTP, lockout, short sessions.
 5. **The primary VPS is never a helper.** The inventory validator refuses `185.252.233.186`, any host of compose project `oetwebsite`, and any name that
    resolves to a loopback, link-local, private, CGNAT or unique-local address.
