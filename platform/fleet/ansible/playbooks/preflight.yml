@@ -1,6 +1,6 @@
 ---
 # S1 preflight (OET-RWP/1 section 8.2): read-only checks with the temporary owner credential.
-# Success: Ubuntu 22.04/24.04 or Debian 12, x86_64, systemd, >= 2 cores, >= 4 GiB RAM, >= 20 GiB free,
+# Success: Ubuntu 22.04/24.04/26.04 or Debian 12, x86_64, systemd, >= 2 cores, >= 4 GiB RAM, >= 20 GiB free,
 # clock within 5 s of the manager, no containers named oet-* (except our own agent) and no compose project
 # oetwebsite, and the host is not the primary. Facts are returned for the policy defaults.
 - name: Preflight - baseline checks (S1)
@@ -81,7 +81,7 @@
 
         - name: Decide whether the baseline is met
           ansible.builtin.set_fact:
-            fleet_os_supported: "{{ (fleet_os_id == 'ubuntu' and fleet_os_version in ['22.04', '24.04']) or (fleet_os_id == 'debian' and fleet_os_version == '12') }}"
+            fleet_os_supported: "{{ (fleet_os_id == 'ubuntu' and fleet_os_version in ['22.04', '24.04', '26.04']) or (fleet_os_id == 'debian' and fleet_os_version == '12') }}"
 
         - name: Name the first unmet requirement
           ansible.builtin.set_fact:

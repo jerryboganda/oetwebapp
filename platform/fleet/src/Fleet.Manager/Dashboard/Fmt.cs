@@ -231,7 +231,7 @@ public static class Fmt
         "ssh_unreachable" => "The manager could not reach the helper over SSH. Check that it is running and that its firewall allows the primary, then retry.",
         "auth_failed" => "The helper refused the key. Check that the user and the key are right (replace the key below), then retry.",
         "owner_credential_expired" => "Your temporary SSH key was erased after its 60 minutes. Provide it again to continue.",
-        "preflight_rejected" => "The server does not meet the requirements (Ubuntu 22.04/24.04 or Debian 12, x86_64, systemd, 2+ cores, 4+ GiB RAM, 20+ GiB free, no existing OET containers). The detail names the check.",
+        "preflight_rejected" => "The server does not meet the requirements (Ubuntu 22.04/24.04/26.04 or Debian 12, x86_64, systemd, 2+ cores, 4+ GiB RAM, 20+ GiB free, no existing OET containers). The detail names the check.",
         "bootstrap_step_failed" => "A preparation step failed. The detail names it; retry resumes at that step and never repeats finished ones.",
         "lockout_risk" => "The manager could not prove it can still log in after hardening SSH, so it stopped before changing anything that could lock you out. Retry or repair.",
         "owner_key_discard_failed" => "Your temporary key could not be erased. Revoke it on the Credentials page, then retry.",
