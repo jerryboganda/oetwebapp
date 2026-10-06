@@ -17,9 +17,10 @@ namespace OetLearner.Api.Services.Content;
 /// <para>
 /// <b>Bump <see cref="LayoutRevision"/> by hand whenever the logic of
 /// <c>PdfPigPdfTextExtractor</c> changes</b> (line grouping, watermark filter, page
-/// joining ...). A golden-hash test fails when the extractor source changes without a
-/// bump, so output can never drift silently between the API (oracle) and a helper. A
-/// bump changes <see cref="EngineVersion"/>, which re-keys every remote job.
+/// joining ...). Nothing enforces this automatically (no CI runs tests): the golden-hash row
+/// in <c>RemoteEngineMigrationAndWiringTests</c> is only a manual reminder, so a human must bump
+/// the revision whenever the extractor changes, or the API (oracle) and a helper can drift
+/// silently. A bump changes <see cref="EngineVersion"/>, which re-keys every remote job.
 /// </para>
 /// </summary>
 public static class PdfTextEngine
