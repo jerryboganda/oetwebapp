@@ -1,13 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    PDF extraction benchmark kernel. Compiled and run ONLY by .github/workflows/pdf-extract-bench.yml
-    (workflow_dispatch); it is not part of OetLearner.sln, is never built by the production pipeline and
-    lives outside backend/ so a change here does not start a production build.
+    MANUAL TOOL, INERT: built and run manually by the owner (dotnet build, then
+    tests/load/pdf-bench/pdf-extract-bench.mjs); no CI builds or runs it and agents never run it.
+    It is not part of OetLearner.sln, is never built by the production pipeline and lives outside
+    backend/ so a change here does not start a production build.
 
-    It link-compiles the API's PdfPigPdfTextExtractor VERBATIM (the parity oracle: whatever the API
-    extracts in-process is by definition correct) with a ~15 line shim of IPdfTextExtractor, exactly the
-    determinism contract the remote-worker agent follows (OET-RWP/1 section 6.1.4, kind pdf.extract).
+    PDF extraction benchmark kernel. It link-compiles the API's PdfPigPdfTextExtractor VERBATIM (the
+    parity oracle: whatever the API extracts in-process is by definition correct) together with
+    PdfExtractionFacts.cs (the extractor reports its page and character counts into it) and a ~15 line
+    shim of IPdfTextExtractor, exactly the determinism contract the remote-worker agent follows
+    (OET-RWP/1 section 6.1.4, kind pdf.extract). If the extractor starts to use another type of the
+    API, link that file here too: the kernel then stops compiling instead of drifting.
     The PdfPig version string is the one OetLearner.Api.csproj pins.
   -->
   <PropertyGroup>
@@ -26,6 +30,7 @@
   <ItemGroup>
     <Using Include="Microsoft.Extensions.Logging" />
     <Compile Include="..\..\..\..\backend\src\OetLearner.Api\Services\Content\PdfPigPdfTextExtractor.cs" Link="Linked\PdfPigPdfTextExtractor.cs" />
+    <Compile Include="..\..\..\..\backend\src\OetLearner.Api\Services\Content\PdfExtractionFacts.cs" Link="Linked\PdfExtractionFacts.cs" />
   </ItemGroup>
 
   <ItemGroup>

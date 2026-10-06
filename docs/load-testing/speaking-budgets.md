@@ -21,4 +21,5 @@ Anthropic prompt cache on multi-turn role-plays: **≥ 80%** hit rate (turns 2..
 
 ## Fail criteria
 
-Two consecutive weekly runs over budget on the same metric → release freeze + incident.
+These budgets are what the owner compares a manual k6 run against (`docs/ops/LOAD-TESTING.md`; no CI runs it). Two
+consecutive owner runs over budget on the same metric → release freeze + incident.

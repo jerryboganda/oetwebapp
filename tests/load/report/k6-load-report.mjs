@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE").
+//
 // Turns the `oet-load-summary/1` JSON that tests/load/fleet-1000.k6.js writes (one file per
 // generator leg) into a markdown report with a PASS / FAIL / INCOMPLETE verdict.
 //
@@ -9,18 +12,18 @@
 //     Codex lanes are driven against simulators with configured latency; their real capacity is an
 //     owner-supplied assumption this run cannot prove. The report says so on its first lines.
 //
-// Compute policy: pure file reads and writes, no network. Run it in GitHub Actions.
+// Pure file reads and writes, no network.
 //
 // Usage:
-//   node scripts/perf/k6-load-report.mjs --input leg0.json [--input leg1.json ...] \
+//   node tests/load/report/k6-load-report.mjs --input leg0.json [--input leg1.json ...] \
 //        --out report.md [--json verdict.json] [--require-pass] [--allow-no-data]
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
   SUMMARY_SCHEMA, findMetric, listSubmetrics, valueOf,
-} from '../../tests/load/fleet/summary-model.mjs';
-import { FLOW_NAMES, OWNER_TARGETS } from '../../tests/load/fleet/thresholds.mjs';
+} from '../fleet/summary-model.mjs';
+import { FLOW_NAMES, OWNER_TARGETS } from '../fleet/thresholds.mjs';
 
 export const SCOPE_STATEMENT = 'This report is application and hardware validation of the OET platform. '
   + 'External provider capacity (OpenAI GPT-Live, Gemini Live, LiveKit, and the Claude Max / Codex lanes) is simulated '

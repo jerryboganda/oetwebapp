@@ -65,8 +65,8 @@ export const CFG = Object.freeze({
     .split(',').map((s) => s.trim()).filter(Boolean),
   statusMatrixEndpoints: read('K6_STATUS_MATRIX', profile === 'smoke' ? '1' : '0') === '1',
   summaryPath: read('K6_SUMMARY_PATH', 'k6-summary.json'),
-  runId: read('GITHUB_RUN_ID', read('K6_RUN_ID', 'local')),
-  sha: read('GITHUB_SHA', read('K6_SHA', '')),
+  runId: read('K6_RUN_ID', 'local'),
+  sha: read('K6_SHA', ''),
   targetLabel: read('K6_TARGET_LABEL', ''),
   simulators: read('K6_SIMULATORS_NOTE', ''),
 });

@@ -1,9 +1,15 @@
 # Load testing the OET platform
 
+> **Inert manual tools. Run manually by the owner from a self-provisioned load generator; no CI runs this; agents
+> never run it.** There is no load-test or benchmark workflow in this repository on any trigger (not even
+> `workflow_dispatch`): AGENTS.md "NO AUTOMATED QA ANYWHERE" bars it, and `scripts/deploy/verify-pipeline-contract.mjs`
+> fails the build if a workflow runs `k6` or any test runner. Nothing here has been run by CI, and no number from it
+> is claimed until the owner measures one and reports it.
+
 Owner program 2026-10-05: prove, with numbers, that the primary VPS can serve **1,000 distinct active learners**
 with **100 live AI speaking sessions** and **50 learner-tutor rooms**, and that **overload queues instead of
-collapsing**. This page is the runbook. Everything here is dispatch-only and aimed at a **non-production** stack.
-Nothing in this repository runs a load test on a schedule, on a push, or against production.
+collapsing**. This page is the runbook for the owner's own runs, aimed at a **non-production** stack. Nothing in
+this repository runs a load test on a schedule, on a push, from CI, or against production.
 
 ## 0. What a run proves, and what it does not
 
@@ -29,7 +35,7 @@ run also does not mean "release safe": it is evidence for one commit on one stac
 | Acknowledged saves | none lost | `oet_lost_ack_save`: after each attempt, the stored answers must equal the last acknowledged ones |
 | Duplicate credits or charges | none | `oet_idempotency_violation` (a replayed submit returns the same submission, a page refresh never charges twice) plus the post-run ledger audit |
 | Overload | queues, does not collapse; existing sessions survive | during the surge: established sessions >= 99 % OK, collapse responses (5xx other than a graceful 503, or no response) < 1 %; recovery meets the steady targets again |
-| Admission queue (live AI speaking cap, when enabled) | waiting starts no timer and holds no credit | `oet_credit_consumed_while_queued`, `oet_timer_started_while_queued` must be 0 |
+| Admission queue (live AI speaking cap; on by default at 100) | waiting starts no timer and holds no credit | `oet_credit_consumed_while_queued`, `oet_timer_started_while_queued` must be 0 |
 
 Grading is judged on queue drain, not request latency: `oet_ai_assess_ms` p95 < 10 minutes (the oldest-critical-job
 SLO in `docs/ops/observability-slo-checklist.md`). The Max lane runs one CLI at a time with a 40-deep queue, so the
@@ -45,7 +51,7 @@ one action per tick, plus an exam, speaking or room activity at a random moment.
 | Role (global learner `g`, `g % 20`) | Share | Behaviour |
 | --- | --- | --- |
 | learner (17 of 20) | 85 % (850 of 1,000) | browse mix: dashboard, entitlement, study plan, readiness, engagement, notifications, search, progress, subscription. Personas by `g % 20`: reader (4), listener (3), writer (4), browser (6) |
-| speaker (2 of 20) | 10 % (100) | back-to-back AI speaking sessions: create, consent, warm-up, finish warm-up, start role-play, preflight, provider offer / token, a dozen turns (every third with a small WAV), transcript, end, and an AI assessment on the first session and every fifth after it |
+| speaker (2 of 20) | 10 % (100) | back-to-back AI speaking sessions: create, consent, warm-up, finish warm-up (the admission line, see below), start role-play, preflight, provider offer / token, a dozen turns (every third with a small WAV), transcript, end, and an AI assessment on the first session and every fifth after it |
 | room (1 of 20) | 5 % (50) | tutor rooms: consents, a `live_tutor` session, room create, LiveKit token, SignalR `JoinRoom`, hold, leave, end. With a rooms manifest an **expert** joins the same room and raises cues |
 
 Persona flows:
@@ -58,15 +64,28 @@ Persona flows:
   the credit pool moved by at most one letter's cost.
 - **Listener**: starts an attempt and autosaves answers.
 
+Admission line (live AI Speaking cap; owner decision 5 Oct 2026, `SpeakingLiveAdmissionService`): when the cap is
+full, `finish-warmup` answers **HTTP 200** with the session still in `warmup` and an `admission` block
+(`status: waiting`, position, `pollAfterSeconds`); nothing is held or timed while waiting, and the page repeats
+the call. The harness does the same: it waits `pollAfterSeconds` (a 429 / 503 / 202 with `Retry-After` is waited out
+the same way), counts the learner in `oet_live_queued_sessions`, records the wait in `oet_live_queue_wait_ms`,
+checks once per wait that no credit moved for the session and the session never left `warmup`
+(`oet_credit_consumed_while_queued`, `oet_timer_started_while_queued`), and after `K6_SPEAKING_MAX_WAIT_S` gives up
+through `POST /v1/speaking/sessions/{id}/leave-queue`. The gate is on by default with a cap of 100 concurrent live
+AI sessions (`Speaking:LiveAdmission`), so the 100 speakers of the steady profile normally never queue; the
+overload surge does, and so does a lowered cap on the stack under test (`PUT /v1/admin/ai/live-voice/admission`
+with `{"maxConcurrent": 50}`; `docs/speaking/live-voice.md` "Admission control"). Never switch the gate off to make
+a run pass.
+
 Transport fidelity: learner traffic goes through the **web origin's `/api/backend` proxy** (the Next.js BFF) with
 the `Origin` and CSRF headers a browser sends; hubs use **long-polling**, because that is what production
 browsers do (the BFF cannot upgrade WebSockets; `lib/env.ts` forces LongPolling for `/api/backend`). The BFF
 exempts only the auth bootstrap calls and the hubs in `SIGNALR_HUB_PATH_PATTERN` (notifications, conversations,
-ai-assistant, owner-agent) from its double-submit CSRF check, so those requests carry no CSRF header. The
-tutor-room hub (`/v1/speaking/live-rooms/hub`) is **not** exempt: its requests carry the header here, and a browser
-would be refused (section 11, known product finding). `tests/load/fleet/contract.test.mjs` reads the pattern from
-`lib/backend-proxy.ts` and fails the preflight when the harness's list drifts from it. Native clients that use
-WebSockets directly against the API are not modelled.
+ai-assistant, owner-agent and the tutor-room hub `/v1/speaking/live-rooms/hub`) from its double-submit CSRF
+check, so those requests carry no CSRF header. `tests/load/fleet/contract.js` (`CSRF_EXEMPT_HUBS`) mirrors that
+list for the hubs the harness uses, and `tests/load/fleet/contract.test.mjs` reads the pattern from
+`lib/backend-proxy.ts`: when you change the harness or the proxy, run it by hand to see whether the two have
+drifted (no CI does). Native clients that use WebSockets directly against the API are not modelled.
 
 Security posture is **not** relaxed. `SingleActiveSessionEnabled` and `TrustedDeviceRequired` stay on; each
 account's deterministic device id is auto-trusted on its first sign-in. Sign-ins are paced to 60 per minute per
@@ -82,11 +101,12 @@ generator leg to stay under the `AuthBruteforce` limit of 100 per minute per IP.
 | `tests/load/seed/` | `seed-accounts.mjs` (create, `--purge`), `audit-ledger.mjs` (duplicate-charge audit) |
 | `tests/load/simulators/` | `provider-sim.mjs` (OpenAI GPT-Live, Gemini Live, LiveKit Twirp and signed webhooks), `cli-stubs/` (stub `claude` and `codex` CLIs so the **real** writing sidecars run) |
 | `tests/load/sut/docker-compose.load-overrides.yml` | overlay that adds the simulators to the staging stack and points the API at them |
-| `scripts/perf/k6-load-report.mjs` | merges the legs into the markdown report and the verdict |
-| `scripts/perf/load-plan.mjs` | validates dispatch inputs (production refusal, leg capacity) and plans the legs |
-| `.github/workflows/load-fleet.yml` | the dispatch workflow |
-| `.github/workflows/pdf-extract-bench.yml`, `scripts/perf/pdf-extract-bench.mjs`, `tests/load/pdf-bench/` | PDF extraction benchmark and Rust gate (section 9) |
+| `tests/load/report/k6-load-report.mjs` | merges the legs into the markdown report and the verdict |
+| `tests/load/pdf-bench/` | `pdf-extract-bench.mjs` and the `PdfExtractBench` kernel: a manual PDF extraction benchmark and parity oracle, not a load test (section 9) |
 | `tests/load/*.k6.js` (the older scripts) | smoke-scale checks: `critical-paths` (up to 100 VUs on **one** shared session), `speaking-session-create`, `speaking-livekit-token` |
+| `tests/load/**/*.test.mjs` | plain `node:test` files beside the modules; manual only, nothing runs them |
+
+There is no workflow in the list because none exists: nothing in `.github/` runs any of this.
 
 `tests/load/fleet/contract.js` is the single place that names paths, bodies' fields and expected statuses. If the
 API renames a route, change it there.
@@ -97,12 +117,12 @@ API renames a route, change it there.
 
 1. **Never the primary VPS, never production.** The primary is a small shared host (about 6 CPU, about 11 GiB,
    60+ co-tenant containers). A 1,000-learner run against it would be an outage with a report attached. The
-   harness refuses production hosts in four places (the workflow plan, `config.js`, the seed script, the audit).
+   harness refuses production hosts in three places (`config.js` for the k6 run, the seed script, the audit).
 2. A **dedicated staging host**, sized like the primary (at least 6 vCPU and 12 GiB, the same disk class), so the
    numbers transfer. The test is only meaningful if the host is not larger than production.
 3. **Pull-only.** The staging host runs the release artifacts under test, `ghcr.io/jerryboganda/oetwebapp-api:<sha>`
    and `...-web:<sha>`, built by `Build images`. It never compiles anything (the overlay sets `image:` and the stack
-   is started with `--no-build`). Coding agents do not operate this host: they dispatch workflows.
+   is started with `--no-build`). Coding agents do not operate this host and never run the harness: the owner does.
 4. A real **TLS** endpoint for the web and API hostnames (Nginx Proxy Manager or nginx with a real certificate).
    Auth cookies are `Secure`, and the BFF checks the request origin, so plain HTTP does not behave like production.
 5. A **private** data set: nothing from production is copied in.
@@ -152,7 +172,8 @@ is missing, and in the full profiles a required flow with no completion fails th
 - **Tutor rooms**: nothing beyond a card; rooms are created by the learner. Pairing an expert needs a
   pre-provisioned room, see section 6.4.
 - An **admin** account for seeding (`OET_LOAD_ADMIN_EMAIL`, `OET_LOAD_ADMIN_PASSWORD`) and the shared learner
-  password (`OET_LOAD_PASSWORD`, at least 8 characters). Store all three as repository secrets.
+  password (`OET_LOAD_PASSWORD`, at least 8 characters). Keep all three in the shell environment of the generator
+  host: never commit them and never store them as repository secrets (no workflow runs the harness).
 
 ### 4.4 What must stay on
 
@@ -173,8 +194,8 @@ to make a run pass. A result obtained that way describes a stack nobody runs. If
 - Control: `GET /sim/stats`, `POST /sim/config` (latency, jitter, failure rate and status at run time),
   `POST /sim/emit`.
 
-Latency defaults to 150 ms with 50 ms of jitter, a deliberately modest stand-in; the report records the value you
-pass as `simulators_note`. Real providers are slower and have limits the simulator does not.
+Latency defaults to 150 ms with 50 ms of jitter, a deliberately modest stand-in; the report records the text you
+pass as `K6_SIMULATORS_NOTE`. Real providers are slower and have limits the simulator does not.
 
 The two **writing sidecars** are not re-implemented: `writing-claude-sim` and `writing-codex-sim` run the real
 `writing-ai-sidecars/*/server.mjs` with a stub `claude` or `codex` CLI that sleeps (`LOAD_LLM_LATENCY_MS`, 20 s
@@ -213,12 +234,21 @@ once by prefix rather than looking users up one by one.
 
 ### 6.1 Smoke first, always
 
-Dispatch `load-fleet.yml` with `profile=smoke`, `legs=1`, `seed_accounts=true`. It runs 20 learners for a few
-minutes with think times at 15 %, and **publishes the endpoint status matrix** in the report: for every endpoint
-the harness can call, how many times it answered each status. That is the contract probe. A status the endpoint
-is not documented to return means `tests/load/fleet/contract.js` and the API disagree; fix that before trusting a
-latency number. The harness was written from the backend source and has not been executed against a live stack
-by its author: expect the first smoke to find at least a path or body-shape mismatch.
+On the load-generator host, seed the accounts (section 5), then run one smoke leg:
+
+```bash
+export K6_API_URL=https://api.staging.example K6_WEB_URL=https://app.staging.example \
+       K6_PROFILE=smoke OET_LOAD_PASSWORD=... K6_SUMMARY_PATH=leg0.json K6_VERSION_STRING="$(k6 version)"
+k6 run tests/load/fleet-1000.k6.js
+node tests/load/report/k6-load-report.mjs --input leg0.json --out report.md --json verdict.json --allow-no-data
+```
+
+It runs 20 learners for a few minutes with think times at 15 %, and **publishes the endpoint status matrix** in the
+report: for every endpoint the harness can call, how many times it answered each status. That is the contract
+probe. A status the endpoint is not documented to return means `tests/load/fleet/contract.js` and the API
+disagree; fix that before trusting a latency number. The harness was written from the backend source and has not
+been executed against a live stack by its author: expect the first smoke to find at least a path or body-shape
+mismatch.
 
 ### 6.2 The profiles
 
@@ -230,32 +260,31 @@ by its author: expect the first smoke to find at least a path or body-shape mism
 | `overload` | 1,000 for 10 minutes, then +500 learners (1,500), held 20 minutes, 2 minute subside, 10 minutes of recovery | queue-not-collapse and recovery |
 
 Thresholds apply to the **steady** phase (and **overload** / **recovery** for the overload profile); ramps and
-warm-up are not judged. Inputs: `profile`, `legs`, `api_url`, `web_url`, `confirm_non_production`,
-`seed_accounts`, `audit_ledger`, `purge_accounts`, optional `allow_oversubscribe` (more than 300 learners per
-leg), `learners`, `steady_minutes`, `hub_mode`, `think_scale`, `rooms_json`, `simulators_note`.
+warm-up are not judged. Everything is set by environment variable (section 6.4): the profile, the leg
+split, the learner count and hold times, `K6_HUB_MODE`, `K6_THINK_SCALE`, `K6_ROOMS_FILE`, `K6_SIMULATORS_NOTE`.
 
 ### 6.3 Why legs, and the self-provisioned generator
 
-One GitHub-hosted runner (4 vCPU, 16 GB) cannot drive 1,000 learners: each learner is a long-lived VU holding a
-long-poll connection and issuing requests, and k6 saturates its own CPU before the system under test does, which
-would put the generator's weakness into your latency numbers. The harness plans **at most 300 learners per leg**
-(a conservative planning figure; watch the generator's CPU in the leg log and use `allow_oversubscribe` only
-knowingly). The workflow therefore runs **N parallel hosted legs**: leg `L` owns the global learners
-`g = i * N + L`, so legs are interleaved, ramp in parallel, never share an account, and each has its own source
-IP (the per-IP sign-in limit applies per leg). 1,000 learners need 4 legs, the 1,500-learner overload needs 5 or 6.
+One generator machine cannot drive 1,000 learners: each learner is a long-lived VU holding a long-poll
+connection and issuing requests, and k6 saturates its own CPU before the system under test does, which would put
+the generator's weakness into your latency numbers. So the run is split into **N legs**, one k6 process each on its
+own generator: leg `L` owns the global learners `g = i * N + L`, so legs are interleaved, ramp in parallel,
+never share an account, and each has its own source IP (the per-IP sign-in limit applies per leg). As a
+conservative planning figure give a leg **at most about 300 learners** (a 4 vCPU / 16 GB machine; watch the
+generator's CPU while it runs and treat a saturated generator as a distorted result): 1,000 learners need 4
+legs, the 1,500-learner overload needs 5 or 6 (or bigger generators). The harness does not enforce the figure.
 The leg reports are merged by `k6-load-report.mjs`; latency percentiles cannot be merged exactly, so the report
 prints the **worst leg** (the conservative bound) and pools the rates.
 
-When hosted legs are not enough or not available (the repository is private and hosted runners are refused, or a
-single address is wanted), use a **self-provisioned load generator**. This is an owner or operator procedure on a
-dedicated host; coding agents never run it (AGENTS.md compute policy), and a self-hosted runner is never
-registered on the public repository.
+Use a **self-provisioned load generator**. This is an owner or operator procedure on dedicated hosts; coding
+agents never run it (AGENTS.md compute policy), no workflow or CI runner drives it, and a self-hosted runner is
+never registered on the public repository for it.
 
 1. Provision one or more VMs **outside the primary** with the same network path to the staging host as real
    users, at least 8 vCPU and 16 GB each for 1,000 learners (16 vCPU for 1,500). Raise the open-file and
    ephemeral-port limits (`ulimit -n 65535`).
 2. Install k6 and Node 22 and check out the branch.
-3. On each VM run its leg of the same script, with the same environment the workflow sets:
+3. On each VM run its leg of the same script:
 
 ```bash
 export K6_API_URL=https://api.staging.example K6_WEB_URL=https://app.staging.example \
@@ -264,7 +293,10 @@ export K6_API_URL=https://api.staging.example K6_WEB_URL=https://app.staging.exa
 k6 run tests/load/fleet-1000.k6.js        # exit 99 = a threshold failed
 ```
 
-4. Copy the `legN.json` files together and merge: `node scripts/perf/k6-load-report.mjs --input leg0.json --input leg1.json --out report.md --json verdict.json --require-pass`.
+4. Copy the `legN.json` files together and merge: `node tests/load/report/k6-load-report.mjs --input leg0.json --input leg1.json --out report.md --json verdict.json --require-pass`.
+5. Audit the credit ledger for duplicate charges, and purge the accounts when you are finished (section 5):
+   `node tests/load/seed/audit-ledger.mjs --api https://api.staging.example --learners 1500 --experts 75 --report ledger-audit.json`
+   (admin credentials in the environment).
 
 ### 6.4 Environment reference
 
@@ -285,10 +317,12 @@ k6 run tests/load/fleet-1000.k6.js        # exit 99 = a threshold failed
 | `K6_STATUS_MATRIX` | 1 for smoke | publish the per-endpoint status matrix |
 | `OET_LOAD_PASSWORD` | | shared password of the disposable accounts |
 | `OET_LOAD_ACCOUNT_PREFIX`, `OET_LOAD_EMAIL_DOMAIN` | `loadtest`, `load.oet.test` | account naming |
+| `K6_SUMMARY_PATH`, `K6_VERSION_STRING` | `k6-summary.json`, | where this leg writes its summary; the k6 version recorded in the report |
+| `K6_RUN_ID`, `K6_SHA`, `K6_TARGET_LABEL`, `K6_SIMULATORS_NOTE` | `local`, , , | free text the report prints: a run label, the commit under test, a short name of the stack, the simulator latency and fault settings in force |
 
 Pre-provisioning rooms with an assigned expert cannot be done through the public API: a tutor is attached only by
-the private-speaking booking flow (entitlement, lead time, availability, payment), so `rooms_json` is supplied by
-whoever provisions the staging database. The default is learner-created rooms.
+the private-speaking booking flow (entitlement, lead time, availability, payment), so the `K6_ROOMS_FILE` manifest
+is supplied by whoever provisions the staging database. The default is learner-created rooms.
 
 ## 7. Reading the report
 
@@ -296,9 +330,9 @@ The report starts with the verdict and the scope statement, then the owner-targe
 failed, flow coverage, capacity stages, overload behaviour and the endpoint status matrix.
 
 - **PASS**: every owner target had samples and met its limit, every threshold passed on every leg.
-- **FAIL**: a target or a threshold failed. The workflow fails.
+- **FAIL**: a target or a threshold failed. `k6` exits 99 for the leg, and the report exits 1 with `--require-pass`.
 - **INCOMPLETE**: nothing failed but a target had **no samples** (a flow was skipped for lack of content). A target
-  that was not exercised is not a pass; the workflow fails (smoke allows it).
+  that was not exercised is not a pass; `--require-pass` fails it (smoke runs it with `--allow-no-data`).
 
 **Unexpected failure** is exact: a documented business refusal (HTTP 4xx with a known code, such as the Reading
 Part B/C window not being open) is not a failure; a graceful shed (429 or 503 with `Retry-After`) is not a failure
@@ -322,10 +356,18 @@ during the injected window is expected):
 
 ## 9. PDF extraction benchmark and the Rust gate
 
-`pdf-extract-bench.yml` (dispatch-only, labelled **benchmark evidence, not a release proof**) measures PDF text
-extraction over every tracked PDF (40 today): per document wall time, CPU time and peak RSS, p50 and p95, and the
-in-process steady-state cost the primary pays today. The **in-process `PdfPigPdfTextExtractor`, link-compiled
-verbatim, is the parity oracle**. An optional **agent kernel** contender is compared against it byte for byte
+`tests/load/pdf-bench/pdf-extract-bench.mjs` (a manual tool, labelled **benchmark evidence, not a release proof**;
+no workflow runs it) measures PDF text extraction over every PDF tracked in the repository (it lists them with
+`git ls-files`): per document wall time, CPU time and peak RSS, p50 and p95, and the in-process steady-state cost the
+primary pays today. The owner builds the kernel and runs it by hand:
+
+```bash
+dotnet build tests/load/pdf-bench/PdfExtractBench/PdfExtractBench.csproj -c Release -o bench-out
+node tests/load/pdf-bench/pdf-extract-bench.mjs --bench-dll bench-out/PdfExtractBench.dll --steady
+```
+
+The **in-process `PdfPigPdfTextExtractor`, link-compiled verbatim (with `PdfExtractionFacts.cs`, which it reports
+into), is the parity oracle**. An optional **agent kernel** contender is compared against it byte for byte
 (page count, characters, every page hash, text hash). Contenders are commands with a `{pdf}` placeholder that
 print one JSON line of hashes and counts (never text). The **Rust gate** is explicit: exact parity on every
 document AND (p95 at least 30 % lower OR CPU per job at least 40 % lower than the .NET baseline it replaces).
@@ -337,8 +379,7 @@ would have to beat. The corpus has no Listening question paper, so Part B/C pars
 No prices are asserted here; fill them from the actual quotes.
 
 - the dedicated staging host (monthly) and its TLS / DNS;
-- generator time: legs x about 75 minutes of runner time per run (free on a public repository, billable on a
-  private one), or the self-provisioned VMs;
+- generator time: the self-provisioned VMs, legs x about 75 minutes per run;
 - accounts and storage: 1,576 disposable accounts and the rows they create (purge afterwards);
 - provider spend: **none** with the simulators. Validating real GPT-Live / Gemini Live / LiveKit capacity is a
   separate, paid, owner-run exercise with its own limits.
@@ -355,7 +396,7 @@ No prices are asserted here; fill them from the actual quotes.
   and a poll returns only when the server has a frame, normally its 15 s keep-alive. A pause of `T` seconds
   therefore lasts `15 * ceil(T / 15)` seconds: nothing shorter than one poll is reachable on a single
   connection, and the request rate the run drives is **below** the nominal think-time mix. Mean pauses for the
-  default mix (the report prints the same table, computed for the run's `think_scale`, in its method section):
+  default mix (the report prints the same table, computed for the run's `K6_THINK_SCALE`, in its method section):
 
   | activity | nominal mean pause | effective mean pause |
   | --- | --- | --- |
@@ -365,15 +406,16 @@ No prices are asserted here; fill them from the actual quotes.
   | speaking turn (4 to 9 s) | 6.5 s | 15 s |
   | speaking warm-up and role-play pauses (2 to 6 s, 1 to 3 s) | 4 s, 2 s | 15 s |
 
-  A smoke run (`think_scale` 0.15) is dominated by the 15 s floor. Read the achieved rates from the report's class
+  A smoke run (`K6_THINK_SCALE` 0.15) is dominated by the 15 s floor. Read the achieved rates from the report's class
   counts, not from the nominal mix. The harness does not run the actions on a second, poll-free path (that would
   change what one browser tab does); sizing a run from the achieved rates, or adding learners to reach a target
   request rate, is the operator's call.
-- **Known product finding (not fixed by this change).** The web proxy exempts the notification, conversation,
-  AI-assistant and owner-agent hubs from its CSRF check (`SIGNALR_HUB_PATH_PATTERN` in `lib/backend-proxy.ts`) but
-  not the tutor-room hub `/v1/speaking/live-rooms/hub`. A signed-in browser holds the `oet_rt` cookie and its SignalR
-  client sends no `x-csrf-token`, so by reading the code its room-hub negotiate would be refused with 403
-  (`components/domain/speaking/LiveRoomRealtime.tsx` connects without the header). This has **not** been confirmed
-  against a live stack. The harness sends the header for non-exempt hubs so the 50-room target can be measured, and
-  prints this finding in every leg log. If the product is wrong, the fix is one alternative in that pattern, as a
-  separate change (it is a build input); `contract.test.mjs` then fails until `CSRF_EXEMPT_HUBS` follows it.
+- **The CSRF exemption list is a copy.** The tutor-room hub used to be missing from the web proxy's
+  `SIGNALR_HUB_PATH_PATTERN` (`lib/backend-proxy.ts`), so a browser's room-hub negotiate would have been refused
+  with 403; the BFF change that exempts it is in this stack, and `CSRF_EXEMPT_HUBS` in `contract.js` now follows
+  it. If the pattern changes again, `contract.js` must follow (the setup log warns `harness drift` for a hub the
+  harness uses but does not list), or the numbers for that hub stop describing what a browser sees.
+- **Per-process caches.** The API keeps a short per-process user-state cache (JWT liveness, entitlement and freeze
+  reads, about 15 s). A session revoked by a fresh sign-in can keep working for that long on a process that cached
+  it, and an entitlement change can lag by the same amount. The harness's lost-save and idempotency checks read
+  through the same API and are unaffected, but read the timing of a 401 with this in mind.

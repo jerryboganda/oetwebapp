@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+//
 // Writes `claude` and `codex` shell shims into a directory so the real writing sidecars (which spawn
 // the CLIs by name) pick up the stub from PATH:
 //   node install-shims.mjs /tmp/sim-bin && PATH=/tmp/sim-bin:$PATH node /app/claude/server.mjs

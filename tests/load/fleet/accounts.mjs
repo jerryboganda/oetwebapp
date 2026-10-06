@@ -3,7 +3,7 @@
 // seeder can create them, every k6 leg can derive its own slice, and the purge can find them again.
 //
 // SAFETY: these accounts only ever exist on a NON-production stack. isProductionHost() is the guard
-// every entry point (seed, purge, k6 setup, workflow preflight) calls before any request is sent.
+// every entry point (seed, purge, audit, k6 setup) calls before any request is sent.
 
 export const PRODUCTION_HOSTS = Object.freeze([
   'app.oetwithdrhesham.co.uk',

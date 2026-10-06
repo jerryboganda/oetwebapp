@@ -1,3 +1,6 @@
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+//
 // LiveKit JWT mint throughput at smoke scale (default peak 100 VUs, K6_VUS to change it).
 // SLO: p95 < 200ms, error rate < 1%.
 //

@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-// PDF extraction benchmark harness (dispatch-only: .github/workflows/pdf-extract-bench.yml).
+// MANUAL TOOL, INERT: run manually by the owner from a machine the owner provisions; no CI runs this;
+// agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"; benchmarks stay separate labelled tools).
+//
+// PDF extraction benchmark harness. Build the kernel first, then run this against it:
+//   dotnet build tests/load/pdf-bench/PdfExtractBench/PdfExtractBench.csproj -c Release -o bench-out
+//   node tests/load/pdf-bench/pdf-extract-bench.mjs --bench-dll bench-out/PdfExtractBench.dll \
+//        --out pdf-bench.json --md pdf-bench.md [--steady] [--iterations N] [--warmup W] [--max-pdfs N]
 //
 // LABEL: this is BENCHMARK EVIDENCE for sizing and for the Rust decision. It is not a release proof and
 // it proves nothing about a deployed build.
@@ -17,7 +23,7 @@
 // document AND (p95 extraction time is at least 30 % lower OR CPU per job is at least 40 % lower than
 // the .NET baseline it would replace: the kernel when supplied, else the oracle).
 //
-// Compute policy: runs on GitHub Actions only. The harness itself does no extraction.
+// The harness itself does no extraction: it drives the contenders and compares their hashes.
 
 import { spawnSync } from 'node:child_process';
 import { statSync, writeFileSync } from 'node:fs';
@@ -220,7 +226,7 @@ export function renderMarkdown(report) {
   const lines = [];
   lines.push('# PDF extraction benchmark');
   lines.push('');
-  lines.push('> **Benchmark evidence, not a release proof.** Timings come from a shared GitHub-hosted runner and are noisy; read the shape, not the third digit. The in-process oracle is the parity reference: whatever it extracts is correct by definition.');
+  lines.push('> **Benchmark evidence, not a release proof.** Timings come from whatever machine the owner ran it on and are noisy; read the shape, not the third digit. The in-process oracle is the parity reference: whatever it extracts is correct by definition.');
   lines.push('');
   lines.push(`Corpus: ${report.corpus.documents} tracked PDFs, ${report.corpus.bytes} bytes. Runs per document: ${report.iterations} measured after ${report.warmup} warm-up. Runner: ${report.env.os}, ${report.env.cpus} vCPU.`);
   lines.push('');

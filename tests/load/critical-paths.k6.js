@@ -1,3 +1,6 @@
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+//
 // Staging-only critical read path load test (smoke scale: up to 100 VUs sharing ONE learner session).
 // SLO: P95 < 1s, P99 < 2s, HTTP error rate < 1%.
 //

@@ -26,8 +26,8 @@ only together with the code that emits its metrics.
 - `/health/live`, `/health/ready`, the deploy-time `scripts/observability-smoke.sh`, `docker stats`.
 - The admin JSON surfaces under `/v1/admin/**` (AI usage, `/v1/admin/ai/live-voice/health`, readiness).
 - The agent gateway's Prometheus endpoint (`oetgw_*`).
-- Load evidence on demand: `.github/workflows/load-fleet.yml` and its k6 metrics, see
-  `docs/ops/LOAD-TESTING.md`.
+- Load evidence on demand: the k6 harness under `tests/load/`, run manually by the owner from a self-provisioned
+  load generator (no CI runs it, agents never run it), see `docs/ops/LOAD-TESTING.md`.
 
 There is no Prometheus, Grafana, Alertmanager, node-exporter or cAdvisor service in any compose file in this
 repository. Whether the "VPS monitoring stack" that the alert-rule header mentions exists outside the repo

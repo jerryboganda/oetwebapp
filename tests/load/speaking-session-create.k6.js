@@ -1,3 +1,6 @@
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+//
 // Speaking session creation at smoke scale (default peak 100 VUs, K6_VUS to change it).
 // SLO: p95 < 800ms, p99 < 2000ms, error rate < 2%.
 //

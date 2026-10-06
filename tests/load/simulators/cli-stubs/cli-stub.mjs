@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+//
 // Stand-in for the `claude` and `codex` subscription CLIs, so the REAL writing-ai-sidecars servers
 // (writing-ai-sidecars/claude/server.mjs and codex/server.mjs) can run in the load stack unchanged.
 // That is the point: the sidecar's own lane (WRITING_LANE_CONCURRENCY, WRITING_QUEUE_MAX,

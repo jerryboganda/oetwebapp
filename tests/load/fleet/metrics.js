@@ -1,5 +1,5 @@
 // Custom k6 metrics. Names and tags here are the contract with thresholds.mjs and the report
-// generator (scripts/perf/k6-load-report.mjs): change them together.
+// generator (tests/load/report/k6-load-report.mjs): change them together.
 
 import { Counter, Rate, Trend } from 'k6/metrics';
 

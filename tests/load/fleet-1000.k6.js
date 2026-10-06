@@ -1,17 +1,19 @@
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+//
 // OET fleet load test: 1,000 distinct learners, 100 AI speaking sessions, 50 tutor rooms, for a
-// 60 minute steady state, plus a 1,500-learner overload profile. Dispatch-only (see
-// .github/workflows/load-fleet.yml); never aimed at production (the host guard in config.js aborts
-// the run in init if it is).
+// 60 minute steady state, plus a 1,500-learner overload profile. Never aimed at production (the host
+// guard in config.js aborts the run in init if it is).
 //
 //   k6 run -e K6_API_URL=https://api.staging.example -e K6_WEB_URL=https://app.staging.example \
 //          -e OET_LOAD_PASSWORD=... -e K6_PROFILE=smoke tests/load/fleet-1000.k6.js
 //
-// One k6 process is one LEG. A GitHub-hosted runner cannot drive 1,000 learners alone, so the
-// workflow runs several legs in parallel (K6_LEG_COUNT / K6_LEG_INDEX), each owning a disjoint,
-// interleaved slice of the accounts and its own source IP. See docs/ops/LOAD-TESTING.md.
+// One k6 process is one LEG. One generator machine cannot drive 1,000 learners alone, so the owner
+// runs several legs in parallel on separate generators (K6_LEG_COUNT / K6_LEG_INDEX), each owning a
+// disjoint, interleaved slice of the accounts and its own source IP.
 //
 // Thresholds (tests/load/fleet/thresholds.mjs) are the owner's targets and GATE: a breach makes k6
-// exit 99 and the workflow fails. Nothing here swallows the k6 exit code.
+// exit 99 for that leg. Nothing here swallows the k6 exit code.
 
 import { CFG, PARAMS, PLAN, TIMELINE, ROOMS } from './fleet/config.js';
 import { ACTIONS, ENDPOINT_IDS, HUBS, fill, isCsrfExemptHub } from './fleet/contract.js';
@@ -136,9 +138,9 @@ export function setup() {
   }
   for (const [name, hubPath] of Object.entries(HUBS)) {
     if (!isCsrfExemptHub(hubPath)) {
-      console.warn(`known product finding: the web proxy does not exempt ${hubPath} (the ${name} hub) from its CSRF check `
-        + '(SIGNALR_HUB_PATH_PATTERN in lib/backend-proxy.ts) and browsers send no x-csrf-token on SignalR requests; '
-        + 'the harness sends the header so the flow can be measured. See docs/ops/LOAD-TESTING.md section 11.');
+      console.warn(`harness drift: contract.js does not list ${hubPath} (the ${name} hub) as exempt from the web proxy's CSRF check `
+        + '(SIGNALR_HUB_PATH_PATTERN in lib/backend-proxy.ts); browsers send no x-csrf-token on SignalR requests, '
+        + 'so the harness sends the header and the numbers for that hub are not what a browser would see. See docs/ops/LOAD-TESTING.md section 2.');
     }
   }
 

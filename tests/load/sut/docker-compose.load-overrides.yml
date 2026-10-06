@@ -1,3 +1,6 @@
+# MANUAL TOOL, INERT: used manually by the owner on a self-provisioned staging host; no CI runs this;
+# agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+#
 # Overlay for the NON-production load-test stack (docker-compose.staging.yml). It adds the provider
 # simulators and points the staging API at them. It is NEVER run on the primary production VPS or
 # beside production containers: the load harness aims at a dedicated staging host (see

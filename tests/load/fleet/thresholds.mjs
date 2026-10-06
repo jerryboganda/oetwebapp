@@ -1,6 +1,6 @@
 // k6 thresholds for the fleet load harness, from the owner's targets (2026-10-05). Every threshold
-// here GATES: a breached one makes `k6 run` exit 99, and the workflow neither swallows that exit code
-// nor uses continue-on-error. Pure; unit-tested under node.
+// here GATES: a breached one makes `k6 run` exit 99, and nothing swallows that exit code. Pure;
+// unit-tested under node (manual tools: no CI runs them).
 //
 // Tag keys inside `{...}` are written in alphabetical order (class, flow, phase, reason, ...) because
 // k6 stores sub-metrics under their written name and the report generator looks them up as tag SETS.

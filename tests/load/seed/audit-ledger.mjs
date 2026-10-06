@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+//
 // Post-run credit audit for the fleet load test: "no duplicate credits / charges".
 //
 // k6 proves idempotency at the request level (a replayed submit returns the same submission, a page

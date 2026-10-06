@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE"). Runbook: docs/ops/LOAD-TESTING.md.
+//
 // Provider simulator for the fleet load test: stands in for OpenAI GPT-Live, Gemini Live and LiveKit
 // so the OET control plane can be driven at 100 AI sessions + 50 tutor rooms without a single paid
 // provider call. Zero dependencies (node:http, node:crypto, global fetch); one process, one port.

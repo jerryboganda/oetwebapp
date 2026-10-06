@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// MANUAL TOOL, INERT: run manually by the owner from a self-provisioned load generator; no CI runs
+// this; agents never run it (AGENTS.md "NO AUTOMATED QA ANYWHERE").
+//
 // Seed (or purge) the disposable accounts of the fleet load test on a NON-production stack.
 //
 //   OET_LOAD_ADMIN_EMAIL=... OET_LOAD_ADMIN_PASSWORD=... OET_LOAD_PASSWORD=... \
@@ -10,8 +13,8 @@
 // email) with credit pools granted through the admin adjust endpoint. Idempotent. See
 // docs/ops/LOAD-TESTING.md.
 //
-// Compute policy: this script only calls an HTTP API. Run it from GitHub Actions (load-fleet.yml) or
-// from the dedicated load-generator host, never against production (the host guard refuses it).
+// This script only calls an HTTP API. Run it from the dedicated load-generator host, never against
+// production (the host guard refuses it).
 
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
