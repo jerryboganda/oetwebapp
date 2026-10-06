@@ -34,12 +34,22 @@ function writeEvidence(name, value) {
 }
 
 /** mm:ss -> seconds; null when the timer is absent (it hides once the window has elapsed). */
-async function readReleaseTimer(page) {
+async function readReleaseTimer(page, timeoutMs = 5_000) {
   const text = await page.locator(tid('writing-release-timer')).first()
-    .innerText({ timeout: 5_000 }).catch(() => null);
+    .innerText({ timeout: timeoutMs }).catch(() => null);
   if (!text) return null;
   const m = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
   return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+}
+
+/** Everything the countdown surface shows (state attr + visible text) for the evidence ledger. */
+async function countdownSnapshot(page, shotPath) {
+  const el = page.locator(tid('writing-release-countdown')).first();
+  const state = await el.getAttribute('data-release-state').catch(() => null);
+  const text = await el.innerText({ timeout: 3_000 }).catch(() => null);
+  const timer = await readReleaseTimer(page, 15_000);
+  if (shotPath) await page.screenshot({ path: shotPath, fullPage: false }).catch(() => undefined);
+  return { releaseState: state, timer, text: (text ?? '').replace(/\s+/g, ' ').slice(0, 120) };
 }
 
 async function rawSubmission(session, submissionId) {
@@ -145,8 +155,9 @@ async function main() {
     session = await reopenSession(b, learner);
     await session.page.goto(b.appUrl(ROUTES.grading(submissionId)), { waitUntil: 'domcontentloaded' });
     await session.page.locator(tid('writing-release-countdown')).first().waitFor({ state: 'visible', timeout: 30_000 });
-    const afterReopen = await readReleaseTimer(page);
-    step('countdown-after-reopen', { seconds: afterReopen, closedMs: REOPEN_MS });
+    const reopenSnap = await countdownSnapshot(session.page, path.join(OUT, 'countdown-after-reopen.png'));
+    const afterReopen = reopenSnap.timer;
+    step('countdown-after-reopen', { seconds: afterReopen, closedMs: REOPEN_MS, ...reopenSnap });
     if (afterReopen === null) problem('the countdown is gone after reopen (before the release time)');
     else {
       if (beforeClose !== null && afterReopen >= beforeClose) problem(`the countdown reset/paused across reopen (${beforeClose}s -> ${afterReopen}s)`);
