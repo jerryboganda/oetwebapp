@@ -10,6 +10,7 @@ import { Input, Select, Textarea, Checkbox } from '@/components/ui/form-controls
 import { InlineAlert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { BillingConfirmDialog } from './confirm-dialog';
+import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 import {
   createAdminBillingAddOn,
   deleteAdminBillingAddOn,
@@ -35,7 +36,12 @@ interface AdminAddOnRow {
   status?: string;
   addonKind?: string;
   compatiblePlanCodes?: string[];
+  // Server flag: Name/Description are owned by Subscriptions & Packages.
+  packageManaged?: boolean;
 }
+
+const MANAGED_COPY_HINT = 'Managed in Subscriptions & Packages.';
+const READ_ONLY_FIELD_CLASS = 'cursor-not-allowed text-muted';
 
 const INTERVAL_OPTIONS = [
   { value: 'one_time', label: 'One-time' },
@@ -67,6 +73,7 @@ interface FormState {
   status: string;
   addonKind: string;
   compatiblePlanCodes: string;
+  packageManaged: boolean;
 }
 
 function emptyForm(): FormState {
@@ -74,8 +81,16 @@ function emptyForm(): FormState {
     id: null, code: '', name: '', description: '', price: '', currency: 'GBP',
     interval: 'one_time', durationDays: '0', grantCredits: '0', displayOrder: '0',
     isRecurring: false, appliesToAllPlans: true, isStackable: true, maxQuantity: '',
-    status: 'active', addonKind: 'review_credits', compatiblePlanCodes: '',
+    status: 'active', addonKind: 'review_credits', compatiblePlanCodes: '', packageManaged: false,
   };
+}
+
+// A code that only resolves through a package's legacy alias is not managed: the server never
+// mirrors overlay copy onto aliased add-on rows, so locking them would make them uneditable.
+function isCopyManaged(row: AdminAddOnRow): boolean {
+  if (row.packageManaged === true) return true;
+  const pkg = row.code ? resolveWebsitePackageByCode(row.code) : undefined;
+  return pkg !== undefined && !(pkg.legacyCodes && pkg.legacyCodes.length > 0);
 }
 
 function toForm(row: AdminAddOnRow): FormState {
@@ -97,6 +112,7 @@ function toForm(row: AdminAddOnRow): FormState {
     status: (row.status || 'active').toLowerCase(),
     addonKind: row.addonKind || 'review_credits',
     compatiblePlanCodes: Array.isArray(row.compatiblePlanCodes) ? row.compatiblePlanCodes.join(', ') : '',
+    packageManaged: isCopyManaged(row),
   };
 }
 
@@ -142,6 +158,9 @@ export function AddOnCatalogEditor({ canWrite = true }: AddOnCatalogEditorProps)
     () => [...rows].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.price - b.price),
     [rows],
   );
+
+  // Edit mode only: a new add-on's code is not known yet, so its fields stay editable.
+  const copyManaged = !!form.id && form.packageManaged;
 
   const setField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -296,10 +315,38 @@ export function AddOnCatalogEditor({ canWrite = true }: AddOnCatalogEditorProps)
           {feedback && feedback.tone === 'error' ? <InlineAlert variant="error" title="Error">{feedback.message}</InlineAlert> : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Name" value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="3 Review Credits" />
+            <Input
+              label="Name"
+              value={form.name}
+              onChange={(e) => setField('name', e.target.value)}
+              placeholder="3 Review Credits"
+              readOnly={copyManaged}
+              className={copyManaged ? READ_ONLY_FIELD_CLASS : undefined}
+              hint={copyManaged ? MANAGED_COPY_HINT : undefined}
+            />
             <Input label="Code" value={form.code} onChange={(e) => setField('code', e.target.value)} disabled={!!form.id} hint={form.id ? 'Immutable after creation.' : 'Leave blank to auto-generate.'} />
           </div>
-          <Textarea label="Description" value={form.description} onChange={(e) => setField('description', e.target.value)} placeholder="Pack of 3 tutor review credits." />
+          <Textarea
+            label="Description"
+            value={form.description}
+            onChange={(e) => setField('description', e.target.value)}
+            placeholder="Pack of 3 tutor review credits."
+            readOnly={copyManaged}
+            className={copyManaged ? READ_ONLY_FIELD_CLASS : undefined}
+            hint={copyManaged ? MANAGED_COPY_HINT : undefined}
+          />
+          {copyManaged ? (
+            <p className="text-xs leading-5 text-muted" data-testid="addon-package-managed-note">
+              The learner-facing name and description are derived from the package record.{' '}
+              <Link
+                href={`/admin/billing/subscriptions-packages?code=${encodeURIComponent(form.code)}`}
+                className="font-medium text-primary hover:underline"
+              >
+                Edit them in Subscriptions &amp; Packages
+              </Link>
+              . Price, currency, interval and status stay editable here.
+            </p>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Input label="Price" inputMode="decimal" value={form.price} onChange={(e) => setField('price', e.target.value)} />

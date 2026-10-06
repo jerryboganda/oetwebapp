@@ -10,6 +10,7 @@ import { Input, Select, Textarea, Checkbox } from '@/components/ui/form-controls
 import { InlineAlert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { BillingConfirmDialog } from './confirm-dialog';
+import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 import {
   createAdminBillingPlan,
   deleteAdminBillingPlan,
@@ -54,10 +55,14 @@ interface AdminPlanRow {
   deliveryInstructions?: string | null;
   contentOverridesJson?: string | null;
   entitlements?: Record<string, unknown> | null;
+  // Server flag: Name/Description are owned by Subscriptions & Packages.
+  packageManaged?: boolean;
 }
 
 const SUBTESTS = ['listening', 'reading', 'writing', 'speaking'] as const;
 const NO_PLATFORM_ACCESS = 'none';
+const MANAGED_COPY_HINT = 'Managed in Subscriptions & Packages.';
+const READ_ONLY_FIELD_CLASS = 'cursor-not-allowed text-muted';
 
 // Mirrors backend DeliveryMethods (Domain/Enums.cs). Anything but automatic_web parks the
 // buyer's subscription at Pending + FulfilmentStatus=pending_manual until an admin marks it
@@ -159,6 +164,8 @@ interface FormState {
   materialOverridesJson: string;
   invoiceDownloads: boolean;
   entitlements: Record<string, unknown>;
+  // Edit mode only: Name/Description are derived from Subscriptions & Packages and read-only here.
+  packageManaged: boolean;
 }
 
 function emptyForm(): FormState {
@@ -170,7 +177,7 @@ function emptyForm(): FormState {
     accessDurationDays: String(DEFAULT_ACCESS_DURATION_DAYS), deliveryMethod: 'automatic_web',
     telegramInviteUrl: '', deliveryInstructions: '',
     videoOverrides: { ...EMPTY_PLAN_VIDEO_OVERRIDES }, materialOverridesJson: '',
-    invoiceDownloads: false, entitlements: {},
+    invoiceDownloads: false, entitlements: {}, packageManaged: false,
   };
 }
 
@@ -206,6 +213,8 @@ function toForm(row: AdminPlanRow): FormState {
     materialOverridesJson,
     invoiceDownloads: ent.invoiceDownloadsAvailable === true,
     entitlements: ent,
+    packageManaged: row.packageManaged === true
+      || (!!row.code && resolveWebsitePackageByCode(row.code) !== undefined),
   };
 }
 
@@ -302,7 +311,11 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
   const [rows, setRows] = useState<AdminPlanRow[]>([]);
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    tone: 'success' | 'error';
+    message: string;
+    link?: { href: string; label: string };
+  } | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -347,6 +360,9 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
   );
 
   const isManualDelivery = MANUAL_DELIVERY_METHODS.includes(form.deliveryMethod);
+
+  // Edit mode only: a new plan's code is not known yet, so its fields stay editable.
+  const copyManaged = !!form.id && form.packageManaged;
 
   // Live parse feedback while typing; handleSave re-checks so an invalid blob can never be sent.
   const materialsOverridesError = useMemo(
@@ -479,11 +495,20 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
     try {
       if (form.id) {
         await updateAdminBillingPlan(form.id, { code: form.code, ...payload });
+        setFeedback({ tone: 'success', message: 'Plan updated.' });
       } else {
-        await createAdminBillingPlan({ code: form.code.trim() || undefined, ...payload });
+        const created = await createAdminBillingPlan({ code: form.code.trim() || undefined, ...payload });
+        // The server auto-creates the package record; use the code it assigned when the field was left blank.
+        const createdCode = (typeof created?.code === 'string' && created.code) || form.code.trim();
+        setFeedback({
+          tone: 'success',
+          message: 'Plan created and linked to Subscriptions & Packages. Set its learner-facing name, description and features there.',
+          link: createdCode
+            ? { href: `/admin/billing/subscriptions-packages?code=${encodeURIComponent(createdCode)}`, label: 'Open in Subscriptions & Packages' }
+            : undefined,
+        });
       }
       setModalOpen(false);
-      setFeedback({ tone: 'success', message: `Plan ${form.id ? 'updated' : 'created'}.` });
       await load();
     } catch (error) {
       setFeedback({ tone: 'error', message: error instanceof Error ? error.message : 'Failed to save plan.' });
@@ -533,7 +558,15 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
         <InlineAlert variant="info" title="Read-only access">Saving changes requires Billing catalog write permission.</InlineAlert>
       ) : null}
       {feedback ? (
-        <InlineAlert variant={feedback.tone === 'success' ? 'success' : 'error'} title={feedback.tone === 'success' ? 'Saved' : 'Error'}>{feedback.message}</InlineAlert>
+        <InlineAlert variant={feedback.tone === 'success' ? 'success' : 'error'} title={feedback.tone === 'success' ? 'Saved' : 'Error'}>
+          {feedback.message}
+          {feedback.link ? (
+            <>
+              {' '}
+              <Link href={feedback.link.href} className="font-semibold underline" data-testid="plan-linked-package-link">{feedback.link.label}</Link>
+            </>
+          ) : null}
+        </InlineAlert>
       ) : null}
       {status === 'error' ? (
         <InlineAlert variant="error" title="Couldn’t load plans">{loadError ?? 'An unexpected error occurred.'}</InlineAlert>
@@ -592,10 +625,37 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
           {feedback && feedback.tone === 'error' ? <InlineAlert variant="error" title="Error">{feedback.message}</InlineAlert> : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Name" value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="Premium Monthly" />
+            <Input
+              label="Name"
+              value={form.name}
+              onChange={(e) => setField('name', e.target.value)}
+              placeholder="Premium Monthly"
+              readOnly={copyManaged}
+              className={copyManaged ? READ_ONLY_FIELD_CLASS : undefined}
+              hint={copyManaged ? MANAGED_COPY_HINT : undefined}
+            />
             <Input label="Code" value={form.code} onChange={(e) => setField('code', e.target.value)} disabled={!!form.id} hint={form.id ? 'Immutable after creation.' : 'Leave blank to auto-generate.'} />
           </div>
-          <Textarea label="Description" value={form.description} onChange={(e) => setField('description', e.target.value)} />
+          <Textarea
+            label="Description"
+            value={form.description}
+            onChange={(e) => setField('description', e.target.value)}
+            readOnly={copyManaged}
+            className={copyManaged ? READ_ONLY_FIELD_CLASS : undefined}
+            hint={copyManaged ? MANAGED_COPY_HINT : undefined}
+          />
+          {copyManaged ? (
+            <p className="text-xs leading-5 text-muted" data-testid="plan-package-managed-note">
+              The learner-facing name and description are derived from the package record.{' '}
+              <Link
+                href={`/admin/billing/subscriptions-packages?code=${encodeURIComponent(form.code)}`}
+                className="font-medium text-primary hover:underline"
+              >
+                Edit them in Subscriptions &amp; Packages
+              </Link>
+              . Price, currency, interval and status stay editable here.
+            </p>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Input label="Price" inputMode="decimal" value={form.price} onChange={(e) => setField('price', e.target.value)} />

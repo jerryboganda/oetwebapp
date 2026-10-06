@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Hosting;
@@ -92,21 +93,22 @@ public sealed class Oet2026CatalogSeeder(
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
         var now = DateTimeOffset.UtcNow;
+        var managed = await LoadManagedCopyAsync(db, ct);
 
         foreach (var plan in manifest.Plans ?? new List<PlanDto>())
         {
             ct.ThrowIfCancellationRequested();
-            await UpsertPlanAsync(db, plan, now, result, ct);
+            await UpsertPlanAsync(db, plan, now, result, managed, ct);
             if (options.Value.CreateContentPackages)
             {
-                await UpsertPlanPackageAsync(db, plan, now, result, ct);
+                await UpsertPlanPackageAsync(db, plan, now, result, managed, ct);
             }
         }
 
         foreach (var addon in manifest.AddOns ?? new List<AddOnDto>())
         {
             ct.ThrowIfCancellationRequested();
-            await UpsertAddOnAsync(db, addon, now, result, ct);
+            await UpsertAddOnAsync(db, addon, now, result, managed, ct);
             if (options.Value.CreateContentPackages)
             {
                 if (addon.RequiresEligibleParent)
@@ -115,7 +117,7 @@ public sealed class Oet2026CatalogSeeder(
                 }
                 else
                 {
-                    await UpsertAddOnPackageAsync(db, addon, now, result, ct);
+                    await UpsertAddOnPackageAsync(db, addon, now, result, managed, ct);
                 }
             }
         }
@@ -140,8 +142,102 @@ public sealed class Oet2026CatalogSeeder(
         return Path.Combine(env.ContentRootPath, "Data", "Seeds", "oet-2026-catalog.json");
     }
 
+    /// <summary>
+    /// Read-only view of the shipped catalogue copy (name, description and "What's included" bullets per code),
+    /// used by the admin package editor to restore defaults. The bullets are exactly what a seed run writes to
+    /// <c>ContentPackage.ComparisonFeaturesJson</c>.
+    /// </summary>
+    public sealed record SeedCopy(string Name, string? Description, IReadOnlyList<string> Features);
+
+    public sealed record SeedCatalogCopy(
+        IReadOnlyDictionary<string, SeedCopy> Plans,
+        IReadOnlyDictionary<string, SeedCopy> AddOns);
+
+    private SeedCatalogCopy? seedCopyCache;
+
+    /// <summary>
+    /// Loads name/description per code from the shipped manifest without touching the database.
+    /// Independent of <c>Content:Oet2026Catalog:Enabled</c>. Null when the manifest is missing or unreadable.
+    /// </summary>
+    public async Task<SeedCatalogCopy?> LoadSeedCopyAsync(CancellationToken ct)
+    {
+        if (seedCopyCache is { } cached) return cached;
+
+        var seedPath = ResolveSeedPath();
+        if (!File.Exists(seedPath)) return null;
+
+        try
+        {
+            await using var stream = File.OpenRead(seedPath);
+            var manifest = await JsonSerializer.DeserializeAsync<CatalogManifest>(stream, JsonOptions, ct);
+            if (manifest is null) return null;
+
+            var plans = new Dictionary<string, SeedCopy>(StringComparer.Ordinal);
+            foreach (var plan in manifest.Plans ?? new List<PlanDto>())
+            {
+                plans[CatalogPackageCodes.Normalize(plan.Code)] = new SeedCopy(
+                    plan.Name,
+                    plan.Description,
+                    plan.ComparisonFeatures ?? new List<string>());
+            }
+
+            var addOns = new Dictionary<string, SeedCopy>(StringComparer.Ordinal);
+            foreach (var addOn in manifest.AddOns ?? new List<AddOnDto>())
+            {
+                // Same bullets UpsertAddOnPackageAsync writes to the add-on's ContentPackage.
+                addOns[CatalogPackageCodes.Normalize(addOn.Code)] = new SeedCopy(
+                    addOn.Name,
+                    addOn.Description,
+                    addOn.AiFeatures is { Count: > 0 } ? addOn.AiFeatures : new List<string> { addOn.Description ?? string.Empty });
+            }
+
+            seedCopyCache = new SeedCatalogCopy(plans, addOns);
+            return seedCopyCache;
+        }
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning(ex, "Oet2026CatalogSeeder could not read the manifest copy at {Path}.", seedPath);
+            return null;
+        }
+    }
+
+    /// <summary>Codes whose name/description are owned by the admin Subscriptions &amp; Packages overlay.</summary>
+    private sealed record ManagedCopyCodes(HashSet<string> Names, HashSet<string> Descriptions)
+    {
+        public bool HasName(IEnumerable<string?> codes) => codes.Any(code => Names.Contains(CatalogPackageCodes.Normalize(code)));
+
+        public bool HasDescription(IEnumerable<string?> codes) => codes.Any(code => Descriptions.Contains(CatalogPackageCodes.Normalize(code)));
+    }
+
+    private static async Task<ManagedCopyCodes> LoadManagedCopyAsync(LearnerDbContext db, CancellationToken ct)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var descriptions = new HashSet<string>(StringComparer.Ordinal);
+        var json = await db.RuntimeSettings.AsNoTracking()
+            .Where(r => r.Id == "default")
+            .Select(r => r.CatalogPresentationJson)
+            .FirstOrDefaultAsync(ct);
+
+        if (CatalogPresentationDocument.WebsitePackagesByCode(CatalogPresentationDocument.Parse(json)) is { } byCode)
+        {
+            foreach (var pair in byCode)
+            {
+                var entry = pair.Value as JsonObject;
+                var code = CatalogPackageCodes.Normalize(pair.Key);
+                if (CatalogPresentationDocument.ReadEntryText(entry, "name") is not null) names.Add(code);
+                if (CatalogPresentationDocument.ReadEntryText(entry, "description") is not null) descriptions.Add(code);
+            }
+        }
+
+        return new ManagedCopyCodes(names, descriptions);
+    }
+
+    /// <summary>A plan code with its alias (for example speaking-1session and speaking-1session-plan).</summary>
+    private static IEnumerable<string> PlanCodeCandidates(params string[] codes)
+        => codes.SelectMany(code => CatalogPackageCodes.Candidates(code));
+
     private static async Task UpsertPlanAsync(
-        LearnerDbContext db, PlanDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
+        LearnerDbContext db, PlanDto dto, DateTimeOffset now, SeederResult result, ManagedCopyCodes managed, CancellationToken ct)
     {
         var existing = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == dto.Code, ct);
         if (existing is null && LegacyPlanCodeFor(dto.Code) is { } legacyCode)
@@ -171,8 +267,12 @@ public sealed class Oet2026CatalogSeeder(
             plan = existing!;
         }
 
-        plan.Name = dto.Name;
-        plan.Description = dto.Description ?? string.Empty;
+        // Name/Description of a package edited in Admin > Subscriptions & Packages belong to
+        // that overlay: a reseed must not revert them (new rows still take the manifest copy).
+        var managedName = !isNew && managed.HasName(PlanCodeCandidates(dto.Code, plan.Code));
+        var managedDescription = !isNew && managed.HasDescription(PlanCodeCandidates(dto.Code, plan.Code));
+        if (!managedName) plan.Name = dto.Name;
+        if (!managedDescription) plan.Description = dto.Description ?? string.Empty;
         plan.Price = dto.Price;
         plan.Currency = "GBP";
         plan.Interval = "one_time";
@@ -218,6 +318,7 @@ public sealed class Oet2026CatalogSeeder(
         var activeVersion = await db.BillingPlanVersions
             .FirstOrDefaultAsync(v => v.PlanId == plan.Id && v.Status == BillingPlanStatus.Active, ct);
 
+        var versionIsNew = activeVersion is null;
         if (activeVersion is null)
         {
             activeVersion = new BillingPlanVersion
@@ -234,17 +335,23 @@ public sealed class Oet2026CatalogSeeder(
             plan.LatestVersionId = activeVersion.Id;
         }
 
-        CopyPlanIntoVersion(plan, activeVersion);
+        CopyPlanIntoVersion(plan, activeVersion, skipCopy: !versionIsNew && (managedName || managedDescription));
 
         if (isNew) result.PlansCreated++;
         else result.PlansUpdated++;
     }
 
-    private static void CopyPlanIntoVersion(BillingPlan src, BillingPlanVersion dst)
+    private static void CopyPlanIntoVersion(BillingPlan src, BillingPlanVersion dst, bool skipCopy = false)
     {
         dst.Code = src.Code;
-        dst.Name = src.Name;
-        dst.Description = src.Description;
+        // skipCopy: the plan's name/description were mirrored from the package overlay without a
+        // catalog version, and an existing snapshot is immutable.
+        if (!skipCopy)
+        {
+            dst.Name = src.Name;
+            dst.Description = src.Description;
+        }
+
         dst.Price = src.Price;
         dst.Currency = src.Currency;
         dst.Interval = src.Interval;
@@ -283,7 +390,7 @@ public sealed class Oet2026CatalogSeeder(
     }
 
     private static async Task UpsertAddOnAsync(
-        LearnerDbContext db, AddOnDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
+        LearnerDbContext db, AddOnDto dto, DateTimeOffset now, SeederResult result, ManagedCopyCodes managed, CancellationToken ct)
     {
         var existing = await db.BillingAddOns.FirstOrDefaultAsync(a => a.Code == dto.Code, ct);
         if (existing is null && LegacyAddOnCodeFor(dto.Code) is { } legacyCode)
@@ -311,8 +418,12 @@ public sealed class Oet2026CatalogSeeder(
             addon = existing!;
         }
 
-        addon.Name = dto.Name;
-        addon.Description = dto.Description ?? string.Empty;
+        // Only the canonical code is checked: overlay keys for the legacy bare Speaking codes
+        // belong to the plans, not to the add-on rows that happen to share the code.
+        var managedName = !isNew && managed.HasName(new[] { dto.Code });
+        var managedDescription = !isNew && managed.HasDescription(new[] { dto.Code });
+        if (!managedName) addon.Name = dto.Name;
+        if (!managedDescription) addon.Description = dto.Description ?? string.Empty;
         addon.Price = dto.Price;
         addon.Currency = "GBP";
         addon.Interval = "one_time";
@@ -344,6 +455,7 @@ public sealed class Oet2026CatalogSeeder(
         var activeVersion = await db.BillingAddOnVersions
             .FirstOrDefaultAsync(v => v.AddOnId == addon.Id && v.Status == BillingAddOnStatus.Active, ct);
 
+        var versionIsNew = activeVersion is null;
         if (activeVersion is null)
         {
             activeVersion = new BillingAddOnVersion
@@ -360,7 +472,7 @@ public sealed class Oet2026CatalogSeeder(
             addon.LatestVersionId = activeVersion.Id;
         }
 
-        CopyAddOnIntoVersion(addon, activeVersion);
+        CopyAddOnIntoVersion(addon, activeVersion, skipCopy: !versionIsNew && (managedName || managedDescription));
 
         if (isNew) result.AddOnsCreated++;
         else result.AddOnsUpdated++;
@@ -423,11 +535,15 @@ public sealed class Oet2026CatalogSeeder(
         return JsonSerializer.Serialize(grants);
     }
 
-    private static void CopyAddOnIntoVersion(BillingAddOn src, BillingAddOnVersion dst)
+    private static void CopyAddOnIntoVersion(BillingAddOn src, BillingAddOnVersion dst, bool skipCopy = false)
     {
         dst.Code = src.Code;
-        dst.Name = src.Name;
-        dst.Description = src.Description;
+        if (!skipCopy)
+        {
+            dst.Name = src.Name;
+            dst.Description = src.Description;
+        }
+
         dst.Price = src.Price;
         dst.Currency = src.Currency;
         dst.Interval = src.Interval;
@@ -454,7 +570,7 @@ public sealed class Oet2026CatalogSeeder(
     }
 
     private static async Task UpsertPlanPackageAsync(
-        LearnerDbContext db, PlanDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
+        LearnerDbContext db, PlanDto dto, DateTimeOffset now, SeederResult result, ManagedCopyCodes managed, CancellationToken ct)
     {
         var legacyBillingPlanCode = LegacyPlanCodeFor(dto.Code);
         var billingPlan = db.BillingPlans.Local.FirstOrDefault(
@@ -500,8 +616,10 @@ public sealed class Oet2026CatalogSeeder(
             pkg = existing!;
         }
 
-        pkg.Title = dto.Name;
-        pkg.Description = dto.Description;
+        // Package copy edited in Subscriptions & Packages is mirrored onto this row; keep it on reseed.
+        var planCodes = PlanCodeCandidates(dto.Code, billingPlan.Code).ToList();
+        if (isNew || !managed.HasName(planCodes)) pkg.Title = dto.Name;
+        if (isNew || !managed.HasDescription(planCodes)) pkg.Description = dto.Description;
         pkg.PackageType = MapProductCategoryToPackageType(dto.ProductCategory);
         pkg.ProfessionId = dto.Profession;
         pkg.InstructionLanguage = "en";
@@ -520,7 +638,7 @@ public sealed class Oet2026CatalogSeeder(
     }
 
     private static async Task UpsertAddOnPackageAsync(
-        LearnerDbContext db, AddOnDto dto, DateTimeOffset now, SeederResult result, CancellationToken ct)
+        LearnerDbContext db, AddOnDto dto, DateTimeOffset now, SeederResult result, ManagedCopyCodes managed, CancellationToken ct)
     {
         var existing = await db.ContentPackages.FirstOrDefaultAsync(p => p.Code == dto.Code, ct);
         ContentPackage pkg;
@@ -541,8 +659,8 @@ public sealed class Oet2026CatalogSeeder(
             pkg = existing!;
         }
 
-        pkg.Title = dto.Name;
-        pkg.Description = dto.Description;
+        if (isNew || !managed.HasName(new[] { dto.Code })) pkg.Title = dto.Name;
+        if (isNew || !managed.HasDescription(new[] { dto.Code })) pkg.Description = dto.Description;
         pkg.PackageType = "standalone";
         pkg.ProfessionId = "all";
         pkg.InstructionLanguage = "en";
@@ -590,7 +708,7 @@ public sealed class Oet2026CatalogSeeder(
         result.PackagesUpdated++;
     }
 
-    private static string MapProductCategoryToPackageType(string? productCategory) => productCategory switch
+    internal static string MapProductCategoryToPackageType(string? productCategory) => productCategory switch
     {
         "full_course" or "full_course_bundle" => "full_course",
         "crash_course" or "crash_course_bundle" => "crash_course",

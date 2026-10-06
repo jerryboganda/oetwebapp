@@ -5,12 +5,14 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PublicCatalogPlanRow } from '@/lib/types/admin';
 import {
+  type CatalogPresentation,
   type CatalogStorefrontConfig,
   professionLabel,
   categoryLabel,
   formatAccessDuration,
   formatPrice,
 } from '@/lib/catalog-presentation';
+import { buildCustomWebsitePackages, resolveWebsitePackageWithOverlay } from '@/lib/catalog-website-packages';
 
 function FlagDot({ enabled }: { enabled: boolean }) {
   return (
@@ -24,11 +26,18 @@ function FlagDot({ enabled }: { enabled: boolean }) {
 export interface CatalogCompareMatrixProps {
   plans: PublicCatalogPlanRow[];
   config: CatalogStorefrontConfig;
+  /** Admin package copy, so a renamed package carries the same name as its card. */
+  presentation?: CatalogPresentation | null;
 }
 
-export function CatalogCompareMatrix({ plans, config }: CatalogCompareMatrixProps) {
+export function CatalogCompareMatrix({ plans, config, presentation }: CatalogCompareMatrixProps) {
   const [open, setOpen] = useState(false);
   if (plans.length === 0) return null;
+
+  // Plans created in Pricing have no static definition; their admin-edited name comes from the overlay.
+  const customNames = open
+    ? new Map(buildCustomWebsitePackages(plans, presentation).map((pkg) => [pkg.code, pkg.name] as const))
+    : null;
 
   return (
     <section className="rounded-2xl border border-border bg-surface shadow-sm">
@@ -62,7 +71,9 @@ export function CatalogCompareMatrix({ plans, config }: CatalogCompareMatrixProp
               {plans.map((plan) => (
                 <tr key={plan.code} className="hover:bg-background-light/60">
                   <td className="px-4 py-3">
-                    <div className="font-semibold text-navy">{plan.name}</div>
+                    <div className="font-semibold text-navy">
+                      {resolveWebsitePackageWithOverlay(plan.code, presentation)?.name ?? customNames?.get(plan.code) ?? plan.name}
+                    </div>
                     <div className="eyebrow text-muted">{professionLabel(config, plan.profession)}</div>
                   </td>
                   <td className="px-4 py-3 text-muted">{categoryLabel(config, plan.productCategory)}</td>

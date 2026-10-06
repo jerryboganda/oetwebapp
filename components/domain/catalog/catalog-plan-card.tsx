@@ -16,7 +16,7 @@ import {
   formatAccessDuration,
   formatPrice,
 } from '@/lib/catalog-presentation';
-import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
+import { resolveWebsitePackageByCode, type WebsitePackage } from '@/lib/catalog-website-packages';
 
 export const CATALOG_ACCENT_TILE: Record<string, string> = {
   primary: 'bg-primary/10 text-primary',
@@ -35,28 +35,45 @@ export interface CatalogPlanCardProps {
   presentation: CatalogCardPresentation;
   config: CatalogStorefrontConfig;
   owned?: boolean;
+  /** Package copy with the admin overlay applied; falls back to the static package. */
+  websitePackage?: WebsitePackage;
   onSelect: (plan: PublicCatalogPlanRow) => void;
 }
 
-export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }: CatalogPlanCardProps) {
-  const websitePackage = resolveWebsitePackageByCode(plan.code);
+export function CatalogPlanCard({
+  plan,
+  presentation,
+  config,
+  owned,
+  websitePackage: mergedWebsitePackage,
+  onSelect,
+}: CatalogPlanCardProps) {
+  const websitePackage = mergedWebsitePackage ?? resolveWebsitePackageByCode(plan.code);
   const Icon = resolveCatalogIcon(presentation.iconKey) ?? defaultIconForCategory(plan.productCategory);
   const accent = normalizeAccent(presentation.accent, config.accent);
   const tile = CATALOG_ACCENT_TILE[accent] ?? CATALOG_ACCENT_TILE.primary;
-  const bullets = (websitePackage?.features ?? planFeatureBullets(plan, presentation)).slice(0, 3);
+  // A custom plan (packageNo <= 0) with no overlay copy yet has empty lists/description: treat those
+  // as "no overlay" so the derived bullets, chips and tagline still show.
+  const isCustom = websitePackage != null && websitePackage.packageNo <= 0;
+  const packageFeatures = websitePackage && !(isCustom && websitePackage.features.length === 0) ? websitePackage.features : undefined;
+  const metaChips = websitePackage && !(isCustom && websitePackage.metaChips.length === 0) ? websitePackage.metaChips : undefined;
+  const packageDescription = websitePackage && !(isCustom && !websitePackage.description) ? websitePackage.description : undefined;
+  const bullets = (packageFeatures ?? planFeatureBullets(plan, presentation)).slice(0, 3);
   const flags = addOnEnabledFlags(plan);
-  const tagline = websitePackage?.description ?? presentation.tagline ?? plan.description ?? '';
+  const tagline = packageDescription ?? presentation.tagline ?? plan.description ?? '';
   const hasDiscount = plan.originalPrice != null && plan.originalPrice > plan.price;
+  const featured = presentation.featured === true;
+  const featuredLabel = presentation.badgeLabel || 'Most popular';
 
   return (
     <Card
       hoverable
       padding="none"
-      className={cn('flex h-full flex-col overflow-hidden', presentation.featured && 'ring-2 ring-primary/40 shadow-clinical')}
+      className={cn('flex h-full flex-col overflow-hidden', featured && 'ring-2 ring-primary/40 shadow-clinical')}
     >
-      {presentation.featured ? (
+      {featured ? (
         <div className="flex items-center justify-center gap-1.5 bg-primary px-3 py-1.5 eyebrow text-white">
-          <Sparkles className="h-3.5 w-3.5" /> {presentation.badgeLabel || 'Most popular'}
+          <Sparkles className="h-3.5 w-3.5" /> {featuredLabel}
         </div>
       ) : null}
       <div className="flex h-full flex-col gap-4 p-5">
@@ -74,8 +91,8 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
         <div>
           <h3 className="text-lg font-bold leading-snug text-navy">{websitePackage?.name ?? plan.name}</h3>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 eyebrow text-muted">
-            {websitePackage ? (
-              websitePackage.metaChips.map((chip) => <span key={chip}>{chip}</span>)
+            {metaChips ? (
+              metaChips.map((chip, chipIndex) => <span key={`${chipIndex}-${chip}`}>{chip}</span>)
             ) : (
               <>
                 <span>{professionLabel(config, plan.profession)}</span>
@@ -84,17 +101,17 @@ export function CatalogPlanCard({ plan, presentation, config, owned, onSelect }:
               </>
             )}
           </div>
-          {websitePackage ? (
+          {websitePackage && !(isCustom && !websitePackage.category) ? (
             <p className="mt-2 text-xs text-muted">
               <span className="font-semibold text-navy">Category:</span> {websitePackage.category}
             </p>
           ) : null}
-          {tagline ? <p className="mt-3 text-sm leading-relaxed text-muted line-clamp-3">{tagline}</p> : null}
+          {tagline ? <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted line-clamp-3">{tagline}</p> : null}
         </div>
         {bullets.length > 0 ? (
           <ul className="space-y-1.5 text-sm text-navy">
-            {bullets.map((bullet) => (
-              <li key={bullet} className="flex items-start gap-2">
+            {bullets.map((bullet, bulletIndex) => (
+              <li key={`${bulletIndex}-${bullet}`} className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
                 <span>{bullet}</span>
               </li>

@@ -360,3 +360,35 @@ strips request bodies, headers, and query params known to carry PII.
 
 * [`docs/runbooks/billing-incident.md`](./runbooks/billing-incident.md) — operational runbook.
 * [`docs/AI-USAGE-POLICY.md`](./AI-USAGE-POLICY.md) — billing → AI quota mapping.
+
+---
+
+## 11. Catalog presentation and package content (single source of truth)
+
+Owner spec 06 Oct 2026. One edit, one save, every surface follows. This supersedes the 14 Aug 2026 rule that the
+static package copy is never overlaid.
+
+**Ownership**
+
+| Data | Master | Edited in | Consumers |
+| ---- | ------ | --------- | --------- |
+| Name, package number label, category, format line, description, meta chips, badges, feature bullets, Best for, Featured, section headings | `RuntimeSettings.CatalogPresentationJson` → `websitePackages.byCode[<plan code>]` / `.sections` (the overlay). The static module `lib/catalog-website-packages.ts` is the factory DEFAULT used when a field has no overlay. | Admin → Billing → **Subscriptions & Packages** | Learner `/subscriptions`, `/catalog`, `/marketplace/packages`, `/ai-packages`; mirrored (see below) into `BillingPlan` / `BillingAddOn` / `ContentPackage` for checkout, billing pages, Billing Ops and Pricing |
+| Price, currency, interval, status, visibility | The existing `BillingPlan` (plan packages) or `BillingAddOn` (add-on packages) row | Same package screen → `commercialUpdates`; Pricing / Billing Ops edit the same row | Checkout, quotes, entitlements, storefronts |
+| Entitlements, quotas, access bundle, AI credits | `BillingPlan` / `BillingAddOn` columns | Pricing / Billing Ops (read-only summary shown in the package editor) | Entitlement resolver |
+
+The key is always the plan/add-on **code** (aliases: `speaking-1session` ↔ `speaking-1session-plan`, `speaking-2sessions` ↔ `speaking-2sessions-plan`), never the name.
+No second price is ever stored; codes and IDs are never changed by this workflow.
+
+**Write path** (`PUT /v1/admin/billing/catalog/website-packages`, policy `AdminBillingCatalogWrite`)
+
+1. Optimistic concurrency: the request carries `expectedRevision` (hash of the `websitePackages` subtree returned by `GET /v1/admin/billing/catalog/presentation`). A stale revision is `409 catalog_presentation_conflict`; nothing is written.
+2. Sanitised against typed limits (name 128, description 1024, best-for 500, chips 8×80, badges 8×60, bullets 30×300 …); over-limit input is `400 catalog_presentation_invalid`, never truncated. Unknown package codes are dropped and reported in `droppedCodes`.
+3. One database transaction (row lock on the settings row under Npgsql): replace only the `websitePackages` subtree → mirror `Name`/`Description` (and bullets → `ContentPackage.ComparisonFeaturesJson`) onto the live `BillingPlan`/`BillingAddOn`/`ContentPackage` rows **without** minting a catalog version → apply dirty `commercialUpdates` (mints one immutable version per really-changed row, exactly like the Pricing update) → one `CatalogPresentation` audit event plus one audit event per written row.
+4. `BillingPlanMatchesVersion` / `BillingAddOnMatchesVersion` no longer compare Name/Description (presentation copy is not a commercial term), so mirroring never unbinds an open quote.
+5. `PUT .../catalog/storefront` is the Storefront editor's equivalent with its own revision (storefront + per-plan cards); the two editors can no longer wipe each other. The legacy whole-document `PUT .../catalog/presentation` stays for stale browser tabs but only replaces sections that are non-empty objects.
+
+**Lifecycle hooks**: Create Plan auto-creates the `ContentPackage` and an overlay entry (default section by product category) so the new plan is linked to a package record immediately; Update Plan/Add-on forces overlay copy over a stale modal (`OverriddenByPackage` audit) and Billing Ops/Pricing show Name/Description (and What's included) read-only for managed rows; Delete Plan removes its overlay entry; the dev/test-only OET 2026 seeder never overwrites overlay-managed copy.
+
+**Caching / mobile**: `GET /v1/catalog/pricing` and `GET /v1/billing/ai-packages` send `Cache-Control: private, no-store`; the service worker bypasses both; the public pricing response only carries overlay entries for visible plans/add-ons; learner pages refetch silently on `visibilitychange`/`pageshow`. The Capacitor apps load the live web app, so a web deploy reaches Android and iOS without a store release.
+
+**Permissions**: reading the presentation requires `billing:read`; all three PUTs require `billing:catalog_write` or `billing:write` (plus the per-user write limiter).

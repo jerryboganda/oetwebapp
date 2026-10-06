@@ -417,6 +417,8 @@ export interface AdminBillingPlan {
   recallUpdatesEnabled?: boolean;
   // "What's included" bullet list — sourced from the linked ContentPackage.
   comparisonFeatures?: string[];
+  // True when Name/Description/"What's included" are owned by Subscriptions & Packages (server-mirrored, read-only here).
+  packageManaged?: boolean;
 }
 
 export interface AdminBillingInvoice {
@@ -675,6 +677,8 @@ export interface AdminBillingAddOn {
   eligibilityFlag?: string;
   lettersGranted?: number;
   sessionsGranted?: number;
+  // True when Name/Description are owned by Subscriptions & Packages (server-forced, read-only here).
+  packageManaged?: boolean;
 }
 
 export interface AdminBillingCoupon {

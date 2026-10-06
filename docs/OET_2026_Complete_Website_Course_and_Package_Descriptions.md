@@ -21,6 +21,8 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 
 > **Consolidation note:** The first 12 pages of the two source PDFs are text-identical and are represented once. The second PDF's seven-page AI, practice and mock-exam addendum is included in full after the original catalogue. No unique source content has been omitted.
 
+> **Live copy note (06 Oct 2026):** this document is the factory-default copy. The live learner-facing copy is the admin overlay edited in Admin → Billing → Subscriptions & Packages; any field without an overlay falls back to the text below. See `docs/BILLING.md` section 11.
+
 <!-- Repeated running headers and footers were consolidated into the document header above. -->
 
 # Contents

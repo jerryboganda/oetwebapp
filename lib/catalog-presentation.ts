@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { PROFESSION_CATALOG } from '@/lib/auth/enrollment';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
+import type { WebsiteSectionKey } from './catalog-website-packages';
 import type { PublicCatalogPlanRow, PublicCatalogAddOnRow, PublicCatalogResponse } from '@/lib/types/admin';
 
 /*
@@ -98,32 +99,118 @@ export interface CatalogCardPresentation {
   displayOrder?: number | null;
 }
 
-/** Overlay for a website package card shown on /subscriptions (learner dashboard). */
+/**
+ * Admin-edited copy for one package (Admin > Billing > Subscriptions & Packages),
+ * shown on every learner surface that renders package text. Every key is
+ * optional: an absent or blank value means "use the default"; an explicit `[]`
+ * for a list means "show none". Price, currency and status are never stored
+ * here: they always come from the live billing row.
+ */
 export interface WebsitePackageOverlay {
   name?: string;
-  metaChips?: string[];
+  /** Display label only ("Package N"); never used for ordering or filtering. */
+  packageNo?: number;
+  category?: string;
+  /** Only honoured for packages without a static definition (custom packages). */
+  section?: WebsiteSectionKey;
   formatLine?: string;
   description?: string;
+  metaChips?: string[];
   badges?: string[];
   features?: string[];
   bestFor?: string;
   featured?: boolean;
-  packageNo?: number;
+}
+
+/** Heading overrides for one website package section. */
+export interface WebsiteSectionOverlay {
+  title?: string;
+  description?: string;
 }
 
 /** Presentation overrides for the static website packages list. */
 export interface WebsitePackagesPresentation {
   /** Per-package overrides keyed by billing code. */
   byCode?: Record<string, WebsitePackageOverlay>;
-  /** Per-section title/description overrides. */
-  sections?: Record<string, { title?: string; description?: string }>;
+  /** Per-section title/description overrides keyed by section key. */
+  sections?: Record<string, WebsiteSectionOverlay>;
 }
 
 export interface CatalogPresentation {
   storefront: Partial<CatalogStorefrontConfig>;
   byCode: Record<string, CatalogCardPresentation>;
-  /** Optional overrides for the learner dashboard /subscriptions packages. */
+  /** Admin overrides for the website packages shown on every learner surface. */
   websitePackages?: WebsitePackagesPresentation;
+}
+
+/**
+ * Optimistic-concurrency tokens, one per independently edited area
+ * (GET/PUT /v1/admin/billing/catalog/*). The scopes are disjoint on purpose.
+ */
+export interface CatalogPresentationRevisions {
+  /** Covers `storefront` + `byCode` (Catalog storefront editor). */
+  storefront: string;
+  /** Covers `websitePackages` (Subscriptions & Packages editor). */
+  websitePackages: string;
+}
+
+/** One dirty billing row sent with a Subscriptions & Packages save (same request, same transaction). */
+export interface PackageCommercialUpdate {
+  kind: 'plan' | 'addon';
+  code: string;
+  price?: number;
+  currency?: string;
+  interval?: string;
+  status?: string;
+  isVisible?: boolean;
+  isDraft?: boolean;
+}
+
+/** Billing plan row as listed by the package editor (ALL non-deleted plans, every status). */
+export interface AdminCatalogPlanSummary {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  interval: string;
+  status: string;
+  isVisible: boolean;
+  isDraft: boolean;
+  productCategory: string;
+  profession: string;
+  displayOrder: number;
+  activeSubscribers: number;
+  // Read-only entitlement and quota summary of the linked billing record. Optional on read:
+  // an older backend omits these, so every consumer must render defensively.
+  durationMonths?: number;
+  accessDurationDays?: number;
+  includedCredits?: number;
+  bundledWritingAssessments?: number;
+  bundledSpeakingSessions?: number;
+  bundledAiCredits?: number;
+  bundledTutorBook?: boolean;
+  bundledBasicEnglish?: boolean;
+  dashboardModules?: string[];
+  includedSubtests?: string[];
+}
+
+/** Billing add-on row as listed by the package editor (all statuses). */
+export interface AdminCatalogAddOnSummary {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  interval: string;
+  status: string;
+  addonKind: string;
+  // Read-only summary of the linked add-on record; optional on read (older backends omit it).
+  durationDays?: number;
+  grantCredits?: number;
+  appliesToAllPlans?: boolean;
 }
 
 /** GET /v1/catalog/pricing may include the presentation overlay. */

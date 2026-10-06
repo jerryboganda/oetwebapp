@@ -49,6 +49,8 @@ export interface BillingPlanFormState {
   recallUpdatesEnabled: boolean;
   // "What's included" — one bullet per line; persisted on the linked ContentPackage.
   comparisonFeaturesText: string;
+  // Name/Description/"What's included" are owned by Subscriptions & Packages (read-only while editing).
+  packageManaged: boolean;
 }
 
 export interface BillingAddOnFormState {
@@ -76,6 +78,8 @@ export interface BillingAddOnFormState {
   eligibilityFlag: string;
   lettersGranted: string;
   sessionsGranted: string;
+  // Name/Description are owned by Subscriptions & Packages (read-only while editing).
+  packageManaged: boolean;
 }
 
 export interface BillingCouponFormState {

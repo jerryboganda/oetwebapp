@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Plus, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -9,6 +10,7 @@ import { Input, Select, Textarea, Checkbox } from '@/components/ui/form-controls
 import { InlineAlert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { BillingConfirmDialog } from './confirm-dialog';
+import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 import {
   createAdminBillingAddOn,
   deleteAdminBillingAddOn,
@@ -32,7 +34,12 @@ interface AdminAddOnRow {
   grantEntitlements?: Record<string, unknown> | null;
   aiPackageGroup?: string | null;
   aiFeatures?: string[] | null;
+  // Server flag: Name/Description are owned by Subscriptions & Packages.
+  packageManaged?: boolean;
 }
+
+const MANAGED_COPY_HINT = 'Managed in Subscriptions & Packages.';
+const READ_ONLY_FIELD_CLASS = 'cursor-not-allowed text-muted';
 
 const GROUP_OPTIONS = [
   { value: 'full', label: 'Full package (Shared AI credits plus Listening/Reading)' },
@@ -77,6 +84,7 @@ interface FormState {
   feedbackReports: boolean;
   personalisedStudyRecs: boolean;
   features: string[];
+  packageManaged: boolean;
 }
 
 function emptyForm(): FormState {
@@ -107,6 +115,7 @@ function emptyForm(): FormState {
     feedbackReports: true,
     personalisedStudyRecs: false,
     features: [],
+    packageManaged: false,
   };
 }
 
@@ -144,6 +153,8 @@ function toForm(row: AdminAddOnRow): FormState {
     feedbackReports: ent.feedback_reports !== false,
     personalisedStudyRecs: ent.personalised_study_recs === true,
     features: Array.isArray(row.aiFeatures) ? row.aiFeatures.filter((f) => typeof f === 'string') : [],
+    packageManaged: row.packageManaged === true
+      || (!!row.code && resolveWebsitePackageByCode(row.code) !== undefined),
   };
 }
 
@@ -220,6 +231,9 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
     () => [...rows].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.price - b.price),
     [rows],
   );
+
+  // Edit mode only: a new package's code is not known yet, so its fields stay editable.
+  const copyManaged = !!form.id && form.packageManaged;
 
   const openCreate = useCallback(() => {
     setForm(emptyForm());
@@ -432,11 +446,39 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Name" value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="Quick Check" />
+            <Input
+              label="Name"
+              value={form.name}
+              onChange={(e) => setField('name', e.target.value)}
+              placeholder="Quick Check"
+              readOnly={copyManaged}
+              className={copyManaged ? READ_ONLY_FIELD_CLASS : undefined}
+              hint={copyManaged ? MANAGED_COPY_HINT : undefined}
+            />
             <Input label="Code" value={form.code} onChange={(e) => setField('code', e.target.value)} placeholder="pkg_quick_check" hint={form.id ? 'Code is immutable after creation.' : 'Leave blank to auto-generate from the name.'} disabled={!!form.id} />
           </div>
 
-          <Textarea label="Description" value={form.description} onChange={(e) => setField('description', e.target.value)} placeholder="5 Shared AI credits plus Listening and Reading practice, valid for 30 days." />
+          <Textarea
+            label="Description"
+            value={form.description}
+            onChange={(e) => setField('description', e.target.value)}
+            placeholder="5 Shared AI credits plus Listening and Reading practice, valid for 30 days."
+            readOnly={copyManaged}
+            className={copyManaged ? READ_ONLY_FIELD_CLASS : undefined}
+            hint={copyManaged ? MANAGED_COPY_HINT : undefined}
+          />
+          {copyManaged ? (
+            <p className="text-xs leading-5 text-muted" data-testid="ai-package-managed-note">
+              The learner-facing name and description are derived from the package record.{' '}
+              <Link
+                href={`/admin/billing/subscriptions-packages?code=${encodeURIComponent(form.code)}`}
+                className="font-medium text-primary hover:underline"
+              >
+                Edit them in Subscriptions &amp; Packages
+              </Link>
+              . Price, currency, validity, status and entitlements stay editable here.
+            </p>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Input label="Price" inputMode="decimal" value={form.price} onChange={(e) => setField('price', e.target.value)} placeholder="19" />

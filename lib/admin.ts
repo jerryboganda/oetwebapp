@@ -732,6 +732,7 @@ export async function getAdminBillingPlanData(params?: Parameters<typeof fetchAd
     extensionAllowed: item.extensionAllowed === undefined ? undefined : toBooleanValue(item.extensionAllowed),
     recallUpdatesEnabled: toBooleanValue(item.recallUpdatesEnabled),
     comparisonFeatures: parseJsonArray(item.comparisonFeatures),
+    packageManaged: toBooleanValue(item.packageManaged),
   }));
 }
 
@@ -770,6 +771,7 @@ export async function getAdminBillingAddOnData(params?: Parameters<typeof fetchA
     eligibilityFlag: toNullableString(item.eligibilityFlag) ?? undefined,
     lettersGranted: toNumberValue(item.lettersGranted),
     sessionsGranted: toNumberValue(item.sessionsGranted),
+    packageManaged: toBooleanValue(item.packageManaged),
   }));
 }
 

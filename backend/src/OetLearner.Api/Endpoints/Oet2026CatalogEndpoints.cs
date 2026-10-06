@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
@@ -48,6 +49,10 @@ public static class Oet2026CatalogEndpoints
         // Re-seed catalog button (Wave 3.4).
         admin.MapPost("/catalog/seed-oet-2026", AdminReseedOet2026Catalog).WithAdminWrite("AdminBillingCatalogWrite");
         admin.MapGet("/catalog/presentation", AdminGetCatalogPresentation).RequireAuthorization("AdminBillingRead");
+        // Section-scoped saves with a per-section revision check (replace the whole-document PUT below).
+        admin.MapPut("/catalog/website-packages", AdminSaveWebsitePackages).WithAdminWrite("AdminBillingCatalogWrite");
+        admin.MapPut("/catalog/storefront", AdminSaveStorefront).WithAdminWrite("AdminBillingCatalogWrite");
+        // OBSOLETE: whole-document PUT kept for stale browser tabs for one release; see AdminUpdateCatalogPresentation.
         admin.MapPut("/catalog/presentation", AdminUpdateCatalogPresentation).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
@@ -140,7 +145,7 @@ public static class Oet2026CatalogEndpoints
         IReadOnlyList<PublicPlanRow> Plans,
         IReadOnlyList<PublicAddOnRow> AddOns,
         string Currency,
-        object? Presentation = null);
+        JsonObject? Presentation = null);
 
     private sealed record PublicPlanRow(
         string Code,
@@ -190,6 +195,10 @@ public static class Oet2026CatalogEndpoints
         IAddonEligibilityService addonEligibility,
         CancellationToken ct)
     {
+        // Per-user (the Tutor Book add-on is eligibility gated) and admin-editable: no
+        // browser, WebView or CDN may keep a copy.
+        http.Response.Headers.CacheControl = "private, no-store";
+
         var plans = await db.BillingPlans.AsNoTracking()
             .Where(p => p.Status == BillingPlanStatus.Active && p.IsVisible && !p.IsDraft)
             .OrderBy(p => p.DisplayOrder)
@@ -209,6 +218,7 @@ public static class Oet2026CatalogEndpoints
         // to an authenticated learner who currently owns an approved parent course.
         var tutorBookAddon = addOns.FirstOrDefault(a =>
             string.Equals(a.Code, "tutor-book-addon", StringComparison.OrdinalIgnoreCase));
+        string? withheldAddOnCode = null;
         if (tutorBookAddon is not null)
         {
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -217,6 +227,7 @@ public static class Oet2026CatalogEndpoints
             if (!eligible)
             {
                 addOns.Remove(tutorBookAddon);
+                withheldAddOnCode = tutorBookAddon.Code;
             }
         }
 
@@ -257,7 +268,7 @@ public static class Oet2026CatalogEndpoints
             a.IsStackable,
             a.DisplayOrder)).ToList();
 
-        var presentation = await LoadCatalogPresentation(db, ct);
+        var presentation = await LoadPublicCatalogPresentationAsync(db, plans.Select(p => p.Code), withheldAddOnCode, ct);
         return TypedResults.Ok(new PublicCatalogResponse(planRows, addOnRows, "GBP", presentation));
     }
 
@@ -552,35 +563,85 @@ public static class Oet2026CatalogEndpoints
 
     // ── Catalog storefront presentation (admin CMS) ───────────────────────
 
-    private static async Task<object?> LoadCatalogPresentation(LearnerDbContext db, CancellationToken ct)
-    {
-        var json = await db.RuntimeSettings.AsNoTracking()
+    private static Task<string?> LoadCatalogPresentationJsonAsync(LearnerDbContext db, CancellationToken ct)
+        => db.RuntimeSettings.AsNoTracking()
             .Where(r => r.Id == "default")
             .Select(r => r.CatalogPresentationJson)
             .FirstOrDefaultAsync(ct);
-        if (string.IsNullOrWhiteSpace(json)) return null;
-        try
+
+    /// <summary>
+    /// The stored presentation document for the anonymous pricing response. Entries for codes that resolve only
+    /// to rows the caller may not see (draft or hidden plans, inactive add-ons, a Tutor Book add-on withheld from
+    /// this caller) are pruned so unreleased copy never leaks. Visible = the public plans plus every active
+    /// add-on; everything else known is hidden. Null when nothing is left.
+    /// </summary>
+    private static async Task<JsonObject?> LoadPublicCatalogPresentationAsync(
+        LearnerDbContext db,
+        IEnumerable<string> publicPlanCodes,
+        string? withheldAddOnCode,
+        CancellationToken ct)
+    {
+        var root = CatalogPresentationDocument.Parse(await LoadCatalogPresentationJsonAsync(db, ct));
+        if (root.Count == 0) return null;
+
+        // Nothing keyed by code, nothing to prune: skip the two code queries.
+        if (CatalogPresentationDocument.WebsitePackagesByCode(root) is null && root[CatalogPresentationDocument.ByCodeKey] is not JsonObject)
         {
-            using var doc = JsonDocument.Parse(json);
-            return doc.RootElement.Clone();
+            return root;
         }
-        catch (JsonException)
+
+        var visible = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var code in publicPlanCodes) visible.Add(CatalogPackageCodes.Normalize(code));
+
+        var hidden = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var code in await db.BillingPlans.AsNoTracking().Select(p => p.Code).ToListAsync(ct))
         {
-            return null;
+            var normalized = CatalogPackageCodes.Normalize(code);
+            if (!visible.Contains(normalized)) hidden.Add(normalized);
         }
+
+        var withheld = CatalogPackageCodes.Normalize(withheldAddOnCode);
+        foreach (var addOn in await db.BillingAddOns.AsNoTracking().Select(a => new { a.Code, a.Status }).ToListAsync(ct))
+        {
+            var normalized = CatalogPackageCodes.Normalize(addOn.Code);
+
+            // Aliased codes are plan-only: a legacy add-on row sharing one is never the package.
+            if (CatalogPackageCodes.Candidates(normalized).Count > 1) continue;
+
+            if (addOn.Status == BillingAddOnStatus.Active && normalized != withheld) visible.Add(normalized);
+            else hidden.Add(normalized);
+        }
+
+        hidden.ExceptWith(visible);
+        CatalogPresentationDocument.PrunePublic(root, visible, hidden);
+        return root.Count == 0 ? null : root;
     }
 
     private sealed record CatalogPresentationResponse(
         IReadOnlyList<string> PlanCodes,
         IReadOnlyList<string> AddOnCodes,
-        object? Presentation);
+        JsonObject? Presentation,
+        CatalogPresentationRevisions Revisions,
+        IReadOnlyList<AdminCatalogPlanSummary> Plans,
+        IReadOnlyList<AdminCatalogAddOnSummary> AddOns);
 
     private sealed record UpdateCatalogPresentationRequest(JsonElement? Presentation);
 
+    private static string CatalogAdminId(HttpContext http)
+        => http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+           ?? throw new InvalidOperationException("Authenticated admin id is required.");
+
+    private static string CatalogAdminName(HttpContext http)
+        => http.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
+
     private static async Task<Ok<CatalogPresentationResponse>> AdminGetCatalogPresentation(
+        HttpContext http,
         LearnerDbContext db,
+        AdminService service,
         CancellationToken ct)
     {
+        http.Response.Headers.CacheControl = "private, no-store";
+
         var planCodes = await db.BillingPlans.AsNoTracking()
             .Where(p => p.Status == BillingPlanStatus.Active && p.IsVisible && !p.IsDraft)
             .OrderBy(p => p.DisplayOrder).ThenBy(p => p.Code)
@@ -597,33 +658,62 @@ public static class Oet2026CatalogEndpoints
             .Select(a => a.Code)
             .ToListAsync(ct);
 
-        var presentation = await LoadCatalogPresentation(db, ct);
-        return TypedResults.Ok(new CatalogPresentationResponse(planCodes, addOnCodes, presentation));
+        // Revisions are hashed from the re-serialised subtrees (never the raw column text) so the
+        // value matches what the save endpoints compute.
+        var root = CatalogPresentationDocument.Parse(await LoadCatalogPresentationJsonAsync(db, ct));
+        var plans = await service.ListCatalogPlanSummariesAsync(ct);
+        var addOns = await service.ListCatalogAddOnSummariesAsync(ct);
+        return TypedResults.Ok(new CatalogPresentationResponse(
+            planCodes,
+            addOnCodes,
+            root.Count == 0 ? null : root,
+            CatalogPresentationDocument.Revisions(root),
+            plans,
+            addOns));
     }
 
-    private static async Task<Ok> AdminUpdateCatalogPresentation(
-        UpdateCatalogPresentationRequest request,
-        LearnerDbContext db,
+    /// <summary>Saves the Subscriptions &amp; Packages section (and any dirty linked billing rows) in one transaction.</summary>
+    private static async Task<Ok<WebsitePackagesSaveResult>> AdminSaveWebsitePackages(
+        SaveWebsitePackagesRequest request,
+        HttpContext http,
+        AdminService service,
+        Oet2026CatalogSeeder seeder,
         CancellationToken ct)
     {
-        var row = await db.RuntimeSettings.FirstOrDefaultAsync(r => r.Id == "default", ct);
-        if (row is null)
-        {
-            row = new RuntimeSettingsRow { Id = "default" };
-            db.RuntimeSettings.Add(row);
-        }
+        http.Response.Headers.CacheControl = "private, no-store";
+        var seed = await seeder.LoadSeedCopyAsync(ct);
+        return TypedResults.Ok(await service.SaveWebsitePackagesAsync(
+            CatalogAdminId(http), CatalogAdminName(http), request, seed, ct));
+    }
 
-        if (request.Presentation is null || request.Presentation.Value.ValueKind == JsonValueKind.Null)
-        {
-            row.CatalogPresentationJson = null;
-        }
-        else
-        {
-            row.CatalogPresentationJson = request.Presentation.Value.GetRawText();
-        }
+    /// <summary>Saves the Catalog storefront section (storefront + per-card overlays); packages are untouched.</summary>
+    private static async Task<Ok<StorefrontSaveResult>> AdminSaveStorefront(
+        SaveStorefrontRequest request,
+        HttpContext http,
+        AdminService service,
+        CancellationToken ct)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        return TypedResults.Ok(await service.SaveStorefrontAsync(
+            CatalogAdminId(http), CatalogAdminName(http), request, ct));
+    }
 
-        row.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
+    /// <summary>
+    /// OBSOLETE: the old whole-document save. Kept for one release so a browser tab opened before the
+    /// section-scoped saves shipped cannot wipe the other editor's data: a section is replaced only when
+    /// the request carries a non-empty object for it, and only a null presentation clears everything.
+    /// Delete this route once no admin tab can still be running the old bundle.
+    /// </summary>
+    private static async Task<Ok> AdminUpdateCatalogPresentation(
+        UpdateCatalogPresentationRequest request,
+        HttpContext http,
+        AdminService service,
+        Oet2026CatalogSeeder seeder,
+        CancellationToken ct)
+    {
+        var seed = await seeder.LoadSeedCopyAsync(ct);
+        await service.SaveLegacyCatalogPresentationAsync(
+            CatalogAdminId(http), CatalogAdminName(http), request.Presentation, seed, ct);
         return TypedResults.Ok();
     }
 

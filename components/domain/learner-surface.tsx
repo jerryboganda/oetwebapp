@@ -171,7 +171,7 @@ export function LearnerSurfaceSectionHeader({
           {icon ? <span className="text-primary">{renderIcon(icon, 'h-4 w-4')}</span> : null}
           <h2 className="text-lg font-bold text-navy sm:text-xl">{title}</h2>
         </div>
-        {description ? <p className="mt-0.5 text-sm text-muted sm:mt-1">{description}</p> : null}
+        {description ? <p className="mt-0.5 whitespace-pre-line text-sm text-muted sm:mt-1">{description}</p> : null}
       </div>
       {action}
     </div>

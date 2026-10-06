@@ -13,6 +13,7 @@ import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 export default function AdminStorefrontPage() {
   const { user } = useAuth();
   const canReadBilling = hasPermission(user?.adminPermissions, AdminPermission.BillingRead, AdminPermission.BillingWrite);
+  const canWrite = hasPermission(user?.adminPermissions, AdminPermission.BillingWrite, AdminPermission.BillingCatalogWrite);
 
   if (!user) return null;
   if (!canReadBilling) return <NoBillingPermission />;
@@ -44,7 +45,7 @@ export default function AdminStorefrontPage() {
           </div>
         }
       />
-      <StorefrontEditor />
+      <StorefrontEditor canWrite={canWrite} />
     </AdminPageShell>
   );
 }

@@ -175,6 +175,8 @@ export default function BillingPage() {
   const [isSavingAddOn, setIsSavingAddOn] = useState(false);
   const [isSavingCoupon, setIsSavingCoupon] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  // Code of the plan just created here; drives the "linked to Subscriptions & Packages" notice.
+  const [linkedPlanCode, setLinkedPlanCode] = useState<string | null>(null);
   const [editingAddOnId, setEditingAddOnId] = useState<string | null>(null);
   const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
   const [catalogHistoryTarget, setCatalogHistoryTarget] = useState<CatalogHistoryTarget | null>(null);
@@ -1878,6 +1880,14 @@ export default function BillingPage() {
     setIsPlanModalOpen(true);
   }
 
+  // Edit mode only: Name/Description/"What's included" are derived from Subscriptions & Packages.
+  // A new plan's code is not known yet, so its fields stay editable.
+  const planCopyManaged = editingPlanId !== null && planForm.packageManaged;
+  const managedPackageCode = (editingPlanId ? plans.find((plan) => plan.id === editingPlanId)?.code : undefined) ?? planForm.code;
+  // Same rule for add-ons (Packages 30-47 and the AI packages are add-on rows).
+  const addOnCopyManaged = editingAddOnId !== null && addOnForm.packageManaged;
+  const managedAddOnCode = (editingAddOnId ? addOns.find((addOn) => addOn.id === editingAddOnId)?.code : undefined) ?? addOnForm.code;
+
   function openAddOnEditor(addOn?: AdminBillingAddOn) {
     setEditingAddOnId(addOn?.id ?? null);
     setAddOnForm(addOn ? toAddOnForm(addOn) : defaultAddOnForm);
@@ -2037,10 +2047,13 @@ export default function BillingPage() {
         comparisonFeaturesJson: jsonLineList(planForm.comparisonFeaturesText),
       };
 
+      let createdCode: string | null = null;
       if (editingPlanId) {
         await updateAdminBillingPlan(editingPlanId, payload);
       } else {
-        await createAdminBillingPlan(payload);
+        const created = await createAdminBillingPlan(payload);
+        // The server auto-creates the package record; prefer the code it stored over the typed one.
+        createdCode = (typeof created?.code === 'string' && created.code) || payload.code || null;
       }
 
       await reloadBilling();
@@ -2049,7 +2062,13 @@ export default function BillingPage() {
       setEditingPlanId(null);
       setPendingDestructive(null);
       setConflict(null);
-      setToast({ variant: 'success', message: editingPlanId ? 'Billing plan updated successfully.' : 'Billing plan created successfully.' });
+      if (!editingPlanId) setLinkedPlanCode(createdCode);
+      setToast({
+        variant: 'success',
+        message: editingPlanId
+          ? 'Billing plan updated successfully.'
+          : 'Billing plan created and linked to Subscriptions & Packages.',
+      });
     } catch (error) {
       console.error(error);
       if (isConflictError(error)) {
@@ -2357,6 +2376,27 @@ export default function BillingPage() {
           description="Live plan data from the admin billing plan endpoint."
           actions={<Button variant="outline" size="sm" onClick={() => openPlanEditor()} disabled={!canWriteCatalog}>Create Plan</Button>}
         >
+          {linkedPlanCode ? (
+            <InlineAlert
+              variant="success"
+              title="Plan linked to Subscriptions & Packages"
+              live="polite"
+              dismissible
+              onDismiss={() => setLinkedPlanCode(null)}
+              className="mb-4"
+              action={
+                <Link
+                  href={`/admin/billing/subscriptions-packages?code=${encodeURIComponent(linkedPlanCode)}`}
+                  className="text-sm font-semibold text-primary hover:underline"
+                  data-testid="billing-plan-linked-package-link"
+                >
+                  Open {linkedPlanCode} in Subscriptions &amp; Packages
+                </Link>
+              }
+            >
+              A package record was created for this plan. Set its learner-facing name, description and features there.
+            </InlineAlert>
+          ) : null}
           <FilterBar groups={planFilterGroups} selected={planFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setPlanFilters, groupId, optionId)} onClear={() => setPlanFilters({ status: [] })} />
           <DataTable columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} mobileCardRender={planMobileCardRender} />
         </AdminRoutePanel>
@@ -2657,9 +2697,35 @@ export default function BillingPage() {
         <div className="space-y-4 py-2">
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Code" value={planForm.code} onChange={(event) => setPlanForm((current) => ({ ...current, code: event.target.value }))} />
-            <Input label="Name" value={planForm.name} onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))} />
+            <Input
+              label="Name"
+              value={planForm.name}
+              onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))}
+              readOnly={planCopyManaged}
+              className={planCopyManaged ? 'cursor-not-allowed text-muted' : undefined}
+              hint={planCopyManaged ? 'Managed in Subscriptions & Packages.' : undefined}
+            />
           </div>
-          <Textarea label="Description" value={planForm.description} onChange={(event) => setPlanForm((current) => ({ ...current, description: event.target.value }))} />
+          <Textarea
+            label="Description"
+            value={planForm.description}
+            onChange={(event) => setPlanForm((current) => ({ ...current, description: event.target.value }))}
+            readOnly={planCopyManaged}
+            className={planCopyManaged ? 'cursor-not-allowed text-muted' : undefined}
+            hint={planCopyManaged ? 'Managed in Subscriptions & Packages.' : undefined}
+          />
+          {planCopyManaged ? (
+            <p className="text-xs leading-5 text-muted" data-testid="billing-plan-package-managed-note">
+              The learner-facing name, description and &ldquo;What&rsquo;s included&rdquo; list are derived from the package record.{' '}
+              <Link
+                href={`/admin/billing/subscriptions-packages?code=${encodeURIComponent(managedPackageCode)}`}
+                className="font-medium text-primary hover:underline"
+              >
+                Edit them in Subscriptions &amp; Packages
+              </Link>
+              . Price, currency, interval and status stay editable here.
+            </p>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-3">
             <Input label="Price" type="number" min={0} step="0.01" value={planForm.price} onChange={(event) => setPlanForm((current) => ({ ...current, price: event.target.value }))} />
             <Input label="Currency" value={planForm.currency} onChange={(event) => setPlanForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
@@ -2756,7 +2822,11 @@ export default function BillingPage() {
                 value={planForm.comparisonFeaturesText}
                 onChange={(event) => setPlanForm((current) => ({ ...current, comparisonFeaturesText: event.target.value }))}
                 rows={6}
-                hint="One bullet per line. Shown as the public product card's feature list. Persisted on the linked ContentPackage."
+                readOnly={planCopyManaged}
+                className={planCopyManaged ? 'cursor-not-allowed text-muted' : undefined}
+                hint={planCopyManaged
+                  ? 'Managed in Subscriptions & Packages.'
+                  : "One bullet per line. Shown as the public product card's feature list. Persisted on the linked ContentPackage."}
               />
             </div>
             <div className="mt-4 rounded-md border border-amber-300/40 bg-admin-bg-surface/60 p-3 dark:border-amber-700/40 dark:bg-amber-950/20">
@@ -2827,9 +2897,35 @@ export default function BillingPage() {
         <div className="space-y-4 py-2">
           <div className="grid gap-4 md:grid-cols-2">
             <Input label="Code" value={addOnForm.code} onChange={(event) => setAddOnForm((current) => ({ ...current, code: event.target.value }))} />
-            <Input label="Name" value={addOnForm.name} onChange={(event) => setAddOnForm((current) => ({ ...current, name: event.target.value }))} />
+            <Input
+              label="Name"
+              value={addOnForm.name}
+              onChange={(event) => setAddOnForm((current) => ({ ...current, name: event.target.value }))}
+              readOnly={addOnCopyManaged}
+              className={addOnCopyManaged ? 'cursor-not-allowed text-muted' : undefined}
+              hint={addOnCopyManaged ? 'Managed in Subscriptions & Packages.' : undefined}
+            />
           </div>
-          <Textarea label="Description" value={addOnForm.description} onChange={(event) => setAddOnForm((current) => ({ ...current, description: event.target.value }))} />
+          <Textarea
+            label="Description"
+            value={addOnForm.description}
+            onChange={(event) => setAddOnForm((current) => ({ ...current, description: event.target.value }))}
+            readOnly={addOnCopyManaged}
+            className={addOnCopyManaged ? 'cursor-not-allowed text-muted' : undefined}
+            hint={addOnCopyManaged ? 'Managed in Subscriptions & Packages.' : undefined}
+          />
+          {addOnCopyManaged ? (
+            <p className="text-xs leading-5 text-muted" data-testid="billing-addon-package-managed-note">
+              The learner-facing name and description are derived from the package record.{' '}
+              <Link
+                href={`/admin/billing/subscriptions-packages?code=${encodeURIComponent(managedAddOnCode)}`}
+                className="font-medium text-primary hover:underline"
+              >
+                Edit them in Subscriptions &amp; Packages
+              </Link>
+              . Price, currency, interval and status stay editable here.
+            </p>
+          ) : null}
           <div className="grid gap-4 md:grid-cols-3">
             <Input label="Price" type="number" min={0} step="0.01" value={addOnForm.price} onChange={(event) => setAddOnForm((current) => ({ ...current, price: event.target.value }))} />
             <Input label="Currency" value={addOnForm.currency} onChange={(event) => setAddOnForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />

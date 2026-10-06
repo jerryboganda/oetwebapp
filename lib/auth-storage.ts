@@ -7,6 +7,7 @@ import {
 } from './mobile/native-storage';
 import { clearAuthTokens, getStoredAuthTokens, storeAuthTokens } from './mobile/secure-storage';
 import { clearServiceWorkerAuthCache } from './service-worker-cache';
+import { sharedWebCookieDomain } from './device-id';
 
 export type AuthPersistence = 'local' | 'session';
 
@@ -17,15 +18,57 @@ const DEVICE_CHALLENGE_KEY = 'oet.auth.challenge.device';
 
 export const AUTH_INDICATOR_COOKIE = 'oet_auth';
 
+// Presentation-only "signed in" hint for the static marketing site, which lives on a
+// different origin and cannot read the host-only oet_auth cookie. Scoped to the shared
+// parent domain, constant value 1 (never a token, id or PII). It is NOT an auth signal:
+// proxy.ts and every API ignore it, and the website only uses it to swap its header CTA.
+export const AUTH_HINT_COOKIE = 'oet_signed_in';
+
+function writeAuthHintCookie(signedIn: boolean): void {
+  if (typeof document === 'undefined') return;
+  try {
+    // Empty off the apex/www/app hosts (localhost, previews, Capacitor shells): a
+    // Domain cookie would be dropped there, so skip silently.
+    const domain = sharedWebCookieDomain();
+    if (!domain) return;
+    const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = signedIn
+      ? `${AUTH_HINT_COOKIE}=1; path=/; max-age=2592000; SameSite=Lax${secure}${domain}`
+      : `${AUTH_HINT_COOKIE}=; path=/; max-age=0; SameSite=Lax${secure}${domain}`;
+  } catch {
+    // Cosmetic hint only; it must never break sign-in or sign-out.
+  }
+}
+
+function hasAuthHintCookie(): boolean {
+  return typeof document !== 'undefined' && new RegExp(`(?:^|;\\s*)${AUTH_HINT_COOKIE}=1(?:;|$)`).test(document.cookie);
+}
+
 export function setAuthIndicatorCookie(): void {
   if (typeof document === 'undefined') return;
   const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : '';
   document.cookie = `${AUTH_INDICATOR_COOKIE}=1; path=/; max-age=2592000; SameSite=Lax${secure}`;
+  writeAuthHintCookie(true);
 }
 
 export function clearAuthIndicatorCookie(): void {
   if (typeof document === 'undefined') return;
   document.cookie = `${AUTH_INDICATOR_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  writeAuthHintCookie(false);
+}
+
+/**
+ * Idempotent: makes the shared-domain hint mirror whether this browser holds a stored
+ * session, writing only when it differs. Called from hydrateAuthStorage (the shared
+ * start of every session restore) so users who were already signed in get the hint
+ * without signing in again, and a stale hint left by a closed 'session' persistence
+ * login is dropped. Never alters oet_auth.
+ */
+export function syncAuthHintCookie(): void {
+  const signedIn = loadStoredSessionRecord() !== null;
+  if (signedIn !== hasAuthHintCookie()) {
+    writeAuthHintCookie(signedIn);
+  }
 }
 
 interface StoredSessionRecord {
@@ -232,6 +275,8 @@ export async function hydrateAuthStorage(): Promise<void> {
   if (isNativeMobilePlatform()) {
     await hydrateWebStorageKeys([LOCAL_SESSION_KEY, SESSION_SESSION_KEY, MFA_CHALLENGE_KEY, DEVICE_CHALLENGE_KEY]);
   }
+
+  syncAuthHintCookie();
 
   const record = loadStoredSessionRecord();
   if (!record || !isNativeMobilePlatform()) {

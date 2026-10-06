@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Package, Check, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -11,16 +11,20 @@ import { Button } from '@/components/ui/button';
 import { Card, cardClassName } from '@/components/ui/card';
 import { EmptyState, ErrorState } from '@/components/ui/empty-error';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { fetchContentPackages, fetchFreePreviewAssets } from '@/lib/api';
+import { fetchContentPackages, fetchFreePreviewAssets, fetchPublicCatalog } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
+import { useRevalidateOnResume } from '@/hooks/use-revalidate-on-resume';
 import type {
   ContentPackage,
   FreePreviewAsset,
   PaginatedResponse,
 } from '@/lib/types/content-hierarchy';
+import type { CatalogPresentation } from '@/lib/catalog-presentation';
 import {
   resolveWebsitePackageByCode,
+  resolveWebsitePackageWithOverlay,
+  websitePackageNumber,
   websitePackagePurchaseHref,
 } from '@/lib/catalog-website-packages';
 
@@ -53,6 +57,7 @@ export default function PackagesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [typeFilter, setTypeFilter] = useState('');
+  const [presentation, setPresentation] = useState<CatalogPresentation | null>(null);
 
   const changeFilter = (value: string) => {
     setLoading(true);
@@ -62,6 +67,34 @@ export default function PackagesPage() {
   useEffect(() => {
     analytics.track('packages_page_viewed');
   }, []);
+
+  // Admin package copy rides on the public catalogue. It never blocks the page: until it
+  // arrives (or if it cannot be loaded) the static package copy is shown, and a failed refresh
+  // keeps the copy already loaded. A newer request supersedes an older one.
+  const presentationRequestRef = useRef(0);
+  const loadPresentation = useCallback(async () => {
+    presentationRequestRef.current += 1;
+    const requestId = presentationRequestRef.current;
+    try {
+      const catalog = await fetchPublicCatalog();
+      if (requestId !== presentationRequestRef.current) return;
+      setPresentation(catalog.presentation ?? null);
+    } catch {
+      // Keep the static defaults or the copy already loaded.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPresentation();
+    return () => {
+      // Drop the reply of any request still in flight once this page is gone.
+      presentationRequestRef.current += 1;
+    };
+  }, [loadPresentation]);
+
+  useRevalidateOnResume(() => {
+    void loadPresentation();
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -148,7 +181,8 @@ export default function PackagesPage() {
             <MotionSection>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {displayPackages.map((pkg, index) => {
-                  const websitePackage = resolveWebsitePackageByCode(pkg.code);
+                  const websitePackage = resolveWebsitePackageWithOverlay(pkg.code, presentation);
+                  const packageNo = websitePackage ? websitePackageNumber(websitePackage) : null;
                   // The packages API returns comparisonFeaturesJson, not this array, so it can be absent.
                   const features = websitePackage?.features ?? pkg.comparisonFeatures ?? [];
                   return (
@@ -159,20 +193,22 @@ export default function PackagesPage() {
                       >
                         {websitePackage ? (
                           <>
-                            <p className="eyebrow text-muted">
-                              Package {websitePackage.packageNo}
-                            </p>
+                            {packageNo != null ? (
+                              <p className="eyebrow text-muted">
+                                Package {packageNo}
+                              </p>
+                            ) : null}
                             <div className="mt-2 flex flex-wrap gap-1.5">
-                              {websitePackage.badges.map((badge) => (
-                                <Badge key={badge}>
+                              {websitePackage.badges.map((badge, badgeIndex) => (
+                                <Badge key={`${badgeIndex}-${badge}`}>
                                   {badge}
                                 </Badge>
                               ))}
                             </div>
                             <div className="mt-3 flex flex-wrap gap-1.5">
-                              {websitePackage.metaChips.map((chip) => (
+                              {websitePackage.metaChips.map((chip, chipIndex) => (
                                 <span
-                                  key={chip}
+                                  key={`${chipIndex}-${chip}`}
                                   className="rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted"
                                 >
                                   {chip}
@@ -197,7 +233,7 @@ export default function PackagesPage() {
                           {websitePackage?.name ?? pkg.title}
                         </h3>
                         {websitePackage?.description ?? pkg.description ? (
-                          <p className="mt-2 text-sm leading-6 text-muted">
+                          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-muted">
                             {websitePackage?.description ?? pkg.description}
                           </p>
                         ) : null}
@@ -210,8 +246,8 @@ export default function PackagesPage() {
 
                         {features.length > 0 ? (
                           <ul className="mb-4 mt-4 flex-1 space-y-2">
-                            {features.map((feature) => (
-                              <li key={feature} className="flex items-start gap-2 text-sm">
+                            {features.map((feature, featureIndex) => (
+                              <li key={`${featureIndex}-${feature}`} className="flex items-start gap-2 text-sm">
                                 <Check className="mt-0.5 h-4 w-4 shrink-0 text-success-strong" aria-hidden="true" />
                                 <span>{feature}</span>
                               </li>
@@ -222,7 +258,7 @@ export default function PackagesPage() {
                         )}
 
                         {websitePackage ? (
-                          <p className="mb-4 rounded-xl bg-background-light px-3 py-2 text-sm">
+                          <p className="mb-4 whitespace-pre-line rounded-xl bg-background-light px-3 py-2 text-sm">
                             <span className="font-semibold">Best for:</span>{' '}
                             {websitePackage.bestFor}
                           </p>

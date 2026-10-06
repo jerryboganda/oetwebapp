@@ -72,6 +72,12 @@ const WRITING_DRAFT_API = /\/v1\/writing\/drafts\//i;
 // segment, so `/v1/.../hub` and `/hubs/...` are covered on any origin.
 const SIGNALR_HUB = /\/hubs?(\/|$)/i;
 
+// The public catalogue and the AI-package catalogue carry admin-edited package
+// copy and live prices. A saved edit must reach the next fetch, so these are
+// never cached or served from Cache Storage while offline. Unanchored for the
+// same /api/backend proxy reason as above.
+const CATALOG_API = /\/v1\/(catalog\/pricing|billing\/ai-packages)/i;
+
 // ---------- Install ----------
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -119,7 +125,8 @@ self.addEventListener('fetch', (event) => {
     VIDEO_PLAYBACK_API.test(url.pathname) ||
     EXAM_MEDIA_API.test(url.pathname) ||
     WRITING_DRAFT_API.test(url.pathname) ||
-    SIGNALR_HUB.test(url.pathname)
+    SIGNALR_HUB.test(url.pathname) ||
+    CATALOG_API.test(url.pathname)
   ) {
     return;
   }

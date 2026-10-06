@@ -313,9 +313,9 @@ public partial class LearnerService
       }
 
       private static bool BillingPlanMatchesVersion(BillingPlan plan, BillingPlanVersion version)
+          // Name/Description are presentation copy mirrored from Subscriptions & Packages
+          // without a catalog version, so they are not part of the commercial-terms gate.
           => string.Equals(plan.Code, version.Code, StringComparison.Ordinal)
-             && string.Equals(plan.Name, version.Name, StringComparison.Ordinal)
-             && string.Equals(plan.Description, version.Description, StringComparison.Ordinal)
              && plan.Price == version.Price
              && string.Equals(plan.Currency, version.Currency, StringComparison.Ordinal)
              && string.Equals(plan.Interval, version.Interval, StringComparison.Ordinal)
@@ -331,9 +331,8 @@ public partial class LearnerService
              && plan.ArchivedAt == version.ArchivedAt;
 
       private static bool BillingAddOnMatchesVersion(BillingAddOn addOn, BillingAddOnVersion version)
+          // Name/Description are mirrored presentation copy (see BillingPlanMatchesVersion).
           => string.Equals(addOn.Code, version.Code, StringComparison.Ordinal)
-             && string.Equals(addOn.Name, version.Name, StringComparison.Ordinal)
-             && string.Equals(addOn.Description, version.Description, StringComparison.Ordinal)
              && addOn.Price == version.Price
              && string.Equals(addOn.Currency, version.Currency, StringComparison.Ordinal)
              && string.Equals(addOn.Interval, version.Interval, StringComparison.Ordinal)

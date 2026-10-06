@@ -139,6 +139,9 @@ People, access, sponsor/enterprise, billing, and communications:
 - `/admin/institutions`
 - `/admin/enterprise`
 - `/admin/billing`
+- `/admin/billing/pricing`
+- `/admin/billing/subscriptions-packages`
+- `/admin/billing/storefront`
 - `/admin/billing/wallet-tiers`
 - `/admin/credit-lifecycle`
 - `/admin/free-tier`
@@ -550,10 +553,18 @@ People, access, sponsor/enterprise, billing, and communications:
   - Writing and Speaking review-request entitlement logic
 - Cross-dashboard impact:
   - affects learner purchase options and review-access economics
+- Subscriptions & Packages (`/admin/billing/subscriptions-packages`):
+  - the single editing surface for package copy (name, label, category, format line, description, meta chips, badges, feature bullets, Best for, Featured, section headings) and for the linked price, currency, interval and status of the same plan/add-on record
+  - one Save updates the learner web app and mobile app, Billing Ops, Pricing and checkout names; Name/Description in Billing Ops and Pricing become read-only for managed plans
+  - two admins saving the same screen get a conflict message and must reload; Storefront and Packages saves no longer overwrite each other
+  - on a phone, Enter inserts a new line in every multiline field and the Save bar stays pinned to the top
 - What to test:
   - plan and add-on save
   - coupon rule persistence
   - invoice and subscription visibility
+  - package edit (description word + new bullet) on Package 6 and Nursing Premium Bundle appears on learner web/mobile, Billing Ops and Pricing after Save
+  - price change in the package editor changes the checkout price once (no second price row)
+  - Enter key and multiline paste in meta chips, badges and bullets on an Android phone
 
 ## 13. Feature Flags
 

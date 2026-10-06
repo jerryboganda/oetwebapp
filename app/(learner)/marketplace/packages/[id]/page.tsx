@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, CheckCircle2, Clock, Package, Sparkles, Tag as TagIcon } from 'lucide-react';
@@ -14,10 +14,14 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-error';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useRevalidateOnResume } from '@/hooks/use-revalidate-on-resume';
+import type { CatalogPresentation } from '@/lib/catalog-presentation';
 import {
   resolveWebsitePackageByCode,
   resolveWebsitePackageBySlug,
+  resolveWebsitePackageWithOverlay,
   websitePackageCheckoutHref,
+  websitePackageNumber,
   websitePackagePurchaseHref,
 } from '@/lib/catalog-website-packages';
 
@@ -40,20 +44,42 @@ export default function PackageDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modalAddOn, setModalAddOn] = useState<PublicCatalogAddOnRow | null>(null);
+  const [presentation, setPresentation] = useState<CatalogPresentation | null>(null);
+  const hasDataRef = useRef(false);
+  const requestIdRef = useRef(0);
+
+  // First load and the silent refresh on resume: `loading` never flips back to true and a
+  // failed refresh keeps the product already on screen. A newer request supersedes an older one.
+  const loadCatalog = useCallback(async () => {
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
+    try {
+      const response = await fetchPublicCatalog();
+      if (requestId !== requestIdRef.current) return;
+      hasDataRef.current = true;
+      setPlans(response.plans ?? []);
+      setAddOns(response.addOns ?? []);
+      setPresentation(response.presentation ?? null);
+      setError(null);
+    } catch (err) {
+      if (requestId !== requestIdRef.current) return;
+      if (!hasDataRef.current) setError(err instanceof Error ? err.message : 'Could not load product.');
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    void (async () => {
-      try {
-        const response = await fetchPublicCatalog();
-        setPlans(response.plans ?? []);
-        setAddOns(response.addOns ?? []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Could not load product.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+    void loadCatalog();
+    return () => {
+      // Drop the reply of any request still in flight once this page is gone.
+      requestIdRef.current += 1;
+    };
+  }, [loadCatalog]);
+
+  useRevalidateOnResume(() => {
+    void loadCatalog();
+  });
 
   useEffect(() => {
     if (requestedWebsitePackage?.productType !== 'addon_purchase') return;
@@ -68,7 +94,11 @@ export default function PackageDetailPage() {
       }),
     [plans, code, requestedWebsitePackage],
   );
-  const websitePackage = requestedWebsitePackage ?? (plan ? resolveWebsitePackageByCode(plan.code) : undefined);
+  // Slug/code routing above stays on the static package; only the copy shown comes from the overlay.
+  const staticWebsitePackage = requestedWebsitePackage ?? (plan ? resolveWebsitePackageByCode(plan.code) : undefined);
+  const websitePackage = staticWebsitePackage
+    ? resolveWebsitePackageWithOverlay(staticWebsitePackage, presentation)
+    : undefined;
 
   const writingAddons = useMemo(
     () => (plan?.writingAddonsEnabled ? addOns.filter((a) => a.eligibilityFlag === 'writing_addons') : []),
@@ -83,7 +113,7 @@ export default function PackageDetailPage() {
     [plan, addOns],
   );
   const tutorBookWebsitePackage = tutorBookAddon
-    ? resolveWebsitePackageByCode(tutorBookAddon.code)
+    ? resolveWebsitePackageWithOverlay(tutorBookAddon.code, presentation)
     : undefined;
 
   if (requestedWebsitePackage?.productType === 'addon_purchase') {
@@ -120,6 +150,7 @@ export default function PackageDetailPage() {
     );
   }
 
+  const packageNo = websitePackage ? websitePackageNumber(websitePackage) : null;
   const hasBonuses = plan.bundledWritingAssessments > 0
     || plan.bundledSpeakingSessions > 0
     || plan.bundledAiCredits > 0
@@ -135,11 +166,13 @@ export default function PackageDetailPage() {
         <div className="mt-3 flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <p className="eyebrow text-gold">
-              {websitePackage ? `Package ${websitePackage.packageNo} · ${websitePackage.category}` : plan.productCategory.replace(/_/g, ' ')}
+              {websitePackage
+                ? [packageNo != null ? `Package ${packageNo}` : '', websitePackage.category].filter(Boolean).join(' · ')
+                : plan.productCategory.replace(/_/g, ' ')}
             </p>
             <h1 className="mt-2 text-balance text-2xl font-bold sm:text-4xl">{websitePackage?.name ?? plan.name}</h1>
             {(websitePackage?.description ?? plan.description) ? (
-              <p className="mt-3 max-w-2xl text-sm text-white/80">
+              <p className="mt-3 max-w-2xl whitespace-pre-line text-sm text-white/80">
                 {websitePackage?.description ?? plan.description}
               </p>
             ) : null}
@@ -193,15 +226,15 @@ export default function PackageDetailPage() {
         <Card padding="lg" className="lg:col-span-2">
           <h2 className="text-lg font-bold text-navy">What you&apos;ll get</h2>
           <ul className="mt-4 grid gap-2 sm:grid-cols-2">
-            {(websitePackage?.features ?? plan.dashboardModules.map(prettyModule)).map((feature) => (
-              <li key={feature} className="flex items-start gap-2 text-sm text-navy">
+            {(websitePackage?.features ?? plan.dashboardModules.map(prettyModule)).map((feature, featureIndex) => (
+              <li key={`${featureIndex}-${feature}`} className="flex items-start gap-2 text-sm text-navy">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" aria-hidden="true" />
                 <span>{feature}</span>
               </li>
             ))}
           </ul>
           {websitePackage ? (
-            <p className="mt-6 rounded-xl bg-background-light p-4 text-sm text-navy">
+            <p className="mt-6 whitespace-pre-line rounded-xl bg-background-light p-4 text-sm text-navy">
               <span className="font-bold">Best for:</span> {websitePackage.bestFor}
             </p>
           ) : null}
@@ -252,10 +285,20 @@ export default function PackageDetailPage() {
           />
 
           {writingAddons.length > 0 && (
-            <AddonGroup title="Writing letter assessments" addons={writingAddons} onSelect={setModalAddOn} />
+            <AddonGroup
+              title="Writing letter assessments"
+              addons={writingAddons}
+              presentation={presentation}
+              onSelect={setModalAddOn}
+            />
           )}
           {speakingAddons.length > 0 && (
-            <AddonGroup title="Extra private speaking sessions" addons={speakingAddons} onSelect={setModalAddOn} />
+            <AddonGroup
+              title="Extra private speaking sessions"
+              addons={speakingAddons}
+              presentation={presentation}
+              onSelect={setModalAddOn}
+            />
           )}
           {tutorBookAddon && (
             <div>
@@ -267,7 +310,7 @@ export default function PackageDetailPage() {
                   <div className="min-w-0">
                     <h4 className="font-bold text-navy">{tutorBookWebsitePackage?.name ?? tutorBookAddon.name}</h4>
                     {(tutorBookWebsitePackage?.description ?? tutorBookAddon.description) ? (
-                      <p className="mt-1 text-xs text-muted">
+                      <p className="mt-1 whitespace-pre-line text-xs text-muted">
                         {tutorBookWebsitePackage?.description ?? tutorBookAddon.description}
                       </p>
                     ) : null}
@@ -298,7 +341,7 @@ export default function PackageDetailPage() {
         addOnCode={modalAddOn?.code ?? null}
         addOnLabel={
           modalAddOn
-            ? resolveWebsitePackageByCode(modalAddOn.code)?.name ?? modalAddOn.name
+            ? resolveWebsitePackageWithOverlay(modalAddOn.code, presentation)?.name ?? modalAddOn.name
             : null
         }
         addOnPriceGbp={modalAddOn?.price ?? null}
@@ -312,10 +355,12 @@ export default function PackageDetailPage() {
 function AddonGroup({
   title,
   addons,
+  presentation,
   onSelect,
 }: {
   title: string;
   addons: PublicCatalogAddOnRow[];
+  presentation: CatalogPresentation | null;
   onSelect: (addon: PublicCatalogAddOnRow) => void;
 }) {
   return (
@@ -323,7 +368,7 @@ function AddonGroup({
       <h3 className="eyebrow text-muted">{title}</h3>
       <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {addons.map((addon, index) => {
-          const websitePackage = resolveWebsitePackageByCode(addon.code);
+          const websitePackage = resolveWebsitePackageWithOverlay(addon.code, presentation);
           return (
             <MotionItem key={addon.code} delayIndex={Math.min(index, 5)} className="h-full">
               <Card className="flex h-full flex-col">
@@ -331,7 +376,7 @@ function AddonGroup({
                   <div className="min-w-0">
                     <h4 className="font-bold text-navy">{websitePackage?.name ?? addon.name}</h4>
                     {(websitePackage?.description ?? addon.description) ? (
-                      <p className="mt-1 text-xs text-muted">
+                      <p className="mt-1 whitespace-pre-line text-xs text-muted">
                         {websitePackage?.description ?? addon.description}
                       </p>
                     ) : null}

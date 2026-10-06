@@ -1,4 +1,5 @@
 import { getAdminBillingEntitlementDiagnosticsData } from '@/lib/admin';
+import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
 import { formatDateTime as formatSharedDateTime } from '@/lib/domain/datetime';
 import type { AdminBillingAddOn, AdminBillingCoupon, AdminBillingPaymentTransaction, AdminBillingProviderLifecycleSignalsSummary, AdminBillingPlan } from '@/lib/types/admin';
 import type { DiagnosticsLoadResult, BillingPlanFormState, BillingAddOnFormState, BillingCouponFormState } from './billing-page-types';
@@ -38,6 +39,7 @@ export const defaultPlanForm: BillingPlanFormState = {
   extensionAllowed: true,
   recallUpdatesEnabled: false,
   comparisonFeaturesText: '',
+  packageManaged: false,
 };
 
 export const defaultAddOnForm: BillingAddOnFormState = {
@@ -64,6 +66,7 @@ export const defaultAddOnForm: BillingAddOnFormState = {
   eligibilityFlag: '',
   lettersGranted: '0',
   sessionsGranted: '0',
+  packageManaged: false,
 };
 
 export const defaultCouponForm: BillingCouponFormState = {
@@ -250,6 +253,27 @@ export function normalizedCode(value: string): string {
     .slice(0, 64);
 }
 
+/**
+ * A plan whose learner-facing Name/Description/"What's included" are owned by
+ * Subscriptions & Packages: the server says so, or its code is a known package
+ * (canonical or legacy code). Those fields are read-only in the plan editor.
+ */
+export function isPackageManagedPlan(plan: Pick<AdminBillingPlan, 'code' | 'packageManaged'>): boolean {
+  return plan.packageManaged === true || (!!plan.code && resolveWebsitePackageByCode(plan.code) !== undefined);
+}
+
+/**
+ * Add-on counterpart of isPackageManagedPlan: Name/Description are owned by Subscriptions & Packages.
+ * A code that only resolves through a package's legacy alias (for example the bare speaking add-on
+ * rows) is NOT managed: the server never mirrors overlay copy onto aliased add-on rows, so locking
+ * them would leave their Name/Description uneditable everywhere.
+ */
+export function isPackageManagedAddOn(addOn: Pick<AdminBillingAddOn, 'code' | 'packageManaged'>): boolean {
+  if (addOn.packageManaged === true) return true;
+  const pkg = addOn.code ? resolveWebsitePackageByCode(addOn.code) : undefined;
+  return pkg !== undefined && !(pkg.legacyCodes && pkg.legacyCodes.length > 0);
+}
+
 export function toPlanForm(plan: AdminBillingPlan): BillingPlanFormState {
   return {
     code: plan.code ?? plan.id,
@@ -286,6 +310,7 @@ export function toPlanForm(plan: AdminBillingPlan): BillingPlanFormState {
     extensionAllowed: plan.extensionAllowed ?? true,
     recallUpdatesEnabled: plan.recallUpdatesEnabled ?? false,
     comparisonFeaturesText: (plan.comparisonFeatures ?? []).join('\n'),
+    packageManaged: isPackageManagedPlan(plan),
   };
 }
 
@@ -314,6 +339,7 @@ export function toAddOnForm(addOn: AdminBillingAddOn): BillingAddOnFormState {
     eligibilityFlag: addOn.eligibilityFlag ?? '',
     lettersGranted: String(addOn.lettersGranted ?? 0),
     sessionsGranted: String(addOn.sessionsGranted ?? 0),
+    packageManaged: isPackageManagedAddOn(addOn),
   };
 }
 

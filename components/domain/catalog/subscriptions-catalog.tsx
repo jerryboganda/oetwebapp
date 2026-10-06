@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { CheckCircle2, ShoppingCart, Sparkles } from 'lucide-react';
 import { BuyTutorBookButton } from '@/components/billing/buy-tutor-book-button';
@@ -26,11 +26,16 @@ import {
   resolveWebsitePackageBySlug,
   resolveWebsitePackageByCode,
   applyWebsitePackageOverlay,
+  overlayForPackage,
+  resolveWebsiteSections,
+  buildCustomWebsitePackages,
+  websitePackageNumber,
   type WebsitePackage,
   type WebsiteSectionKey,
 } from '@/lib/catalog-website-packages';
 import { cn } from '@/lib/utils';
 import { useAddToCart } from '@/lib/cart/use-add-to-cart';
+import { useRevalidateOnResume } from '@/hooks/use-revalidate-on-resume';
 
 // Live billing values (price is the source of truth for what the learner is charged).
 interface LivePrice {
@@ -117,6 +122,7 @@ function SubscriptionPackageCard({
   const currency = live.currency;
   const price = live.price;
   const hasDiscount = live.originalPrice != null && live.originalPrice > price;
+  const packageNo = websitePackageNumber(pkg);
 
   const onAddToCart = () => {
     addToCart({
@@ -146,8 +152,8 @@ function SubscriptionPackageCard({
 
       <div className="flex h-full flex-col gap-4 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
-          <span className="eyebrow text-muted">Package {pkg.packageNo}</span>
-          <div className="text-end">
+          {packageNo != null ? <span className="eyebrow text-muted">Package {packageNo}</span> : null}
+          <div className="ms-auto text-end">
             <div className="text-2xl font-bold tabular-nums text-navy">{formatPrice(price, currency)}</div>
             {hasDiscount ? (
               <div className="text-xs tabular-nums text-muted line-through">was {formatPrice(live!.originalPrice as number, currency)}</div>
@@ -159,9 +165,9 @@ function SubscriptionPackageCard({
           <h3 className="text-lg font-bold leading-snug text-navy">{pkg.name}</h3>
           {pkg.metaChips.length > 0 ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {pkg.metaChips.map((chip) => (
+              {pkg.metaChips.map((chip, chipIndex) => (
                 <span
-                  key={chip}
+                  key={`${chipIndex}-${chip}`}
                   className="inline-flex items-center rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted"
                 >
                   {chip}
@@ -169,9 +175,11 @@ function SubscriptionPackageCard({
               ))}
             </div>
           ) : null}
-          <p className="mt-2 text-xs text-muted">
-            <span className="font-semibold text-navy">Category:</span> {pkg.category}
-          </p>
+          {pkg.category ? (
+            <p className="mt-2 text-xs text-muted">
+              <span className="font-semibold text-navy">Category:</span> {pkg.category}
+            </p>
+          ) : null}
         </div>
 
         {pkg.formatLine ? (
@@ -180,13 +188,13 @@ function SubscriptionPackageCard({
           </p>
         ) : null}
 
-        {pkg.description ? <p className="text-sm leading-relaxed text-muted">{pkg.description}</p> : null}
+        {pkg.description ? <p className="whitespace-pre-line text-sm leading-relaxed text-muted">{pkg.description}</p> : null}
 
         {pkg.badges.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
-            {pkg.badges.map((badge) => (
+            {pkg.badges.map((badge, badgeIndex) => (
               <span
-                key={badge}
+                key={`${badgeIndex}-${badge}`}
                 className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-2xs font-semibold text-primary"
               >
                 {badge}
@@ -197,8 +205,8 @@ function SubscriptionPackageCard({
 
         {pkg.features.length > 0 ? (
           <ul className="space-y-1.5 text-sm text-navy">
-            {pkg.features.map((feature) => (
-              <li key={feature} className="flex items-start gap-2">
+            {pkg.features.map((feature, featureIndex) => (
+              <li key={`${featureIndex}-${feature}`} className="flex items-start gap-2">
                 <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" aria-hidden="true" />
                 <span>{feature}</span>
               </li>
@@ -207,7 +215,7 @@ function SubscriptionPackageCard({
         ) : null}
 
         {pkg.bestFor ? (
-          <p className="rounded-xl bg-background-light px-3 py-2 text-sm text-navy">
+          <p className="whitespace-pre-line rounded-xl bg-background-light px-3 py-2 text-sm text-navy">
             <span className="font-bold">Best for:</span> {pkg.bestFor}
           </p>
         ) : null}
@@ -246,28 +254,52 @@ export function SubscriptionsCatalog() {
   const [activeProfession, setActiveProfession] = useState('all');
   const [highlightCode, setHighlightCode] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [catalogResult, aiResult] = await Promise.allSettled([fetchPublicCatalog(), fetchAiPackages()]);
-        if (cancelled) return;
-        if (catalogResult.status === 'fulfilled') setCatalog(catalogResult.value as PublicCatalogResponseWithPresentation);
-        if (aiResult.status === 'fulfilled') setAi(aiResult.value);
-        if (catalogResult.status === 'rejected' && aiResult.status === 'rejected') {
-          setError('Could not load the packages right now. Please refresh to try again.');
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+  const requestIdRef = useRef(0);
+  const hasDataRef = useRef(false);
+
+  // Used for the first load and for the silent refresh on resume: `loading` is never
+  // set back to true, and a failed refresh keeps whatever was already on screen.
+  const loadPackages = useCallback(async () => {
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
+    try {
+      const [catalogResult, aiResult] = await Promise.allSettled([fetchPublicCatalog(), fetchAiPackages()]);
+      if (requestId !== requestIdRef.current) return;
+      if (catalogResult.status === 'fulfilled') setCatalog(catalogResult.value);
+      if (aiResult.status === 'fulfilled') setAi(aiResult.value);
+      if (catalogResult.status === 'fulfilled' || aiResult.status === 'fulfilled') {
+        hasDataRef.current = true;
+        setError(null);
+      } else if (!hasDataRef.current) {
+        setError('Could not load the packages right now. Please refresh to try again.');
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    } finally {
+      if (requestId === requestIdRef.current) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadPackages();
+    return () => {
+      // Drop the reply of any request still in flight once this page is gone.
+      requestIdRef.current += 1;
+    };
+  }, [loadPackages]);
+
+  useRevalidateOnResume(() => {
+    void loadPackages();
+  });
 
   const priceMap = useMemo(() => buildPriceMap(catalog, ai), [catalog, ai]);
   const websitePackages = catalog?.presentation?.websitePackages;
+  // Section headings and the quick-jump labels follow the admin's section overrides.
+  const sections = useMemo(() => resolveWebsiteSections(websitePackages?.sections), [websitePackages]);
+  // Plans created in Billing > Pricing that have no static definition but whose package
+  // record was given a section in the admin editor. Their overlay is already applied.
+  const customPackages = useMemo(
+    () => buildCustomWebsitePackages(catalog?.plans ?? [], catalog?.presentation),
+    [catalog],
+  );
   const ownedPlanCode = entitlement?.planCode ?? null;
   const canonicalOwnedPlanCode = ownedPlanCode
     ? resolveWebsitePackageByCode(ownedPlanCode)?.code ?? ownedPlanCode
@@ -295,7 +327,9 @@ export function SubscriptionsCatalog() {
   const packagesBySection = useMemo(() => {
     const grouped = new Map<WebsiteSectionKey, WebsitePackage[]>();
     for (const section of WEBSITE_SECTIONS) grouped.set(section.key, []);
-    for (const pkg of WEBSITE_PACKAGES) {
+    const customCodes = new Set(customPackages.map((pkg) => pkg.code));
+    // Filtering and ordering run on the static package; the overlay is applied afterwards.
+    for (const pkg of [...WEBSITE_PACKAGES, ...customPackages]) {
       if (!priceMap.has(pkg.code) || !isConditionalPackageVisible(pkg, ownedPlan)) continue;
       // Full Recorded courses respect the active discipline filter; every other
       // section is discipline-agnostic (all "All disciplines") and always shown.
@@ -322,11 +356,13 @@ export function SubscriptionsCatalog() {
               pkg.code === 'basic-english'));
         if (prof && prof !== 'all' && !matchesProfession) continue;
       }
-      const overlay = websitePackages?.byCode?.[pkg.code];
-      grouped.get(pkg.section)?.push(applyWebsitePackageOverlay(pkg, overlay));
+      const merged = customCodes.has(pkg.code)
+        ? pkg
+        : applyWebsitePackageOverlay(pkg, overlayForPackage(websitePackages?.byCode, pkg));
+      grouped.get(pkg.section)?.push(merged);
     }
     return grouped;
-  }, [activeProfession, ownedPlan, priceMap, websitePackages]);
+  }, [activeProfession, customPackages, ownedPlan, priceMap, websitePackages]);
 
   // First visible section of the "Separate AI Packages" group — the parent
   // group heading renders immediately before it.
@@ -355,14 +391,16 @@ export function SubscriptionsCatalog() {
     return () => window.clearTimeout(timer);
   }, [loading, searchParams]);
 
-  const CATALOG_SHORTCUTS = [
-    { id: 'section-full-recorded', label: 'Full Recorded Courses' },
-    { id: 'section-separate', label: 'Separate Packages' },
-    { id: 'section-ai', label: 'AI Grading Packages' },
-    { id: 'section-separate-ai', label: 'Separate AI Packages' },
-    { id: 'section-listening-recalls', label: 'Listening Recalls' },
-    { id: 'section-tutorbook', label: 'TutorBook / TutorBook of Recalls' },
-    { id: 'section-mock', label: 'Full Mock Exam Packages' },
+  const sectionTitle = (key: WebsiteSectionKey) => sections.find((section) => section.key === key)?.title ?? key;
+  // Ids stay fixed (they are scroll targets); labels follow the resolved section titles.
+  const catalogShortcuts = [
+    { id: 'section-full-recorded', label: sectionTitle('full-recorded') },
+    { id: 'section-separate', label: sectionTitle('separate') },
+    { id: 'section-ai', label: sectionTitle('ai') },
+    { id: 'section-separate-ai', label: SEPARATE_AI_PACKAGES_GROUP.title },
+    { id: 'section-listening-recalls', label: sectionTitle('listening-recalls') },
+    { id: 'section-tutorbook', label: sectionTitle('tutorbook') },
+    { id: 'section-mock', label: sectionTitle('mock') },
   ];
 
   const handleShortcutClick = (sectionId: string) => {
@@ -395,7 +433,7 @@ export function SubscriptionsCatalog() {
           <span className="shrink-0 select-none ps-1.5 eyebrow text-muted">
             Quick jump:
           </span>
-          {CATALOG_SHORTCUTS.map((shortcut) => (
+          {catalogShortcuts.map((shortcut) => (
             <button
               key={shortcut.id}
               type="button"
@@ -420,7 +458,7 @@ export function SubscriptionsCatalog() {
         </div>
       ) : (
         <>
-          {WEBSITE_SECTIONS.map((section) => {
+          {sections.map((section) => {
             const packages = packagesBySection.get(section.key) ?? [];
             // A filtered-out Full Recorded section keeps its discipline chips, so the
             // learner can switch the filter back instead of losing the whole section.

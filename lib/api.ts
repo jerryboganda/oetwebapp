@@ -1511,6 +1511,8 @@ export type {
   AdminCatalogPresentationResponse,
   MyEntitlementSnapshot,
   Oet2026ReseedResponse,
+  SaveStorefrontResult,
+  SaveWebsitePackagesResult,
 } from './api/catalog';
 export {
   fetchAdminCatalogPresentation,
@@ -1520,6 +1522,8 @@ export {
   quoteAddonEligibility,
   reseedOet2026Catalog,
   saveAdminCatalogPresentation,
+  saveAdminStorefront,
+  saveAdminWebsitePackages,
 } from './api/catalog';
 
 // ── Tutor Book API ───────────────────────────────────────────────────────

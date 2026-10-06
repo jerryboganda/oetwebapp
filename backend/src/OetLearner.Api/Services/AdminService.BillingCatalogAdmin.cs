@@ -60,10 +60,15 @@ public partial class AdminService
             .Where(p => planCodes.Contains(p.Code))
             .ToDictionaryAsync(p => p.Code, p => p.ComparisonFeaturesJson, ct);
 
+        // One overlay read per request: plans whose name/description are owned by
+        // Subscriptions & Packages are flagged so the Pricing editors show them read-only.
+        var overlayByCode = await LoadWebsitePackagesByCodeAsync(ct);
+
         return plans.Select(plan => MapBillingPlan(
             plan,
             versionMetadata.TryGetValue(plan.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata,
-            packageFeatures.TryGetValue(plan.Code, out var features) ? features : null));
+            packageFeatures.TryGetValue(plan.Code, out var features) ? features : null,
+            ReadManagedCopy(overlayByCode, plan.Code)?.IsManaged == true));
     }
 
     public async Task<object> CreateBillingPlanAsync(string adminId, string adminName,
@@ -104,19 +109,31 @@ public partial class AdminService
         plan.ActiveVersionId = version.Id;
         plan.LatestVersionId = version.Id;
 
+        // One transaction: the plan, its linked package record and its Subscriptions & Packages
+        // entry are created together or not at all.
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+
         db.BillingPlans.Add(plan);
         db.BillingPlanVersions.Add(version);
         await db.SaveChangesAsync(ct);
 
+        // Without a ContentPackage the "What's included" bullets typed here would be dropped.
+        await EnsureLinkedContentPackageAsync(plan, validated.Oet2026.ComparisonFeaturesJson, now, ct);
         await SyncContentPackageComparisonFeaturesAsync(plan.Code, validated.Oet2026.ComparisonFeaturesJson, now, ct);
         if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct);
+
+        await EnsurePackageOverlayEntryAsync(adminId, adminName, plan, validated.Oet2026.ComparisonFeaturesJson, ct);
 
         await LogAuditAsync(adminId, adminName, "Created", "BillingPlan", id, $"Created plan: {validated.Name}", ct);
         var freshFeatures = await db.ContentPackages.AsNoTracking()
             .Where(p => p.Code == plan.Code)
             .Select(p => p.ComparisonFeaturesJson)
             .FirstOrDefaultAsync(ct);
-        return MapBillingPlan(plan, null, freshFeatures);
+        await CommitIfOwnedAsync(tx, ct);
+
+        // The nested overlay write does not invalidate the settings cache; do it once the whole create is committed.
+        runtimeSettingsProvider?.Invalidate();
+        return MapBillingPlan(plan, null, freshFeatures, ReadManagedCopy(await LoadWebsitePackagesByCodeAsync(ct), plan.Code)?.IsManaged == true);
     }
 
     public async Task<object> UpdateBillingPlanAsync(string adminId, string adminName, string planId, AdminBillingPlanUpdateRequest request, CancellationToken ct)
@@ -126,6 +143,38 @@ public partial class AdminService
 
         await ThrowIfCatalogCodeChangedWithAuditAsync(adminId, adminName, "BillingPlan", plan.Id, request.Code, plan.Code, "billing_plan_invalid", "Billing plan catalog data is invalid.", ct);
         var validated = await ValidateBillingPlanCatalogAsync(ToBillingPlanCatalogInput(request), plan.Id, plan.Status, ct);
+
+        // Subscriptions & Packages owns name, description and "What's included": force them over the
+        // request so a stale Pricing/Billing Ops modal can never desync the learner-facing copy.
+        var managedCopy = await GetPackageManagedCopyAsync(plan.Code, ct);
+        var overriddenFields = new List<string>();
+        if (managedCopy is not null)
+        {
+            if (managedCopy.Name is not null && !string.Equals(managedCopy.Name, validated.Name, StringComparison.Ordinal))
+            {
+                validated = validated with { Name = managedCopy.Name };
+                overriddenFields.Add("name");
+            }
+
+            if (managedCopy.Description is not null && !string.Equals(managedCopy.Description, validated.Description, StringComparison.Ordinal))
+            {
+                validated = validated with { Description = managedCopy.Description };
+                overriddenFields.Add("description");
+            }
+
+            if (managedCopy.Features is not null)
+            {
+                var submitted = validated.Oet2026.ComparisonFeaturesJson is null
+                    ? null
+                    : JsonSupport.Deserialize<List<string>>(validated.Oet2026.ComparisonFeaturesJson, new List<string>());
+                if (submitted is not null && !submitted.SequenceEqual(managedCopy.Features)) overriddenFields.Add("comparisonFeatures");
+                validated = validated with
+                {
+                    Oet2026 = validated.Oet2026 with { ComparisonFeaturesJson = JsonSupport.Serialize(managedCopy.Features) }
+                };
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         var latestVersionNumber = await EnsureBillingPlanVersionBaselineAsync(plan, adminId, adminName, now, ct);
         plan.Code = validated.Code;
@@ -159,11 +208,24 @@ public partial class AdminService
         if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Updated", "BillingPlan", plan.Id, $"Updated plan: {validated.Name}", ct);
+        if (overriddenFields.Count > 0)
+        {
+            var overriddenSummary = string.Join(", ", overriddenFields);
+            await LogAuditAsync(
+                adminId,
+                adminName,
+                "OverriddenByPackage",
+                "BillingPlan",
+                plan.Id,
+                $"Subscriptions & Packages copy replaced the submitted {overriddenSummary} for plan {plan.Code}.",
+                ct);
+        }
+
         var freshFeatures = await db.ContentPackages.AsNoTracking()
             .Where(p => p.Code == plan.Code)
             .Select(p => p.ComparisonFeaturesJson)
             .FirstOrDefaultAsync(ct);
-        return MapBillingPlan(plan, null, freshFeatures);
+        return MapBillingPlan(plan, null, freshFeatures, managedCopy?.IsManaged == true);
     }
 
     public async Task<object> GetBillingAddOnsAsync(string? status, CancellationToken ct)
@@ -193,9 +255,15 @@ public partial class AdminService
         }
 
         var versionMetadata = await GetBillingAddOnVersionMetadataAsync(addOns, ct);
+
+        // One overlay read per request: add-ons whose name/description are owned by Subscriptions & Packages
+        // are flagged so the Pricing and Billing Ops editors show them read-only.
+        var overlayByCode = await LoadWebsitePackagesByCodeAsync(ct);
+
         return addOns.Select(addOn => MapBillingAddOn(
             addOn,
-            versionMetadata.TryGetValue(addOn.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata));
+            versionMetadata.TryGetValue(addOn.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata,
+            ReadAddOnManagedCopy(overlayByCode, addOn.Code)?.IsManaged == true));
     }
 
     /// <summary>Keys must look like <c>billing.section.name</c> — lowercase-rooted, dotted, alnum + . _ - only.</summary>
@@ -375,6 +443,26 @@ public partial class AdminService
 
         await ThrowIfCatalogCodeChangedWithAuditAsync(adminId, adminName, "BillingAddOn", addOn.Id, request.Code, addOn.Code, "billing_addon_invalid", "Billing add-on catalog data is invalid.", ct);
         var validated = await ValidateBillingAddOnCatalogAsync(ToBillingAddOnCatalogInput(request), addOn.Id, addOn.Status, ct);
+
+        // Subscriptions & Packages owns an add-on package's name and description: force them over the
+        // request so a stale Pricing/Billing Ops modal can never desync the learner-facing copy.
+        var managedCopy = ReadAddOnManagedCopy(await LoadWebsitePackagesByCodeAsync(ct), addOn.Code);
+        var overriddenFields = new List<string>();
+        if (managedCopy is not null)
+        {
+            if (managedCopy.Name is not null && !string.Equals(managedCopy.Name, validated.Name, StringComparison.Ordinal))
+            {
+                validated = validated with { Name = managedCopy.Name };
+                overriddenFields.Add("name");
+            }
+
+            if (managedCopy.Description is not null && !string.Equals(managedCopy.Description, validated.Description, StringComparison.Ordinal))
+            {
+                validated = validated with { Description = managedCopy.Description };
+                overriddenFields.Add("description");
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         var latestVersionNumber = await EnsureBillingAddOnVersionBaselineAsync(addOn, adminId, adminName, now, ct);
         addOn.Code = validated.Code;
@@ -404,7 +492,20 @@ public partial class AdminService
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "BillingAddOn", addOn.Id, $"Updated add-on: {validated.Name}", ct);
-        return MapBillingAddOn(addOn);
+        if (overriddenFields.Count > 0)
+        {
+            var overriddenSummary = string.Join(", ", overriddenFields);
+            await LogAuditAsync(
+                adminId,
+                adminName,
+                "OverriddenByPackage",
+                "BillingAddOn",
+                addOn.Id,
+                $"Subscriptions & Packages copy replaced the submitted {overriddenSummary} for add-on {addOn.Code}.",
+                ct);
+        }
+
+        return MapBillingAddOn(addOn, null, managedCopy?.IsManaged == true);
     }
 
     /// <summary>
@@ -452,6 +553,12 @@ public partial class AdminService
         var resolvedPlanId = plan.Id;
         db.Entry(plan).State = EntityState.Detached;
 
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+
+        // The plan's Subscriptions & Packages entry goes with it so no orphan overlay is left behind. It runs first
+        // so the settings row is locked before any billing row, the same order as the website-packages save.
+        await RemovePackageOverlayEntryAsync(adminId, adminName, planCode, ct);
+
         // BillingPlanVersion is guarded by an EF SaveChanges interceptor that
         // forbids Modified/Deleted on snapshot rows. ExecuteDeleteAsync issues
         // a single SQL DELETE without going through the ChangeTracker, so the
@@ -461,6 +568,10 @@ public partial class AdminService
         await db.BillingPlans.Where(p => p.Id == resolvedPlanId).ExecuteDeleteAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Deleted", "BillingPlan", resolvedPlanId, $"Hard-deleted plan {planCode}: {planName}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        // The nested overlay write does not invalidate the settings cache; do it once the whole delete is committed.
+        runtimeSettingsProvider?.Invalidate();
         return new { id = resolvedPlanId, code = planCode, deleted = true };
     }
 
@@ -497,6 +608,11 @@ public partial class AdminService
         var resolvedAddOnId = addOn.Id;
         db.Entry(addOn).State = EntityState.Detached;
 
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+
+        // The add-on's Subscriptions & Packages entry goes with it (settings row locked first, as in the plan delete).
+        await RemoveAddOnPackageOverlayEntryAsync(adminId, adminName, addOnCode, ct);
+
         // Same rationale as DeleteBillingPlanAsync — bypass the immutability
         // interceptor by issuing SQL DELETEs that don't touch the ChangeTracker.
         await db.BillingAddOnVersions.Where(v => v.AddOnId == resolvedAddOnId).ExecuteDeleteAsync(ct);
@@ -504,6 +620,8 @@ public partial class AdminService
         await db.BillingAddOns.Where(a => a.Id == resolvedAddOnId).ExecuteDeleteAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Deleted", "BillingAddOn", resolvedAddOnId, $"Hard-deleted add-on {addOnCode}: {addOnName}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+        runtimeSettingsProvider?.Invalidate();
         return new { id = resolvedAddOnId, code = addOnCode, deleted = true };
     }
 

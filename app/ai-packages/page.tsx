@@ -9,26 +9,38 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchAiPackages, fetchMyAiPackageCredits } from '@/lib/api';
+import { fetchAiPackages, fetchMyAiPackageCredits, fetchPublicCatalog } from '@/lib/api';
 import type { AiPackage, AiPackageCreditSnapshot, AiPackagesResponse } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
 import { useAddToCart } from '@/lib/cart/use-add-to-cart';
+import { useRevalidateOnResume } from '@/hooks/use-revalidate-on-resume';
 import { CartNavButton } from '@/components/cart';
+import type { CatalogPresentation } from '@/lib/catalog-presentation';
 import {
   resolveWebsitePackageByCode,
   resolveWebsitePackageBySlug,
+  resolveWebsitePackageWithOverlay,
+  resolveWebsiteSections,
+  websitePackageNumber,
   SEPARATE_AI_PACKAGES_GROUP,
   type WebsitePackage,
+  type WebsiteSectionKey,
 } from '@/lib/catalog-website-packages';
 
 type PackageTab = 'full' | 'separate' | 'mock';
 type SeparateKey = 'listening' | 'reading' | 'writing' | 'speaking';
 
-const SEPARATE_SECTIONS: Array<{ key: SeparateKey; label: string; icon: React.ReactNode }> = [
-  { key: 'listening', label: 'Separate Listening Packages', icon: <Headphones className="h-4 w-4" /> },
-  { key: 'reading', label: 'Separate Reading Packages', icon: <FileText className="h-4 w-4" /> },
-  { key: 'writing', label: 'Separate Writing Packages', icon: <ClipboardCheck className="h-4 w-4" /> },
-  { key: 'speaking', label: 'Separate Speaking Packages', icon: <Mic2 className="h-4 w-4" /> },
+// `sectionKey` is the website section whose admin-edited title replaces `label`.
+const SEPARATE_SECTIONS: Array<{
+  key: SeparateKey;
+  sectionKey: WebsiteSectionKey;
+  label: string;
+  icon: React.ReactNode;
+}> = [
+  { key: 'listening', sectionKey: 'listening', label: 'Separate Listening Packages', icon: <Headphones className="h-4 w-4" /> },
+  { key: 'reading', sectionKey: 'reading', label: 'Separate Reading Packages', icon: <FileText className="h-4 w-4" /> },
+  { key: 'writing', sectionKey: 'writing-ai', label: 'Separate Writing Packages', icon: <ClipboardCheck className="h-4 w-4" /> },
+  { key: 'speaking', sectionKey: 'speaking-ai', label: 'Separate Speaking Packages', icon: <Mic2 className="h-4 w-4" /> },
 ];
 
 function formatAllowance(
@@ -45,11 +57,18 @@ function formatDate(value?: string | null) {
   return Number.isNaN(parsed.getTime()) ? 'No active expiry' : parsed.toLocaleDateString();
 }
 
+// Static package: decides which rows belong on this page and in what order.
 function canonicalAiPackage(pkg: AiPackage): WebsitePackage | undefined {
   const websitePackage = resolveWebsitePackageByCode(pkg.code);
   return websitePackage && websitePackage.packageNo >= 30 && websitePackage.packageNo <= 50
     ? websitePackage
     : undefined;
+}
+
+// The same package with the admin overlay applied: the copy actually shown.
+function displayAiPackage(pkg: AiPackage, presentation?: CatalogPresentation | null): WebsitePackage | undefined {
+  const websitePackage = canonicalAiPackage(pkg);
+  return websitePackage ? resolveWebsitePackageWithOverlay(websitePackage, presentation) : undefined;
 }
 
 function canonicalAiRows(rows: AiPackage[]): AiPackage[] {
@@ -73,25 +92,69 @@ export default function AiPackagesPage() {
   const [loading, setLoading] = useState(true);
   const [busyCode, setBusyCode] = useState<string | null>(null);
   const [message, setMessage] = useState<{ variant: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [presentation, setPresentation] = useState<CatalogPresentation | null>(null);
   const submittingRef = useRef(false);
+  // Read at click time so a late presentation reply never changes startCheckout's identity,
+  // which would re-run the ?package= auto-checkout effect below.
+  const presentationRef = useRef<CatalogPresentation | null>(null);
+  // The ?package= code already added to the cart, so a refetch of the rows never adds it again.
+  const autoAddedCodeRef = useRef<string | null>(null);
+  const packagesRequestRef = useRef(0);
+  const hasPackagesRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchAiPackages()
-      .then((result) => {
-        if (!cancelled) setPackages(result);
-      })
-      .catch((error) => {
-        if (!cancelled) setMessage({ variant: 'error', text: error instanceof Error ? error.message : 'Could not load AI packages.' });
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    presentationRef.current = presentation;
+  }, [presentation]);
+
+  // Admin package copy rides on the public catalogue. It never blocks the page: until it
+  // arrives (or if it cannot be loaded) the static package copy is shown, and a failed refresh
+  // keeps the copy already loaded.
+  const loadPresentation = useCallback(async () => {
+    try {
+      const catalog = await fetchPublicCatalog();
+      setPresentation(catalog.presentation ?? null);
+    } catch {
+      // Keep the static defaults or the copy already loaded.
+    }
   }, []);
+
+  useEffect(() => {
+    void loadPresentation();
+  }, [loadPresentation]);
+
+  // First load and the silent refresh on resume: `loading` never flips back to true and a
+  // failed refresh keeps the rows already on screen. A newer request supersedes an older one.
+  const loadPackages = useCallback(async () => {
+    packagesRequestRef.current += 1;
+    const requestId = packagesRequestRef.current;
+    try {
+      const result = await fetchAiPackages();
+      if (requestId !== packagesRequestRef.current) return;
+      hasPackagesRef.current = true;
+      setPackages(result);
+      setMessage((current) => (current?.variant === 'error' ? null : current));
+    } catch (error) {
+      if (requestId !== packagesRequestRef.current) return;
+      if (!hasPackagesRef.current) {
+        setMessage({ variant: 'error', text: error instanceof Error ? error.message : 'Could not load AI packages.' });
+      }
+    } finally {
+      if (requestId === packagesRequestRef.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPackages();
+    return () => {
+      // Drop the reply of any request still in flight once this page is gone.
+      packagesRequestRef.current += 1;
+    };
+  }, [loadPackages]);
+
+  useRevalidateOnResume(() => {
+    void loadPresentation();
+    void loadPackages();
+  });
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -137,6 +200,11 @@ export default function AiPackagesPage() {
       + visiblePackages.mock.length;
   }, [visiblePackages]);
 
+  // Tab and sub-section headings follow the admin's section title overrides.
+  const sections = useMemo(() => resolveWebsiteSections(presentation?.websitePackages?.sections), [presentation]);
+  const sectionTitle = (key: WebsiteSectionKey, fallback: string) =>
+    sections.find((section) => section.key === key)?.title ?? fallback;
+
   const startCheckout = useCallback(async (pkg: AiPackage) => {
     if (authLoading) return;
     if (!isAuthenticated) {
@@ -150,7 +218,7 @@ export default function AiPackagesPage() {
     addToCart({
       code: pkg.code,
       kind: 'addon',
-      name: canonicalAiPackage(pkg)?.name ?? pkg.name,
+      name: displayAiPackage(pkg, presentationRef.current)?.name ?? pkg.name,
       price: pkg.price,
       currency: pkg.currency,
     });
@@ -161,6 +229,7 @@ export default function AiPackagesPage() {
   useEffect(() => {
     const code = searchParams?.get('package');
     if (!code || !visiblePackages || authLoading || !isAuthenticated || submittingRef.current) return;
+    if (autoAddedCodeRef.current === code) return;
     const allPackages = [
       ...visiblePackages.full,
       ...visiblePackages.separate.listening,
@@ -174,33 +243,37 @@ export default function AiPackagesPage() {
       (pkg) => (resolveWebsitePackageByCode(pkg.code)?.code ?? pkg.code) === (requestedPackage?.code ?? code),
     );
     if (selected) {
+      autoAddedCodeRef.current = code;
       void startCheckout(selected);
     }
   }, [authLoading, isAuthenticated, searchParams, startCheckout, visiblePackages]);
 
   const renderCard = (pkg: AiPackage) => {
-    const websitePackage = canonicalAiPackage(pkg);
+    const websitePackage = displayAiPackage(pkg, presentation);
     if (!websitePackage) return null;
+    const packageNo = websitePackageNumber(websitePackage);
     return (
     <article key={pkg.code} className="flex min-h-[320px] flex-col rounded-lg border border-border bg-surface p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">
-            Package {websitePackage.packageNo}
-          </p>
+          {packageNo != null ? (
+            <p className="text-2xs font-bold uppercase tracking-[0.14em] text-muted">
+              Package {packageNo}
+            </p>
+          ) : null}
           <h2 className="mt-1 text-lg font-semibold text-navy">{websitePackage.name}</h2>
         </div>
         <div className="flex flex-wrap justify-end gap-1.5">
-          {websitePackage.badges.map((badge) => (
-            <span key={badge} className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+          {websitePackage.badges.map((badge, badgeIndex) => (
+            <span key={`${badgeIndex}-${badge}`} className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
               {badge}
             </span>
           ))}
         </div>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {websitePackage.metaChips.map((chip) => (
-          <span key={chip} className="rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted">
+        {websitePackage.metaChips.map((chip, chipIndex) => (
+          <span key={`${chipIndex}-${chip}`} className="rounded-full bg-background-light px-2.5 py-0.5 text-2xs font-semibold text-muted">
             {chip}
           </span>
         ))}
@@ -208,20 +281,20 @@ export default function AiPackagesPage() {
       <p className="mt-2 text-xs text-muted">
         <span className="font-semibold text-navy">Category:</span> {websitePackage.category}
       </p>
-      <p className="mt-3 text-sm leading-6 text-muted">{websitePackage.description}</p>
+      <p className="mt-3 whitespace-pre-line text-sm leading-6 text-muted">{websitePackage.description}</p>
       <p className="mt-3 text-sm text-muted">
         <span className="font-semibold text-navy">Format:</span> {websitePackage.formatLine}
       </p>
       <p className="mt-4 text-3xl font-semibold text-navy">{formatMoney(pkg.price, { currency: pkg.currency })}</p>
       <ul className="mt-4 flex-1 space-y-2 text-sm text-navy">
-        {websitePackage.features.map((feature) => (
-          <li key={feature} className="flex gap-2">
+        {websitePackage.features.map((feature, featureIndex) => (
+          <li key={`${featureIndex}-${feature}`} className="flex gap-2">
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
             <span>{feature}</span>
           </li>
         ))}
       </ul>
-      <p className="mt-4 rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy">
+      <p className="mt-4 whitespace-pre-line rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy">
         <span className="font-bold">Best for:</span> {websitePackage.bestFor}
       </p>
       <Button className="mt-5" fullWidth loading={busyCode === pkg.code} onClick={() => startCheckout(pkg)}>
@@ -273,9 +346,9 @@ export default function AiPackagesPage() {
       <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <Tabs
           tabs={[
-            { id: 'full', label: 'AI Grading Packages', icon: <PackageCheck className="h-4 w-4" /> },
+            { id: 'full', label: sectionTitle('ai', 'AI Grading Packages'), icon: <PackageCheck className="h-4 w-4" /> },
             { id: 'separate', label: 'Separate Packages', icon: <ClipboardCheck className="h-4 w-4" /> },
-            { id: 'mock', label: 'Full Mock Exam Packages', icon: <Bot className="h-4 w-4" /> },
+            { id: 'mock', label: sectionTitle('mock', 'Full Mock Exam Packages'), icon: <Bot className="h-4 w-4" /> },
           ]}
           activeTab={activeTab}
           onChange={(tab: string) => setActiveTab(tab as PackageTab)}
@@ -302,7 +375,7 @@ export default function AiPackagesPage() {
                 </div>
                 {SEPARATE_SECTIONS.map((section) => (
                   <section key={section.key}>
-                    <h2 className="flex items-center gap-2 text-xl font-semibold text-navy">{section.icon}{section.label}</h2>
+                    <h2 className="flex items-center gap-2 text-xl font-semibold text-navy">{section.icon}{sectionTitle(section.sectionKey, section.label)}</h2>
                     <div className="mt-3 grid gap-4 lg:grid-cols-3">{visiblePackages?.separate[section.key].map(renderCard)}</div>
                   </section>
                 ))}

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-04T11:22:41Z",
+  "updated": "2026-10-06T12:53:09Z",
   "statuses": [
     "pending",
     "in_progress",
@@ -9,353 +9,115 @@
   ],
   "tasks": [
     {
-      "id": "FAST-01",
-      "title": "Inspect all existing release entrypoints and validate strict enforcement scope with live Jev",
+      "id": "PKG-01",
+      "title": "Map the package admin editor, billing plan CRUD, learner surfaces, caching, mobile and website header (read-only)",
       "status": "done",
-      "owner": "mandatory-fast-release",
+      "owner": "package-sync",
       "blockedBy": [],
-      "verify": "native source inspection and validated live typed Jev",
-      "evidence": ["Inspected current guards, ship lifecycle, native agent entrypoints and isolated console executor; exact live baseline510.240s is not a duration guarantee", "Live Jev existing_contract, mandatory_verified_release, scoped_mutations, inherited_contract, lease_safe_retry and pin_and_reject each p/confidence/margin1"],
-      "files": []
-    },
-    {
-      "id": "FAST-02",
-      "title": "Enforce the compulsory accelerated architecture, verified lifecycle and native agent inheritance",
-      "status": "done",
-      "owner": "mandatory-fast-release",
-      "blockedBy": ["FAST-01"],
-      "verify": "build-images.yml / guards and ax-check.yml",
-      "evidence": ["Implementation and focused mutation/native boundary regressions written; final static local:ship:gate and ax:check passed. Executable Actions verification is part of FAST-04, not claimed here."],
-      "files": ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "CONTRIBUTING.md", ".github/copilot-instructions.md", "scripts/deploy/verify-pipeline-contract.mjs", "scripts/deploy/release-manifest.test.mjs", "scripts/ship/ship.mjs", "scripts/ship/pre-push-gate.mjs", "scripts/ship/watch-deploy.ps1"]
-    },
-    {
-      "id": "FAST-03",
-      "title": "Keep console agents on the same production pipeline with isolated PR Ship and lease-safe privacy retries",
-      "status": "done",
-      "owner": "mandatory-fast-release",
-      "blockedBy": ["FAST-01"],
-      "verify": "agent-console.yml / tests and actual runtime update",
-      "evidence": ["Scoped code/manual/regressions written and final source reread/static gate clean; pinned workflow, guarded watchdog and shared native holder reach preserve PR/Ship isolation. Actual console tests/runtime proof belongs to FAST-04."],
-      "files": ["agent-console/src/config.ts", "agent-console/src/ship.ts", "agent-console/tests/config.test.ts", "agent-console/tests/ship.test.ts", "agent-console/etc/MANUAL.md", "docs/ops/OWNER-AGENT-CONSOLE.md"]
-    },
-    {
-      "id": "FAST-04",
-      "title": "Commit only owned paths, ship main and record actual Actions/live deployment and coordinated handoff",
-      "status": "done",
-      "owner": "mandatory-fast-release",
-      "blockedBy": ["FAST-02", "FAST-03"],
-      "verify": "pnpm run ship + native build/AX/console/production runs + ax:record",
-      "evidence": ["327082ec21 exact main release verified: Build37194323785 ran70/70 protocol cases and four proven digest reuses; Deploy37194396337 actual blue promotion, public HTTP200/release/slot and physical image proof. Inclusive284.177s (4m44.18), measured reuse case not universal.", "AX37193948034 native matrices passed; exact9e2 QA37197421291 frontend/placement/gate passed, backend skipped; native frontend111422053012 confirms all command steps green. ax:record wrote real9e2 QA/triage rows.", "Owner's fresh specific grant (D-47, 2026-10-04) closed both gates: stale May25907015352 deleted with the verified owner credential (DELETE HTTP 204, native GET now 404) and console apply=true dispatch 37199930253 passed all 8 jobs; runtime recreated on exact main fde751378e3e39aeaa861560c5be6c807d09890e images, /healthz ok/activeTurns 0/draining false, update-pending marker cleared. Interrupted owner turns resumable; privacy restoration via the guarded ship close (DEPLOY-PRIVATE)."],
-      "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md", "DEPLOYMENT.md"]
-    },
-    {
-      "id": "LDB-01",
-      "title": "Profile identity: AppShell derives effectiveUserSummary from AuthContext when the caller omits userSummary (learner chip stops showing 'User')",
-      "status": "done",
-      "owner": "learner-dashboard-fixes",
-      "blockedBy": [],
-      "verify": "qa-smoke.yml",
+      "verify": "six read-only mapping reports",
       "evidence": [
-        "components/layout/app-shell.tsx effectiveUserSummary derivation (carried from interrupted session, verified against HEAD)"
-      ],
-      "files": [
-        "components/layout/app-shell.tsx"
-      ]
-    },
-    {
-      "id": "LDB-02",
-      "title": "Gamification split-brain merge: XP/streak/achievements/leaderboard read through reading-pathway + engagement stores",
-      "status": "done",
-      "owner": "learner-dashboard-fixes",
-      "blockedBy": [],
-      "verify": "qa-smoke.yml",
-      "evidence": [
-        "backend/src/OetLearner.Api/Services/GamificationService.cs (carried from interrupted session, verified; DbSet cases LearnerXPs vs LearnerXps confirmed distinct)"
-      ],
-      "files": [
-        "backend/src/OetLearner.Api/Services/GamificationService.cs"
-      ]
-    },
-    {
-      "id": "LDB-03",
-      "title": "Notification inbox retention: purge 180d rows, mark 14d stale unread read (bell unpins from 99+)",
-      "status": "done",
-      "owner": "learner-dashboard-fixes",
-      "blockedBy": [],
-      "verify": "qa-smoke.yml",
-      "evidence": [
-        "DataRetentionWorker.cs inboxItems/staleUnread sweeps + DataRetentionOptions defaults (carried from interrupted session, verified; worker registered in Program.cs)"
-      ],
-      "files": [
-        "backend/src/OetLearner.Api/Services/DataRetentionWorker.cs",
-        "backend/src/OetLearner.Api/Configuration/DataRetentionOptions.cs"
-      ]
-    },
-    {
-      "id": "LDB-04",
-      "title": "Bell truthfulness: badge/popover count consistency with labeled admin alerts, 99+ cap, degraded UI only after a real failed hub attempt",
-      "status": "done",
-      "owner": "learner-dashboard-fixes",
-      "blockedBy": [],
-      "verify": "qa-smoke.yml",
-      "evidence": [
-        "notification-center.tsx header/aria-label joins + context initial 'connecting' (this session)"
-      ],
-      "files": [
-        "components/layout/notification-center.tsx",
-        "contexts/notification-center-context.tsx"
-      ]
-    },
-    {
-      "id": "LDB-05",
-      "title": "Gamification flag honored: header badges hide on explicit false only; seeding forces the flag on (strategy_guides idiom)",
-      "status": "done",
-      "owner": "learner-dashboard-fixes",
-      "blockedBy": [],
-      "verify": "qa-smoke.yml",
-      "evidence": [
-        "learner-streak-badges.tsx useFeatureFlagMap gate + SeedData.cs upsert (this session)"
-      ],
-      "files": [
-        "components/layout/learner-streak-badges.tsx",
-        "backend/src/OetLearner.Api/Services/SeedData.cs",
-        "backend/src/OetLearner.Api/Services/SeedData.DemoUserData.cs"
-      ]
-    },
-    {
-      "id": "LDB-06",
-      "title": "Polish: theme toggle renders immediately (no placeholder flash), tooltips on header icon chips",
-      "status": "done",
-      "owner": "learner-dashboard-fixes",
-      "blockedBy": [],
-      "verify": "qa-smoke.yml",
-      "evidence": [
-        "theme-toggle.tsx CSS glyph swap; title attrs on bell, account, streak/level chips (this session)"
-      ],
-      "files": [
-        "components/ui/theme-toggle.tsx",
-        "components/layout/profile-menu.tsx",
-        "components/layout/learner-streak-badges.tsx",
-        "components/layout/notification-center.tsx"
-      ]
-    },
-    {
-      "id": "LDB-07",
-      "title": "Tests: backend GamificationService merge coverage + frontend identity/bell/badge-flag suites",
-      "status": "done",
-      "owner": "learner-dashboard-fixes",
-      "blockedBy": [],
-      "verify": "qa-smoke.yml",
-      "evidence": [
-        "backend/tests/OetLearner.Api.Tests/GamificationServiceTests.cs (new, 5 tests)",
-        "components/layout/__tests__/app-shell.test.tsx (+3), notification-center.test.tsx (+3, 2 updated), learner-streak-badges.test.tsx (new, 4)"
-      ],
-      "files": [
-        "backend/tests/OetLearner.Api.Tests/GamificationServiceTests.cs",
-        "components/layout/__tests__/app-shell.test.tsx",
-        "components/layout/__tests__/notification-center.test.tsx",
-        "components/layout/__tests__/learner-streak-badges.test.tsx"
-      ]
-    },
-    {
-      "id": "LDB-08",
-      "title": "Ship: commit, public repo, pnpm run ship, qa-smoke green on SHA, deploy, live confirmation, ax:record",
-      "status": "done",
-      "owner": "learner-dashboard-fixes",
-      "blockedBy": [],
-      "verify": "qa-smoke.yml",
-      "evidence": [
-        "Live SHA 58ba842eafb7d6de2d6b522285775e1e08a6f1ce (green slot healthy; VPS oet-web-green/oet-api-green on the SHA)",
-        "qa-smoke.yml run 37159346891 success (Frontend unit + 6 backend shards + QA gate, sha 58ba842e)",
-        "build-images.yml run 37159346852 success; production-deploy.yml run 37159617346 success"
-      ],
-      "files": [
-        "SESSION_STATE.md",
-        "VERIFICATION.md"
-      ]
-    },
-    {
-      "id": "DEPLOY-01",
-      "title": "Confirm inclusive deployment clock, free-runner scope and approved acceleration plan",
-      "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": [],
-      "verify": "owner approval and live Jev planning record",
-      "evidence": [
-        "Owner approved all-category target with existing free runners even if 300 seconds remains unmet",
-        "Baseline build/deploy pairs 37159346852/37159617346 and 37156713454/37156952312"
+        "Root causes: applyWebsitePackageOverlay applied only featured; whole-blob presentation PUT let the two editors wipe each other; one-per-line textareas re-derived from a filtered array; website CTA only inside the hamburger / >=1500px nav"
       ],
       "files": []
     },
     {
-      "id": "DEPLOY-02",
-      "title": "Write immutable component classification and same-publish migration/Writing reference reuse",
+      "id": "PKG-02",
+      "title": "Backend: section-scoped locked saves with revisions, mirror to billing rows, commercial updates, lifecycle hooks, public prune, no-store",
       "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": ["DEPLOY-01"],
-      "verify": "build-images.yml",
+      "owner": "package-sync",
+      "blockedBy": [
+        "PKG-01"
+      ],
+      "verify": "static review only; compiled by Build images",
       "evidence": [
-        "Draft implementation written; executable acceptance belongs to DEPLOY-05/06"
+        "Two independent review rounds, no blocker/major open; not compiled locally (owner directive 2026-10-06)"
       ],
       "files": [
-        ".github/workflows/build-images.yml",
-        ".github/workflows/production-deploy.yml",
-        "scripts/deploy/release-manifest.mjs"
+        "backend/src/OetLearner.Api/Services/Billing/CatalogPresentationDocument.cs",
+        "backend/src/OetLearner.Api/Services/AdminService.CatalogPackages.cs",
+        "backend/src/OetLearner.Api/Endpoints/Oet2026CatalogEndpoints.cs",
+        "backend/src/OetLearner.Api/Services/AdminService.BillingCatalogAdmin.cs"
       ]
     },
     {
-      "id": "DEPLOY-03",
-      "title": "Write bounded cache/context changes and durable health-aware prepare/promote rollout",
+      "id": "PKG-03",
+      "title": "Frontend: overlay merge on every learner surface, package editor rewrite, mobile multiline fix, read-only managed copy in Billing Ops and Pricing",
       "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": ["DEPLOY-02"],
-      "verify": "build-images.yml and production-deploy.yml",
+      "owner": "package-sync",
+      "blockedBy": [
+        "PKG-01"
+      ],
+      "verify": "static review only; next build in Build images",
       "evidence": [
-        "Draft implementation written; cache/cutover Jev choices validated; no runtime acceptance yet"
+        "Two review rounds; not tested - owner QA"
       ],
       "files": [
-        "Dockerfile",
-        "Dockerfile.dockerignore",
-        "backend/Dockerfile.runtime.dockerignore",
-        "scripts/backup/Dockerfile.dockerignore",
-        "next.config.ts",
-        "docker-compose.production.yml",
-        "scripts/deploy/auto-deploy-ghcr.sh",
-        "scripts/ship/ship.mjs",
-        "scripts/ship/watch-deploy.ps1"
+        "lib/catalog-website-packages.ts",
+        "components/admin/billing/subscriptions-packages-editor.tsx",
+        "components/admin/ui/lines-textarea.tsx",
+        "components/domain/catalog/subscriptions-catalog.tsx"
       ]
     },
     {
-      "id": "DEPLOY-04",
-      "title": "Complete independent evidence review, live Jev triage, failure regressions and operational docs",
+      "id": "PKG-04",
+      "title": "Auth hint cookie oet_signed_in and website Login / Register CTA (branch feat/website-login-cta)",
       "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": ["DEPLOY-02", "DEPLOY-03"],
-      "verify": "build-images.yml / guards",
+      "owner": "package-sync",
+      "blockedBy": [
+        "PKG-01"
+      ],
+      "verify": "static review; website CI regenerates root pages",
       "evidence": [
-        "Independent source review and strictly validated live Jev dispositions completed",
-        "Offline driver, watcher, provenance and registry-cleanup regressions written for Actions; not executed locally",
-        "local:ship:gate and local:ax:check passed; executable acceptance remains DEPLOY-05/06"
+        "Website branch edited, not built; owner QA at 320-1600px after merge"
       ],
       "files": [
-        "scripts/deploy/release-manifest.test.mjs",
-        "scripts/deploy/verify-pipeline-contract.mjs",
-        "scripts/deploy/verify-compute-offload.sh",
-        "scripts/deploy/prune-stale-images.sh",
-        "docs/ops/deploy-gate.md",
+        "lib/auth-storage.ts",
+        "lib/device-id.ts"
+      ]
+    },
+    {
+      "id": "PKG-05",
+      "title": "Docs and ledger",
+      "status": "done",
+      "owner": "package-sync",
+      "blockedBy": [
+        "PKG-02",
+        "PKG-03",
+        "PKG-04"
+      ],
+      "verify": "pnpm run ax:check",
+      "evidence": [
+        "docs/BILLING.md section 11, admin manual, AGENTS.md invariant bullet"
+      ],
+      "files": [
+        "docs/BILLING.md",
         "AGENTS.md",
-        ".github/instructions/deployment.instructions.md",
-        ".github/instructions/validation.instructions.md"
+        "SESSION_STATE.md"
       ]
     },
     {
-      "id": "DEPLOY-AUTH",
-      "title": "Verify process-scoped existing repository-owner authentication without changing the shared CLI identity",
-      "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": [],
-      "verify": "owner authorization and gh repository permission/visibility checks",
-      "evidence": [
-        "Read-only checks: active account push=true/admin=false; repository remains private",
-        "Speaking wrapper public flip returned HTTP 404 before push; its lock/lease released",
-        "Renewed user task authorization; live Jev chose isolated existing authentication (probability/confidence 1)",
-        "Native process-scoped owner identity verified with admin=true; shared default identity unchanged"
+      "id": "PKG-06",
+      "title": "Commit owned paths, pnpm run ship, confirm Build images and Deploy production green for this SHA",
+      "status": "in_progress",
+      "owner": "package-sync",
+      "blockedBy": [
+        "PKG-05"
       ],
+      "verify": "pnpm run ship watcher + ax:record",
+      "evidence": [],
       "files": []
     },
     {
-      "id": "DEPLOY-05",
-      "title": "Run static ship gate, commit only owned paths and verify production through the shipping lease",
-      "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": ["DEPLOY-04", "DEPLOY-AUTH"],
-      "verify": "build-images.yml and production-deploy.yml",
-      "evidence": [
-        "Static gate passed; deployment draft persisted in d6f7e0104 above Speaking ancestor 092e9434dc",
-        "DEPLOY-AUTH resolved with process-scoped native admin verification; shared default unchanged",
-        "37169434286: 30/30 protocol tests and component builds passed; required Writing compilation failed MSB3030 before execution",
-        "Apphost correction verified at 66458ca821e6fb0cca7b40d695d14662eeb5d6fc: build 37170176749, 31 protocol regressions and 26 required Writing tests passed",
-        "Deploy 37170535406 succeeded with HTTP 200, release/green-slot headers and exact physical web/API image and alias proof; inclusive elapsed 744.784 seconds (target missed)"
+      "id": "PKG-07",
+      "title": "Website: push feat/website-login-cta, let regenerate-root rebuild root pages, open PR, owner go-ahead for merge and VPS deploy",
+      "status": "pending",
+      "owner": "package-sync",
+      "blockedBy": [
+        "PKG-06"
       ],
-      "files": ["SESSION_STATE.md", "TASKS.json", "VERIFICATION.md"]
-    },
-    {
-      "id": "DEPLOY-06",
-      "title": "Measure genuine warm/cold and Writing paths on Actions and record exact live evidence or target misses",
-      "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": ["DEPLOY-05", "DEPLOY-07"],
-      "verify": "build-images.yml benchmark/Writing dispatch and production-deploy.yml",
-      "evidence": [
-        "First actual promotion 37170535406 verified at 744.784 seconds inclusive; target missed honestly",
-        "Cold build-only benchmark 37170735127 succeeded in about 322 seconds with 26 real Writing tests; no deployment or cold-live result claimed",
-        "Measured Next compilation improved 75 seconds to 2.9 seconds; remove 67-second cache extraction/20-second hosted cleanup overhead without discarding useful persistence",
-        "Live Jev approved native cache export, exact opt-in Writing compilation, stable API layer partition and watcher benchmark-purpose filtering",
-        "Follow-up f13b93bd47b74123b4cbeba09dc81ce2e0a19094: build 37172887015 passed 37 protocol tests, native cache persistence and complete runtime-byte checks; Writing was skipped",
-        "Deploy 37173143817 served exact physical images in blue: 569.457 seconds before-push-to-watcher-live, 543.109 seconds to driver public-live; target missed",
-        "AX invalid step runner/matrix expressions were corrected using supported job defaults; 37174084749 passed actual-source cases on native Windows PS 5.1.26100.33438 and Linux PS 7.6.6",
-        "Cold forced-Writing build-only benchmark 37173946904 passed exact evaluated 3/666 source sets and 26/26 real tests in 310 workflow seconds; no cold-live claim",
-        "Genuine changed-web/reused-API e96e762ac: build 37174218390 restored the Next cache (5.7s compilation), reused exact f13 component digests and passed; production 37174402463 skipped proven already-applied SQL and verified green physical serving images",
-        "E96 inclusive watcher elapsed 582.880 seconds; driver public-live elapsed 528.521 seconds. Measured image pull 91.524s and actual target readiness 94.649s; target remains unmet",
-        "Corrected 0689edfd0 build 37176154885 passed 38 tests and actual original-byte/owner marker; production 37176403559 verified blue physical serving at 529.552s inclusive, driver 491.713s",
-        "Actual final conditions: cold Next compilation 89s after Dockerfile cache input change; native API/config reuse, 54.659s image pull, 14.482s target readiness and 2.2s layer export; no isolated causal benchmark or five-minute guarantee",
-        "QA 37175518536 and 37176154904 preserved frontend tsc/encoding/lint/vitest/build passed; backend skipped. One backend=always dispatch follows the final docs push so pending replacement does not lose repair evidence",
-        "Final ax:verify matched 78 recorded rows and 14 cited gate run IDs to native GitHub; ax:check and owned diff whitespace check passed",
-        "Specific deletion approval for sole empty stale queued run 25907015352 was requested; owner unavailable, no authorization granted and no history deleted. Ship lock/lease free at 04:26Z; public state remains guarded",
-        "Owned final documentation/evidence commit 88b2567dd shipped with genuine NOTHING_TO_DEPLOY proof; runtime stays verified at 068. Backend repair evidence and explicit privacy blocker tracked separately"
-      ],
-      "files": ["SESSION_STATE.md", "TASKS.json", "PROGRESS.md", "VERIFICATION.md"]
-    },
-    {
-      "id": "DEPLOY-07",
-      "title": "Remove measured web runtime ownership copy-up with unchanged standalone bytes and permissions",
-      "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": ["DEPLOY-05"],
-      "verify": "build-images.yml / guards + build-web and production-deploy.yml",
-      "evidence": [
-        "Live validated Jev selected native copy-time ownership and stable dependency partition after a genuine 91.524-second changed-web image pull (p .99/confidence .99)",
-        "Dockerfile retains root-owned dependencies/server.js and nextjs-owned .next/public; native checksum/ownership assertions and one protocol regression written",
-        "F6 build 37175518557 passed 38 protocol checks and native COPY partition; failed before image publication because Alpine BusyBox rejects GNU sha256sum --check/--quiet. No rollout or five-minute result",
-        "Literal correction uses native advertised -c/-s flags; 0689edfd0 build 37176154885 passed 38 tests and actual WEB_RUNTIME_BYTES_AND_OWNERS_OK; every original byte/owner assertion retained",
-        "Production 37176403559 verified blue HTTP 200/release headers and exact physical images at 529.552s inclusive (driver 491.713s), target missed; native unchanged API reused, pull 54.659s/readiness 14.482s"
-      ],
-      "files": ["Dockerfile", "scripts/deploy/release-manifest.test.mjs", "DEPLOYMENT.md"]
-    },
-    {
-      "id": "DEPLOY-08",
-      "title": "Preserve actual backend evidence for the released repair fixtures after pending QA replacement",
-      "status": "done",
-      "owner": "speaking-repair-qa",
-      "blockedBy": ["DEPLOY-06"],
-      "verify": "writing-rev8-ci.yml / filtered backend + whole compile and production-deploy.yml / live proof",
-      "evidence": [
-        "Exactly one backend=always dispatch 37177363819 confirmed natively: workflow_dispatch, main 88b2567dd9b3cc1414dd6692db4e78405e6b9bbf, pending with no jobs at 04:36Z",
-        "Native exact-ID read recovered a failed timestamp-proximity discovery; no duplicate submission",
-        "Speaking peer 50e6824d-d15d-4890-9995-76a639b35996 owns changed-fixture triage; no shared HEAD/index/visibility/continuity edits",
-        "Final QA 37177363819: frontend/placement, all six native default backend Release builds and shards 1/2/3/5/6 passed. Only shard4 job 111363914610 and dependent gate failed",
-        "Source owner traced exactly one raw snapshot assertion (expected397 actual400) to averaging public rounded projections; live Jev production_regression p.99/confidence.98. Existing assertion remains",
-        "One-file selected-persisted-raw tuple correction is released and inspected; both callers wired. Live Jev approved existing manual custom-filter CI (p.97/confidence.96), production/browser/AI controls off",
-        "Correction e7485ce2fec757c158e1b381d271f65f4d136478: Build images 37180577765 passed 38 protocol cases/original API bytes; production 37180764537 applied same-publish SQL and verified exact green physical/public serving, inclusive510.240s/driver460.272s",
-        "Focused native 37180640839 TRX executed/passed67 with zero skipped/failed; original raw397/public400 plus all three hold/clean/classic selectors actually Passed. Every production/browser/AI switch false",
-        "Native whole-solution compile111372344831 and frontend111372344713 passed; scoped Vitest12 cases in report-view file only, no hook execution inferred. Canonical regeneration in this manual lane is distinct from original production bytes",
-        "Source owner independently confirmed native tests/public serving and released work. New full QA37180577741 remains active; focused evidence is not a full-QA success claim"
-      ],
-      "files": ["backend/src/OetLearner.Api/Services/Speaking/SpeakingExamService.cs", "SESSION_STATE.md", "TASKS.json", "VERIFICATION.md"]
-    },
-    {
-      "id": "DEPLOY-PRIVATE",
-      "title": "Restore repository privacy only after native queue and lease safety permits",
-      "status": "done",
-      "owner": "deployment-latency",
-      "blockedBy": ["DEPLOY-08"],
-      "verify": "ship.mjs --may-flip-private and native GitHub visibility",
-      "evidence": [
-        "Owner's fresh specific grant (D-47, 2026-10-04) authorized exact deletion of the stale May record: DELETE actions/runs/25907015352 returned HTTP 204 and native GET now 404; the phantom queued record is gone from the Actions queue",
-        "Console apply=true dispatch 37199930253 passed all 8 jobs and recreated the runtime on exact main fde751378 images; the previously active owner turns were interrupted per the grant and remain resumable",
-        "Privacy restoration executes through the guarded ship close: flip private only when no lease holder and no queued/in-progress Actions run remains; an unrelated Writing Rev8 run 37199702750 in flight during this round is not owned by it"
-      ],
-      "files": ["SESSION_STATE.md", "TASKS.json"]
+      "verify": "Website build.yml green on the PR",
+      "evidence": [],
+      "files": []
     }
   ]
 }

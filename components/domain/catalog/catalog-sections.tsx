@@ -8,13 +8,14 @@ import { cn } from '@/lib/utils';
 import type { MyEntitlementSnapshot } from '@/lib/api';
 import type { PublicCatalogAddOnRow } from '@/lib/types/admin';
 import {
+  type CatalogPresentation,
   type CatalogStorefrontConfig,
   resolveCatalogIcon,
   normalizeAccent,
   professionLabel,
   formatPrice,
 } from '@/lib/catalog-presentation';
-import { resolveWebsitePackageByCode } from '@/lib/catalog-website-packages';
+import { resolveWebsitePackageWithOverlay } from '@/lib/catalog-website-packages';
 
 export function CatalogHero({ config }: { config: CatalogStorefrontConfig }) {
   const accent = normalizeAccent(config.hero.accent, config.accent);
@@ -116,7 +117,14 @@ export function CatalogFilters({
   );
 }
 
-export function CatalogAddOnsSection({ addOns }: { addOns: PublicCatalogAddOnRow[] }) {
+export function CatalogAddOnsSection({
+  addOns,
+  presentation,
+}: {
+  addOns: PublicCatalogAddOnRow[];
+  /** Admin package copy; without it the static website copy is shown. */
+  presentation?: CatalogPresentation | null;
+}) {
   if (addOns.length === 0) return null;
   return (
     <section className="space-y-4">
@@ -127,7 +135,7 @@ export function CatalogAddOnsSection({ addOns }: { addOns: PublicCatalogAddOnRow
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {addOns.map((addon) => {
-          const websitePackage = resolveWebsitePackageByCode(addon.code);
+          const websitePackage = resolveWebsitePackageWithOverlay(addon.code, presentation);
           return (
           <Card key={addon.code} padding="md" className="flex h-full flex-col">
             <div className="flex items-start justify-between gap-3">
@@ -149,24 +157,24 @@ export function CatalogAddOnsSection({ addOns }: { addOns: PublicCatalogAddOnRow
                 <p className="mt-3 text-xs text-muted">
                   <span className="font-semibold text-navy">Category:</span> {websitePackage.category}
                 </p>
-                <p className="mt-2 text-sm text-muted">{websitePackage.description}</p>
+                <p className="mt-2 whitespace-pre-line text-sm text-muted">{websitePackage.description}</p>
                 <p className="mt-2 text-sm text-muted">
                   <span className="font-semibold text-navy">Format:</span> {websitePackage.formatLine}
                 </p>
                 <ul className="mt-3 space-y-1.5 text-sm text-navy">
-                  {websitePackage.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
+                  {websitePackage.features.map((feature, featureIndex) => (
+                    <li key={`${featureIndex}-${feature}`} className="flex items-start gap-2">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
                       <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
-                <p className="mt-3 text-sm text-navy">
+                <p className="mt-3 whitespace-pre-line text-sm text-navy">
                   <span className="font-bold">Best for:</span> {websitePackage.bestFor}
                 </p>
               </>
             ) : addon.description ? (
-              <p className="mt-3 text-sm text-muted">{addon.description}</p>
+              <p className="mt-3 whitespace-pre-line text-sm text-muted">{addon.description}</p>
             ) : null}
           </Card>
           );

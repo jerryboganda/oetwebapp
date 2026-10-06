@@ -29,7 +29,12 @@ public static class LearnerEndpoints
         // values (Sentry DSN, Soketi public key, VAPID public key, platform URLs)
         // from the DB at runtime instead of build-time NEXT_PUBLIC_* bundle values.
         publicV1.MapPublicRuntimeConfig();
-        app.MapGet("/v1/billing/ai-packages", async (LearnerService service) => Results.Ok(await service.GetAiPackagesAsync())).AllowAnonymous();
+        app.MapGet("/v1/billing/ai-packages", async (HttpContext http, LearnerService service) =>
+        {
+            // Package copy is admin-editable; no WebView or CDN may hold a stale list.
+            http.Response.Headers.CacheControl = "private, no-store";
+            return Results.Ok(await service.GetAiPackagesAsync());
+        }).AllowAnonymous();
         app.MapGet("/v1/billing/content", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingContentAsync(ct))).AllowAnonymous();
 
         var participantV1 = app.MapGroup("/v1").RequireAuthorization("RulebookReader");

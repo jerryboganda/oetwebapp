@@ -68,7 +68,14 @@ function readWebDeviceCookie(): string | null {
   }
 }
 
-function sharedWebCookieDomain(): string {
+/**
+ * Returns the `; Domain=.oetwithdrhesham.co.uk` cookie attribute (ready to append
+ * to a cookie string) on the apex, www and app hosts, and an empty string on any
+ * other origin (localhost, previews, Capacitor shells), where a Domain attribute
+ * would be silently rejected by the browser. Shared with lib/auth-storage.ts for
+ * the signed-in hint cookie.
+ */
+export function sharedWebCookieDomain(): string {
   if (typeof window === 'undefined') return '';
 
   const hostname = window.location.hostname.toLowerCase();

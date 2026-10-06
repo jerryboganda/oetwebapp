@@ -1178,7 +1178,7 @@ public partial class AdminService
                     couponPointers[group.Key].LatestVersionId));
     }
 
-    private static object MapBillingPlan(BillingPlan plan, BillingCatalogVersionMetadata? versionMetadata = null, string? comparisonFeaturesJson = null) => new
+    private static object MapBillingPlan(BillingPlan plan, BillingCatalogVersionMetadata? versionMetadata = null, string? comparisonFeaturesJson = null, bool packageManaged = false) => new
     {
         plan.Id,
         code = plan.Code,
@@ -1232,10 +1232,12 @@ public partial class AdminService
         deliveryInstructions = plan.DeliveryInstructions,
         contentOverridesJson = plan.ContentOverridesJson,
         // "What's included" — loaded from the linked ContentPackage.
-        comparisonFeatures = JsonSupport.Deserialize<List<string>>(comparisonFeaturesJson ?? "[]", [])
+        comparisonFeatures = JsonSupport.Deserialize<List<string>>(comparisonFeaturesJson ?? "[]", []),
+        // True when Subscriptions & Packages owns this plan's name and description (they are mirrored read-only here).
+        packageManaged
     };
 
-    private static object MapBillingAddOn(BillingAddOn addOn, BillingCatalogVersionMetadata? versionMetadata = null) => new
+    private static object MapBillingAddOn(BillingAddOn addOn, BillingCatalogVersionMetadata? versionMetadata = null, bool packageManaged = false) => new
     {
         addOn.Id,
         code = addOn.Code,
@@ -1271,7 +1273,9 @@ public partial class AdminService
         sessionsGranted = addOn.SessionsGranted,
         // AI grading package presentation (admin-configurable)
         aiPackageGroup = addOn.AiPackageGroup,
-        aiFeatures = JsonSupport.Deserialize<List<string>>(addOn.AiFeaturesJson, [])
+        aiFeatures = JsonSupport.Deserialize<List<string>>(addOn.AiFeaturesJson, []),
+        // True when Subscriptions & Packages owns this add-on's name and description (they are mirrored read-only here).
+        packageManaged
     };
 
     private static object MapBillingCoupon(BillingCoupon coupon, BillingCatalogVersionMetadata? versionMetadata = null) => new

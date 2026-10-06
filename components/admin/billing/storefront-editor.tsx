@@ -1,20 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Save, RotateCcw, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { Input } from '@/components/admin/ui/input';
 import { Textarea } from '@/components/admin/ui/textarea';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchAdminCatalogPresentation, saveAdminCatalogPresentation } from '@/lib/api';
+import { fetchAdminCatalogPresentation, isApiError, saveAdminStorefront } from '@/lib/api';
 import {
   DEFAULT_CATALOG_STOREFRONT,
   resolveStorefrontConfig,
   CATALOG_ICON_KEYS,
   type CatalogStorefrontConfig,
   type CatalogCardPresentation,
-  type CatalogPresentation,
 } from '@/lib/catalog-presentation';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
 
@@ -33,61 +32,108 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-export function StorefrontEditor() {
+export function StorefrontEditor({ canWrite = true }: { canWrite?: boolean }) {
   const [loading, setLoading] = useState(true);
+  const [reloading, setReloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [droppedCodes, setDroppedCodes] = useState<string[]>([]);
   const [planCodes, setPlanCodes] = useState<string[]>([]);
   const [addOnCodes, setAddOnCodes] = useState<string[]>([]);
   const [config, setConfig] = useState<CatalogStorefrontConfig>(DEFAULT_CATALOG_STOREFRONT);
   const [byCode, setByCode] = useState<Record<string, CatalogCardPresentation>>({});
+  const [revision, setRevision] = useState('');
+  const [savedSnapshot, setSavedSnapshot] = useState('');
   const [selectedCode, setSelectedCode] = useState<string>('');
+  const aliveRef = useRef(true);
+
+  const loadLatest = useCallback(async (initial: boolean) => {
+    if (!initial) setReloading(true);
+    try {
+      const res = await fetchAdminCatalogPresentation();
+      if (!aliveRef.current) return;
+      const nextPlanCodes = res.planCodes ?? [];
+      const nextAddOnCodes = res.addOnCodes ?? [];
+      const nextConfig = resolveStorefrontConfig(res.presentation);
+      const nextByCode = res.presentation?.byCode ?? {};
+      setPlanCodes(nextPlanCodes);
+      setAddOnCodes(nextAddOnCodes);
+      setConfig(nextConfig);
+      setByCode(nextByCode);
+      setRevision(res.revisions?.storefront ?? '');
+      setSavedSnapshot(JSON.stringify({ config: nextConfig, byCode: nextByCode }));
+      setSelectedCode((current) =>
+        [...nextPlanCodes, ...nextAddOnCodes].includes(current) ? current : (nextPlanCodes[0] ?? nextAddOnCodes[0] ?? ''),
+      );
+      setError(null);
+      setConflict(false);
+      setDroppedCodes([]);
+    } catch (err) {
+      if (!aliveRef.current) return;
+      setError(err instanceof Error ? err.message : 'Failed to load storefront settings.');
+    } finally {
+      if (aliveRef.current) {
+        setLoading(false);
+        setReloading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetchAdminCatalogPresentation();
-        if (cancelled) return;
-        setPlanCodes(res.planCodes ?? []);
-        setAddOnCodes(res.addOnCodes ?? []);
-        setConfig(resolveStorefrontConfig(res.presentation));
-        setByCode(res.presentation?.byCode ?? {});
-        setSelectedCode((res.planCodes ?? [])[0] ?? (res.addOnCodes ?? [])[0] ?? '');
-        setError(null);
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load storefront settings.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    aliveRef.current = true;
     return () => {
-      cancelled = true;
+      aliveRef.current = false;
     };
   }, []);
 
+  useEffect(() => {
+    void loadLatest(true);
+  }, [loadLatest]);
+
   const allCodes = useMemo(() => [...planCodes, ...addOnCodes], [planCodes, addOnCodes]);
   const card: CatalogCardPresentation = byCode[selectedCode] ?? {};
+  const dirty = useMemo(() => JSON.stringify({ config, byCode }) !== savedSnapshot, [config, byCode, savedSnapshot]);
 
+  // Saves ONLY the storefront + per-plan card sections against the storefront revision; the
+  // server never touches the Subscriptions & Packages (websitePackages) section from here.
   const handleSave = async () => {
     setSaving(true);
     setError(null);
+    setConflict(false);
+    setDroppedCodes([]);
     try {
-      const presentation: CatalogPresentation = { storefront: config, byCode };
-      await saveAdminCatalogPresentation(presentation);
-      setSavedAt(new Date().toLocaleTimeString());
+      const res = await saveAdminStorefront({ expectedRevision: revision, storefront: config, byCode });
+      const nextConfig = resolveStorefrontConfig(res.presentation);
+      const nextByCode = res.presentation?.byCode ?? {};
+      setConfig(nextConfig);
+      setByCode(nextByCode);
+      setRevision(res.revisions?.storefront ?? '');
+      setSavedSnapshot(JSON.stringify({ config: nextConfig, byCode: nextByCode }));
+      setDroppedCodes(res.droppedCodes ?? []);
+      setSavedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save storefront settings.');
+      if (isApiError(err) && (err.status === 409 || err.code === 'catalog_presentation_conflict')) {
+        setConflict(true);
+        setError(err.message);
+      } else if (isApiError(err) && err.status === 400 && err.fieldErrors.length > 0) {
+        setError(err.fieldErrors[0].message);
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to save storefront settings.');
+      }
     } finally {
       setSaving(false);
     }
   };
 
   const handleReset = () => {
+    const confirmed = window.confirm(
+      'Reset the whole storefront (hero, sections, call-to-action, categories, legend, labels and every per-package presentation) to the defaults? Nothing is saved until you press Save changes.',
+    );
+    if (!confirmed) return;
     setConfig(DEFAULT_CATALOG_STOREFRONT);
     setByCode({});
-    setSavedAt(null);
   };
 
   const updateHero = (patch: Partial<CatalogStorefrontConfig['hero']>) =>
@@ -106,21 +152,54 @@ export function StorefrontEditor() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-admin-border bg-admin-bg-page px-4 py-3">
-        <div className="text-sm text-admin-fg-muted">
+        <div className="text-sm text-admin-fg-muted" aria-live="polite">
           Changes apply to the public catalog and the in-dashboard Subscriptions and Packages page immediately on save.
-          {savedAt ? <span className="ml-2 font-semibold text-admin-fg-default">Saved at {savedAt}.</span> : null}
+          {dirty ? (
+            <span className="ml-2 font-semibold text-admin-fg-default">Unsaved changes.</span>
+          ) : savedAt ? (
+            <span className="ml-2 font-semibold text-admin-fg-default">Saved at {savedAt}.</span>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={handleReset} startIcon={<RotateCcw className="h-4 w-4" />}>
+          <Button variant="ghost" size="sm" onClick={handleReset} disabled={!canWrite || saving} startIcon={<RotateCcw className="h-4 w-4" />}>
             Reset to defaults
           </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving} startIcon={<Save className="h-4 w-4" />}>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={!canWrite || saving || !dirty || revision === ''}
+            startIcon={<Save className="h-4 w-4" />}
+          >
             {saving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>
       </div>
 
-      {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+      {!canWrite ? (
+        <InlineAlert variant="warning">You have read-only billing access. You can review the storefront settings, but saving is disabled.</InlineAlert>
+      ) : null}
+
+      {error ? (
+        <InlineAlert
+          variant={conflict ? 'warning' : 'error'}
+          action={
+            conflict || revision === '' ? (
+              <Button size="sm" variant="secondary" loading={reloading} onClick={() => void loadLatest(false)}>
+                Reload latest
+              </Button>
+            ) : undefined
+          }
+        >
+          {error}
+          {conflict ? ' Your edits are still on screen; reloading replaces them with the latest saved version.' : ''}
+        </InlineAlert>
+      ) : null}
+
+      {droppedCodes.length > 0 ? (
+        <InlineAlert variant="info" live="polite">
+          Saved. These package codes no longer exist, so their presentation was not stored: {droppedCodes.join(', ')}.
+        </InlineAlert>
+      ) : null}
 
       <Card>
         <CardContent className="space-y-4 pt-6">

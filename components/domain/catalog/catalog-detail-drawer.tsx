@@ -19,7 +19,7 @@ import {
   formatAccessDuration,
   formatPrice,
 } from '@/lib/catalog-presentation';
-import { resolveWebsitePackageByCode, type WebsitePackage } from '@/lib/catalog-website-packages';
+import { resolveWebsitePackageWithOverlay, type WebsitePackage } from '@/lib/catalog-website-packages';
 import { CATALOG_ACCENT_TILE } from './catalog-plan-card';
 
 export interface CatalogPlanDetailDrawerProps {
@@ -28,6 +28,8 @@ export interface CatalogPlanDetailDrawerProps {
   config: CatalogStorefrontConfig;
   owned?: boolean;
   variant: 'dashboard' | 'public';
+  /** Package copy already merged by the storefront (static, or custom plan); resolved from the overlay when omitted. */
+  websitePackage?: WebsitePackage;
   onClose: () => void;
   /** Adds the plan to the client cart instead of deep-linking to /checkout/review. */
   onAddToCart: (plan: PublicCatalogPlanRow) => void;
@@ -38,9 +40,17 @@ interface BundledStat {
   value: string;
 }
 
+// A custom plan (packageNo <= 0) carries empty strings/lists until the admin writes overlay copy.
+function isCustomPackage(websitePackage?: WebsitePackage): boolean {
+  return websitePackage != null && websitePackage.packageNo <= 0;
+}
+
 function bundledStats(plan: PublicCatalogPlanRow, websitePackage?: WebsitePackage): BundledStat[] {
+  const packageAccess = websitePackage && !(isCustomPackage(websitePackage) && !websitePackage.access)
+    ? websitePackage.access
+    : undefined;
   const stats: BundledStat[] = [
-    { label: 'Access', value: websitePackage?.access ?? formatAccessDuration(plan.accessDurationDays) },
+    { label: 'Access', value: packageAccess ?? formatAccessDuration(plan.accessDurationDays) },
   ];
   if (websitePackage?.duration) stats.push({ label: 'Duration', value: websitePackage.duration });
   if (plan.bundledWritingAssessments > 0) stats.push({ label: 'Writing assessments', value: String(plan.bundledWritingAssessments) });
@@ -51,13 +61,29 @@ function bundledStats(plan: PublicCatalogPlanRow, websitePackage?: WebsitePackag
   return stats;
 }
 
-export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, variant, onClose, onAddToCart }: CatalogPlanDetailDrawerProps) {
-  const websitePackage = plan ? resolveWebsitePackageByCode(plan.code) : undefined;
+export function CatalogPlanDetailDrawer({
+  plan,
+  presentation,
+  config,
+  owned,
+  variant,
+  websitePackage: mergedWebsitePackage,
+  onClose,
+  onAddToCart,
+}: CatalogPlanDetailDrawerProps) {
+  const websitePackage = mergedWebsitePackage ?? (plan ? resolveWebsitePackageWithOverlay(plan.code, presentation) : undefined);
+  const isCustom = isCustomPackage(websitePackage);
+  // An empty custom package has no overlay copy yet: fall back to the plan-derived values.
+  const packageFeatures = websitePackage && !(isCustom && websitePackage.features.length === 0) ? websitePackage.features : undefined;
+  const packageProfession = websitePackage && !(isCustom && websitePackage.metaChips.length === 0) ? websitePackage.profession : undefined;
+  const packageCategory = websitePackage && !(isCustom && !websitePackage.category) ? websitePackage.category : undefined;
+  const packageDescription = websitePackage && !(isCustom && !websitePackage.description) ? websitePackage.description : undefined;
   const card = plan ? resolveCardPresentation(plan.code, presentation) : {};
   const Icon = plan ? (resolveCatalogIcon(card.iconKey) ?? defaultIconForCategory(plan.productCategory)) : Layers;
   const accent = normalizeAccent(card.accent, config.accent);
   const tile = CATALOG_ACCENT_TILE[accent] ?? CATALOG_ACCENT_TILE.primary;
-  const bullets = plan ? websitePackage?.features ?? planFeatureBullets(plan, card) : [];
+  const bullets = plan ? packageFeatures ?? planFeatureBullets(plan, card) : [];
+  const description = plan ? packageDescription ?? card.tagline ?? plan.description : undefined;
   const flags = plan ? addOnEnabledFlags(plan) : [];
   const stats = plan ? bundledStats(plan, websitePackage) : [];
   const hasDiscount = plan?.originalPrice != null && plan.originalPrice > plan.price;
@@ -72,9 +98,9 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2 eyebrow text-muted">
-                <span>{websitePackage?.profession ?? professionLabel(config, plan.profession)}</span>
+                <span>{packageProfession ?? professionLabel(config, plan.profession)}</span>
                 <span aria-hidden="true">·</span>
-                <span>{websitePackage?.category ?? categoryLabel(config, plan.productCategory)}</span>
+                <span>{packageCategory ?? categoryLabel(config, plan.productCategory)}</span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="text-3xl font-bold text-navy">{formatPrice(plan.price, plan.currency)}</span>
@@ -85,10 +111,8 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             </div>
           </div>
 
-          {websitePackage?.description || card.tagline || plan.description ? (
-            <p className="text-sm leading-relaxed text-muted">
-              {websitePackage?.description ?? card.tagline ?? plan.description}
-            </p>
+          {description ? (
+            <p className="whitespace-pre-line text-sm leading-relaxed text-muted">{description}</p>
           ) : null}
 
           {stats.length > 0 ? (
@@ -106,8 +130,8 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             <div>
               <p className="mb-2 eyebrow text-muted">What you get</p>
               <ul className="space-y-2 text-sm text-navy">
-                {bullets.map((bullet) => (
-                  <li key={bullet} className="flex items-start gap-2">
+                {bullets.map((bullet, bulletIndex) => (
+                  <li key={`${bulletIndex}-${bullet}`} className="flex items-start gap-2">
                     <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-success-strong" />
                     <span>{bullet}</span>
                   </li>
@@ -116,14 +140,18 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             </div>
           ) : null}
 
-          {websitePackage ? (
+          {websitePackage && (websitePackage.formatLine || websitePackage.bestFor) ? (
             <div className="space-y-3 rounded-xl border border-border bg-background-light px-4 py-3 text-sm">
-              <p className="text-navy">
-                <span className="font-bold">Format:</span> {websitePackage.formatLine}
-              </p>
-              <p className="text-navy">
-                <span className="font-bold">Best for:</span> {websitePackage.bestFor}
-              </p>
+              {websitePackage.formatLine ? (
+                <p className="text-navy">
+                  <span className="font-bold">Format:</span> {websitePackage.formatLine}
+                </p>
+              ) : null}
+              {websitePackage.bestFor ? (
+                <p className="whitespace-pre-line text-navy">
+                  <span className="font-bold">Best for:</span> {websitePackage.bestFor}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

@@ -1,6 +1,6 @@
 # PROGRESS — Durable Checkpoint Ledger
 
-Last updated: 2026-10-04
+Last updated: 2026-10-06
 
 ## How this file works
 
@@ -11,7 +11,14 @@ Last updated: 2026-10-04
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
 
-## Active checkpoint - Compulsory accelerated release enforcement (2026-10-04)
+## Active checkpoint - Package sync, linked pricing, mobile multiline fix, website Login CTA (2026-10-06)
+
+- Owner spec 06 Oct 2026. Root causes: overlay merge applied only `featured`; the whole-blob presentation PUT let the Storefront and Packages editors wipe each other; one-per-line textareas re-derived their value from a trimmed array (Enter/space lost on desktop too); the website CTA lived only in the hamburger / >=1500px nav.
+- Master = `CatalogPresentationJson.websitePackages` keyed by plan code (static TS copy = factory default); Name/Description/bullets mirror onto BillingPlan/BillingAddOn/ContentPackage without a new version; price/currency/interval/status edit the same row (one version). Section-scoped PUTs with hash revisions (409 on stale), audit, no-store, public prune. Supersedes the 14 Aug "never overlay" rule.
+- No schema/migration. Reviewed twice by independent static reviewers; not compiled or run locally (owner directive 2026-10-06) - compilation happens in Build images, everything else is owner QA.
+- Website CTA + `oet_signed_in` hint cookie: Website branch `feat/website-login-cta` (root HTML via that repo's CI); VPS deploy needs the owner's go-ahead.
+
+## Previous checkpoint - Compulsory accelerated release enforcement (2026-10-04)
 
 - Owner requires every contributor/agent to retain the live510.240s architecture and explicitly authorizes scoped commit/main push/deploy; no duration guarantee or weakened gates.
 - Live Jev approved guard/lifecycle/inheritance/console corrections (all p/confidence/margin1); Claude/Gemini imports and contributor/Copilot guidance inherit one baseline. Console engines remain isolated agent-branch/PR-only.

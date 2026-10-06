@@ -112,7 +112,7 @@ export function DashboardAddonsWidget({
 
                 <div className="flex-1 min-h-[36px] mb-4">
                   {addon.description && (
-                    <p className="mt-2.5 text-xs leading-relaxed text-muted line-clamp-2">{addon.description}</p>
+                    <p className="mt-2.5 whitespace-pre-line text-xs leading-relaxed text-muted line-clamp-2">{addon.description}</p>
                   )}
                 </div>
 
