@@ -54,7 +54,7 @@ public sealed class CompanionPromptComposer(
     /// </summary>
     internal const string DefaultPersona = "Sami";
 
-    public Task<string> ComposeAsync(
+    public async Task<string> ComposeAsync(
         CompanionTurnContext context,
         CompanionRetrievalResult retrieval,
         CancellationToken ct)
@@ -100,7 +100,7 @@ public sealed class CompanionPromptComposer(
         AppendBoundaries(sb, context);
         AppendStyle(sb, context);
 
-        return Task.FromResult(sb.ToString());
+        return sb.ToString();
     }
 
     private static void AppendLearnerContext(StringBuilder sb, CompanionTurnContext context)

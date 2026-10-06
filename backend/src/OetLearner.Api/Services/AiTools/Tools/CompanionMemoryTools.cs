@@ -425,7 +425,7 @@ public sealed class CompanionWhyScoreChangeTool(
 
         var trend = bySubtest.ToDictionary(
             g => g.Key,
-            g => g.Take(3).Select(m => new { date = m.RecordedAt.ToString("yyyy-MM-dd"), content = m.Content }).ToArray());
+            g => g.Value.Take(3).Select(m => new { date = m.RecordedAt.ToString("yyyy-MM-dd"), content = m.Content }).ToArray());
         var weaknesses = await errorDna.TopWeaknessesAsync(ctx.UserId!, 6, ct);
 
         return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
