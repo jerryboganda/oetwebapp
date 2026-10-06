@@ -1,0 +1,79 @@
+name: writing-stimulus-swap
+
+# Swap raster-derived Writing stimulus PDFs for their verified vector retypes
+# (owner patch 7 Oct 2026: every Writing sample sharp; content verbatim,
+# source-quality fix only). The built PDFs live in scripts/materials/built/
+# keyed by the OLD media-asset id (<oldAssetId>.pdf). The swap script uploads
+# each PDF as a new MediaAsset, points the task's StimulusPdfMediaAssetId at
+# it (mirroring every other field — the authoring PUT is a full-replace),
+# re-reads to prove the pointer moved, and runs the validate gate.
+#
+# Manual only. Dry-run by default; tick "apply" to write. Ledger artifact on
+# every run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "false = dry-run plan only; true = perform the swaps"
+        type: boolean
+        default: false
+      only:
+        description: "Optional substring filter on task id/title (empty = all rows in the ledger)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: writing-stimulus-swap
+  cancel-in-progress: false
+
+jobs:
+  swap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the ledger from scripts/materials/built/
+        run: |
+          node -e '
+          const fs = require("fs");
+          const path = require("path");
+          const dir = "scripts/materials/built";
+          const only = process.env.ONLY.toLowerCase();
+          // oldAssetId -> the live task still pointing at it is resolved by the swap script per task id below.
+          // The task ledger maps each built file to its scenario id (committed alongside as ledger.json).
+          const ledger = JSON.parse(fs.readFileSync(path.join(dir, "ledger.json"), "utf8"));
+          const jobs = ledger
+            .filter((row) => fs.existsSync(path.join(dir, `${row.oldAssetId}.pdf`)))
+            .map((row) => ({ task: row.scenarioId, upload: path.resolve(dir, `${row.oldAssetId}.pdf`), title: row.title }))
+            .filter((row) => !only || row.title.toLowerCase().includes(only) || row.task.toLowerCase().includes(only));
+          fs.writeFileSync("swap-jobs.json", JSON.stringify(jobs, null, 2));
+          console.log(`${jobs.length} swap job(s)`);
+          '
+        env:
+          ONLY: ${{ inputs.only }}
+
+      - name: Swap the stimulus PDFs
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          SWAP_OUT: swap-result.json
+        run: node scripts/materials/swap-stimulus-pdf.mjs --from swap-jobs.json ${{ inputs.apply && '--apply' || '' }}
+
+      - name: Upload the ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stimulus-swap-${{ github.run_id }}
+          path: |
+            swap-jobs.json
+            swap-result.json
+          retention-days: 90
