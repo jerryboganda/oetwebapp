@@ -13,8 +13,8 @@ public sealed record CanaryExpected(int PageCount, string TextSha256, string Pag
 ///
 /// <para>
 /// The expected hashes are produced by running <see cref="PdfPigPdfTextExtractor"/> (the oracle the agent is
-/// link-compiled from) over the embedded bytes, once per process, so they can never drift from the extractor. A CI test
-/// pins the result as non-empty text so a broken fixture fails the build, not production.
+/// link-compiled from) over the embedded bytes, once per process, so they can never drift from the extractor. A manual
+/// test source (<c>RemoteEngineMigrationAndWiringTests</c>) pins the result as non-empty text; nothing runs it automatically.
 /// </para>
 /// </summary>
 public static class RemoteCanary

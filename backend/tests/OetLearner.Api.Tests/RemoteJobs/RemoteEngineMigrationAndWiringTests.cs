@@ -36,7 +36,10 @@ public sealed class RemoteEngineMigrationAndWiringTests
     /// </summary>
     private static readonly Dictionary<int, string> KnownExtractorHashes = new()
     {
-        [1] = "6e290e380a13ab92b587c5d425359e25616282e6ac46bbcf404fc6df589f4858",
+        // Revision 1 was first recorded as 6e290e38...f4858. The PDF hardening layer then added ONE diagnostics-only call to
+        // ExtractAsync (PdfExtractionFacts.RecordEmbedded, feeding the "pdf.extract.done" log line; it never touches the returned
+        // text), so the output is unchanged, the revision stays 1 and only the recorded hash moved.
+        [1] = "2f2abe20df25cd9570db9e40227f821a158ace4c4b7b5fc237af2343c582ee2f",
     };
 
     [Fact]
@@ -81,7 +84,7 @@ public sealed class RemoteEngineMigrationAndWiringTests
 
         var expected = RemoteCanary.GetExpectedAsync().GetAwaiter().GetResult();
 
-        // A fixture that extracts to nothing could never prove a node correct: fail the build, not production.
+        // A fixture that extracts to nothing could never prove a node correct: fail this test, not production.
         Assert.True(expected.PageCount >= 1);
         Assert.True(expected.EmbeddedChars >= RemoteCanary.MinTextLength, "the canary document must carry real text");
         Assert.True(RemoteIds.IsSha256Hex(expected.TextSha256));

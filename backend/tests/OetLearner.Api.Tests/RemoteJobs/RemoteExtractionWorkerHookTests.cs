@@ -57,6 +57,26 @@ public sealed class RemoteExtractionWorkerHookTests
                 CreatedAt = now.AddMinutes(index),
                 UpdatedAt = now.AddMinutes(index),
             }));
+            // The worker only selects papers with an uncached PDF asset (predicate + id cursor), so each one carries a PDF.
+            seed.MediaAssets.AddRange(Enumerable.Range(0, 4).Select(index => new MediaAsset
+            {
+                Id = "media-" + index,
+                OriginalFilename = "paper-" + index + ".pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                StoragePath = "papers/paper-" + index + ".pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedAt = now,
+            }));
+            seed.ContentPaperAssets.AddRange(Enumerable.Range(0, 4).Select(index => new ContentPaperAsset
+            {
+                Id = "asset-" + index,
+                PaperId = "paper-" + index,
+                Role = PaperAssetRole.QuestionPaper,
+                MediaAssetId = "media-" + index,
+                IsPrimary = true,
+                CreatedAt = now,
+            }));
             await seed.SaveChangesAsync();
         }
 

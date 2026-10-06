@@ -7,7 +7,9 @@ namespace OetLearner.Api.Services.Content;
 ///
 /// <para>
 /// This file is deliberately dependency-free (System + UglyToad.PdfPig only) so the
-/// fleet agent can link-compile it next to <c>PdfPigPdfTextExtractor.cs</c>. Both
+/// fleet agent can link-compile it next to <c>PdfPigPdfTextExtractor.cs</c> (which also needs
+/// the equally dependency-free <c>PdfExtractionFacts.cs</c> linked in: its <c>ExtractAsync</c> reports the
+/// log-line facts there, and the project needs implicit usings for <c>AsyncLocal</c>). Both
 /// processes then derive the same <see cref="EngineVersion"/> string, which is part of
 /// every remote job's idempotency key and result echo.
 /// </para>

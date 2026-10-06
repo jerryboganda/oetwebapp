@@ -142,7 +142,6 @@ public sealed class RemotePdfExtractionProducer(
         {
             var allowed = headroom.HasHeadroom() || fallbacks.All(p => now - p.Job!.CreatedAt >= hardAfter);
             if (allowed) return RemoteExtractionDecision.Local;
-            await TouchForRotationAsync(paperId, ct);
             return RemoteExtractionDecision.Skip;
         }
 
@@ -154,7 +153,6 @@ public sealed class RemotePdfExtractionProducer(
             if (decision == RemotePlacementDecision.Wait)
             {
                 if (waits.HardDeadlinePassed("pdf:" + paperId, hardAfter)) return RemoteExtractionDecision.Local;
-                await TouchForRotationAsync(paperId, ct);
                 return RemoteExtractionDecision.Skip;
             }
 
@@ -169,7 +167,6 @@ public sealed class RemotePdfExtractionProducer(
             waits.Clear("pdf:" + paperId);
         }
 
-        await TouchForRotationAsync(paperId, ct);
         return plans.Any(p => p.Plan is AssetPlan.Pending or AssetPlan.EnqueueNeeded)
             ? RemoteExtractionDecision.Remote
             : RemoteExtractionDecision.Skip;
@@ -294,18 +291,5 @@ public sealed class RemotePdfExtractionProducer(
             logger.LogWarning(ex, "Could not hash media asset {MediaId}; it stays on the local extraction path.", asset.MediaId);
             return null;
         }
-    }
-
-    /// <summary>
-    /// Keeps the worker's oldest-first window rotating exactly as the local pass does: the local pass bumps
-    /// <c>UpdatedAt</c> of every paper it visits, so a paper that remote jobs own must be bumped too or the same papers
-    /// would be revisited forever and later papers never reached.
-    /// </summary>
-    private Task TouchForRotationAsync(string paperId, CancellationToken ct)
-    {
-        var now = timeProvider.GetUtcNow();
-        return db.ContentPapers
-            .Where(p => p.Id == paperId)
-            .ExecuteUpdateAsync(s => s.SetProperty(p => p.UpdatedAt, _ => now), ct);
     }
 }

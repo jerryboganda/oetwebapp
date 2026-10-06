@@ -650,8 +650,9 @@ public sealed class RemoteNodesAndProducersPostgresTests
         Assert.Equal(RemoteTestData.Sha, job.InputSha256);
         Assert.Equal(RemoteTestData.Engine(), job.EngineVersion);
         Assert.NotNull(job.FallbackAfter);
-        // the worker's oldest-first window keeps rotating: a paper that remote jobs own is bumped like a locally processed one
-        Assert.True(await h.ScalarAsync<bool>("""SELECT "UpdatedAt" > now() - interval '1 hour' FROM "ContentPapers" WHERE "Id" = 'paper-1';"""));
+        // the worker's id cursor rotates the window now, so handing a paper to remote jobs touches neither UpdatedAt nor RowVersion
+        Assert.Equal(0, await h.CountAsync("""SELECT COUNT(*)::int FROM "ContentPapers" WHERE "Id" = 'paper-1' AND "UpdatedAt" > now() - interval '1 hour';"""));
+        Assert.Equal(3, await h.PaperVersionAsync());
     }
 
     [PostgreSqlFact]

@@ -105,6 +105,41 @@ public sealed class RemoteContentApplierTests
         Assert.Null(ExtractedTextMerger.ReadKeys("not json"));
     }
 
+    [Fact]
+    public void ReadKeys_AnAssetWhoseAutomaticAttemptsAreUsedUp_CountsAsNeedingNoWork()
+    {
+        // layer 02's reserved key: { "<assetId>": attempts }; the worker's SQL pre-filter reads the id as a key too
+        var keys = ExtractedTextMerger.ReadKeys("{\"a\":\"1\",\"extractionExhausted\":{\"b\":5},\"extractionFailures\":[{\"assetId\":\"c\",\"attempts\":1}]}")!;
+
+        Assert.Contains("a", keys);
+        Assert.Contains("b", keys);
+        Assert.DoesNotContain("c", keys); // a failure in back-off is still a candidate: a bounded wait, then a retry
+    }
+
+    [Fact]
+    public void Merge_AnAssetThatNowHasText_DropsItsFailureMarkerAndExhaustedEntry_AndNoOneElses()
+    {
+        const string existing = "{\"listeningQuestions\":[],\"extractionExhausted\":{\"b\":5,\"c\":5},"
+            + "\"extractionFailures\":[{\"assetId\":\"b\",\"attempts\":5},{\"assetId\":\"c\",\"attempts\":5}]}";
+
+        var merged = ExtractedTextMerger.Merge(existing, "b", "text", replaceExisting: false);
+
+        Assert.Equal(ExtractedTextMergeStatus.Written, merged.Status);
+        using var document = JsonDocument.Parse(merged.Json!);
+        var root = document.RootElement;
+        Assert.Equal("text", root.GetProperty("b").GetString());
+        Assert.False(root.GetProperty("extractionExhausted").TryGetProperty("b", out _));
+        Assert.Equal(5, root.GetProperty("extractionExhausted").GetProperty("c").GetInt32());
+        var remaining = root.GetProperty("extractionFailures").EnumerateArray().Select(f => f.GetProperty("assetId").GetString()).ToArray();
+        Assert.Equal(new[] { "c" }, remaining);
+        Assert.Equal(JsonValueKind.Array, root.GetProperty("listeningQuestions").ValueKind);
+
+        var last = ExtractedTextMerger.Merge(merged.Json, "c", "more", replaceExisting: false);
+        using var cleared = JsonDocument.Parse(last.Json!);
+        Assert.False(cleared.RootElement.TryGetProperty("extractionExhausted", out _));
+        Assert.False(cleared.RootElement.TryGetProperty("extractionFailures", out _));
+    }
+
     // ── single-key commit ────────────────────────────────────────────────────
 
     [Fact]

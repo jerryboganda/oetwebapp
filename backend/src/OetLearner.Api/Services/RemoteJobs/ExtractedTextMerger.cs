@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.RemoteJobs;
 
@@ -25,8 +26,12 @@ public readonly record struct ExtractedTextMergeResult(ExtractedTextMergeStatus 
 public static class ExtractedTextMerger
 {
     /// <summary>
-    /// The asset keys already cached in a payload (an empty set for a blank column), or null when the column is not a
-    /// JSON object. Authored members such as <c>listeningQuestions</c> are returned too; callers only test asset ids.
+    /// The asset keys that need no automatic extraction in a payload (an empty set for a blank column), or null when the
+    /// column is not a JSON object. That is every top-level member (cached asset texts; authored members such as
+    /// <c>listeningQuestions</c> are returned too, callers only test asset ids) plus the ids listed under
+    /// <see cref="ContentTextExtractionService.ExhaustedKey"/>, whose automatic attempts are used up: the worker's own SQL
+    /// pre-filter treats "id appears as a key" as "nothing left to do" for both, so a remote job must not be sent for an
+    /// asset the local pass has deliberately given up on until a forced extraction succeeds.
     /// </summary>
     public static HashSet<string>? ReadKeys(string? existingJson)
     {
@@ -36,7 +41,18 @@ public static class ExtractedTextMerger
             using var document = JsonDocument.Parse(existingJson);
             if (document.RootElement.ValueKind == JsonValueKind.Null) return new HashSet<string>(StringComparer.Ordinal);
             if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
-            return document.RootElement.EnumerateObject().Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+
+            var keys = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var member in document.RootElement.EnumerateObject())
+            {
+                keys.Add(member.Name);
+                if (member.Name == ContentTextExtractionService.ExhaustedKey && member.Value.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var exhausted in member.Value.EnumerateObject()) keys.Add(exhausted.Name);
+                }
+            }
+
+            return keys;
         }
         catch (JsonException)
         {
@@ -75,6 +91,38 @@ public static class ExtractedTextMerger
         }
 
         existing[assetKey] = JsonSerializer.SerializeToElement(text);
+        ClearFailureMarkers(existing, assetKey);
         return new ExtractedTextMergeResult(ExtractedTextMergeStatus.Written, JsonSerializer.Serialize(existing));
+    }
+
+    /// <summary>
+    /// An asset that now has text has neither a failure marker nor an exhausted entry, exactly as the local pass leaves it
+    /// (<c>ContentTextExtractionService</c> drops both when it caches a result). Only this asset's entries are touched; the
+    /// reserved keys disappear when they empty out, and a value of an unexpected shape is left as it is.
+    /// </summary>
+    private static void ClearFailureMarkers(Dictionary<string, JsonElement> payload, string assetKey)
+    {
+        if (payload.TryGetValue(ContentTextExtractionService.FailuresKey, out var failures) && failures.ValueKind == JsonValueKind.Array)
+        {
+            var kept = failures.EnumerateArray()
+                .Where(item => !(item.ValueKind == JsonValueKind.Object
+                    && item.TryGetProperty("assetId", out var id)
+                    && id.ValueKind == JsonValueKind.String
+                    && string.Equals(id.GetString(), assetKey, StringComparison.Ordinal)))
+                .ToList();
+            if (kept.Count == 0) payload.Remove(ContentTextExtractionService.FailuresKey);
+            else if (kept.Count != failures.GetArrayLength()) payload[ContentTextExtractionService.FailuresKey] = JsonSerializer.SerializeToElement(kept);
+        }
+
+        if (payload.TryGetValue(ContentTextExtractionService.ExhaustedKey, out var exhausted)
+            && exhausted.ValueKind == JsonValueKind.Object
+            && exhausted.TryGetProperty(assetKey, out _))
+        {
+            var kept = exhausted.EnumerateObject()
+                .Where(member => !string.Equals(member.Name, assetKey, StringComparison.Ordinal))
+                .ToDictionary(member => member.Name, member => member.Value, StringComparer.Ordinal);
+            if (kept.Count == 0) payload.Remove(ContentTextExtractionService.ExhaustedKey);
+            else payload[ContentTextExtractionService.ExhaustedKey] = JsonSerializer.SerializeToElement(kept);
+        }
     }
 }
