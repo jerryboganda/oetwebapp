@@ -55,7 +55,7 @@ by prompts:
 
 Out of scope: any use by other admins, tutors or learners; any product AI
 feature; web terminals; builds or tests on the VPS (those stay on GitHub
-Actions — sessions dispatch `qa-smoke.yml`).
+Actions — sessions watch `Build images` / `Deploy production` (or `fleet.yml` for platform changes) with `gh run watch`; there is no QA workflow).
 
 ## 2. Architecture
 
