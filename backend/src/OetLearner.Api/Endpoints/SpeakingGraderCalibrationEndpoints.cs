@@ -87,6 +87,74 @@ public static class SpeakingGraderCalibrationEndpoints
             .WithSummary("Mark a performance unusable (with a reason); it is kept for audit and never reported.")
             .WithAdminWrite("AdminContentWrite");
 
+        // ── Full Mock samples: one whole two-card test, one expert mark ──
+
+        group.MapGet("/mocks", async (SpeakingGraderCalibrationService service, CancellationToken ct)
+                => Results.Ok(await service.GetMockOverviewAsync(ct)))
+            .WithName("SpeakingGraderCalibrationMockOverview")
+            .WithSummary("The Full Mock calibration set and its coverage. Never carries an AI score.")
+            .WithAdminRead("AdminContentRead");
+
+        group.MapGet("/mock-candidates", async (int? take, SpeakingGraderCalibrationService service, CancellationToken ct)
+                => Results.Ok(await service.ListMockCandidatesAsync(take ?? 50, ct)))
+            .WithName("SpeakingGraderCalibrationMockCandidates")
+            .WithSummary("Completed two-card AI exams that could be promoted: no learner identity, no AI result.")
+            .WithAdminRead("AdminContentRead");
+
+        group.MapPost("/mock-samples", async (
+                SpeakingGraderCalibrationMockPromoteRequest request,
+                HttpContext http,
+                SpeakingGraderCalibrationService service,
+                CancellationToken ct)
+                => Results.Ok(await service.PromoteMockAsync(AdminId(http), AdminName(http), request.ExamId, ct)))
+            .WithName("SpeakingGraderCalibrationMockPromote")
+            .WithSummary("Promote a completed Full Mock for the expert to mark as ONE test; keeps both cards' audio for a year and writes an audit event.")
+            .WithAdminWrite("AdminContentWrite");
+
+        group.MapGet("/mock-samples/{id}", async (string id, SpeakingGraderCalibrationService service, CancellationToken ct)
+                => Results.Ok(await service.GetMockDetailAsync(id, ct)))
+            .WithName("SpeakingGraderCalibrationMockSample")
+            .WithSummary("The blind Full Mock view: both cards, both transcripts, both clip lists — one label. Never joins an AI assessment.")
+            .WithAdminRead("AdminContentRead");
+
+        group.MapGet("/mock-samples/{id}/audio/{recordingId}", async (
+                string id,
+                string recordingId,
+                HttpContext http,
+                SpeakingGraderCalibrationService service,
+                IFileStorage storage,
+                CancellationToken ct) =>
+            {
+                var (storagePath, mimeType) = await service.GetMockClipAsync(id, recordingId, ct);
+                await service.AuditMockClipAccessAsync(AdminId(http), AdminName(http), id, recordingId, ct);
+                var stream = await storage.OpenReadAsync(storagePath, ct);
+                return Results.File(stream, mimeType, enableRangeProcessing: true);
+            })
+            .WithName("SpeakingGraderCalibrationMockAudio")
+            .WithSummary("Stream one of the Full Mock's audio clips (Card A or Card B) for the expert to hear.")
+            .WithAdminRead("AdminContentRead");
+
+        group.MapPut("/mock-samples/{id}/label", async (
+                string id,
+                SpeakingGraderCalibrationLabelRequest request,
+                HttpContext http,
+                SpeakingGraderCalibrationService service,
+                CancellationToken ct)
+                => Results.Ok(await service.LabelMockAsync(AdminId(http), id, request, ct)))
+            .WithName("SpeakingGraderCalibrationMockLabel")
+            .WithSummary("Record the expert's ONE set of nine criterion scores and overall /500 (steps of 10) for the whole test.")
+            .WithAdminWrite("AdminContentWrite");
+
+        group.MapPost("/mock-samples/{id}/exclude", async (
+                string id,
+                SpeakingGraderCalibrationExcludeRequest request,
+                SpeakingGraderCalibrationService service,
+                CancellationToken ct)
+                => Results.Ok(await service.ExcludeMockAsync(id, request, ct)))
+            .WithName("SpeakingGraderCalibrationMockExclude")
+            .WithSummary("Mark a Full Mock unusable (with a reason); it is kept for audit and never reported.")
+            .WithAdminWrite("AdminContentWrite");
+
         group.MapGet("/runs", async (SpeakingGraderCalibrationService service, CancellationToken ct)
                 => Results.Ok(await service.ListRunsAsync(ct)))
             .WithName("SpeakingGraderCalibrationRuns")
@@ -100,7 +168,7 @@ public static class SpeakingGraderCalibrationEndpoints
                 CancellationToken ct)
                 => Results.Ok(await service.CreateRunAsync(AdminId(http), AdminName(http), request, ct)))
             .WithName("SpeakingGraderCalibrationRunCreate")
-            .WithSummary("Start grading every expert-marked performance with the current grader (at least twice each).")
+            .WithSummary("Start grading every expert-marked performance with the current grader (at least twice each); scope=card|mock, pilot=true for an owner pilot.")
             .WithAdminWrite("AdminContentWrite");
 
         group.MapGet("/runs/{id}", async (string id, SpeakingGraderCalibrationService service, CancellationToken ct)

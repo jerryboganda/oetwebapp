@@ -100,10 +100,41 @@ grades each exact grader version + model produced (the "Provisional" label is ea
 same grader core, rubric and score map but a different prompt (`speaking.score.v3-combined`), so it stays provisional until
 it is calibrated on its own.
 
-**Next: Full Mock calibration (owner, 5 Oct 2026 — not built yet).** The combined grader must be calibrated separately on real two-card
-performances, because it makes one combined judgement rather than two single-card ones. Needed: a sample kind for a whole two-card test
-(both session ids, one combined expert overall and criterion marks), a harness path that grades with `speaking.score.v3-combined`, its own
-report and thresholds proposal, and its own entry in the calibrated-grader set. Until then every Full Mock score stays "Provisional".
+## Owner pilot (owner request 7 Oct 2026)
+
+Before collecting the full validation set, the owner can run a **pilot**: dispatch
+`speaking-grader-calibration.yml` with `pilot: true` (and `scope: card` or `mock`). A pilot run grades whatever is
+expert-marked at the moment it starts — two testers, two Full Mocks, four cards is enough — twice each, and produces
+the same comparison report: the expert's nine criterion marks beside each AI grade, raw total, overall /500
+(leave-one-out), grade, score difference, pass/fail at 350, where Intelligibility was judged from, and repeatability.
+
+A pilot **cannot pass by design**. Its verdict says `PILOT` and never earns a grader version the loss of the
+"Provisional" label: the approved coverage and thresholds below are what the later **validation** run (no `pilot`)
+must meet, unchanged. Every threshold miss in a pilot is listed as an advisory note (where the grader stood against
+the bar), not as a failure, so a small sample is reported honestly instead of as a pass/fail verdict.
+
+Testers need nothing special: `recording.v3` is the normal current Speaking consent every candidate accepts at the
+intro, so a pilot tester simply completes a normal Full Mock as a regular candidate (both cards' audio is then
+promoted into the calibration set by the owner, with the usual 365-day retention and audit event).
+
+## Full Mock calibration (built 7 Oct 2026)
+
+The combined grader (`speaking.score.v3-combined`) is calibrated on its own sample kind: a **whole two-card test**
+marked as ONE performance. Admin → Speaking → Grader calibration has a **Single cards | Full Mocks** switch.
+
+- **Candidates** — completed two-card AI exams whose both cards have a usable latest transcript, recorded under the
+  calibration consent, not already promoted. No learner identity, no AI result.
+- **Promote** — pins BOTH cards' transcripts, keeps both cards' audio for 365 days, writes an audit event
+  (`SpeakingGraderCalibrationMockSamplePromoted`).
+- **Mark** — the expert opens the mock, hears Card A and Card B, reads both cards and both cleaned transcripts, and
+  gives ONE set of the nine criteria and ONE overall /500 for the whole test — blind, like the card view.
+- **Harness** — `POST /runs` with `scope: "mock"` freezes the labelled mocks and grades each with the combined core
+  (`GradeCombinedForCalibrationAsync`: the same `speaking.score.v3-combined` prompt a learner's Full Mock uses, on the
+  pinned transcripts, audio per card combined by the same rule — nothing persisted). Its report compares the expert's
+  one mark with each combined grade; everything else (leave-one-out, grades, pass/fail, repeatability) works the same.
+- A combined result that never came from real two-card comparisons stays "Provisional"; a passing mock-scope
+  validation run plus the owner's agreement is what changes that.
+
 
 ## What passing does
 

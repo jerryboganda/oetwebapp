@@ -2,20 +2,36 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithRouter } from '@/tests/test-utils';
 import type {
   GraderCalibrationCandidate,
+  GraderCalibrationMockCandidate,
+  GraderCalibrationMockOverview,
+  GraderCalibrationMockSampleRow,
   GraderCalibrationOverview,
   GraderCalibrationSampleRow,
 } from '@/lib/api/speaking-grader-calibration';
 
-const { mockOverview, mockCandidates, mockPromote } = vi.hoisted(() => ({
+const {
+  mockOverview,
+  mockCandidates,
+  mockPromote,
+  mockMockOverview,
+  mockMockCandidatesList,
+  mockPromoteMock,
+} = vi.hoisted(() => ({
   mockOverview: vi.fn(),
   mockCandidates: vi.fn(),
   mockPromote: vi.fn(),
+  mockMockOverview: vi.fn(),
+  mockMockCandidatesList: vi.fn(),
+  mockPromoteMock: vi.fn(),
 }));
 
 vi.mock('@/lib/api/speaking-grader-calibration', () => ({
   adminGetGraderCalibration: mockOverview,
   adminListGraderCalibrationCandidates: mockCandidates,
   adminPromoteGraderCalibrationSample: mockPromote,
+  adminGetGraderCalibrationMocks: mockMockOverview,
+  adminListGraderCalibrationMockCandidates: mockMockCandidatesList,
+  adminPromoteGraderCalibrationMock: mockPromoteMock,
 }));
 
 import SpeakingGraderCalibrationPage from './page';
@@ -66,6 +82,55 @@ const candidate = (overrides: Partial<GraderCalibrationCandidate> = {}): GraderC
   ...overrides,
 });
 
+const coverage = () => ({
+  total: 3,
+  labelled: 3,
+  pending: 1,
+  excluded: 0,
+  labelledByGrade: { A: 1, B: 2, 'C+': 0, C: 0, D: 0, E: 0 },
+  labelledNearPassLine: 2,
+  audioShare: 0.667,
+  requiredLabelled: 30,
+  requiredPerGrade: 3,
+  requiredNearPassLine: 10,
+  labelledBelowPassLine: 1,
+  labelledAtOrAbovePassLine: 1,
+  requiredEachSideOfPassLine: 4,
+  requiredAudioShare: 0.8,
+  meetsCoverage: false,
+  unmet: ['Mark 27 more performance(s): 3 of 30 marked.', 'Grade E: 0 of 3 marked.'],
+});
+
+const mockRow = (overrides: Partial<GraderCalibrationMockSampleRow>): GraderCalibrationMockSampleRow => ({
+  id: 'spgcm_1',
+  examId: 'exam-1',
+  professionId: 'medicine',
+  cardATitle: 'Asthma review',
+  cardBTitle: 'Chest pain',
+  hasAudio: true,
+  status: 'pending',
+  expertOverallScaled: null,
+  expertGrade: null,
+  promotedAt: '2026-10-07T10:00:00Z',
+  labelledAt: null,
+  ...overrides,
+});
+
+const mockOverviewData = (samples: GraderCalibrationMockSampleRow[]): GraderCalibrationMockOverview => ({
+  coverage: coverage(),
+  samples,
+});
+
+const mockCandidate = (overrides: Partial<GraderCalibrationMockCandidate> = {}): GraderCalibrationMockCandidate => ({
+  examId: 'exam-9',
+  professionId: 'medicine',
+  cardATitle: 'Asthma review',
+  cardBTitle: 'Chest pain',
+  finishedAt: '2026-10-07T09:00:00Z',
+  hasAudio: true,
+  ...overrides,
+});
+
 describe('SpeakingGraderCalibrationPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -74,6 +139,11 @@ describe('SpeakingGraderCalibrationPage', () => {
       row({ id: 'spgc_todo', cardTitle: 'Waiting one' }),
     ]));
     mockCandidates.mockResolvedValue([candidate()]);
+    mockMockOverview.mockResolvedValue(mockOverviewData([
+      mockRow({ id: 'spgcm_done', status: 'labelled', expertOverallScaled: 360, expertGrade: 'B' }),
+      mockRow({ id: 'spgcm_todo' }),
+    ]));
+    mockMockCandidatesList.mockResolvedValue([mockCandidate()]);
   });
 
   it('shows how much expert marking exists against what is needed, in plain words, and says marking is blind', async () => {
@@ -166,5 +236,40 @@ describe('SpeakingGraderCalibrationPage', () => {
     renderWithRouter(<SpeakingGraderCalibrationPage />);
 
     expect(await screen.findByText('Calibration is unavailable.')).toBeInTheDocument();
+  });
+
+  it('switches to Full Mocks and lists the mock set with a way to mark each as one test', async () => {
+    renderWithRouter(<SpeakingGraderCalibrationPage />);
+
+    fireEvent.click(await screen.findByTestId('kind-switch-mocks'));
+
+    const rows = await screen.findAllByTestId('calibration-mock-row');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent('Asthma review');
+    expect(rows[0]).toHaveTextContent('Chest pain');
+    expect(within(rows[0]).getByRole('link', { name: 'Mark' })).toHaveAttribute('href', '/admin/speaking/grader-calibration/mock/spgcm_todo');
+    expect(within(rows[1]).getByRole('link', { name: 'Edit marks' })).toHaveAttribute('href', '/admin/speaking/grader-calibration/mock/spgcm_done');
+    expect(screen.getByRole('link', { name: 'Mark the next Full Mock' })).toHaveAttribute('href', '/admin/speaking/grader-calibration/mock/spgcm_todo');
+    // The coverage panel says a pilot needs none of it.
+    expect(screen.getByTestId('coverage-pilot-note')).toHaveTextContent(/owner pilot/i);
+  });
+
+  it('adds a completed Full Mock as ONE performance only after the admin confirms the retention', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockPromoteMock.mockResolvedValue(mockRow({ id: 'spgcm_new', examId: 'exam-9' }));
+    renderWithRouter(<SpeakingGraderCalibrationPage />);
+    await screen.findByText('3 of 30 performances marked');
+
+    fireEvent.click(await screen.findByTestId('kind-switch-mocks'));
+    fireEvent.click(screen.getByRole('button', { name: /Candidates/ }));
+    const candidateRow = await screen.findByTestId('calibration-mock-candidate-row');
+    expect(candidateRow).toHaveTextContent('Asthma review');
+    expect(candidateRow).toHaveTextContent('Chest pain');
+    fireEvent.click(within(candidateRow).getByRole('button', { name: 'Add as one Full Mock' }));
+
+    await waitFor(() => expect(mockPromoteMock).toHaveBeenCalledWith('exam-9'));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining('ONE performance'));
+    expect(await screen.findByText(/Added to the Full Mock calibration set/)).toBeInTheDocument();
+    confirm.mockRestore();
   });
 });

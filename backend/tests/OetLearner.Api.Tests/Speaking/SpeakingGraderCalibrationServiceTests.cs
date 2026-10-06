@@ -518,7 +518,168 @@ public sealed class SpeakingGraderCalibrationServiceTests : IAsyncLifetime
         Assert.Equal(1, coverage.LabelledByGrade["A"]);
     }
 
+    // ── Full Mock samples (owner request 7 Oct 2026) ─────────────────────
+
+    [Fact]
+    public async Task MockCandidates_AreCompletedAiExamsWithBothTranscripts_AndCarryNoLearnerIdentity()
+    {
+        await using var db = new LearnerDbContext(_options);
+        AddCard(db, "card-1", "Asthma review");
+        AddMockExam(db, "exam-ok", sessionA: "exa", sessionB: "exb");
+        AddSession(db, "exa", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exa");
+        AddSession(db, "exb", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exb");
+        // Not candidates: one card without a usable transcript, a cancelled exam, an already-promoted one.
+        AddMockExam(db, "exam-notranscript", sessionA: "exnta", sessionB: "exntb");
+        AddSession(db, "exnta", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exnta");
+        AddSession(db, "exntb", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exntb", isLatest: false);
+        AddMockExam(db, "exam-cancelled", sessionA: "exc", sessionB: "exd", state: SpeakingExamState.Cancelled);
+        AddSession(db, "exc", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exc");
+        AddSession(db, "exd", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exd");
+        AddMockExam(db, "exam-taken", sessionA: "exta", sessionB: "extb");
+        AddSession(db, "exta", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exta");
+        AddSession(db, "extb", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "extb");
+        db.SpeakingGraderCalibrationMockSamples.Add(new SpeakingGraderCalibrationMockSample
+        {
+            Id = "spgcm_taken", SpeakingExamId = "exam-taken", SessionAId = "exta", SessionBId = "extb",
+            TranscriptAId = "t_exta", TranscriptBId = "t_extb", CardAId = "card-1", CardBId = "card-1",
+            ProfessionId = "nursing", PromotedById = "admin-1", PromotedAt = Now, UpdatedAt = Now,
+        });
+        await db.SaveChangesAsync();
+
+        var candidates = await Service(db).ListMockCandidatesAsync(50, CancellationToken.None);
+
+        var candidate = Assert.Single(candidates);
+        Assert.Equal("exam-ok", candidate.ExamId);
+        Assert.Equal("Asthma review", candidate.CardATitle);
+        Assert.Equal("Asthma review", candidate.CardBTitle);
+        // The contract has no learner identity at all.
+        Assert.DoesNotContain(typeof(SpeakingGraderCalibrationMockCandidate).GetProperties(),
+            p => p.Name.Contains("User", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task MockPromote_PinsBothTranscripts_KeepsBothCardsAudio_AndAuditsIt()
+    {
+        await using var db = new LearnerDbContext(_options);
+        AddCard(db, "card-1", "Asthma review");
+        AddMockExam(db, "exam-1", sessionA: "exa", sessionB: "exb");
+        AddSession(db, "exa", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exa", id: "t_exa");
+        AddSession(db, "exb", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exb", id: "t_exb");
+        AddRecording(db, "exa", "rec_a");
+        AddRecording(db, "exb", "rec_b", retention: Now.AddDays(10));
+        await db.SaveChangesAsync();
+
+        var row = await Service(db).PromoteMockAsync("admin-1", "Dr Hesham", "exam-1", CancellationToken.None);
+
+        Assert.Equal("pending", row.Status);
+        Assert.True(row.HasAudio);
+        var sample = await db.SpeakingGraderCalibrationMockSamples.AsNoTracking().SingleAsync();
+        Assert.Equal("t_exa", sample.TranscriptAId);
+        Assert.Equal("t_exb", sample.TranscriptBId);
+        Assert.Equal("card-1", sample.CardAId);
+
+        var keepUntil = Now + SpeakingGraderCalibrationService.CalibrationAudioRetention;
+        var retention = await db.SpeakingRecordings.AsNoTracking()
+            .ToDictionaryAsync(r => r.Id, r => r.RetentionExpiresAt);
+        Assert.Equal(keepUntil, retention["rec_a"]);
+        Assert.Equal(keepUntil, retention["rec_b"]);
+
+        var audit = await db.AuditEvents.AsNoTracking().SingleAsync(a => a.Action == "SpeakingGraderCalibrationMockSamplePromoted");
+        Assert.Equal(sample.Id, audit.ResourceId);
+
+        // A second promotion of the same exam is refused.
+        var again = await Assert.ThrowsAsync<ApiException>(() =>
+            Service(db).PromoteMockAsync("admin-1", "Dr Hesham", "exam-1", CancellationToken.None));
+        Assert.Equal("speaking_calibration_already_promoted", again.ErrorCode);
+    }
+
+    [Fact]
+    public async Task MockPromote_RejectsAMockRecordedUnderAnOlderConsent()
+    {
+        await using var db = new LearnerDbContext(_options);
+        AddCard(db, "card-1", "Asthma review");
+        AddConsent(db, userId: "learner-old", version: "recording.v2");
+        AddMockExam(db, "exam-old", sessionA: "exoa", sessionB: "exob", userId: "learner-old");
+        AddSession(db, "exoa", state: SpeakingSessionState.Finished, userId: "learner-old");
+        AddTranscript(db, "exoa");
+        AddSession(db, "exob", state: SpeakingSessionState.Finished, userId: "learner-old");
+        AddTranscript(db, "exob");
+        await db.SaveChangesAsync();
+
+        var failure = await Assert.ThrowsAsync<ApiException>(() =>
+            Service(db).PromoteMockAsync("admin-1", "Dr Hesham", "exam-old", CancellationToken.None));
+
+        Assert.Equal("speaking_calibration_consent_missing", failure.ErrorCode);
+    }
+
+    [Fact]
+    public async Task MockDetail_ShowsBothCardsBlind_AndLabelStoresOneSetOfMarksForTheWholeTest()
+    {
+        await using var db = new LearnerDbContext(_options);
+        AddCard(db, "card-1", "Asthma review");
+        AddMockExam(db, "exam-1", sessionA: "exa", sessionB: "exb");
+        AddSession(db, "exa", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exa", id: "t_exa");
+        AddSession(db, "exb", state: SpeakingSessionState.Finished);
+        AddTranscript(db, "exb", id: "t_exb");
+        await db.SaveChangesAsync();
+        var sampleId = (await Service(db).PromoteMockAsync("admin-1", "Dr Hesham", "exam-1", CancellationToken.None)).Id;
+
+        var pending = await Service(db).GetMockDetailAsync(sampleId, CancellationToken.None);
+        Assert.Equal("pending", pending.Status);
+        Assert.Equal("Asthma review", pending.CardA.Title);
+        Assert.Equal("Asthma review", pending.CardB.Title);
+        Assert.Single(pending.TranscriptA);
+        Assert.Single(pending.TranscriptB);
+        Assert.Null(pending.Label);
+
+        var service = Service(db);
+        var marked = await service.LabelMockAsync("admin-1", sampleId, new SpeakingGraderCalibrationLabelRequest(
+            SpeakingGraderCalibrationService.Criteria.ToDictionary(c => c.Code, c => c.Max == 6 ? 4 : 2), 340, "Mixed test, slightly below the line."),
+            CancellationToken.None);
+
+        Assert.Equal("labelled", marked.Status);
+        Assert.Equal(340, marked.ExpertOverallScaled);
+        Assert.Equal("C+", marked.ExpertGrade);
+        var detail = await service.GetMockDetailAsync(sampleId, CancellationToken.None);
+        Assert.Equal(340, detail.Label!.OverallScaled);
+        Assert.Equal(9, detail.Label.Scores.Count);
+
+        // One mark counts towards the mock coverage, in the same shape as the card coverage.
+        var overview = await service.GetMockOverviewAsync(CancellationToken.None);
+        Assert.Equal(1, overview.Coverage.Labelled);
+        Assert.Equal(1, overview.Coverage.LabelledByGrade["C+"]);
+    }
+
     // ── seeds ────────────────────────────────────────────────────────────
+
+    private static void AddMockExam(
+        LearnerDbContext db, string id, string sessionA, string sessionB,
+        string userId = "learner-1", SpeakingExamState state = SpeakingExamState.Completed)
+        => db.SpeakingExamSessions.Add(new SpeakingExamSession
+        {
+            Id = id,
+            UserId = userId,
+            ProfessionId = "nursing",
+            Mode = SpeakingExamMode.Ai,
+            State = state,
+            CardAId = "card-1",
+            CardBId = "card-1",
+            SessionAId = sessionA,
+            SessionBId = sessionB,
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        });
 
     private async Task<string> SeedSampleAsync(LearnerDbContext db, string sessionId)
     {

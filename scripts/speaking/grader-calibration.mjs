@@ -11,7 +11,12 @@
  *
  * Usage:
  *   OET_ADMIN_EMAIL=... OET_ADMIN_PASSWORD=... node scripts/speaking/grader-calibration.mjs \\
- *     [--run <id>] [--repeats 2] [--no-audio] [--max-minutes 330] [--poll-seconds 30] [--smoke]
+ *     [--run <id>] [--repeats 2] [--no-audio] [--scope card|mock] [--pilot] [--max-minutes 330] [--poll-seconds 30] [--smoke]
+ *
+ * --scope card grades each expert-marked single card with the card grader (default); --scope mock grades each expert-marked
+ * Full Mock with the combined grader (speaking.score.v3-combined). --pilot marks the run an OWNER PILOT: an informational
+ * comparison whose report cannot pass by design — the score stays Provisional and the approved coverage/thresholds are
+ * what the later validation run (no --pilot) must meet.
  *
  * --smoke signs in and reads the calibration overview and candidate list (counts only), then stops: the authenticated proof
  * that the Admin > Speaking > Grader calibration screen's API is live. It starts no run and writes nothing.
@@ -36,6 +41,8 @@ const flag = (name) => process.argv.includes(`--${name}`);
 const runIdArg = arg('run');
 const repeats = Number.parseInt(arg('repeats', '2'), 10) || 2;
 const useAudio = !flag('no-audio');
+const scope = arg('scope', 'card') === 'mock' ? 'mock' : 'card';
+const pilot = flag('pilot');
 const maxMinutes = Number.parseInt(arg('max-minutes', '330'), 10) || 330;
 const pollSeconds = Math.max(5, Number.parseInt(arg('poll-seconds', '30'), 10) || 30);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -99,14 +106,21 @@ await signIn();
 if (flag('smoke')) {
   const overview = await api('GET', '/');
   const candidates = await api('GET', '/candidates?take=100');
+  const mocks = await api('GET', '/mocks');
+  const mockCandidates = await api('GET', '/mock-candidates?take=100');
   if (overview.status !== 200) throw new Error(`overview -> HTTP ${overview.status} ${JSON.stringify(overview.json).slice(0, 200)}`);
   if (candidates.status !== 200) throw new Error(`candidates -> HTTP ${candidates.status} ${JSON.stringify(candidates.json).slice(0, 200)}`);
+  if (mocks.status !== 200) throw new Error(`mocks -> HTTP ${mocks.status} ${JSON.stringify(mocks.json).slice(0, 200)}`);
+  if (mockCandidates.status !== 200) throw new Error(`mock-candidates -> HTTP ${mockCandidates.status} ${JSON.stringify(mockCandidates.json).slice(0, 200)}`);
   const c = overview.json.coverage;
+  const m = mocks.json.coverage;
   const smoke = [
     'SMOKE OK: the grader calibration API answers for an admin',
     `candidates (finished AI cards under the calibration consent): ${candidates.json.length}, with audio: ${candidates.json.filter((x) => x.hasAudio).length}`,
     `promoted samples: ${c.total} (labelled ${c.labelled}, pending ${c.pending}, excluded ${c.excluded})`,
-    `coverage needs: ${c.requiredLabelled} marked, ${c.requiredPerGrade} per grade, ${c.requiredNearPassLine} at 320-380 with ${c.requiredEachSideOfPassLine} each side of 350, ${(c.requiredAudioShare * 100).toFixed(0)}% with audio`,
+    `mock candidates (completed two-card AI exams): ${mockCandidates.json.length}, with audio: ${mockCandidates.json.filter((x) => x.hasAudio).length}`,
+    `promoted Full Mocks: ${m.total} (labelled ${m.labelled}, pending ${m.pending}, excluded ${m.excluded})`,
+    `coverage (what the approved VALIDATION run needs; a pilot needs none of it): ${c.requiredLabelled} marked, ${c.requiredPerGrade} per grade, ${c.requiredNearPassLine} at 320-380 with ${c.requiredEachSideOfPassLine} each side of 350, ${(c.requiredAudioShare * 100).toFixed(0)}% with audio`,
     ...(c.unmet.length ? ['still missing:', ...c.unmet.map((u) => `  - ${u}`)] : ['coverage is complete']),
   ];
   console.log(smoke.join('\n'));
@@ -116,10 +130,10 @@ if (flag('smoke')) {
 
 let runId = runIdArg;
 if (!runId) {
-  const created = await api('POST', '/runs', { repeats, useAudio });
+  const created = await api('POST', '/runs', { repeats, useAudio, scope, pilot });
   if (created.status === 200) {
     runId = created.json.id;
-    console.log(`started run ${runId}: repeats=${created.json.repeats} audio=${created.json.useAudio} ${line(created.json.progress)}`);
+    console.log(`started run ${runId}: scope=${created.json.scope} pilot=${created.json.pilot} repeats=${created.json.repeats} audio=${created.json.useAudio} ${line(created.json.progress)}`);
   } else if (created.status === 409) {
     const runs = await api('GET', '/runs');
     const running = (runs.json ?? []).find((r) => r.status === 'running');
@@ -172,10 +186,17 @@ if (!report) {
 }
 
 const pct = (rate) => `${(rate.share * 100).toFixed(0)}% [${(rate.low * 100).toFixed(0)}-${(rate.high * 100).toFixed(0)}]`;
+const isPilot = report.verdict.mode === 'pilot';
+const kind = view.json.scope === 'mock' ? 'Full Mock (combined grader)' : 'single cards';
 const out = [];
-out.push(`RUN ${runId} grader=${view.json.graderVersion} performances=${report.performances} grades=${report.observations} repeats=${report.repeats}`);
-out.push(`VERDICT: ${report.verdict.passed ? 'PASS' : 'FAIL'}`);
+out.push(`RUN ${runId} grader=${view.json.graderVersion} scope=${view.json.scope} pilot=${view.json.pilot} performances=${report.performances} grades=${report.observations} repeats=${report.repeats}`);
+if (isPilot) {
+  out.push('VERDICT: PILOT — cannot pass by design. An informational comparison on a small real sample: not statistical validation, and the Speaking score stays Provisional.');
+} else {
+  out.push(`VERDICT: ${report.verdict.passed ? 'PASS' : 'FAIL'}`);
+}
 for (const failure of report.verdict.failures) out.push(`  - ${failure}`);
+for (const note of report.verdict.advisory ?? []) out.push(`  · ${note}`);
 out.push('criterion            n   mean-err  bias   exact           within-1');
 for (const c of report.criteria) {
   out.push(`${c.code.padEnd(20)} ${String(c.n).padStart(3)} ${String(c.mae).padStart(8)} ${String(c.bias).padStart(6)}   ${pct(c.exact).padEnd(15)} ${pct(c.adjacent)}`);
@@ -200,21 +221,30 @@ if (report.graderVersions) {
 console.log(out.join('\n'));
 
 // The full per-performance comparison (ids and numbers only): the expert's nine marks and overall beside every grade.
+// A Pass? column shows the pass/fail (350) agreement of each grade — often the first thing an owner pilot reads.
 const codes = report.criteria.map((c) => c.code);
 const md = [];
 md.push(`# Speaking grader calibration: run ${runId}`, '');
-md.push(`Grader: ${view.json.graderVersion}. Performances ${report.performances}, grades ${report.observations}, repeats ${report.repeats}. Verdict: **${report.verdict.passed ? 'PASS' : 'FAIL'}**.`, '');
+md.push(`Scope: ${kind}. Grader: ${view.json.graderVersion}. Performances ${report.performances}, grades ${report.observations}, repeats ${report.repeats}.`);
+if (isPilot) {
+  md.push('**OWNER PILOT — informational comparison; not statistical validation; the Speaking score stays Provisional. This run cannot pass by design.**', '');
+} else {
+  md.push(`Verdict: **${report.verdict.passed ? 'PASS' : 'FAIL'}**.`, '');
+}
 if (report.verdict.failures.length) md.push(...report.verdict.failures.map((f) => `- ${f}`), '');
+if (report.verdict.advisory?.length) md.push(...report.verdict.advisory.map((a) => `· ${a}`), '');
 md.push('## Expert vs grader, per performance', '');
-md.push(`| Performance | Audio | Expert (${codes.map((c) => c.slice(0, 4)).join('/')}) | Expert raw | Expert /500 | Grade | Repeat | Grader criteria | Grader raw | Grader /500 (leave-one-out) | Grade | Error | Intelligibility from |`);
-md.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+md.push(`| Performance | Audio | Expert (${codes.map((c) => c.slice(0, 4)).join('/')}) | Expert raw | Expert /500 | Grade | Repeat | Grader criteria | Grader raw | Grader /500 (leave-one-out) | Grade | Error | Intelligibility from | Pass? |`);
+md.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+const passOf = (scaled) => (scaled >= 350 ? 'pass' : 'fail');
 for (const p of report.detail ?? []) {
   const expert = codes.map((c) => p.expertScores[c]).join('/');
   if (!p.grades.length) {
-    md.push(`| ${p.sampleId} | ${p.hasAudio ? 'yes' : 'no'} | ${expert} | ${p.expertRaw} | ${p.expertOverall} | ${p.expertGrade} | not graded | | | | | | |`);
+    md.push(`| ${p.sampleId} | ${p.hasAudio ? 'yes' : 'no'} | ${expert} | ${p.expertRaw} | ${p.expertOverall} | ${p.expertGrade} | not graded | | | | | | | |`);
   }
   for (const g of p.grades) {
-    md.push(`| ${p.sampleId} | ${p.hasAudio ? 'yes' : 'no'} | ${expert} | ${p.expertRaw} | ${p.expertOverall} | ${p.expertGrade} | ${g.repeat} | ${codes.map((c) => g.scores[c]).join('/')} | ${g.raw} | ${g.scaledLeaveOneOut} | ${g.grade} | ${g.scaledError > 0 ? '+' : ''}${g.scaledError} | ${g.intelligibilitySource} |`);
+    const agree = passOf(g.scaledLeaveOneOut) === passOf(p.expertOverall) ? 'same' : 'DIFFERENT';
+    md.push(`| ${p.sampleId} | ${p.hasAudio ? 'yes' : 'no'} | ${expert} | ${p.expertRaw} | ${p.expertOverall} | ${p.expertGrade} | ${g.repeat} | ${codes.map((c) => g.scores[c]).join('/')} | ${g.raw} | ${g.scaledLeaveOneOut} | ${g.grade} | ${g.scaledError > 0 ? '+' : ''}${g.scaledError} | ${g.intelligibilitySource} | ${agree} (${passOf(p.expertOverall)} vs ${passOf(g.scaledLeaveOneOut)}) |`);
   }
 }
 md.push('', '## Grade confusion (rows: expert grade A,B,C+,C,D,E; columns: grader grade)', '', '```');
@@ -223,5 +253,5 @@ md.push('```', '', '## Summary', '', '```', ...out, '```');
 writeFileSync('grader-calibration-report.md', md.join('\n'));
 
 if (process.env.GITHUB_STEP_SUMMARY) {
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Speaking grader calibration: ${report.verdict.passed ? 'PASS' : 'FAIL'}\n\n\`\`\`\n${out.join('\n')}\n\`\`\`\n`);
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Speaking grader calibration: ${isPilot ? 'PILOT (cannot pass by design)' : report.verdict.passed ? 'PASS' : 'FAIL'}\n\n\`\`\`\n${out.join('\n')}\n\`\`\`\n`);
 }

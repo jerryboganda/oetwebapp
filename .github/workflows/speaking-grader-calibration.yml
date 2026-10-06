@@ -22,6 +22,19 @@ on:
         required: false
         default: true
         type: boolean
+      scope:
+        description: 'What to grade: card = each marked single card (card grader); mock = each marked Full Mock (combined grader)'
+        required: false
+        default: 'card'
+        type: choice
+        options:
+          - card
+          - mock
+      pilot:
+        description: 'OWNER PILOT: informational comparison on a small sample; cannot pass by design (score stays Provisional)'
+        required: false
+        default: false
+        type: boolean
       smoke:
         description: 'Only check that the calibration API is live for an admin (counts only; starts no run)'
         required: false
@@ -57,6 +70,8 @@ jobs:
           RUN_ID: ${{ inputs.run }}
           REPEATS: ${{ inputs.repeats }}
           AUDIO: ${{ inputs.audio }}
+          SCOPE: ${{ inputs.scope }}
+          PILOT: ${{ inputs.pilot }}
           MAX_MINUTES: ${{ inputs.max_minutes }}
           SMOKE: ${{ inputs.smoke }}
         run: |
@@ -64,6 +79,8 @@ jobs:
           if [ "$SMOKE" = "true" ]; then ARGS="$ARGS --smoke"; fi
           if [ -n "$RUN_ID" ]; then ARGS="$ARGS --run $RUN_ID"; fi
           if [ "$AUDIO" = "false" ]; then ARGS="$ARGS --no-audio"; fi
+          if [ "$SCOPE" = "mock" ]; then ARGS="$ARGS --scope mock"; fi
+          if [ "$PILOT" = "true" ]; then ARGS="$ARGS --pilot"; fi
           node scripts/speaking/grader-calibration.mjs $ARGS
 
       - name: Upload the report

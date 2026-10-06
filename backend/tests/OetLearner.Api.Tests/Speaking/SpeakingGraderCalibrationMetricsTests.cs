@@ -268,6 +268,41 @@ public sealed class SpeakingGraderCalibrationMetricsTests
     }
 
     [Fact]
+    public void APilotRun_ShowsTheComparisonAsAdvisory_AndCanNeverPass()
+    {
+        // An owner pilot (owner request 7 Oct 2026): the same tiny set, computed in pilot mode. The coverage gates are
+        // not applied, every threshold miss becomes an advisory note, and the verdict can never pass — the approved
+        // validation thresholds are untouched (validation mode above still fails on all of them).
+        var few = Experts().Take(5).ToList();
+
+        var report = SpeakingGraderCalibrationMetrics.Compute(few, Grades(few), requireAudio: true, pilot: true);
+
+        Assert.Equal("pilot", report.Verdict.Mode);
+        Assert.False(report.Verdict.Passed); // by design, even when every number agrees
+        Assert.Empty(report.Verdict.Failures);
+        Assert.Contains(report.Verdict.Advisory ?? [], a => a.Contains("OWNER PILOT"));
+        // The numbers the owner reads are all still there.
+        Assert.Equal(5, report.Performances);
+        Assert.Equal(10, report.Observations);
+        Assert.Equal(9, report.Criteria.Count);
+        Assert.NotNull(report.Repeatability);
+    }
+
+    [Fact]
+    public void APilotRun_KeepsCompletenessFailures_SoAnUnfinishedRunIsNotMistakenForAResult()
+    {
+        var experts = Experts().Take(5).ToList();
+        var partial = Grades(experts.Take(2)); // three of the five performances never graded
+
+        var report = SpeakingGraderCalibrationMetrics.Compute(experts, partial, requireAudio: true, pilot: true);
+
+        Assert.Equal("pilot", report.Verdict.Mode);
+        Assert.False(report.Verdict.Passed);
+        Assert.Contains(report.Verdict.Failures, f => f.Contains("only 2 of 5 marked performances have been graded"));
+        Assert.DoesNotContain(report.Verdict.Failures, f => f.Contains("at least 30"));
+    }
+
+    [Fact]
     public void PerformancesNotYetGraded_AreSaid_NotSilentlyDropped()
     {
         var experts = Experts();

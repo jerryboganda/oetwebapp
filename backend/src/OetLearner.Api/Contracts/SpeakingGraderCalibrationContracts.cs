@@ -63,6 +63,54 @@ public sealed record SpeakingGraderCalibrationOverview(
     SpeakingGraderCalibrationCoverage Coverage,
     IReadOnlyList<SpeakingGraderCalibrationSampleRow> Samples);
 
+// ── Full Mock samples: one whole two-card test, one expert mark (owner request 7 Oct 2026) ──
+
+/// <summary>A completed two-card AI exam that could be promoted as one Full Mock calibration sample.
+/// No learner identity, no AI result.</summary>
+public sealed record SpeakingGraderCalibrationMockCandidate(
+    string ExamId,
+    string ProfessionId,
+    string CardATitle,
+    string CardBTitle,
+    DateTimeOffset FinishedAt,
+    bool HasAudio);
+
+public sealed record SpeakingGraderCalibrationMockSampleRow(
+    string Id,
+    string ExamId,
+    string ProfessionId,
+    string CardATitle,
+    string CardBTitle,
+    bool HasAudio,
+    /// <summary>pending | labelled | excluded</summary>
+    string Status,
+    int? ExpertOverallScaled,
+    string? ExpertGrade,
+    DateTimeOffset PromotedAt,
+    DateTimeOffset? LabelledAt,
+    bool Usable = true);
+
+public sealed record SpeakingGraderCalibrationMockOverview(
+    SpeakingGraderCalibrationCoverage Coverage,
+    IReadOnlyList<SpeakingGraderCalibrationMockSampleRow> Samples);
+
+/// <summary>The blind Full Mock marking view: both cards, both transcripts, both clip lists — one label.</summary>
+public sealed record SpeakingGraderCalibrationMockSampleDetail(
+    string Id,
+    string Status,
+    bool HasAudio,
+    SpeakingGraderCalibrationCard CardA,
+    SpeakingGraderCalibrationCard CardB,
+    IReadOnlyList<SpeakingGraderCalibrationTranscriptLine> TranscriptA,
+    IReadOnlyList<SpeakingGraderCalibrationTranscriptLine> TranscriptB,
+    IReadOnlyList<SpeakingGraderCalibrationAudioClip> ClipsA,
+    IReadOnlyList<SpeakingGraderCalibrationAudioClip> ClipsB,
+    IReadOnlyList<SpeakingGraderCalibrationCriterion> Criteria,
+    SpeakingGraderCalibrationLabel? Label,
+    string ExcludedReason);
+
+public sealed record SpeakingGraderCalibrationMockPromoteRequest(string? ExamId);
+
 public sealed record SpeakingGraderCalibrationCriterion(string Code, string Label, string Family, int Max);
 
 public sealed record SpeakingGraderCalibrationCard(
@@ -111,9 +159,15 @@ public sealed record SpeakingGraderCalibrationExcludeRequest(string? Reason);
 
 // ── The harness ──────────────────────────────────────────────────────────
 
-/// <summary>Start a calibration run: how many times each marked performance is graded (at least two) and whether the audio
-/// judge runs on every grade (default true).</summary>
-public sealed record SpeakingGraderCalibrationRunCreateRequest(int? Repeats, bool? UseAudio);
+/// <summary>Start a calibration run: how many times each marked performance is graded (at least two), whether the audio
+/// judge runs on every grade (default true), what it grades (<c>card</c> = each marked single card with the card grader;
+/// <c>mock</c> = each marked Full Mock with the combined grader), and whether it is an OWNER PILOT (informational; its
+/// verdict can never pass — the full approved coverage is what can).</summary>
+public sealed record SpeakingGraderCalibrationRunCreateRequest(
+    int? Repeats,
+    bool? UseAudio,
+    string? Scope = null,
+    bool? Pilot = null);
 
 public sealed record SpeakingGraderCalibrationRunProgress(int Total, int Pending, int Queued, int Done, int Failed);
 
@@ -128,7 +182,11 @@ public sealed record SpeakingGraderCalibrationRunView(
     DateTimeOffset CreatedAt,
     DateTimeOffset? FinalizedAt,
     SpeakingGraderCalibrationRunProgress Progress,
-    OetLearner.Api.Services.Speaking.SpeakingCalibrationReport? Report);
+    OetLearner.Api.Services.Speaking.SpeakingCalibrationReport? Report,
+    /// <summary>card | mock: which marked set the run grades.</summary>
+    string Scope = "card",
+    /// <summary>An OWNER PILOT run: informational comparison, never a pass.</summary>
+    bool Pilot = false);
 
 /// <summary>What <c>next</c> did: <c>queued</c> | <c>busy</c> | <c>yield</c> | <c>done</c> | <c>complete</c>.</summary>
 public sealed record SpeakingGraderCalibrationNext(string State, string? GradeId, SpeakingGraderCalibrationRunProgress Progress);
