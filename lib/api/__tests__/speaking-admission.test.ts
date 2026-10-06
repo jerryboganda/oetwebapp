@@ -36,6 +36,8 @@ describe('speaking admission helpers', () => {
 
   it('repeats only the failures that waiting can cure', () => {
     expect(isTransientAdmissionFailure(undefined)).toBe(true);
+    // ApiError(0, 'network_error'): what the client throws once its own retries are spent.
+    expect(isTransientAdmissionFailure(0)).toBe(true);
     expect(isTransientAdmissionFailure(503)).toBe(true);
     expect(isTransientAdmissionFailure(502)).toBe(true);
     expect(isTransientAdmissionFailure(429)).toBe(true);

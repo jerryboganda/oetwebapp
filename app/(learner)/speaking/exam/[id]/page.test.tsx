@@ -534,7 +534,8 @@ describe('Speaking exam page', () => {
     it('keeps waiting through a network blip: a transient failure is retried, never shown', async () => {
       mockGetExam.mockResolvedValue(waitingIntro());
       vi.mocked(finishSpeakingExamIntro)
-        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        // lib/api/client.ts throws ApiError(0, 'network_error', ..., retryable) once its own retries are spent.
+        .mockRejectedValueOnce(refusal(0, 'network_error', 'Unable to connect to the server. Please check your internet connection.'))
         .mockResolvedValue(waitingIntro(1));
       await renderPage();
 

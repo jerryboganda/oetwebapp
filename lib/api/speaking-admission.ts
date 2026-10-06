@@ -39,10 +39,11 @@ export function formatAdmissionWait(seconds: number): string {
 
 /**
  * Whether a failed admission retry is worth repeating. A server or network failure, a 408 or a 429 may pass;
- * any other refusal (no credits, wrong state, not found, forbidden) cannot be fixed by waiting.
+ * any other refusal (no credits, wrong state, not found, forbidden) cannot be fixed by waiting. The shared client
+ * throws `ApiError(0, 'network_error')` once its own retries are spent, so status 0 is a connectivity blip too.
  */
 export function isTransientAdmissionFailure(status: number | undefined): boolean {
-  if (status === undefined) return true;
+  if (status === undefined || status === 0) return true;
   return status >= 500 || status === 408 || status === 429;
 }
 
