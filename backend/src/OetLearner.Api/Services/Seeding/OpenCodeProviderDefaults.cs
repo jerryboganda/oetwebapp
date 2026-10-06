@@ -36,10 +36,10 @@ public static class OpenCodeProviderDefaults
     public const int FailoverPriority = 900;
 
     /// <summary>Documented per-1M-token rates for <see cref="DefaultModel"/>
-    /// (deepseek-v4.1-flash: $0.14 in / $0.28 out, checked 2026-10-07 — the gateway passes
-    /// DeepSeek's native rates through at zero markup), expressed per 1K tokens for the pricing
+    /// (deepseek-v4.1-flash: $0.14 in / $0.28 out, checked 2026-10-07 — the gateway passes the
+    /// native DeepSeek rates through at zero markup), expressed per 1K tokens for the pricing
     /// columns. Row-level columns: glm calls are costed at these rates unless an admin adjusts
-    /// them; glm-5.3-flash's own documented rates ($0.15 in / $0.50 out per 1M) are near-identical.</summary>
+    /// them; the own documented glm-5.3-flash rates ($0.15 in / $0.50 out per 1M) are near-identical.</summary>
     public const decimal DefaultPricePer1kPromptTokens = 0.00014m;
     public const decimal DefaultPricePer1kCompletionTokens = 0.00028m;
 

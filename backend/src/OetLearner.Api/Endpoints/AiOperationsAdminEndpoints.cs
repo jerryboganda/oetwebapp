@@ -239,7 +239,7 @@ public static class AiOperationsAdminEndpoints
     /// <summary>
     /// Executes the route benchmark corpus against a candidate provider/model through the real
     /// dispatch path and RECORDS the run (passed or failed) for the route-approval gate. Every
-    /// metric is computed from the observed completions and the providers' admin-configured token
+    /// metric is computed from the observed completions and the admin-configured token pricing of
     /// pricing; nothing is hand-entered. A refused or failed run is recorded as not-passed, so a
     /// route switch attempt citing it is refused by <c>AiProviderRouteApprovalService</c>.
     /// Audited: the run row itself plus an explicit audit event.

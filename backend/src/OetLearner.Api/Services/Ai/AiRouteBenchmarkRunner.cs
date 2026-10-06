@@ -132,7 +132,7 @@ public sealed partial class AiRouteBenchmarkRunner(
         var (per1kPrompt, per1kCompletion) = await ResolvePricingAsync(providerCode, ct);
         if (string.IsNullOrWhiteSpace(model))
         {
-            // A legacy route row with no pinned model runs on the provider's configured default.
+            // A legacy route row with no pinned model runs on the configured default of the provider row.
             model = (await registry.FindByCodeAsync(providerCode, ct))?.DefaultModel ?? "";
         }
 
@@ -249,8 +249,8 @@ public sealed partial class AiRouteBenchmarkRunner(
     private static partial Regex RefusalMarker();
 
     /// <summary>A grounded case is measured CORRECT when the answer either cites provided
-    /// sources or correctly refuses without citing. Citing a source outside the case's
-    /// provided range is fabrication (scored separately, and it also fails the case).</summary>
+    /// sources or correctly refuses without citing. Citing a source outside the range provided by
+    /// the case counts as fabrication (scored separately, and it also fails the case).</summary>
     private static bool GroundedCorrect(string? text, int providedSourceCount)
     {
         if (string.IsNullOrWhiteSpace(text)) return false;
