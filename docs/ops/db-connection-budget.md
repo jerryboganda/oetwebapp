@@ -53,17 +53,39 @@ Reading this table:
   is best effort and happens after the public gates, so every automatic router rollback
   still runs while the previous slot is up. Set `KEEP_PREVIOUS_SLOT_RUNNING=true` to keep
   it warm for one rollout.
-- **The live pipeline path does not read that variable.** `production-deploy.yml` runs
-  `scripts/deploy/auto-deploy-ghcr.sh`, which never stops the previous slot (its closing
-  line says it is "kept for rollback"). Until that script gets an equivalent retirement
-  step the production steady state is still the left-hand column above. That change
-  touches the verified accelerated rollout and kills the old slot's in-flight long-lived
-  connections (uploads, SignalR, live exams) right after cutover, so it is recorded as an
-  owner decision rather than done silently.
-- Rollback is unaffected by a stopped slot: `gh workflow run production-deploy.yml -f sha=<previous-sha>`
-  recreates the inactive slot from the compose file whether its containers are running,
-  stopped or missing (`service_matches` in `auto-deploy-ghcr.sh` treats a non-running
-  container as "update"), and the images are already in GHCR / on the host.
+- **The live pipeline path does not read that variable, on purpose.** `production-deploy.yml`
+  runs `scripts/deploy/auto-deploy-ghcr.sh`, which never stops the previous slot (its closing
+  line says it is "kept for rollback"), so the production steady state is still the
+  left-hand column above. The 2026-10-05 approval covers the variable's default on the
+  manual path only. Extending it to the live path is a separate owner decision with two
+  costs:
+  1. It defeats the smart component reuse of 2026-10-06. `service_matches` treats a
+     non-running container as "update", so with the previous slot always stopped every
+     release would force-recreate `learner-api-<target>` (about 70 s of API start on the
+     prepare path) even for a web-only change, instead of only the first web-only release
+     after an API change (`DEPLOY_REUSE service=learner-api-<slot>` would never print).
+  2. It kills the old slot's in-flight long-lived connections (uploads, SignalR, live
+     exams) right after cutover.
+  If the owner wants it, the shape is one best-effort `compose stop` after the
+  `DEPLOY_LIVE` line (`cutover_started=false` is already set there, so a failed stop can
+  never trigger a router rollback); `scripts/deploy/verify-pipeline-contract.mjs` and the
+  `guards` job's offline rollout fixtures cover that file, so it ships as its own reviewed
+  change.
+- `scripts/deploy/**`, `docker-compose.production.yml` and `docs/**` are not inputs of any
+  image (`classifyInputs` in `release-manifest.mjs`; `buildInputParityFailures` checks it),
+  so these edits start no build by themselves. They go live with the next API release.
+  The new `Application Name` changes the compose config hash of both API slots and the
+  `ai-worker` once: `service_matches` reports "update" for the target slot's API and the
+  worker (the worker with its 90 s drain) and recreates only those; the other slot's API
+  follows the next time it is the target. Nothing else is recreated.
+
+## Rollback with a stopped previous slot
+
+| Situation | Previous slot | What undoes it |
+|---|---|---|
+| A public gate fails inside a rollout | still running (the stop comes only after the release is recorded) | the script itself flips the routers back to the previous slot: `rollout-release.sh` re-creates the two routers for `$previous_slot`, `auto-deploy-ghcr.sh` runs `rollback_routers` |
+| A release is found bad later | stopped (manual path) or running (live path) | `gh workflow run production-deploy.yml -f sha=<previous-sha>`: prepare targets the inactive slot, `service_matches` returns "update" for a non-running or missing container, `up --no-build --no-deps --pull never --force-recreate` recreates it from the immutable digest already in GHCR / on the host, the health gate runs, and promote has its own paired router rollback |
+| The VPS reboots | a stopped slot stays stopped (`restart: unless-stopped` honours a manual stop) | nothing to do; the routers only reference the active slot, so nginx never resolves the stopped one |
 
 ## Process names
 
