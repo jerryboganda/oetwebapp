@@ -163,8 +163,15 @@ scope the worker opens. Any failure of the remote path degrades to the unchanged
 
 Both are OFF by default and are never offered until their flag is on AND `REMOTEJOBS__KINDS__MEDIA_<KIND>__ENGINEVERSION` pins the
 exact engine string the agent image reports (for example `ffmpeg:7.1.1/audio-extract:1`). Provider calls stay on the primary: no
-media code references an AI gateway, a recorder or a key (a source-scan test fails the build otherwise), helpers hold no
-credentials, and nothing here touches grading, credits or the Claude Max route.
+media code (the handlers and producers) references an AI gateway, a recorder or a key (a manual source-scan test source,
+`RemoteMediaWiringTests`, checks this; no workflow runs it, so a reviewer must keep it true), helpers hold no
+credentials, and nothing here touches grading, credits or the Claude Max route. The kinds are **not tested - owner QA**: the only
+automated check is compilation in `Build images`.
+
+The layer adds one migration, `20270111090000_AddLiveClassRecordingAudioChunks` (nullable `LiveClassRecordings.AudioChunksJson`,
+`ADD COLUMN IF NOT EXISTS`, additive and idempotent, so the blue/green slots overlap safely). It is hand-authored like
+`20270110090000_AddRemoteWorkersAndJobs` and the property is written into `LearnerDbContextModelSnapshot` by hand, so the
+`migrations-check` job of `speaking-ci.yml` (`has-pending-model-changes`) stays clean.
 
 ### `media.audio-extract` (Live Class recordings)
 
@@ -195,7 +202,8 @@ the recording stays `Pending`, nothing is enqueued, nothing is called):
 3. The completion applier verifies a contiguous, sample-exact manifest (6.3), writes it to `LiveClassRecordings.AudioChunksJson`
    in the same transaction that settles the job, and fills `DurationSeconds` only when it was 0. The chunks are NOT registered as
    `MediaAsset`s (nothing needs them as assets, no recording-retention worker exists to find them there, and they would show up in
-   media listings); the manifest names their keys, which are server-side only (never in a DTO: guarded by a test).
+   media listings); the manifest names their keys, which are server-side only (never in a DTO: keep it that way in review; a manual
+test source checks it).
 4. With a manifest the stage makes ONE `IAiGatewayService` call per chunk (feature `class.recording.transcribe.v1`, so every call
    writes its own `AiUsageRecord` exactly like the single call), saves each chunk's transcript immediately (a retry resumes, it
    never pays twice), verifies each chunk's size and SHA-256 before sending it, and continues in a new job after
