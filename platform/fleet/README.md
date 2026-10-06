@@ -173,6 +173,16 @@ WOULD be assigned, and UBAG's prober keeps the node unusable until the trust pla
 starting point) via `Fleet__Ubag__MaxBrowserWorkloads`. Node ids are `ubag-<hostId>` with URI SAN
 `spiffe://ubag/node/<node_id>`; generation is the host's `DesiredRevision` (monotonic in practice).
 
+Turning it on after a rollout (owner settings live in `.env.production`, which
+the sync job copies into the generated fleet.env only when well formed):
+`FLEET_UBAG_ENABLED=true`, `FLEET_UBAG_HOSTS=<hostId,...>`, optionally
+`FLEET_UBAG_ENDPOINT_TEMPLATE` / `FLEET_UBAG_MAX_BROWSER_WORKLOADS` /
+`FLEET_UBAG_GRANT_TTL_MINUTES`, and the `fleet_ubag_token` secret file in
+`$FLEET_SECRETS_DIR` (`FLEET_UBAG_TOKEN_FILE` names it). Per-host endpoint
+overrides (`Fleet__Ubag__EndpointOverrides__<hostId>`) are not part of the
+sync allowlist; add them to the generated fleet.env only if you accept that a
+rollout regenerates that file.
+
 Reaching the endpoint from the UBAG gateway: the manager publishes on the host's loopback only,
 so attach the gateway container to the manager's bridge once
 (`docker network connect oet_fleet_net <gateway-container>`) and point
