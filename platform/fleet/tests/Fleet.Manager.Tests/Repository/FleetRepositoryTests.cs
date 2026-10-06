@@ -26,8 +26,14 @@ public sealed class FleetRepositoryTests
     private static IEnumerable<string> Playbooks() =>
         Directory.EnumerateFiles(Path.Combine(Root, "ansible", "playbooks"), "*.yml", SearchOption.AllDirectories);
 
+    /// <summary>
+    /// The MANAGER's own code (Fleet.Core and Fleet.Manager). The helper agent (src/Fleet.Agent) is a different program with different
+    /// rules: it starts its own child processes and ffmpeg and opens its own HTTP connection to the OET API, so the manager-only
+    /// guarantees below (one process starter, one HttpClient, no console output) must not be applied to it.
+    /// </summary>
     private static IEnumerable<string> SourceFiles() =>
-        Directory.EnumerateFiles(Path.Combine(Root, "src"), "*.cs", SearchOption.AllDirectories)
+        new[] { "Fleet.Core", "Fleet.Manager" }
+            .SelectMany(project => Directory.EnumerateFiles(Path.Combine(Root, "src", project), "*.cs", SearchOption.AllDirectories))
             .Where(path => !Relative(path).Contains("/obj/", StringComparison.Ordinal) && !Relative(path).Contains("/bin/", StringComparison.Ordinal));
 
     // ---- solution --------------------------------------------------------------------------
@@ -49,8 +55,12 @@ public sealed class FleetRepositoryTests
             Assert.Contains("\"" + project + "\"", solution);
         }
 
-        // The projects this track owns exist; the agent projects belong to the agent track and are only registered here.
-        foreach (var project in new[] { "src/Fleet.Core/Fleet.Core.csproj", "src/Fleet.Manager/Fleet.Manager.csproj", "tests/Fleet.Manager.Tests/Fleet.Manager.Tests.csproj" })
+        // Every registered project exists (the agent projects arrive with the agent layer, which owns them).
+        foreach (var project in new[]
+                 {
+                     "src/Fleet.Core/Fleet.Core.csproj", "src/Fleet.Manager/Fleet.Manager.csproj", "src/Fleet.Agent/Fleet.Agent.csproj",
+                     "tests/Fleet.Manager.Tests/Fleet.Manager.Tests.csproj", "tests/Fleet.Agent.Tests/Fleet.Agent.Tests.csproj",
+                 })
         {
             Assert.True(File.Exists(Path.Combine(Root, project)), project + " is missing");
         }

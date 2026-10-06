@@ -1,5 +1,4 @@
 using System.Buffers;
-using System.Reflection;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -11,24 +10,20 @@ namespace Fleet.Agent;
 /// <summary>Engine version strings offered at claim (protocol 6.0, 6.1.4 item 3).</summary>
 internal static class EngineVersions
 {
-    /// <summary>pdfpig:&lt;PdfPig assembly informational version without build metadata&gt;/oet-text:&lt;LayoutRevision&gt;.</summary>
-    public static string Pdf { get; } = BuildPdf();
+    /// <summary>
+    /// pdfpig:&lt;PdfPig assembly informational version without build metadata&gt;/oet-text:&lt;LayoutRevision&gt;. Taken from the
+    /// link-compiled <see cref="PdfTextEngine"/> itself, so the agent and the API cannot derive different strings
+    /// (RemoteJobKinds.EngineVersion uses the same property).
+    /// </summary>
+    public static string Pdf { get; } = PdfTextEngine.EngineVersion;
 
-    /// <summary>Chunker revision of companion.index-prep; part of its engineVersion and of the job's chunkerVersion param.</summary>
-    public const string CompanionChunkerVersion = "companion-chunker:1";
+    /// <summary>
+    /// Chunker revision of companion.index-prep; part of its engineVersion and of the job's chunkerVersion param. The link-compiled
+    /// CompanionChunker's own constant, so a chunker revision bump in the API follows into the next agent build.
+    /// </summary>
+    public const string CompanionChunkerVersion = OetLearner.Api.Services.Companion.CompanionChunker.Version;
 
     public static string CompanionIndexPrep => Pdf + "/" + CompanionChunkerVersion;
-
-    private static string BuildPdf()
-    {
-        var assembly = typeof(UglyToad.PdfPig.PdfDocument).Assembly;
-        var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-            ?? assembly.GetName().Version?.ToString()
-            ?? "unknown";
-        var plus = informational.IndexOf('+');
-        if (plus >= 0) informational = informational[..plus];
-        return "pdfpig:" + informational + "/oet-text:" + PdfTextEngine.LayoutRevision;
-    }
 
     /// <summary>engineVersion for the ffmpeg-backed kinds: ffmpeg:&lt;parsed version&gt;/&lt;procedure&gt;. Null when the version is unknown.</summary>
     public static string? Media(string? ffmpegVersion, string procedure) =>

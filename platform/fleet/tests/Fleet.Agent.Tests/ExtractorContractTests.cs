@@ -88,7 +88,10 @@ public sealed class ExtractorContractTests
     }
 }
 
-/// <summary>Runs only when FLEET_PARITY_LIST names a file listing PDFs (the fleet.yml parity job sets it).</summary>
+/// <summary>
+/// Runs only when FLEET_PARITY_LIST names a file listing PDFs. An inert MANUAL tool (owner directive 2026-10-06, no automated QA): the owner
+/// sets the variables by hand; no workflow runs it. The production safeguard is the API's runtime shadow compare (RemoteJobShadowComparer).
+/// </summary>
 public sealed class ParityFactAttribute : FactAttribute
 {
     public const string ListVariable = "FLEET_PARITY_LIST";

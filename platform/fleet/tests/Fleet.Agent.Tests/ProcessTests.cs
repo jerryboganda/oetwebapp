@@ -12,7 +12,7 @@ public sealed class LinuxFactAttribute : FactAttribute
     }
 }
 
-/// <summary>Runs only when FLEET_AGENT_DLL points at a PUBLISHED Fleet.Agent.dll (the fleet.yml parity job sets it).</summary>
+/// <summary>Runs only when FLEET_AGENT_DLL points at a PUBLISHED Fleet.Agent.dll (a manual tool: no workflow sets it).</summary>
 public sealed class AgentDllFactAttribute : FactAttribute
 {
     public const string Variable = "FLEET_AGENT_DLL";
