@@ -16,7 +16,7 @@ namespace Fleet.Manager.Tests.Web;
 /// </summary>
 public sealed class ConsolePagesTests : IDisposable
 {
-    private const string ProtectedKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nPASSPHRASE-PROTECTED\n-----END OPENSSH PRIVATE KEY-----\n";
+    private const string ProtectedKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nPASSPHRASE-PROTECTED\n-----END OPENSSH PRIVATE KEY-----\n"; // secret-scan:allow (fake PEM framing, no key material)
 
     private ConsoleSession? _session;
 
@@ -298,6 +298,36 @@ public sealed class ConsolePagesTests : IDisposable
 
         Assert.Contains("Pushed to 3 helper(s); 1 could not be updated", ConsoleSession.Visible(await s.PageAsync("/Policies?notice=policy-saved&n=3&f=1")));
         Assert.Contains("Pushed to 999 helper(s); 0 could not be updated", ConsoleSession.Visible(await s.PageAsync("/Policies?notice=policy-saved&n=1000&f=-4")));
+    }
+
+    [Fact]
+    public async Task A_live_refresh_does_not_keep_an_idle_session_alive()
+    {
+        var s = await StartAsync();
+
+        // Only the console script's background polls for 24 minutes: each is answered inside the 20-minute window, but none is the owner doing
+        // anything, so the window is never extended and the next request after it is sent to sign in.
+        for (var poll = 0; poll < 4; poll++)
+        {
+            s.Factory.Time.Advance(TimeSpan.FromMinutes(4));
+            using var inside = await s.Client.GetAsync("/?handler=Fragment");
+            Assert.Equal(HttpStatusCode.OK, inside.StatusCode);
+        }
+
+        s.Factory.Time.Advance(TimeSpan.FromMinutes(8));
+        using var late = await s.Client.GetAsync("/?handler=Fragment");
+        Assert.Equal(HttpStatusCode.Redirect, late.StatusCode);
+        Assert.Contains("/Login", late.Headers.Location!.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_page_the_owner_opens_does_keep_the_session_alive_past_the_idle_window()
+    {
+        var s = await StartAsync();
+
+        await s.AdvanceAsync(TimeSpan.FromMinutes(24));
+
+        Assert.Contains("Fleet overview", ConsoleSession.Visible(await s.PageAsync("/")), StringComparison.Ordinal);
     }
 
     // ---- add a helper --------------------------------------------------------------------------------

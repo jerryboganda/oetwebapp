@@ -15,7 +15,7 @@ namespace Fleet.Manager.Tests.Operations;
 /// </summary>
 public sealed class StagedCredentialTests : IAsyncLifetime
 {
-    private const string ProtectedKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nPASSPHRASE-PROTECTED\n-----END OPENSSH PRIVATE KEY-----\n";
+    private const string ProtectedKey = "-----BEGIN OPENSSH PRIVATE KEY-----\nPASSPHRASE-PROTECTED\n-----END OPENSSH PRIVATE KEY-----\n"; // secret-scan:allow (fake PEM framing, no key material)
 
     private FleetTestHost _host = null!;
     private EnrollmentDriver _driver = null!;
@@ -189,7 +189,7 @@ public sealed class StagedCredentialTests : IAsyncLifetime
     [Fact]
     public async Task A_legacy_pem_key_that_announces_itself_as_encrypted_is_accepted_only_together_with_a_passphrase()
     {
-        const string legacy = "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nPASSPHRASE-PROTECTED\n-----END RSA PRIVATE KEY-----\n";
+        const string legacy = "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nPASSPHRASE-PROTECTED\n-----END RSA PRIVATE KEY-----\n"; // secret-scan:allow (fake PEM framing, no key material)
         var (operation, _) = await _driver.AddAsync();
 
         var without = await Assert.ThrowsAsync<FleetValidationException>(() => StageAsync(operation.Id, legacy));

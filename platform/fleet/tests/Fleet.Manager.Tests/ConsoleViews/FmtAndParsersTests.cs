@@ -62,6 +62,7 @@ public sealed class FmtAndParsersTests
         Assert.Equal("<script>alert(1)</script>", Fmt.Untrusted("&lt;script&gt;alert(1)&lt;/script&gt;"));
         Assert.Equal("red", Fmt.Untrusted("\u001b[31mred\u001b[0m"));
         Assert.Equal("a b", Fmt.Untrusted("a\u0007b"));
+        Assert.Equal("ab", Fmt.Untrusted("a\u202Eb\u200B"));
         Assert.Equal("token [redacted]", Fmt.Untrusted("token ghp_" + new string('A', 24)));
         Assert.Equal(new string('x', 50) + "…", Fmt.Untrusted(new string('x', 300), 50));
         Assert.Equal(string.Empty, Fmt.Untrusted(null));

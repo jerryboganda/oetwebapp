@@ -47,7 +47,7 @@ keyboard-friendly (skip link, labelled controls, captioned tables, visible focus
 | --- | --- | --- |
 | Fleet overview | `/` | The primary (host-wide CPU, memory pressure and headroom) and every helper: state, API health, heartbeat age, load, slots in use, capacity, SSH-status latency, agent, the open operation; totals, utilisation, offline helpers and a "needs your attention" list. Refreshes live; **Refresh now** polls the API at once. |
 | Add helper | `/Hosts/Add` | IP or host name, optional name, SSH user (default `root`), port (default 22), region and provider, and the temporary SSH key (paste, or choose a file that is read in the browser) with its optional passphrase. Everything is validated before the authenticator code is used. |
-| Enrollment progress | `/Operations/Detail/{id}` | The live, durable progress of any operation: steps, failure reason with plain-words guidance, the host-key check (type the first 8 characters), the key prompt (save in advance, use now, replace), retry and cancel. Survives closing the browser: the work is on the server. |
+| Enrollment progress | `/Operations/Detail/{id}` | The live, durable progress of any operation: steps, failure reason with plain-words guidance, the host-key check (type the first 8 characters of the key the console marks as the one that is pinned), the key prompt (save in advance, use now, replace), retry and cancel. Survives closing the browser: the work is on the server. |
 | Server detail | `/Hosts/Detail/{id}` | Summary, pinned host key, hardware, installed components (Docker, agent container, image, fleet-owned list), assigned workloads and limits, health history, operations and audit trail of that helper, credential hints; actions: drain, resume, disable, repair, rotate token, change limits (per-helper override), re-pin a changed host key, remove from the fleet (drain first, typed confirmation, only fleet-owned components). |
 | Workloads | `/Workloads` | Per job kind: project, queue depth, active jobs, outcomes, completion rate, eligible helpers and where the next job would go with the reason (the placement engine run as a what-if, nothing reserved). |
 | Policies | `/Policies` | The global policy (allocation, concurrency, budgets, pressure, polling) with a step-up save that is pushed to every helper, the fixed priority and fallback rules in words, and which helpers have limits of their own. |
@@ -62,15 +62,16 @@ How it is kept safe:
   code, checked by the SAME replay-guarded step-up as the JSON API; the form is validated first, so a typo never burns a code. Pressing Enter
   in the code box cannot run an action nobody picked (one radio choice and one button on the host page; one button per mini form elsewhere).
 * **No inline script, no nonce needed.** The CSP stays `script-src 'self'; style-src 'self'`: all script and CSS are files, there is no inline
-  `<script>`, `style=` or event handler anywhere (a repository test scans for them), and the markup never uses a raw-HTML escape hatch.
+  `<script>`, `style=` or event handler anywhere (the manual repository tests are written to fail on them; no workflow runs them), and the markup never uses a raw-HTML escape hatch.
 * **Helper text is untrusted.** Everything a helper, the OET API or a child process says goes through `Fmt.Untrusted` (decode the manager's own
-  storage encoding once, strip ANSI and control characters, redact credential shapes, cap) and then Razor's encoder.
+  storage encoding once, strip ANSI, control and invisible direction characters, redact credential shapes, cap) and then Razor's encoder.
 * **Secrets are write-only.** A key or passphrase is moved out of the bound property at once, never echoed (a refused form comes back
   without it), never audited, never logged, cleared from the browser when the page is left, and shown afterwards only as an 8-character
   fingerprint hint of the public key. Service secrets are files: the console says present or absent, never reads one out.
 * **Live updates.** The script re-fetches server-rendered fragments (`?handler=Fragment`) when the manager's SSE stream (`/api/v1/events`)
   says something changed, and on a timer as a fallback. Fragments never contain a form, so what you are typing is never replaced; a change
-  of state that alters what you can do reloads the page unless something is typed in it. A session that ends shows a sign-in link.
+  of state that alters what you can do reloads the page unless something is typed in it. A session that ends shows a sign-in link. The refresh is not
+  the owner doing anything, so it does not extend the 20-minute idle session (the 60-minute absolute limit applies either way).
 * **Notices are fixed text.** A redirect carries a code from a table in `FleetPageModel`, never request text.
 
 A key can be saved in advance (`StageOwnerCredentialAsync`): it is the same encrypted, 60-minute vault credential, but it is only used after
@@ -216,3 +217,7 @@ OET API, helpers, registry), so a 180-second verification window or a 60-minute 
   that outlives its enrollment would contradict OET-RWP/1 section 8.2 (S8 destroys the owner credential), so there is no cross-host key store.
 * Console: the passphrase of a protected key is one argument of one `ssh-keygen -p` call inside the container (see above); the alternative is
   to give the manager only keys without a passphrase, which the JSON API also still accepts.
+* Console: the session and antiforgery cookies are `Secure`. Chrome, Edge and Firefox accept them on `http://localhost` and `http://127.0.0.1` through the SSH
+  tunnel; Safari may refuse a `Secure` cookie on a plain-http address, so open the tunnel in one of the others.
+* Console: the manager pins ONE of the keys a host offers (ed25519, then ecdsa, then rsa). The host-key tables mark it; type the characters of that
+  key, not of another type the provider console happens to show first.
