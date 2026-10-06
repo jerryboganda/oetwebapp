@@ -34,6 +34,10 @@ on:
       - 'backend/src/OetLearner.Api/Services/Content/PdfTextEngine.cs'
       - 'backend/src/OetLearner.Api/Services/Speaking/PcmJoiner.cs'
       - 'backend/src/OetLearner.Api/Services/Companion/CompanionChunker.cs'
+      # The files that DECLARE what the agent's shims (Fleet.Agent/Shim) restate: CompanionChunkDraft lives in CompanionIndexWriter.cs and
+      # IPdfTextExtractor in ContentTextExtractionService.cs. A change there must rebuild the agent so a shim cannot drift unnoticed.
+      - 'backend/src/OetLearner.Api/Services/Companion/CompanionIndexWriter.cs'
+      - 'backend/src/OetLearner.Api/Services/Content/ContentTextExtractionService.cs'
       - 'backend/src/OetLearner.Api/OetLearner.Api.csproj'
       - 'global.json'
       - 'backend/Directory.Build.props'

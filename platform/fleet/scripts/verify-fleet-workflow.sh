@@ -84,6 +84,8 @@ for required in "'platform/fleet/**'" \
   "'backend/src/OetLearner.Api/Services/Content/PdfTextEngine.cs'" \
   "'backend/src/OetLearner.Api/Services/Speaking/PcmJoiner.cs'" \
   "'backend/src/OetLearner.Api/Services/Companion/CompanionChunker.cs'" \
+  "'backend/src/OetLearner.Api/Services/Companion/CompanionIndexWriter.cs'" \
+  "'backend/src/OetLearner.Api/Services/Content/ContentTextExtractionService.cs'" \
   "'backend/src/OetLearner.Api/OetLearner.Api.csproj'" \
   "'global.json'" \
   "'backend/Directory.Build.props'"; do

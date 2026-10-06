@@ -41,7 +41,12 @@ internal static class CompanionChunkAdapter
 internal static class CompanionPrepCore
 {
     public const int MaxChunks = 5000;
+#if FLEET_HAS_COMPANION_CHUNKER
+    // The link-compiled chunker is the single source of the bound the API validates against, so the agent can never drift from it.
+    public const int MaxChunkChars = OetLearner.Api.Services.Companion.CompanionChunker.MaxChunkChars;
+#else
     public const int MaxChunkChars = 1100;
+#endif
 
     private static readonly Regex HeadingPattern = new(@"^Page \d+( \(\d+\))?$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly UTF8Encoding Strict = new(false, true);
