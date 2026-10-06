@@ -6,6 +6,14 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-06 14:24 | CI triage | CI triage | 37478641297 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | b3b10fdc8 |
+| 2026-10-06 14:19 | CI triage | CI triage | 37478062742 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | b3b10fdc8 |
+| 2026-10-06 14:19 | Deploy production | Deploy production | 37478062712 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | b3b10fdc8 |
+| 2026-10-06 14:13 | CI triage | CI triage | 37477141854 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | b3b10fdc8 |
+| 2026-10-06 14:13 | Deploy production | Deploy production | 37477132044 | Resolve the build to deploy=skipped Apply migration SQL (if the API changed)=skipped Roll out to the VPS=skipped | SKIPPED | b3b10fdc8 |
+| 2026-10-06 14:13 | CI triage | CI triage | 37477132040 | Classify the failed run (jev-1.13.0)=success | SUCCESS | b3b10fdc8 |
+| 2026-10-06 14:08 | Speaking Module CI | Speaking Module CI | 37476424234 | migrations-check=success secrets-scan=success | SUCCESS | b3b10fdc8 |
+| 2026-10-06 14:08 | Build images | Build images | 37476424300 | Detect what changed=success build-api=success Syntax gate (seconds)=success Retag unchanged db-backup=success Deployment contract guards=success build-agent-gateway=skipped Writing grader regression (on change)=success build-backup=skipped Retag unchanged agent-gateway=success build-web=success Writing model-answer gate (on change)=success Publish verified release provenance=success | SUCCESS | b3b10fdc8 |
 | 2026-10-06 13:24 | CI triage | CI triage | 37470503819 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 8985103f7 |
 | 2026-10-06 13:20 | CI triage | CI triage | 37470058617 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 8985103f7 |
 | 2026-10-06 13:20 | Deploy production | Deploy production | 37470058537 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 8985103f7 |

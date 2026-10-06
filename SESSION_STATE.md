@@ -2,8 +2,8 @@
 
 Session: writing-ai-final
 Goal: Implement the 6 Oct 2026 Writing AI-Final handoff: candidate-facing cleanup, severity/priority rules, secondary reviewer with soft 400+ guardrail, 15-minute release window and the five-account owner allowlist.
-Mode: execute
-Updated: 2026-10-06T14:40:00Z
+Mode: verify
+Updated: 2026-10-06T15:05:00Z
 Branch: work/2026-10-05
 HEAD: 48ea43a39
 
@@ -61,12 +61,14 @@ Implement the owner's 6 Oct 2026 "Writing AI-Final" handoff before remaining-pro
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
 | ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| deploy | production-deploy.yml | NOT RUN | NOT RUN |
+| Build images: API + web compiled, Writing grader regression + Writing model-answer gate green (attempt 2 after a NuGet-mutex CI flake in attempt 1) | build-images.yml | 37476424300 | PASS |
+| Deploy production: migration SQL applied, blue/green roll-out, live X-Oet-Release b3b10fdc8 on slot green, health 200 | production-deploy.yml | 37478062712 | PASS |
 
 ## Blockers
 
-- None. Nothing compiled or tested locally by owner directive; first compile is Build images, then owner QA.
+- None for shipping. Not tested by the agent (owner directive): everything is verified only by compilation in Build images plus the live health/serving proof. Owner QA needed: Medicine C/C+/B sweep (create FeatureFlags writing_ai_reviewer_shadow first if shadow calibration is wanted), normal vs allowlisted accounts, reviewer outage behaviour.
+- lib/catalog-website-packages.ts (another session's file) still promises "instant" Writing feedback in package copy (lines ~974-1016); not edited here.
 
 ## Next action
 
-1. Run pnpm run ship:gate, commit explicit paths, pnpm run ship, then confirm live health and ax:record evidence.
+1. Owner QA on production: normal candidate (15:00 countdown, held reads), the five allowlisted accounts (instant, copy/paste), then Medicine C/C+/B and the remaining professions.

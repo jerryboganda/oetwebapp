@@ -130,7 +130,7 @@
       "owner": "writing-ai-final",
       "blockedBy": [],
       "verify": "build-images.yml compiles API and web; owner QA",
-      "evidence": ["Implemented and independently re-read twice; not compiled or tested locally."],
+      "evidence": ["Implemented and independently re-read twice; not compiled or tested locally. Build images 37476424300, Deploy production 37478062712."],
       "files": ["backend/src/OetLearner.Api/Services/Writing/WritingCandidateText.cs","app/(learner)/writing/submissions/[id]/results/page.tsx","messages/en/writing.json"]
     },
     {
@@ -140,7 +140,7 @@
       "owner": "writing-ai-final",
       "blockedBy": ["WAI-01"],
       "verify": "build-images.yml writing gates; owner QA",
-      "evidence": ["Implemented behind !IsModelAnswer; Model Answer gate files and hashed inputs untouched."],
+      "evidence": ["Implemented behind !IsModelAnswer; Model Answer gate files and hashed inputs untouched. Writing gates green in 37476424300."],
       "files": ["backend/src/OetLearner.Api/Services/Writing/WritingCandidateSeverityPolicy.cs","backend/src/OetLearner.Api/Services/Rulebook/WritingRuleEngine.cs"]
     },
     {
@@ -150,7 +150,7 @@
       "owner": "writing-ai-final",
       "blockedBy": ["WAI-02"],
       "verify": "build-images.yml; owner QA in shadow then enforce",
-      "evidence": ["Implemented; mode resolves from FeatureFlags and the writing-codex-sub row."],
+      "evidence": ["Implemented; mode resolves from FeatureFlags and the writing-codex-sub row. Live in 37478062712."],
       "files": ["backend/src/OetLearner.Api/Services/Writing/Review/WritingGradeReviewer.cs","backend/src/OetLearner.Api/Services/Writing/WritingSubmissionEvaluationPipeline.cs"]
     },
     {
@@ -160,7 +160,7 @@
       "owner": "writing-ai-final",
       "blockedBy": ["WAI-03"],
       "verify": "build-images.yml; owner QA with allowlisted and normal accounts",
-      "evidence": ["Implemented server-side from SubmittedAt; client countdown anchored to server clock."],
+      "evidence": ["Implemented server-side from SubmittedAt; client countdown anchored to server clock. Live in 37478062712."],
       "files": ["backend/src/OetLearner.Api/Services/Writing/WritingResultRelease.cs","components/domain/writing/WritingReleaseCountdown.tsx","lib/paste-exempt.ts"]
     },
     {
