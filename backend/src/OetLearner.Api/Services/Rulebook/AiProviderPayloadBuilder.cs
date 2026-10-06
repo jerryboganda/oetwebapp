@@ -11,8 +11,16 @@ internal static class AiProviderPayloadBuilder
         // `input_audio` parts. Any other model keeps byte-identical payloads, whatever was attached.
         var audioParts = BuildOpenAiAudioParts(request);
 
+        // Document attachment: folded into the LAST user message text so every
+        // OpenAI-compatible provider — including text-only gateways — can answer
+        // questions about an uploaded file without native attachment support.
+        // (SAMI Wave 2, UAT Pack 3; verified live that dropping it silently
+        // loses the upload entirely.)
+        var documentFold = BuildDocumentFold(request.DocumentAttachment);
+
         if (request.Messages is not { Count: > 0 })
         {
+            var foldedPrompt = string.IsNullOrEmpty(documentFold) ? request.UserPrompt : request.UserPrompt + documentFold;
             return new List<Dictionary<string, object?>>
             {
                 new() { ["role"] = "system", ["content"] = request.SystemPrompt },
@@ -20,14 +28,24 @@ internal static class AiProviderPayloadBuilder
                 {
                     ["role"] = "user",
                     ["content"] = audioParts.Count == 0
-                        ? request.UserPrompt
-                        : TextThenParts(request.UserPrompt, audioParts),
+                        ? foldedPrompt
+                        : TextThenParts(foldedPrompt, audioParts),
                 },
             };
         }
 
         var audioPending = audioParts.Count > 0;
-        return request.Messages.Select(message =>
+        // The document fold rides on the LAST user message of the history.
+        var lastUserIndex = -1;
+        for (var i = 0; i < request.Messages.Count; i++)
+        {
+            if (string.Equals((request.Messages[i].Role ?? "user").Trim().ToLowerInvariant(), "user", StringComparison.Ordinal))
+            {
+                lastUserIndex = i;
+            }
+        }
+
+        return request.Messages.Select((message, messageIndex) =>
         {
             var role = (message.Role ?? "user").Trim().ToLowerInvariant();
             if (role == "tool" && string.IsNullOrWhiteSpace(message.ToolCallId))
@@ -39,18 +57,19 @@ internal static class AiProviderPayloadBuilder
             // OpenAI content-parts shape (text + image_url/data:). Plain
             // string content keeps the legacy shape so text-only providers
             // and the mock see byte-identical payloads to before.
-            object? content = message.Content ?? string.Empty;
+            var effectiveContent = messageIndex == lastUserIndex ? message.Content + documentFold : message.Content;
+            object? content = effectiveContent ?? string.Empty;
             var carriesAudio = audioPending && role == "user";
             if (carriesAudio) audioPending = false;
             if ((role is "user" or "system" && message.ImageAttachments is { Count: > 0 }) || carriesAudio)
             {
                 var parts = new List<object?>();
-                if (!string.IsNullOrWhiteSpace(message.Content))
+                if (!string.IsNullOrWhiteSpace(effectiveContent))
                 {
                     parts.Add(new Dictionary<string, object?>
                     {
                         ["type"] = "text",
-                        ["text"] = message.Content,
+                        ["text"] = effectiveContent,
                     });
                 }
                 foreach (var image in message.ImageAttachments ?? Array.Empty<AiProviderImageAttachment>())
@@ -119,6 +138,27 @@ internal static class AiProviderPayloadBuilder
     /// <summary>The <c>input_audio</c> content parts for the request's audio attachments: only for an
     /// audio chat model, and only mp3/wav (the formats the API accepts); anything else is left out
     /// rather than sent as a payload the API would reject.</summary>
+    /// <summary>
+    /// Builds the text block that folds an uploaded document into the prompt: an
+    /// explicit, bounded block the model is told to treat as the attachment's
+    /// verbatim content. Empty string when there is no document attachment.
+    /// </summary>
+    public static string BuildDocumentFold(AiProviderDocumentAttachment? document)
+    {
+        if (document is null || string.IsNullOrWhiteSpace(document.Text)) return string.Empty;
+        var name = string.IsNullOrWhiteSpace(document.FileName) ? "document" : document.FileName;
+        var mime = string.IsNullOrWhiteSpace(document.MimeType) ? "text/plain" : document.MimeType;
+        return "
+
+[UPLOADED DOCUMENT: " + name + " (" + mime + ")]
+" +
+               "The learner uploaded the document below this turn. Treat its text as the attachment's verbatim content: quote and reason from it, never invent parts that are not present.
+" +
+               "--- BEGIN " + name + " ---
+" + document.Text + "
+--- END " + name + " ---";
+    }
+
     internal static List<object?> BuildOpenAiAudioParts(AiProviderRequest request)
     {
         var parts = new List<object?>();
