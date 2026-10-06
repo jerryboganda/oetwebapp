@@ -126,7 +126,7 @@ An enrollment is the manager operation `enroll` (RWP 8.1). The owner supplies, i
 port, region and provider, and a **one-time owner SSH credential** for the helper (root or a sudo user). Steps are idempotent and resumable; a crash
 re-runs the failed step safely.
 
-1. **Rent a helper**: Ubuntu 22.04/24.04 or Debian 12, `x86_64`, systemd, at least 2 cores, 4 GiB RAM and 20 GiB free disk (design default for a node
+1. **Rent a helper**: Ubuntu 22.04/24.04/26.04 or Debian 12, `x86_64`, systemd, at least 2 cores, 4 GiB RAM and 20 GiB free disk (design default for a node
    is 4 vCPU / 8 GiB). It must be a fresh VPS with no `oet-*` containers and not the primary.
 2. **Validate**: the inventory validator rejects forbidden addresses and malformed input before any connection (RWP 8.9).
 3. **Verify the host key out-of-band** (section 8). The manager fetches fingerprints only to display them; the owner compares with the VPS provider
