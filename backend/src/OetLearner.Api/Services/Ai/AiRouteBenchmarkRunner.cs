@@ -65,15 +65,12 @@ public sealed partial class AiRouteBenchmarkRunner(
 
     public async Task<AiRouteBenchmarkResult> RunAsync(string featureCode, string providerCode, string model, CancellationToken ct)
     {
-        var provider = providers.FirstOrDefault(p => p is RegistryBackedProvider)
-            ?? throw new InvalidOperationException("The registry-backed AI provider is not registered.");
-
         var (incumbentProviderCode, incumbentModel) = await ResolveIncumbentRouteAsync(featureCode, providerCode, model, ct);
 
-        var candidateCases = await ExecuteCorpusAsync(provider, providerCode, model, ct);
+        var candidateCases = await ExecuteCorpusAsync(providerCode, model, ct);
         var incumbentCases = incumbentProviderCode is null
             ? []
-            : await ExecuteCorpusAsync(provider, incumbentProviderCode, incumbentModel ?? "", ct);
+            : await ExecuteCorpusAsync(incumbentProviderCode, incumbentModel ?? "", ct);
 
         var metrics = ComputeMetrics(candidateCases, incumbentCases);
         var evaluation = approval.Evaluate(approval.Classify(featureCode), metrics);
@@ -127,9 +124,24 @@ public sealed partial class AiRouteBenchmarkRunner(
     private static decimal CostUsd(int promptTokens, int completionTokens, decimal per1kPrompt, decimal per1kCompletion)
         => promptTokens * per1kPrompt / 1000m + completionTokens * per1kCompletion / 1000m;
 
-    private async Task<IReadOnlyList<AiRouteBenchmarkCaseOutcome>> ExecuteCorpusAsync(
-        IAiModelProvider provider, string providerCode, string model, CancellationToken ct)
+    /// <summary>Dispatches by the provider row's dialect so the incumbent route is measured on
+    /// the SAME provider implementation production uses for it (anthropic native adapter vs the
+    /// OpenAI-compatible registry path).</summary>
+    private async Task<IAiModelProvider> ResolveProviderForCodeAsync(string providerCode, CancellationToken ct)
     {
+        var row = await registry.FindByCodeAsync(providerCode, ct)
+            ?? throw new InvalidOperationException($"Benchmark: provider '{providerCode}' is not registered.");
+        if (row.Dialect == AiProviderDialect.Anthropic)
+            return providers.OfType<AnthropicProvider>().FirstOrDefault()
+                ?? throw new InvalidOperationException("Benchmark: the Anthropic provider adapter is not registered.");
+        return providers.OfType<RegistryBackedProvider>().FirstOrDefault()
+            ?? throw new InvalidOperationException("Benchmark: the registry-backed AI provider is not registered.");
+    }
+
+    private async Task<IReadOnlyList<AiRouteBenchmarkCaseOutcome>> ExecuteCorpusAsync(
+        string providerCode, string model, CancellationToken ct)
+    {
+        var provider = await ResolveProviderForCodeAsync(providerCode, ct);
         var (per1kPrompt, per1kCompletion) = await ResolvePricingAsync(providerCode, ct);
         if (string.IsNullOrWhiteSpace(model))
         {
