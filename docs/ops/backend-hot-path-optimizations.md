@@ -1,9 +1,14 @@
 # Backend hot-path optimizations (2026-10-05)
 
-Branch `feat/opt-backend-api`. The API is database-round-trip bound on its hot paths, so every
-item below removes queries, writes or lock contention; none changes a learner-visible result except
-where noted under "Behaviour changes". Nothing here was benchmarked locally (the repository's
-compute rule: GitHub Actions only); each item names the test that pins it.
+Layer 03 (`stack/03-api`) of the optimisation program. The API is database-round-trip bound on its
+hot paths, so every item below removes queries, writes or lock contention; none changes a
+learner-visible result except where noted under "Behaviour changes".
+
+**Verification status: not tested - owner QA** (owner directive 2026-10-06: no automated QA runs
+anywhere). The only automated check on this change is compilation inside `Build images`
+(`dotnet publish`); nothing was benchmarked, built or run locally. Each item names the test source
+that describes its intended behaviour: those files stay in git as inert manual tools, no CI lane runs
+them, and none of them has been run for this change.
 
 ## 1. Dashboard / readiness / bootstrap
 
@@ -31,7 +36,7 @@ Not changed, with the reason:
   me / bootstrap / dashboard reads them once); the cross-request freeze cache above is the real fix.
 - **Readiness 24 h TTL** and the daily rollover (capped at 100 users) are unchanged.
 
-Tests: `Learner/LearnerReferenceDataCacheTests.cs`, `Readiness/ReadinessOptimizationTests.cs`
+Manual test sources (not run by CI): `Learner/LearnerReferenceDataCacheTests.cs`, `Readiness/ReadinessOptimizationTests.cs`
 (window equivalence with the previous algorithm on SQLite and the in-memory provider, single-flight),
 `Learner/LearnerServicePerformanceTests.cs` (no pending analytics row after dashboard / bootstrap).
 
@@ -55,7 +60,7 @@ answer the learner was told was saved. Bumping first would open exactly that los
 is why the bump is not hoisted above the write. The EF in-memory provider (the rest of the Reading
 suite) has no `ExecuteUpdate`, so it keeps the tracked bump at the end of the method as before.
 
-Tests: `Reading/ReadingAutosaveRelationalTests.cs` (SQLite): a second context bumps `RowVersion`
+Manual test sources (not run by CI): `Reading/ReadingAutosaveRelationalTests.cs` (SQLite): a second context bumps `RowVersion`
 between two saves of the first (the old code threw here), a grader that read the attempt before an
 autosave conflicts instead of grading without it, the status guard, revisions / elapsed time, no audit
 event.
@@ -75,7 +80,7 @@ Not done on purpose: `pg_trgm` / a derived `SearchText` index. The migration com
 `20260728091000_AddContentItemBrowseIndexes` requires an EXPLAIN-validated
 `CREATE INDEX CONCURRENTLY`; that needs production-sized data and is a separate change.
 
-Tests: `Content/ContentSearchKeysetTests.cs` (every item exactly once across pages, ties on rank
+Manual test sources (not run by CI): `Content/ContentSearchKeysetTests.cs` (every item exactly once across pages, ties on rank
 and on title, stability when better-ranked rows arrive between pages, legacy `page`, overflow, cursor
 validation, filters, text, facet cache), `Content/ContentPapersPagingEndpointTests.cs` (HTTP contract).
 

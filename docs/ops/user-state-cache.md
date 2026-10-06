@@ -128,7 +128,11 @@ so the JWT check stays a single database command. A failed read keeps the last v
 A healthy slot shows a hit ratio well above 90 % on `jwt_account`; a rising `rejected_sets` means
 writes are landing during reads (normal under load, harmless: the fill is simply skipped).
 
-## Tests
+## Manual test sources (not run by CI)
+
+Not tested - owner QA (owner directive 2026-10-06: no automated QA anywhere). These files stay in
+git as inert manual tools; no CI lane runs them and none has been run for this change. They describe
+the intended behaviour:
 
 `backend/tests/OetLearner.Api.Tests/Caching/` (hit / miss / expiry / clamp / invalidation / kill switch /
 sweep; every row of the invalidation table; resolver, freeze DTO and write-gate consumers including
