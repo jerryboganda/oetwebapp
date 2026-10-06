@@ -674,7 +674,8 @@ kill switch below is the lever if it misbehaves.
 - **Counts are database-derived** (all API slots and the worker), not a process gauge: they are also in
   `GET /v1/admin/ai/live-voice/health` as `admission`, and in `GET /v1/admin/ops/snapshot` (job queue depth by type, database
   connections by `application_name` from `pg_stat_activity`, admitted and queued counts, and a placeholder for remote workers;
-  `AdminSystemAdmin`, read-only, counts only; connections read `(unset)` until each process sets its own `Application Name`).
+  `AdminSystemAdmin`, read-only, counts only; connections are grouped by the process's Npgsql `Application Name`: `oet-api-blue`, `oet-api-green`, `oet-ai-worker`, and
+  `(unset)` for any connection that sets none; see [../ops/db-connection-budget.md](../ops/db-connection-budget.md)).
 - **Not capacity controls** (verified dead 5 Oct 2026): `SpeakingSimulationV11TurnTelemetryService.ActiveTurnCount` and the
   statics in `ConversationHub.SpeakingRoleplay.cs`. Every entry point of that legacy hub rejects typed sessions first, so they
   never leave zero; they are marked as dead in code.

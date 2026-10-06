@@ -21,7 +21,9 @@ public sealed record AdminOpsJobsSnapshot(
     IReadOnlyList<AdminOpsJobTypeRow> ByType);
 
 /// <summary>Database connections of one <c>application_name</c> and <c>state</c> (from <c>pg_stat_activity</c>).
-/// <c>ApplicationName</c> is empty-as-<c>(unset)</c> until each process sets its own (see the compose files).</summary>
+/// <c>ApplicationName</c> is the process's Npgsql <c>Application Name</c> (<c>oet-api-blue</c>, <c>oet-api-green</c>,
+/// <c>oet-ai-worker</c> in <c>docker-compose.production.yml</c>); <c>(unset)</c> for any connection that sets none
+/// (the database's own workers, an admin shell).</summary>
 public sealed record AdminOpsConnectionRow(string ApplicationName, string? State, int Count);
 
 /// <summary><c>Available</c> is false off Postgres or when the catalog cannot be read; <c>Note</c> says why.</summary>
