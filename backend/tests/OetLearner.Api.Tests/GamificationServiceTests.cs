@@ -244,4 +244,19 @@ public class GamificationServiceTests
         Assert.Equal("Bilal", weekly[0].GetProperty("displayName").GetString());
         Assert.Equal("Aisha", weekly[1].GetProperty("displayName").GetString());
     }
+
+    [Fact]
+    public async Task AwardXpAsync_awards_the_xp_without_queueing_a_background_job()
+    {
+        // It used to queue a JobType.AchievementCheck row per award (one per answered
+        // Reading question) that no handler ever processed: pure queue and write load.
+        var db = BuildDb();
+        var svc = new GamificationService(db);
+
+        await svc.AwardXpAsync("u1", 10, "question_answered", CancellationToken.None);
+        await svc.AwardXpAsync("u1", 5, "question_answered", CancellationToken.None);
+
+        Assert.Equal(15, (await db.LearnerXPs.SingleAsync(x => x.UserId == "u1")).TotalXP);
+        Assert.Empty(db.BackgroundJobs);
+    }
 }

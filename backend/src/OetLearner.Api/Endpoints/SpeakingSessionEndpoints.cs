@@ -17,6 +17,7 @@ namespace OetLearner.Api.Endpoints;
 /// Routes:
 ///   * POST   /v1/speaking/sessions
 ///   * GET    /v1/speaking/sessions/{id}
+///   * POST   /v1/speaking/sessions/{id}/leave-queue     (leave the live AI session admission line)
 ///   * POST   /v1/speaking/sessions/{id}/start-roleplay
 ///   * POST   /v1/speaking/sessions/{id}/end
 ///   * POST   /v1/speaking/sessions/{id}/consent
@@ -61,10 +62,15 @@ public static class SpeakingSessionEndpoints
             .Produces(StatusCodes.Status409Conflict);
 
         learner.MapPost("/{id}/finish-warmup", FinishWarmupAsync)
-            .WithSummary("Transition warm-up → prep. The only authorised exit from warm-up.")
+            .WithSummary("Transition warm-up → prep. The only authorised exit from warm-up. While the live AI session cap is full the session stays in warmup, nothing is held or timed, and the response carries `admission` (position, estimated wait): repeat the call.")
             .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
             .Produces(StatusCodes.Status409Conflict);
+
+        learner.MapPost("/{id}/leave-queue", LeaveQueueAsync)
+            .WithSummary("Leave the live AI session admission line: this card's waiting place is released at once (the card stays in warmup). A no-op when the card is not waiting.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status404NotFound);
 
         learner.MapPost("/{id}/start-roleplay", StartRolePlayAsync)
             .RequireRateLimiting("AiLiveSpeaking")
@@ -187,6 +193,20 @@ public static class SpeakingSessionEndpoints
         var userId = ResolveUserId(http);
         var detail = await sessions.FinishWarmupAsync(userId, id, ct);
         return Results.Ok(detail);
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // POST /v1/speaking/sessions/{id}/leave-queue
+    // ─────────────────────────────────────────────────────────────────
+    private static async Task<IResult> LeaveQueueAsync(
+        HttpContext http,
+        string id,
+        SpeakingSessionService sessions,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        await sessions.LeaveAdmissionQueueAsync(userId, id, ct);
+        return Results.NoContent();
     }
 
     // ─────────────────────────────────────────────────────────────────

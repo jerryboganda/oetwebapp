@@ -11,7 +11,16 @@ namespace OetLearner.Api.Services;
 
 public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<BackgroundJobProcessor> logger) : BackgroundService
 {
-    internal const int JobClaimBatchSize = 50;
+    /// <summary>
+    /// A pass claims this many jobs up front and runs them one after another, so
+    /// the claimed-but-not-started tail waits behind the head. 50 let one process
+    /// sit on a long tail of slow jobs (AI evaluations run for minutes) while the
+    /// other two processes idled; 20 keeps bursts of fast jobs moving and the
+    /// hoard bounded. Correctness of a long tail does not depend on this number:
+    /// <see cref="TryBeginClaimedJobAsync"/> keeps the unstarted tail from looking
+    /// orphaned and refuses to run a job another process has already taken back.
+    /// </summary>
+    internal const int JobClaimBatchSize = 20;
     internal const int SqliteQueuedJobScanLimit = 200;
     internal static string PostgresClaimQueuedJobsSql => """
         WITH candidate AS (
@@ -56,7 +65,8 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
     private DateTimeOffset _lastAutoAssignAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastSlaCheckAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastReadinessRolloverAt = DateTimeOffset.MinValue;
-    private DateTimeOffset _lastSpeakingTranscriptionPollAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastFreezeReconcileAt = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastSpeakingTranscriptionRecoveryAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastBillingAbandonedCartSweepAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastBillingDunningRetryDispatchAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastPrivateSpeakingNoShowSweepAt = DateTimeOffset.MinValue;
@@ -101,6 +111,22 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
     private static readonly TimeSpan ExpertSlaCheckInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReadinessRolloverInterval = TimeSpan.FromHours(24);
     private static readonly TimeSpan SpeakingTranscriptionPollInterval = TimeSpan.FromSeconds(10);
+    /// <summary>How often the transcription lane looks for rows orphaned in
+    /// <c>__processing__</c> by a process that died mid-ASR.</summary>
+    private static readonly TimeSpan SpeakingTranscriptionRecoveryInterval = TimeSpan.FromSeconds(60);
+    /// <summary>Safety net for a freeze whose FreezeStart/FreezeEnd job never ran.
+    /// The scheduled jobs are the primary path, so a minute of lateness here is
+    /// harmless; the sweep itself used to run on every 2-6 s tick in all three
+    /// processes.</summary>
+    internal static readonly TimeSpan FreezeReconcileInterval = TimeSpan.FromSeconds(60);
+    /// <summary>Once a claimed job's claim stamp is at least this old when it is about
+    /// to start, <see cref="TryBeginClaimedJobAsync"/> checks that this process still
+    /// owns it and refreshes the stamp of it and of the unstarted tail. A fast batch
+    /// (every job starting within this window of the claim) pays no extra statements.
+    /// Kept well under <see cref="StuckJobStaleThreshold"/> minus
+    /// <see cref="MaxJobExecutionTime"/> (30 - 20 = 10 minutes) so a stamp can never age
+    /// past the stuck-job sweep's threshold while a job runs.</summary>
+    internal static readonly TimeSpan JobStartStampAfter = TimeSpan.FromMinutes(5);
     /// <summary>How often to poll <c>DunningAttempts</c> for rows ready to retry.</summary>
     private static readonly TimeSpan BillingDunningRetryDispatchInterval = TimeSpan.FromMinutes(5);
     /// <summary>How often to enqueue the Private Speaking no-show sweep (T5).</summary>
@@ -111,7 +137,12 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
     private static readonly TimeSpan PrivateSpeakingReminderInterval = TimeSpan.FromMinutes(2);
     /// <summary>How often to enqueue the Private Speaking unpaid-reservation expiry sweep.</summary>
     private static readonly TimeSpan PrivateSpeakingReservationExpiryInterval = TimeSpan.FromMinutes(2);
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+        => Task.WhenAll(
+            RunJobLoopAsync(stoppingToken),
+            RunSpeakingTranscriptionLoopAsync(stoppingToken));
+
+    private async Task RunJobLoopAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -135,6 +166,45 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
                 // queued job still starts within 2 seconds of appearing.
                 var idle = _lastClaimedJobCount == 0;
                 await Task.Delay(idle ? TimeSpan.FromSeconds(6) : TimeSpan.FromSeconds(2), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The Speaking transcription queue (recorder-fallback sessions) polls on its
+    /// own loop with its own scope instead of inside <see cref="ProcessOnceAsync"/>.
+    /// After a transcript lands the pipeline runs the learner's grade inline, and a
+    /// Max-reasoning grade takes ~12 minutes: in the shared tick that stalled every
+    /// other job type in the process (notifications, evaluations, sweeps) for the
+    /// duration. On this loop it only delays further transcription polling in this
+    /// process; the other processes keep claiming rows, which is safe because the
+    /// claim is atomic.
+    /// </summary>
+    private async Task RunSpeakingTranscriptionLoopAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                await RunSpeakingTranscriptionQueueAsync(scope.ServiceProvider, DateTimeOffset.UtcNow, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Speaking transcription queue poll failed");
+            }
+
+            try
+            {
+                await Task.Delay(SpeakingTranscriptionPollInterval, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -168,10 +238,18 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
         var jobs = await ClaimQueuedJobsAsync(db, now, cancellationToken);
         _lastClaimedJobCount = jobs.Count;
 
-        foreach (var job in jobs)
+        for (var index = 0; index < jobs.Count; index++)
         {
+            var job = jobs[index];
             try
             {
+                // A job that waited behind slow ones may already have been taken back
+                // by another process's stuck-job sweep: never run it a second time.
+                if (!await TryBeginClaimedJobAsync(db, jobs, index, cancellationToken))
+                {
+                    continue;
+                }
+
                 using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 jobCts.CancelAfter(MaxJobExecutionTime);
                 try
@@ -190,6 +268,19 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
                 job.State = AsyncState.Completed;
                 job.StatusReasonCode = "completed";
                 job.StatusMessage = "Job completed successfully.";
+                job.LastTransitionAt = DateTimeOffset.UtcNow;
+            }
+            catch (UnhandledJobTypeException ex)
+            {
+                // No handler exists for this type, so a retry cannot help and the
+                // per-type admin alert the generic path raises would only be noise.
+                // Fail it once and terminally, with a reason an operator can read.
+                logger.LogError(ex, "Job {JobId} has type {JobType}, which has no handler; failed without retries.", job.Id, job.Type);
+                job.State = AsyncState.Failed;
+                job.StatusReasonCode = "unhandled_job_type";
+                job.StatusMessage = ex.Message;
+                job.Retryable = false;
+                job.RetryAfterMs = 0;
                 job.LastTransitionAt = DateTimeOffset.UtcNow;
             }
             catch (Exception ex)
@@ -228,7 +319,17 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
         // method) so it is never starved by a hung job; it is deliberately not
         // repeated here.
 
-        await ReconcileFreezeLifecycleAsync(scope.ServiceProvider, db, cancellationToken);
+        try
+        {
+            await ReconcileFreezeLifecycleIfDueAsync(scope.ServiceProvider, db, now, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Not fatal to the rest of the pass: a failing reconcile used to abort
+            // the tick, so none of the sections below ever ran again while it failed.
+            logger.LogError(ex, "Freeze lifecycle reconciliation failed");
+            db.ChangeTracker.Clear();
+        }
 
         if (now - _lastReconciliationAt >= ReconciliationInterval)
         {
@@ -285,18 +386,9 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
             }
         }
 
-        if (now - _lastSpeakingTranscriptionPollAt >= SpeakingTranscriptionPollInterval)
-        {
-            _lastSpeakingTranscriptionPollAt = now;
-            try
-            {
-                await RunSpeakingTranscriptionQueueAsync(scope.ServiceProvider, cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                logger.LogError(ex, "Speaking transcription queue poll failed");
-            }
-        }
+        // The Speaking transcription queue is not polled here: it has its own loop
+        // (RunSpeakingTranscriptionLoopAsync) so a long inline grade cannot stall
+        // this pass.
 
         // ── Wave A5 — Billing recurring jobs ─────────────────────────
         // Dunning ladder dispatcher (every 5 min): claims due DunningAttempt
@@ -381,6 +473,198 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
                 logger.LogError(ex, "Private Speaking reservation-expiry enqueue failed");
             }
         }
+    }
+
+    /// <summary>
+    /// The gate every claimed job passes just before it runs; returns false when the
+    /// caller must skip the job. A pass claims a whole batch up front (stamping every
+    /// row's <c>LastTransitionAt</c> at claim time) and then runs the jobs serially, so
+    /// a job near the tail can start long after its stamp. Another process's stuck-job
+    /// sweep (<see cref="RecoverStuckJobsAsync"/>) treats a Processing row older than
+    /// <see cref="StuckJobStaleThreshold"/> as orphaned and re-queues it, and this
+    /// process would still hold the stale in-memory row: both would run the job (double
+    /// AI cost and notifications, burned retries, and after three requeues a false
+    /// "evaluation failed" notice plus an admin stuck-job alert).
+    ///
+    /// <para>
+    /// Once the claim stamp has aged past <see cref="JobStartStampAfter"/> this
+    /// (1) confirms in the store that the row is still ours, and (2) refreshes the
+    /// stamp of this job and of the whole unstarted tail, so no tail row can age past
+    /// the sweep's threshold while it waits behind a job capped at
+    /// <see cref="MaxJobExecutionTime"/>. A fast batch (every job starting within
+    /// <see cref="JobStartStampAfter"/> of the claim) pays no extra statements.
+    /// </para>
+    ///
+    /// <para>
+    /// "Still ours" means still Processing under the <see cref="BackgroundJobItem.RetryCount"/>
+    /// this process claimed it with: every way the sweep takes a row back either leaves
+    /// Processing or increments RetryCount, so a row the sweep re-queued and another
+    /// process then re-claimed is told apart too (a stamp comparison could not). If
+    /// ownership cannot be confirmed (the store errored) the job is skipped, which is the
+    /// safe side: it stays Processing and the sweep re-queues it, instead of risking a
+    /// second run.
+    /// </para>
+    /// </summary>
+    internal async Task<bool> TryBeginClaimedJobAsync(
+        LearnerDbContext db,
+        IReadOnlyList<BackgroundJobItem> batch,
+        int index,
+        CancellationToken cancellationToken)
+    {
+        var job = batch[index];
+        var now = DateTimeOffset.UtcNow;
+        if (now - job.LastTransitionAt < JobStartStampAfter)
+        {
+            return true;
+        }
+
+        bool owned;
+        try
+        {
+            owned = db.Database.IsNpgsql()
+                ? await RefreshClaimInStoreAsync(db, batch, index, now, cancellationToken)
+                : await RefreshClaimTrackedAsync(db, batch, index, now, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex,
+                "Could not confirm that this process still owns job {JobId} ({JobType}); skipping it here and leaving it to the stuck-job sweep.",
+                job.Id, job.Type);
+            owned = false;
+        }
+
+        if (!owned)
+        {
+            logger.LogWarning(
+                "Job {JobId} ({JobType}) is no longer owned by this process (taken back by the stuck-job sweep after waiting in the claimed batch); not running it a second time.",
+                job.Id, job.Type);
+            // Whatever this stale copy holds must never be written back over the live row.
+            db.Entry(job).State = EntityState.Detached;
+        }
+
+        return owned;
+    }
+
+    /// <summary>PostgreSQL: one compare-and-swap UPDATE for the job about to run
+    /// (<c>WHERE Id = x AND State = Processing AND RetryCount = claimed</c>; zero rows
+    /// affected = lost) and one best-effort keep-alive UPDATE for the unstarted tail.</summary>
+    private async Task<bool> RefreshClaimInStoreAsync(
+        LearnerDbContext db,
+        IReadOnlyList<BackgroundJobItem> batch,
+        int index,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var job = batch[index];
+        var claimedRetryCount = job.RetryCount;
+        var owned = await db.BackgroundJobs
+            .Where(x => x.Id == job.Id
+                && x.State == AsyncState.Processing
+                && x.RetryCount == claimedRetryCount)
+            .ExecuteUpdateAsync(set => set.SetProperty(x => x.LastTransitionAt, now), cancellationToken);
+        if (owned == 0)
+        {
+            return false;
+        }
+
+        var tailIds = new List<string>(Math.Max(0, batch.Count - index - 1));
+        for (var i = index + 1; i < batch.Count; i++)
+        {
+            tailIds.Add(batch[i].Id);
+        }
+
+        if (tailIds.Count > 0)
+        {
+            try
+            {
+                // A tail row the sweep already took back is not Processing (or was
+                // re-claimed elsewhere, where a fresher stamp does no harm); its own
+                // gate, when its turn comes, finds it is no longer ours.
+                await db.BackgroundJobs
+                    .Where(x => tailIds.Contains(x.Id) && x.State == AsyncState.Processing)
+                    .ExecuteUpdateAsync(set => set.SetProperty(x => x.LastTransitionAt, now), cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // This job is ours, so it runs; the next job's gate refreshes the tail again.
+                logger.LogWarning(ex, "Could not refresh the claim stamps of {Count} unstarted job(s) behind {JobId}; continuing.", tailIds.Count, job.Id);
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Non-PostgreSQL providers (the in-memory and SQLite test providers; one
+    /// process, so a read followed by a write loses no atomicity): the same ownership
+    /// rule as <see cref="RefreshClaimInStoreAsync"/>, evaluated against a fresh read of the
+    /// store, with the refresh written through the tracked rows that are still ours and
+    /// the rows that are not detached so they can never be saved over the live ones.</summary>
+    private static async Task<bool> RefreshClaimTrackedAsync(
+        LearnerDbContext db,
+        IReadOnlyList<BackgroundJobItem> batch,
+        int index,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var ids = new List<string>(batch.Count - index);
+        for (var i = index; i < batch.Count; i++)
+        {
+            ids.Add(batch[i].Id);
+        }
+
+        var stored = (await db.BackgroundJobs.AsNoTracking()
+                .Where(x => ids.Contains(x.Id))
+                .Select(x => new { x.Id, x.State, x.RetryCount })
+                .ToListAsync(cancellationToken))
+            .ToDictionary(x => x.Id);
+
+        var currentOwned = false;
+        for (var i = index; i < batch.Count; i++)
+        {
+            var candidate = batch[i];
+            var stillOurs = stored.TryGetValue(candidate.Id, out var row)
+                && row.State == AsyncState.Processing
+                && row.RetryCount == candidate.RetryCount;
+            if (stillOurs)
+            {
+                candidate.LastTransitionAt = now;
+                currentOwned |= i == index;
+            }
+            else if (i > index)
+            {
+                db.Entry(candidate).State = EntityState.Detached;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return currentOwned;
+    }
+
+    /// <summary>
+    /// Throttled entry point for <see cref="ReconcileFreezeLifecycleAsync"/>: returns
+    /// false (doing nothing) when it ran less than <see cref="FreezeReconcileInterval"/> ago.
+    /// </summary>
+    internal async Task<bool> ReconcileFreezeLifecycleIfDueAsync(
+        IServiceProvider services,
+        LearnerDbContext db,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        if (now - _lastFreezeReconcileAt < FreezeReconcileInterval)
+        {
+            return false;
+        }
+
+        _lastFreezeReconcileAt = now;
+        await ReconcileFreezeLifecycleAsync(services, db, cancellationToken);
+        return true;
+    }
+
+    /// <summary>Raised for a job whose <see cref="JobType"/> has no case in
+    /// <see cref="ExecuteJobAsync"/>; handled in the pass loop (fail once, no retries, no alert).</summary>
+    private sealed class UnhandledJobTypeException(JobType type)
+        : InvalidOperationException($"No handler is registered for job type {type}.")
+    {
     }
 
     internal static async Task<List<BackgroundJobItem>> ClaimQueuedJobsAsync(
@@ -691,6 +975,20 @@ public partial class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, I
             case JobType.BillingRenewalReminder:
                 await ExecuteBillingRenewalReminderAsync(services, job, cancellationToken);
                 break;
+
+            // GamificationService.AwardXpAsync used to queue one of these per XP award
+            // (one per answered Reading question) although no handler ever existed, so
+            // every row completed as a silent no-op. Achievements are evaluated inline
+            // (GamificationService.CheckAndAwardAchievementsAsync), nothing enqueues the
+            // type any more, and this explicit case only drains rows an older release
+            // queued. It must stay ahead of the default below.
+            case JobType.AchievementCheck:
+                break;
+
+            default:
+                // Before this default an unhandled type silently ended as Completed,
+                // which is how a job meant for somewhere else would look "done".
+                throw new UnhandledJobTypeException(job.Type);
         }
     }
 

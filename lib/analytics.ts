@@ -1,5 +1,6 @@
 import { ensureFreshAccessToken } from './auth-client';
 import { env } from './env';
+import { createEventBatcher, type EventBatcher } from './telemetry/event-batcher';
 
 export type EventProperties = Record<string, string | number | boolean | null | undefined>;
 
@@ -333,6 +334,7 @@ type AnalyticsProvider = (event: string, properties?: EventProperties) => Promis
 
 const MAX_BUFFER_SIZE = 1000;
 const ANALYTICS_EVENTS_PATH = '/v1/analytics/events';
+const ANALYTICS_BATCH_PATH = '/v1/analytics/events/batch';
 
 /**
  * Cookie value exactly as stored. Deliberately not decoded: the CSRF token is
@@ -348,11 +350,114 @@ function readRawCookie(name: string): string | null {
   return match ? match[1] : null;
 }
 
+type QueuedAnalyticsEvent = { eventName: string; properties?: EventProperties };
+
+/** Events waiting this long, or this many, are sent together as one request. */
+const ANALYTICS_BATCH_SIZE = 20;
+const ANALYTICS_FLUSH_INTERVAL_MS = 3000;
+/** The API ignores a batch body larger than 64 KiB, so a bigger one is split before it is sent. */
+const MAX_BATCH_BODY_BYTES = 48 * 1024;
+
+/** Set once the API answers the batch route with "no such route": this page load then sends single events. */
+let batchEndpointUnavailable = false;
+
+async function postAnalyticsBody(path: string, body: string, keepalive: boolean): Promise<Response | null> {
+  const send = async () => {
+    const accessToken = await ensureFreshAccessToken();
+    if (!accessToken) {
+      return null;
+    }
+
+    // Send the cookie value verbatim: the proxy compares it byte-for-byte
+    // against the raw Cookie header without decoding, so a decoded token
+    // would never match.
+    const csrfToken = readRawCookie('oet_csrf');
+
+    return fetch(`${env.apiBaseUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'X-OET-Client-Platform': 'web',
+        ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
+      },
+      body,
+      // Lets the request outlive the page when the batch is flushed on hide / unload.
+      ...(keepalive ? { keepalive: true } : {}),
+    });
+  };
+
+  let response = await send();
+
+  // A token refresh rotates the CSRF cookie, so an event fired while that
+  // was in flight can carry a superseded token and be rejected. Both
+  // credentials are re-read on the retry. Without this the event is lost
+  // silently, because callers discard transport rejections.
+  if (response && (response.status === 401 || response.status === 403)) {
+    response = await send();
+  }
+
+  return response;
+}
+
+async function sendSingleAnalyticsEvent(event: QueuedAnalyticsEvent, keepalive: boolean): Promise<void> {
+  const response = await postAnalyticsBody(
+    ANALYTICS_EVENTS_PATH,
+    JSON.stringify({ eventName: event.eventName, properties: event.properties }),
+    keepalive,
+  );
+
+  if (response && !response.ok) {
+    throw new Error(`Analytics event submission failed with status ${response.status}.`);
+  }
+}
+
+async function sendEachAnalyticsEvent(events: QueuedAnalyticsEvent[], keepalive: boolean): Promise<void> {
+  for (const event of events) {
+    // One bad event must not cost the rest of the batch.
+    await sendSingleAnalyticsEvent(event, keepalive).catch(() => undefined);
+  }
+}
+
+async function sendAnalyticsBatchBody(events: QueuedAnalyticsEvent[], keepalive: boolean): Promise<void> {
+  const body = JSON.stringify({ events });
+  if (events.length > 1 && new TextEncoder().encode(body).length > MAX_BATCH_BODY_BYTES) {
+    const middle = Math.ceil(events.length / 2);
+    await sendAnalyticsBatchBody(events.slice(0, middle), keepalive);
+    await sendAnalyticsBatchBody(events.slice(middle), keepalive);
+    return;
+  }
+
+  const response = await postAnalyticsBody(ANALYTICS_BATCH_PATH, body, keepalive);
+
+  // An older API that has no batch route: stop batching for this page load and replay singly.
+  if (response && (response.status === 404 || response.status === 405 || response.status === 501)) {
+    batchEndpointUnavailable = true;
+    await sendEachAnalyticsEvent(events, keepalive);
+    return;
+  }
+
+  if (response && !response.ok) {
+    throw new Error(`Analytics batch submission failed with status ${response.status}.`);
+  }
+}
+
+/** One event goes to the single-event route; two or more share one request. */
+async function sendAnalyticsBatch(events: QueuedAnalyticsEvent[], context: { keepalive: boolean }): Promise<void> {
+  if (events.length === 1 || batchEndpointUnavailable) {
+    await sendEachAnalyticsEvent(events, context.keepalive);
+    return;
+  }
+
+  await sendAnalyticsBatchBody(events, context.keepalive);
+}
+
 class AnalyticsService {
   private enabled = true;
   private provider: AnalyticsProvider | null = null;
   private buffer: Array<{ event: AnalyticsEvent; properties: EventProperties }> = [];
   private transportInitialized = false;
+  private batcher: EventBatcher<QueuedAnalyticsEvent> | null = null;
 
   setProvider(provider: AnalyticsProvider) {
     this.provider = provider;
@@ -369,49 +474,22 @@ class AnalyticsService {
     }
 
     this.transportInitialized = true;
-    this.setProvider(async (event, properties) => {
-      const body = JSON.stringify({
-        eventName: event,
-        properties,
-      });
-
-      const send = async () => {
-        const accessToken = await ensureFreshAccessToken();
-        if (!accessToken) {
-          return null;
-        }
-
-        // Send the cookie value verbatim: the proxy compares it byte-for-byte
-        // against the raw Cookie header without decoding, so a decoded token
-        // would never match.
-        const csrfToken = readRawCookie('oet_csrf');
-
-        return fetch(`${env.apiBaseUrl}${ANALYTICS_EVENTS_PATH}`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-            'X-OET-Client-Platform': 'web',
-            ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
-          },
-          body,
-        });
-      };
-
-      let response = await send();
-
-      // A token refresh rotates the CSRF cookie, so an event fired while that
-      // was in flight can carry a superseded token and be rejected. Both
-      // credentials are re-read on the retry. Without this the event is lost
-      // silently, because callers discard transport rejections.
-      if (response && (response.status === 401 || response.status === 403)) {
-        response = await send();
-      }
-
-      if (response && !response.ok) {
-        throw new Error(`Analytics event submission failed with status ${response.status}.`);
-      }
+    // One authenticated request per event (246 call sites) is what this replaces: events
+    // are collected for a few seconds and sent together, and flushed when the page is hidden.
+    const batcher = createEventBatcher<QueuedAnalyticsEvent>({
+      send: sendAnalyticsBatch,
+      maxBatchSize: ANALYTICS_BATCH_SIZE,
+      flushIntervalMs: ANALYTICS_FLUSH_INTERVAL_MS,
     });
+    this.batcher = batcher;
+    this.setProvider((event, properties) => {
+      batcher.enqueue({ eventName: event, properties });
+    });
+  }
+
+  /** Sends whatever is queued now. Resolves once it has been sent; never rejects. */
+  flush(): Promise<void> {
+    return this.batcher?.flush() ?? Promise.resolve();
   }
 
   track(event: AnalyticsEvent, properties?: EventProperties) {
@@ -446,4 +524,24 @@ export const analytics = new AnalyticsService();
 
 export function initializeAnalyticsTransport() {
   analytics.initializeBrowserTransport();
+}
+
+/**
+ * Sends whatever analytics is still queued. Called at sign-out while the session is still valid:
+ * events are batched for a few seconds, and once the session is gone there is no token to send
+ * them with. Never rejects. `maxWaitMs` bounds how long the caller waits for the send to finish
+ * (the send itself carries on); without it the promise settles when everything queued is sent.
+ */
+export function flushAnalytics(maxWaitMs?: number): Promise<void> {
+  const flushed = Promise.resolve(analytics.flush());
+  if (maxWaitMs === undefined) return flushed;
+
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, maxWaitMs);
+    const finish = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    void flushed.then(finish, finish);
+  });
 }

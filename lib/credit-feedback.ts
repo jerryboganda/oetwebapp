@@ -1,7 +1,8 @@
 'use client';
 
+import type { QueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/toaster';
-import { queryKeys } from '@/lib/query/hooks';
+import { queryKeys } from '@/lib/query/keys';
 import type { AiPackageCreditSnapshot, AiPackageCreditTransaction } from '@/lib/billing-types';
 
 export type MeteredSubtest = 'reading' | 'listening' | 'writing' | 'speaking' | 'mock';
@@ -96,6 +97,33 @@ async function latestMatchingDebit(
 }
 
 /**
+ * Writes an authoritative snapshot straight into the dashboard credit-card
+ * caches that already exist. The caller has just fetched it, so invalidating
+ * those queries instead made every mounted observer fetch the very same
+ * snapshot a second time. A key with no cache entry is left alone (there is
+ * nothing stale to refresh; the next mount fetches on its own).
+ */
+async function seedCreditCaches(queryClient: QueryClient, snapshot: AiPackageCreditSnapshot): Promise<void> {
+  for (const userId of new Set(['current', snapshot.userId])) {
+    const queryKey = queryKeys.dashboard.aiPackageCredits(userId);
+    if (!queryClient.getQueryCache().find({ queryKey })) continue;
+    // A fetch already in flight started before this snapshot; do not let it land after it.
+    await queryClient.cancelQueries({ queryKey });
+    queryClient.setQueryData(queryKey, snapshot);
+  }
+}
+
+/** One fetch of the ledger snapshot, shared with the dashboard credit-card caches. */
+async function loadCreditSnapshot(): Promise<AiPackageCreditSnapshot> {
+  const [snapshot, queryClient] = await Promise.all([
+    import('@/lib/api').then((m) => m.fetchMyAiPackageCredits()),
+    import('@/components/providers/query-provider').then((m) => m.getQueryClient()),
+  ]);
+  await seedCreditCaches(queryClient, snapshot);
+  return snapshot;
+}
+
+/**
  * Refreshes the dashboard credit card caches so the candidate sees the same
  * authoritative balances the admin reads. Safe to call after any metered
  * activity — including ones that consumed nothing (idempotent per paper),
@@ -103,12 +131,7 @@ async function latestMatchingDebit(
  */
 export async function refreshCreditCards(): Promise<void> {
   try {
-    const [snapshot, queryClient] = await Promise.all([
-      import('@/lib/api').then((m) => m.fetchMyAiPackageCredits()),
-      import('@/components/providers/query-provider').then((m) => m.getQueryClient()),
-    ]);
-    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits('current') });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits(snapshot.userId) });
+    await loadCreditSnapshot();
   } catch {
     // Balance refresh must never block the activity itself.
   }
@@ -122,12 +145,7 @@ export async function refreshCreditCards(): Promise<void> {
  */
 export async function announceCreditUsage(subtest: MeteredSubtest): Promise<void> {
   try {
-    const [snapshot, queryClient] = await Promise.all([
-      import('@/lib/api').then((m) => m.fetchMyAiPackageCredits()),
-      import('@/components/providers/query-provider').then((m) => m.getQueryClient()),
-    ]);
-    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits('current') });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits(snapshot.userId) });
+    const snapshot = await loadCreditSnapshot();
 
     const tx = await latestMatchingDebit(snapshot, subtest);
     if (!tx) return;

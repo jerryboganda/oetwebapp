@@ -50,6 +50,26 @@ public sealed class SpeakingTranscriptionPipeline(
     private const string EmptySegmentsJson = "[]";
     private const string DefaultLanguage = "en";
 
+    /// <summary>
+    /// A row is <c>__processing__</c> for one ASR call (the HTTP client's own
+    /// timeout is 100 s) plus a few queries, and <see cref="SpeakingTranscript.GeneratedAt"/>
+    /// is stamped when it enters that state. A row older than this lost its worker
+    /// (process killed mid-ASR) and is put back in the queue by
+    /// <see cref="RequeueStaleProcessingAsync(CancellationToken)"/>.
+    /// </summary>
+    internal static readonly TimeSpan ProcessingLease = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// Ceiling for the inline grade that follows a landed transcript. A healthy
+    /// Max-reasoning grade takes ~12 minutes, so this only bounds a hung call. It
+    /// stays under <see cref="Ai.AiOperationWorker.LeaseDuration"/> (30 minutes) so
+    /// the hand-back below happens before the operation's lease would expire.
+    /// </summary>
+    internal static readonly TimeSpan InlineAssessCeiling = TimeSpan.FromMinutes(20);
+
+    /// <summary>How many times one pass re-reads the queue after losing a claim race.</summary>
+    private const int MaxClaimAttempts = 5;
+
     /// <summary>Add a session to the transcription queue. Idempotent — if
     /// there's already a non-failed pending/processing row for this
     /// session, returns without creating a duplicate. The
@@ -127,30 +147,30 @@ public sealed class SpeakingTranscriptionPipeline(
             row.Id);
     }
 
-    /// <summary>Picks the oldest queued transcript row, hands it to the
-    /// configured <see cref="ISpeakingTranscriptionProvider"/>, persists
-    /// the result, and marks it the latest transcript for its session.
-    /// Returns true if a row was processed, false if the queue was
-    /// empty.</summary>
+    /// <summary>Claims the oldest queued transcript row (atomically: see
+    /// <see cref="ClaimNextQueuedAsync"/>), hands it to the configured
+    /// <see cref="ISpeakingTranscriptionProvider"/>, persists the result, and
+    /// marks it the latest transcript for its session. Returns true if a row was
+    /// processed, false if the queue was empty.</summary>
     public async Task<bool> ProcessNextAsync(CancellationToken ct)
     {
-        var row = await db.SpeakingTranscripts
-            .Where(t => t.Provider == StateQueued)
-            .OrderBy(t => t.GeneratedAt)
-            .FirstOrDefaultAsync(ct);
-        if (row is null)
+        // The claim moves the row to processing before any heavy lifting, so a
+        // crashed worker leaves a visible state (see RequeueStaleProcessingAsync).
+        var claimedId = await ClaimNextQueuedAsync(ct);
+        if (claimedId is null)
         {
             return false;
         }
 
+        var row = await LoadFreshAsync(claimedId, ct);
+        if (row is null)
+        {
+            // Deleted between the claim and the load: nothing left to do for it.
+            return true;
+        }
+
         var sessionId = row.SpeakingSessionId;
         var languageHint = string.IsNullOrWhiteSpace(row.Language) ? DefaultLanguage : row.Language;
-
-        // Transition to processing before doing any heavy lifting so a
-        // crashed worker leaves a visible state.
-        row.Provider = StateProcessing;
-        row.GeneratedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync(ct);
 
         // Resolve the most recent recording on the session, then its
         // backing MediaAsset for the storage path. We deliberately
@@ -238,11 +258,141 @@ public sealed class SpeakingTranscriptionPipeline(
     }
 
     /// <summary>
+    /// Atomically moves the oldest queued row to <c>__processing__</c> (stamping
+    /// <see cref="SpeakingTranscript.GeneratedAt"/> as the start of the lease) and
+    /// returns its id; null when the queue is empty. Every process polls this
+    /// queue, and the old read-then-write let two of them take the same row and
+    /// call the paid ASR provider twice. On a relational provider the move is a
+    /// compare-and-swap (<c>WHERE Id = x AND Provider = '__queued__'</c>), so
+    /// exactly one claimant sees one affected row; a loser re-reads the queue and
+    /// tries the next row.
+    /// </summary>
+    internal async Task<string?> ClaimNextQueuedAsync(CancellationToken ct)
+    {
+        for (var attempt = 0; attempt < MaxClaimAttempts; attempt++)
+        {
+            var candidateId = await db.SpeakingTranscripts.AsNoTracking()
+                .Where(t => t.Provider == StateQueued)
+                .OrderBy(t => t.GeneratedAt)
+                .Select(t => t.Id)
+                .FirstOrDefaultAsync(ct);
+            if (candidateId is null)
+            {
+                return null;
+            }
+
+            var claimedAt = DateTimeOffset.UtcNow;
+            if (db.Database.IsRelational())
+            {
+                var rows = await db.SpeakingTranscripts
+                    .Where(t => t.Id == candidateId && t.Provider == StateQueued)
+                    .ExecuteUpdateAsync(set => set
+                        .SetProperty(t => t.Provider, StateProcessing)
+                        .SetProperty(t => t.GeneratedAt, claimedAt), ct);
+                if (rows == 1)
+                {
+                    return candidateId;
+                }
+            }
+            else
+            {
+                // The in-memory test provider has no ExecuteUpdate; it is
+                // single-process, so load + conditional save loses no atomicity.
+                var row = await db.SpeakingTranscripts
+                    .FirstOrDefaultAsync(t => t.Id == candidateId && t.Provider == StateQueued, ct);
+                if (row is not null)
+                {
+                    row.Provider = StateProcessing;
+                    row.GeneratedAt = claimedAt;
+                    await db.SaveChangesAsync(ct);
+                    return candidateId;
+                }
+            }
+
+            // Lost the race (another claimant moved it first): look again.
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Puts rows orphaned in <c>__processing__</c> back in the queue: the worker
+    /// that claimed them died before finishing (nothing else ever leaves that
+    /// state), so they would otherwise stay "being generated" forever. Keeps the
+    /// row's original timestamp, which puts it at the front of the queue.
+    /// </summary>
+    public Task<int> RequeueStaleProcessingAsync(CancellationToken ct)
+        => RequeueStaleProcessingAsync(DateTimeOffset.UtcNow, ct);
+
+    internal async Task<int> RequeueStaleProcessingAsync(DateTimeOffset now, CancellationToken ct)
+    {
+        var staleBefore = now - ProcessingLease;
+        int requeued;
+        if (db.Database.IsRelational())
+        {
+            requeued = await db.SpeakingTranscripts
+                .Where(t => t.Provider == StateProcessing && t.GeneratedAt < staleBefore)
+                .ExecuteUpdateAsync(set => set.SetProperty(t => t.Provider, StateQueued), ct);
+        }
+        else
+        {
+            var stale = await db.SpeakingTranscripts
+                .Where(t => t.Provider == StateProcessing && t.GeneratedAt < staleBefore)
+                .ToListAsync(ct);
+            foreach (var row in stale)
+            {
+                row.Provider = StateQueued;
+            }
+
+            if (stale.Count > 0)
+            {
+                await db.SaveChangesAsync(ct);
+            }
+
+            requeued = stale.Count;
+        }
+
+        if (requeued > 0)
+        {
+            logger.LogWarning(
+                "Re-queued {Count} Speaking transcription row(s) orphaned in processing for over {Lease} (worker lost).",
+                requeued, ProcessingLease);
+        }
+
+        return requeued;
+    }
+
+    /// <summary>Loads the row as it is in the database now. A stale tracked copy
+    /// (this scope enqueued it, or an earlier pass here already saw it) would
+    /// otherwise win over the claim that just changed the row underneath it, and
+    /// later writes that happen to match its stale original values would be
+    /// dropped.</summary>
+    private async Task<SpeakingTranscript?> LoadFreshAsync(string transcriptId, CancellationToken ct)
+    {
+        var tracked = db.ChangeTracker.Entries<SpeakingTranscript>()
+            .FirstOrDefault(entry => entry.Entity.Id == transcriptId);
+        if (tracked is not null)
+        {
+            tracked.State = EntityState.Detached;
+        }
+
+        return await db.SpeakingTranscripts.FirstOrDefaultAsync(t => t.Id == transcriptId, ct);
+    }
+
+    /// <summary>
     /// Recorder fallback: once the transcript lands, run the assessment the
     /// learner already asked for (<c>/ai-assess</c> recorded the canonical
     /// operation) or implied by submitting (<c>/submit</c> stamped
     /// SubmittedAt). Failures are persisted by the canonical service and
     /// surface as a retryable result, so they never break the queue.
+    ///
+    /// <para>
+    /// The grade runs inline here, so it is bounded by
+    /// <see cref="InlineAssessCeiling"/>. If that ceiling fires, the canonical
+    /// service has already handed the operation back to the AI worker queue (it
+    /// does so for any cancellation of the token it was given), so the learner's
+    /// grade is not lost and this loop is released.
+    /// </para>
     /// </summary>
     private async Task AssessIfRequestedAsync(string sessionId, CancellationToken ct)
     {
@@ -256,12 +406,26 @@ public sealed class SpeakingTranscriptionPipeline(
                 && o.ResourceId == sessionId, ct);
         if (!requested) return;
 
+        using var ceiling = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        ceiling.CancelAfter(InlineAssessCeiling);
         try
         {
-            await canonical.AssessNowAsync(sessionId, ct);
+            await canonical.AssessNowAsync(sessionId, ceiling.Token);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested && ceiling.IsCancellationRequested)
         {
+            // Only OUR ceiling counts as "handed back": the canonical service requeues the
+            // operation for any cancellation of the token it was given.
+            logger.LogWarning(
+                "Inline assessment for session {SessionId} hit the {Ceiling} ceiling; handed back to the AI worker queue.",
+                sessionId, InlineAssessCeiling);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // Any other failure - including a cancellation this ceiling did not cause (an
+            // HttpClient timeout surfaces as TaskCanceledException, and the canonical service
+            // does not hand those back) - is a failed auto-assessment the learner can retry.
+            // Only a real shutdown (ct) propagates.
             logger.LogWarning(ex,
                 "Auto-assessment after transcription failed for session {SessionId}; the learner can retry.",
                 sessionId);

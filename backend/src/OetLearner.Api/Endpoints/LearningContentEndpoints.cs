@@ -13,6 +13,38 @@ namespace OetLearner.Api.Endpoints;
 
 public static class LearningContentEndpoints
 {
+    /// <summary>Upper bound on the keys one batched feature-flag request resolves; the rest are ignored.</summary>
+    private const int MaxBatchedFeatureFlags = 16;
+
+    /// <summary>
+    /// The learner-visible release gates. Allow-listed so internal operational flags are never
+    /// exposed. Returns null for a key that is not exposed. Shared by the single and batched routes.
+    /// </summary>
+    private static async Task<LearnerFeatureFlagResponse?> ResolveLearnerFeatureFlagAsync(
+        string featureKey,
+        OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService videoLibrary,
+        StrategyGuideService strategyGuides,
+        OetLearner.Api.Services.Companion.ICompanionFeatureFlags companionFlags,
+        CancellationToken ct)
+    {
+        var normalized = featureKey.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            // video_lessons was retired in favour of video_library (see the
+            // 410 handlers below); the new flag defaults ENABLED.
+            "video_library" or "video-library" =>
+                new LearnerFeatureFlagResponse("video_library", await videoLibrary.IsEnabledAsync(ct)),
+            "strategy_guides" or "strategy-guides" =>
+                new LearnerFeatureFlagResponse("strategy_guides", await strategyGuides.IsEnabledAsync(ct)),
+            // AI Learning Companion master switch. Fails closed: an unset or
+            // unreadable flag reports disabled, so the surface never appears
+            // by accident. docs/ai-learning-companion/.
+            "ai_learning_companion" or "ai-learning-companion" =>
+                new LearnerFeatureFlagResponse("ai_learning_companion", await companionFlags.IsEnabledAsync(ct)),
+            _ => null,
+        };
+    }
+
     public static IEndpointRouteBuilder MapLearningContentEndpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
@@ -27,25 +59,48 @@ public static class LearningContentEndpoints
             OetLearner.Api.Services.Companion.ICompanionFeatureFlags companionFlags,
             CancellationToken ct) =>
         {
-            var normalized = featureKey.Trim().ToLowerInvariant();
-            return normalized switch
-            {
-                // video_lessons was retired in favour of video_library (see the
-                // 410 handlers below); the new flag defaults ENABLED.
-                "video_library" or "video-library" =>
-                    Results.Ok(new LearnerFeatureFlagResponse("video_library", await videoLibrary.IsEnabledAsync(ct))),
-                "strategy_guides" or "strategy-guides" =>
-                    Results.Ok(new LearnerFeatureFlagResponse("strategy_guides", await strategyGuides.IsEnabledAsync(ct))),
-                // AI Learning Companion master switch. Fails closed: an unset or
-                // unreadable flag reports disabled, so the surface never appears
-                // by accident. docs/ai-learning-companion/.
-                "ai_learning_companion" or "ai-learning-companion" =>
-                    Results.Ok(new LearnerFeatureFlagResponse("ai_learning_companion", await companionFlags.IsEnabledAsync(ct))),
-                _ => new ApiErrorResult(404, "NOT_FOUND", "Feature flag is not exposed to learners.")
-            };
+            var flag = await ResolveLearnerFeatureFlagAsync(featureKey, videoLibrary, strategyGuides, companionFlags, ct);
+            return flag is null
+                ? (IResult)new ApiErrorResult(404, "NOT_FOUND", "Feature flag is not exposed to learners.")
+                : Results.Ok(flag);
         })
         .WithName("GetLearnerFeatureFlag")
         .WithSummary("Returns a learner-visible feature release gate.");
+
+        // One round trip for every gate a page needs (the shell reads several on each
+        // cold load). Same allow-list and the same per-flag semantics as the route
+        // above. A key that is not exposed to learners is simply absent from the
+        // answer instead of failing the whole request, so the client treats it as
+        // disabled. Each entry echoes the key as it was requested, so aliases such as
+        // "video-library" round-trip.
+        features.MapGet("", async (
+            [FromQuery] string? keys,
+            OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService videoLibrary,
+            StrategyGuideService strategyGuides,
+            OetLearner.Api.Services.Companion.ICompanionFeatureFlags companionFlags,
+            CancellationToken ct) =>
+        {
+            var requested = (keys ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Take(MaxBatchedFeatureFlags)
+                .ToList();
+
+            var resolved = new List<LearnerFeatureFlagResponse>(requested.Count);
+            foreach (var requestedKey in requested)
+            {
+                // Sequential on purpose: the services share one scoped DbContext.
+                var flag = await ResolveLearnerFeatureFlagAsync(requestedKey, videoLibrary, strategyGuides, companionFlags, ct);
+                if (flag is not null)
+                {
+                    resolved.Add(flag with { Key = requestedKey });
+                }
+            }
+
+            return Results.Ok(new LearnerFeatureFlagBatchResponse(resolved));
+        })
+        .WithName("GetLearnerFeatureFlags")
+        .WithSummary("Returns several learner-visible feature release gates in one request.");
 
         // ── Grammar Lessons ───────────────────────────────────────────────
         var grammar = v1.MapGroup("/grammar");
@@ -352,6 +407,8 @@ public record GrammarCompletionRequest(int Score, string AnswersJson);
 public record GrammarSubmitRequest(string AnswersJson);
 
 public record LearnerFeatureFlagResponse(string Key, bool Enabled);
+
+public record LearnerFeatureFlagBatchResponse(IReadOnlyList<LearnerFeatureFlagResponse> Flags);
 
 file static class LearningContentHttpContextExtensions
 {

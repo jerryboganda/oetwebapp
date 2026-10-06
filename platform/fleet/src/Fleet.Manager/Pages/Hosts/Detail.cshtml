@@ -1,0 +1,151 @@
+@page "{id}"
+@model Fleet.Manager.Pages.Hosts.DetailModel
+@{
+    var view = Model.Detail;
+    var host = view.Line.Host;
+    var actions = view.Actions;
+    var hostPath = "/Hosts/Detail/" + Uri.EscapeDataString(host.Id);
+    ViewData["Title"] = host.DisplayName;
+}
+<div class="page-head">
+    <h1>@host.DisplayName</h1>
+    <a href="/">Back to the fleet</a>
+</div>
+@await Html.PartialAsync("_Messages", Model)
+
+@if (actions.NeedsRepin)
+{
+    <section class="panel danger-panel" aria-labelledby="repin-h" id="repin">
+        <h2 id="repin-h">The SSH host key changed</h2>
+        <p>The key this helper offers is not the one you pinned. The helper was disabled automatically. That can be a reinstalled server, or someone in the middle. Verify the new fingerprint with your provider's console or API (not over this network path) before you trust it.</p>
+        <form method="post" action="@hostPath" asp-antiforgery="true">
+            <button type="submit" class="btn" formaction="@(hostPath + "?handler=RepinStart")">Fetch the fingerprint the helper offers now</button>
+        </form>
+        @if (Model.RepinCandidates is not null)
+        {
+            var pinnedAlgorithm = HostKeyChoice.PinnedAlgorithm(Model.RepinCandidates);
+            <p class="hint">The helper may offer several keys, but only the one marked below is pinned. Compare and type that one.</p>
+            <div class="table-wrap" role="region" aria-label="Offered host keys" tabindex="0">
+                <table class="data compact">
+                    <caption class="sr-only">Host keys the helper offers now (display only)</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">Algorithm</th>
+                        <th scope="col">SHA256 fingerprint</th>
+                        <th scope="col">Pinned if you confirm</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var candidate in Model.RepinCandidates)
+                    {
+                        <tr>
+                            <td>@Fmt.Untrusted(candidate.Algorithm, 30)</td>
+                            <td><code class="break">@Fmt.Untrusted(candidate.Fingerprint, 80)</code></td>
+                            <td>@(candidate.Algorithm == pinnedAlgorithm ? "Yes: compare this one" : "No")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <form method="post" action="@(hostPath + "?handler=RepinConfirm")" asp-antiforgery="true" autocomplete="off">
+                <div class="field narrow">
+                    <label for="Fingerprint">First 8 characters of the fingerprint, after the SHA256: prefix</label>
+                    <input id="Fingerprint" name="Fingerprint" type="text" maxlength="80" minlength="8" autocomplete="off" autocapitalize="off" spellcheck="false" required />
+                </div>
+                @await Html.PartialAsync("_StepUp", "repin")
+                <div class="actions">
+                    <button type="submit" class="btn primary">Pin this key and clear the alert</button>
+                </div>
+            </form>
+        }
+    </section>
+}
+
+<section class="panel" aria-labelledby="act-h">
+    <h2 id="act-h">Actions</h2>
+    @if (!actions.CanDrain && !actions.CanResume && !actions.CanDisable && !actions.CanRepair && !actions.CanRotateToken)
+    {
+        <p class="empty">No action applies in the state "@host.Lifecycle".</p>
+    }
+    else
+    {
+        <form method="post" action="@(hostPath + "?handler=Run")" asp-antiforgery="true" autocomplete="off">
+            <fieldset class="fieldset">
+                <legend>Choose one action</legend>
+                <div class="choices">
+                    @if (actions.CanDrain)
+                    {
+                        <label class="choice"><input type="radio" name="ActionName" value="drain" required /> <span><strong>Drain</strong> Stops new work; jobs already running finish. Undo with Resume.</span></label>
+                    }
+                    @if (actions.CanResume)
+                    {
+                        <label class="choice"><input type="radio" name="ActionName" value="resume" required /> <span><strong>Resume</strong> Puts a drained or disabled helper back to work (after a self-test when it needs one).</span></label>
+                    }
+                    @if (actions.CanDisable)
+                    {
+                        <label class="choice"><input type="radio" name="ActionName" value="disable" required /> <span><strong>Disable</strong> Takes the helper out of service without removing anything from it.</span></label>
+                    }
+                    @if (actions.CanRepair)
+                    {
+                        <label class="choice"><input type="radio" name="ActionName" value="repair" required /> <span><strong>Repair</strong> Re-runs the preparation steps. Needs a fresh temporary SSH key, asked for on the next page.</span></label>
+                    }
+                    @if (actions.CanRotateToken)
+                    {
+                        <label class="choice"><input type="radio" name="ActionName" value="rotate-token" required /> <span><strong>Rotate token</strong> Issues a new node token, installs it, checks the agent with it, then lets the old one expire.</span></label>
+                    }
+                </div>
+            </fieldset>
+            @await Html.PartialAsync("_StepUp", "actions")
+            <div class="actions">
+                <button type="submit" class="btn primary">Run the chosen action</button>
+            </div>
+        </form>
+    }
+</section>
+
+<div id="host-live" data-live-url="@(hostPath + "?handler=Fragment")" data-live-events="node.updated,host.updated,operation.updated,alert.raised,alert.cleared,policy.updated,credential.updated" data-live-every="15" data-reload-on-change="true">
+    @await Html.PartialAsync("_HostLive", view)
+</div>
+
+@if (host.ApiNodeId is not null && actions.CanRemove)
+{
+    <section class="panel" aria-labelledby="lim-h">
+        <h2 id="lim-h">Change limits</h2>
+        <p class="muted">@(view.Policy.IsOverride ? "This helper has its own limits." : "Saving creates limits for this helper alone; the global policy stays as it is.")</p>
+        <form method="post" action="@hostPath" asp-antiforgery="true" autocomplete="off">
+            @await Html.PartialAsync("_PolicyFields", Model.Input)
+            @await Html.PartialAsync("_StepUp", "limits")
+            <div class="button-row">
+                <button type="submit" class="btn primary" formaction="@(hostPath + "?handler=Limits")">Save limits</button>
+                @if (view.Policy.IsOverride)
+                {
+                    <button type="submit" class="btn" formaction="@(hostPath + "?handler=ClearLimits")" formnovalidate>Use the global policy</button>
+                }
+            </div>
+        </form>
+    </section>
+}
+
+@if (actions.CanRemove)
+{
+    <section class="panel danger-panel" aria-labelledby="rm-h">
+        <h2 id="rm-h">Remove from the fleet</h2>
+        <details>
+            <summary>Show the removal form</summary>
+            <p>The helper is drained first and the console waits for its running jobs. Then it removes only what this fleet installed: the <code>oetfleet</code> account and its gate, <code>/etc/oet-fleet</code>, the systemd unit, the agent container and the agent images. Docker, the firewall, other containers and volumes are not touched. Finally the node is revoked and every stored credential of this helper is erased. Cancel the VPS itself with your provider afterwards.</p>
+            <form method="post" action="@(hostPath + "?handler=Remove")" asp-antiforgery="true" autocomplete="off">
+                <div class="field">
+                    <label for="ConfirmNodeRef">Type the node reference <code>@host.NodeRef</code> to confirm</label>
+                    <input id="ConfirmNodeRef" name="ConfirmNodeRef" type="text" maxlength="63" autocomplete="off" autocapitalize="off" spellcheck="false" required />
+                </div>
+                <div class="field">
+                    <label class="check"><input type="checkbox" name="Force" value="true" /> The VPS is already gone or unreachable: skip cleaning it up (force)</label>
+                </div>
+                @await Html.PartialAsync("_StepUp", "remove")
+                <div class="actions">
+                    <button type="submit" class="btn danger">Remove from fleet</button>
+                </div>
+            </form>
+        </details>
+    </section>
+}

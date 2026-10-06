@@ -24,6 +24,7 @@ import type {
   ResistanceLevelCode,
 } from '@/lib/api/speaking-role-play-cards';
 import type { SpeakingInputKind } from '@/lib/speaking/input-kind';
+import type { SpeakingLiveAdmission } from '@/lib/api/speaking-admission';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Enums
@@ -90,6 +91,11 @@ export interface SpeakingSessionDetail extends SpeakingSessionTimingDetail {
   bookingId: string | null;
   /** Wallet copy after a real debit at finish-warmup. */
   feedbackMessage?: string | null;
+  /**
+   * Present only while the live AI session cap is full and this practice card is waiting in the line: the
+   * session stays in warm-up, nothing is held or timed, and the page repeats `finish-warmup` until a place is free.
+   */
+  admission?: SpeakingLiveAdmission | null;
 }
 
 export interface CriterionScore {
@@ -278,6 +284,17 @@ export async function startSpeakingWarmup(sessionId: string): Promise<SpeakingSe
 export async function finishSpeakingWarmup(sessionId: string): Promise<SpeakingSessionDetail> {
   return apiClient.post<SpeakingSessionDetail>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/finish-warmup`,
+    {},
+  );
+}
+
+/**
+ * Leave the live AI session admission line: releases this card's waiting place at once so it stops counting towards
+ * the positions of everyone behind it. The card stays in warm-up. A no-op when the card is not waiting.
+ */
+export async function leaveSpeakingSessionQueue(sessionId: string): Promise<void> {
+  return apiClient.post<void>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/leave-queue`,
     {},
   );
 }

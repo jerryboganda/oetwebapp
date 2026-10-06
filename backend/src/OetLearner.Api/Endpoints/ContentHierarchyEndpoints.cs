@@ -263,7 +263,7 @@ public static class ContentHierarchyEndpoints
             string? q, string? subtest, string? profession, string? difficulty,
             string? language, string? provenance, string? contentType,
             int? minQuality, bool? mockEligible, bool? previewEligible,
-            int? page, int? pageSize)
+            int? page, int? pageSize, string? cursor, bool? includeTotal)
             => Results.Ok(await searchService.SearchContentAsync(
                 new ContentSearchQuery
                 {
@@ -271,7 +271,8 @@ public static class ContentHierarchyEndpoints
                     Language = language, Provenance = provenance, ContentType = contentType,
                     MinQuality = minQuality ?? 0, MockEligibleOnly = mockEligible ?? false,
                     PreviewEligibleOnly = previewEligible ?? false,
-                    Page = page ?? 1, PageSize = pageSize ?? 20
+                    Page = page ?? 1, PageSize = pageSize ?? 20,
+                    Cursor = cursor, IncludeTotal = includeTotal ?? false
                 }, ct)));
 
         learner.MapGet("/search/facets", async (ContentSearchService searchService, CancellationToken ct)

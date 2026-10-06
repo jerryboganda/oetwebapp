@@ -1,0 +1,68 @@
+@model Fleet.Manager.Dashboard.OperationPageView
+@{
+    var op = Model.Operation;
+    var steps = op.Steps;
+    var finished = steps.Count(s => s.State == "done" || s.State == "skipped");
+    var total = steps.Count;
+    var failed = op.State == "Failed";
+}
+<div data-live-state="@(op.State + "|" + Model.KeyAcceptance + "|" + (Model.SavedKey is null ? "nokey" : "key"))">
+    <section class="panel" aria-labelledby="op-h">
+        <h2 id="op-h">Progress</h2>
+        <p>
+            <span class="badge @Fmt.BadgeClass(op.State)">@Fmt.StateLabel(op.State)</span>
+            @if (op.CurrentStep is not null && !failed)
+            {
+                <span class="sub">now: @Fmt.StepLabel(op.CurrentStep)</span>
+            }
+        </p>
+        @if (total > 0)
+        {
+            <progress max="@total" value="@finished" aria-label="Steps finished">@finished of @total</progress>
+            <p class="sub">@finished of @total steps finished</p>
+        }
+        <dl class="kv">
+            <dt>Started</dt>
+            <dd>@Fmt.Timestamp(op.StartedAt) <span class="sub">@Fmt.Ago(op.StartedAt, Model.Now)</span></dd>
+            <dt>Last change</dt>
+            <dd>@Fmt.Ago(op.UpdatedAt, Model.Now)</dd>
+            <dt>Finished</dt>
+            <dd>@Fmt.Timestamp(op.FinishedAt)</dd>
+            <dt>Attempt of the current step</dt>
+            <dd>@op.StepAttempt</dd>
+        </dl>
+        @if (op.State == "ImageAwaitingSync")
+        {
+            <p class="notice warn">Waiting for the CI image sync. A late-enrolled helper pulls its image with a token that only the fleet sync job supplies (it is held in memory for one hour). Registry pull token held now: <strong>@(Model.PullTokenHeld ? "yes, it continues on its own" : "no")</strong>.</p>
+        }
+        @if (op.FailureReason is not null)
+        {
+            <div class="notice bad" role="status">
+                <p><strong>Failed: <code>@op.FailureReason</code></strong></p>
+                <p>@Fmt.FailureGuidance(op.FailureReason)</p>
+                @if (!string.IsNullOrEmpty(op.FailureDetail))
+                {
+                    <p class="sub">Detail: @Fmt.Untrusted(op.FailureDetail, 500)</p>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="panel" aria-labelledby="steps-h">
+        <h2 id="steps-h">Steps</h2>
+        <ol class="steps">
+            @foreach (var step in steps)
+            {
+                <li class="step @step.State">
+                    <span class="badge @Fmt.BadgeClass(step.State)">@step.State</span>
+                    <span class="step-name">@Fmt.StepLabel(step.Name)</span>
+                    <span class="sub">@(step.FinishedAt is { } endedAt ? "finished " + Fmt.Ago(endedAt, Model.Now) : step.StartedAt is { } startedAt ? "started " + Fmt.Ago(startedAt, Model.Now) : string.Empty)</span>
+                    @if (!string.IsNullOrEmpty(step.Summary))
+                    {
+                        <span class="sub">@Fmt.Untrusted(step.Summary, 500)</span>
+                    }
+                </li>
+            }
+        </ol>
+    </section>
+</div>

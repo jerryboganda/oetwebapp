@@ -578,6 +578,118 @@ be created (30 Sep: OpenAI's catalog probe was green while session creation answ
   request, a 401 or 403 a masked key, a 404 the URL), and the catalog probe never keeps provider text. Keys, tokens, SDP,
   card or hidden instructions and transcripts are never logged.
 
+## Admission control (live session cap and wait queue)
+
+Owner decision 5 Oct 2026: at most **100** live AI patient sessions run at once; beyond that a learner waits in a FIFO line
+and is started when a place frees. Source: `SpeakingLiveAdmissionService`, tables `SpeakingLiveAdmissions` and
+`SpeakingLiveAdmissionSettings` (migration `20270109113000_AddSpeakingLiveAdmission`), options `Speaking:LiveAdmission`
+(`SpeakingLiveAdmissionOptions`). Provider health above decides **which** provider; this decides **whether a session starts now**.
+
+**Verification status: not tested - owner QA** (owner directive 2026-10-06: no automated QA runs anywhere). The only automated
+check on this layer is compilation inside `Build images` (`dotnet publish`, `next build`) plus the EF pending-model-changes
+check on the hand-authored snapshot entries; nothing here was built, benchmarked or run locally. The test sources that describe
+the intended behaviour (`SpeakingLiveAdmission*Tests.cs`, `AdminOpsSnapshotServiceTests.cs`, `SpeakingAdmissionWait.test.tsx`,
+`speaking-admission.test.ts`, the exam and role-play page tests) stay in git as inert manual tools: no CI lane runs them and none
+has been run for this change. The first real proof is the owner's own testing of the wait queue on production, and the admin
+kill switch below is the lever if it misbehaves.
+
+- **Where.** At the two unscored gates that precede every credit hold and every clock: an AI **exam** at
+  `POST /v1/speaking/exams/{id}/finish-intro` (one place for both cards; Card B's reveal is not gated) and an AI **practice
+  card** at `POST /v1/speaking/sessions/{id}/finish-warmup` (the free sample too: it uses live voice). Live-tutor exams and
+  sessions are never gated. The gate runs after the plan check and before the hold. **A learner who cannot pay for the hold is
+  refused with the hold's own 402 before taking a place or a line position**, for both an exam (`speaking_exam_insufficient_credits`
+  when the wallet is too small; `ai_credits_insufficient` for an account with no credit wallet at all) and a practice card
+  (`ai_credits_insufficient` / `no_ai_package_credits`): a read-only mirror of the hold (`AiCreditReservationService.ReserveSpeakingAsync`
+  where reservations are wired, as in production). The designated free-sample card holds no credit and skips it. The check runs
+  only when a call is about to take or look for a place (`beforeNewPlace`), never on a waiting learner's repeat poll.
+- **While waiting.** The call answers **200** with the unscored state unchanged (exam `intro`, practice `warmup`) and an
+  `admission` object `{status:"waiting", position, queueLength, estimatedWaitSeconds, pollAfterSeconds}`. Nothing is timed, **no
+  credit is held**, no child session or Card B is created, and `PrepAStartedAt` / `PrepStartedAt` stay null. A plain
+  `GET /v1/speaking/exams/{id}` or `GET /v1/speaking/sessions/{id}` shows the same `admission` (read-only: it never refreshes the
+  heartbeat). An admitted learner gets the normal next state and **no** `admission`.
+- **How a waiter is admitted.** The learner page (`SpeakingAdmissionWait`) repeats the same finish call every
+  `pollAfterSeconds` while the tab is visible (4 s, growing by 1 s per 25 waiters up to 20 s for a very long line), every 20 s
+  while hidden, and at once when the tab becomes visible. That call is also the heartbeat. A poll of a learner who is already
+  waiting and still cannot be admitted takes **no lock**: it refreshes its own heartbeat and reports its place (about six small
+  indexed queries). Only an enqueue, an admission or an expiry takes the advisory lock, and only that path can admit, so a long
+  line polling never queues on the lock. The call that finds a free place **holds the credit and starts the clock in that same request**:
+  admission is atomic with the start. While the wait panel is on screen the exam page runs **no refresh poll of its own** (the
+  panel's retries carry the newest place, and two pollers would race and could show a stale answer); a 409 on a retry other than the
+  one-place refusal means the exam moved on (admitted in another tab, cancelled), so the page re-reads it. A refusal at the gate
+  (no credits, another live session, a full line) is kept in its own state on screen: a later successful poll no longer wipes it.
+- **Atomic and FIFO.** Every decision runs under one Postgres advisory lock inside a short transaction of its own
+  (cross-process: both API slots and the ai-worker) that waits at most **5 s** for the lock (`SET LOCAL lock_timeout`): a hung
+  holder becomes the fail-open path below, never a pooled connection waiting for ever. A waiter holds a strictly increasing
+  ticket; a caller is admitted only when its rank among live waiters is below the number of free places, so a newcomer never
+  overtakes an earlier waiter even while that waiter's page has not polled yet. One row per exam or practice session
+  (`{kind}:{id}`), so a subject can never hold two places. **A caller that already owns a database transaction is never
+  gated** (outcome `Bypassed`, reason `ambient_transaction`; `SweepAsync` does nothing): the lock is transaction-scoped and would
+  be held, platform-wide, until that foreign transaction ends. The admin corpus harness is such a caller (one transaction per
+  card, rolled back).
+- **One live place per learner.** A learner holds at most one live place (waiting in the line, or holding a slot) at a time. A
+  request for a **different** subject while another place is waiting (fresh heartbeat) or holding a slot is refused with
+  **409** `speaking_live_session_active` ("You already have a live Speaking session open or waiting. Finish it, or leave the
+  queue, before starting another."), before any line position, hold or clock, so one account cannot fill the line or the cap by
+  creating many sessions. Known consequence: a learner who abandons a practice card in its preparation window and picks
+  another card is refused until the first one stops holding a place (its card ends, or its 20 min safety TTL passes); there is
+  no "abandon card" action yet. The page treats this 409 as a message to show, never as "already admitted"
+  (`isAlreadyPastGateConflict`).
+- **What holds a place.** An admitted row inside its safety TTL (exam 45 min, practice 20 min) that was admitted within the
+  120 s claim window or whose subject is running (exam `prep_a` .. `active_b`, practice `prep` / `active`). A finished,
+  cancelled or expired subject therefore frees its place at once with no release hook on any terminal path. A running session
+  is **never evicted**: lowering the cap only stops new admissions until the count drains. An admitted row that **no longer
+  holds** (its claim window is over and the subject never started: a refused hold, a lost response) is **not** admitted again
+  for free: its repeat call asks for a place again with a fresh ticket and the cap is re-checked like anyone else's.
+- **Giving a place back at once.** (1) A start that fails after the call took the place (a refused or failed credit hold)
+  releases it immediately (`ReleaseAsync`, called by `FinishIntroAsync` / `FinishWarmupAsync` only when that call took the
+  place, never for an idempotent repeat). (2) Cancelling an exam releases its place. (3) `POST /v1/speaking/exams/{id}/leave-queue`
+  and `POST /v1/speaking/sessions/{id}/leave-queue` (the wait panel's "Leave the queue", owner-checked, 204) release a waiting
+  place so it stops counting towards the positions behind it, instead of lingering for the 90 s heartbeat; the exam or card stays
+  in its intro / warm-up. (4) A waiter whose turn has come but who can no longer pay is refused with the credit 402 and leaves
+  the line at once, so nobody waits behind a ticket that cannot be used. A release is one single-row UPDATE (no lock, cannot
+  flush the caller's pending changes, never throws) and never touches a subject that is running; if it fails the claim window
+  frees the place anyway.
+- **Abandoned waiters.** A waiter silent for 90 s leaves the line (its ticket stops counting). A polling waiter is **not**
+  demoted for waiting long: the line is never allowed to grow longer than the maximum wait can serve at the average session
+  length (`MaxLineLengthFor(cap) = min(MaxQueueLength 1000, MaxWait 7200 s x cap / AverageSessionSeconds 900)`; 800 at cap 100), so a
+  waiter that keeps polling is served before the 2 h safety bound, which exists only so a forgotten tab cannot hold a place and
+  start a session unattended (past it the waiter goes to the back). A new waiter beyond the line limit gets a retryable **503**
+  `speaking_live_queue_full` instead of a wait the server could not honour; the page's estimate is capped at the maximum wait.
+  The sweeper (`SpeakingExamAutoAdvanceWorker.SweepAdmissionsAsync`) only tidies the table (expires, purges rows older than 7
+  days); correctness never depends on it.
+- **A queued exam is not idle.** A waiting exam stays in `intro` and is never touched while it queues, so `IntroStartedAt` is
+  its only clock, and the 2 h `SpeakingExamService.IdleExpiry` equals the queue's 2 h maximum wait, which is counted from
+  joining the line (after the intro). The same sweeper therefore skips the idle expiry of an `intro` exam that
+  `SpeakingLiveAdmissionService.GetWaitingViewAsync` still reads as waiting (fresh heartbeat, inside the maximum wait), so the
+  tail of a long line is never swept to `expired` from under its page; a waiter that stops polling loses the line after 90 s and
+  the next 20 s sweep expires its exam as before.
+- **Degrade path (explicit).** With **no healthy live provider** (`liveVoiceAvailable` false) the learner uses the recorder
+  fallback, which consumes no live capacity: the gate is **bypassed**, never queued, and writes no row. If the gate itself fails
+  (a database fault, a missing table, a lock wait that timed out) it **fails open**: the learner is let through and an Error is
+  logged. A capacity check is never the reason a paying learner cannot start. The recorder fallback itself is unchanged.
+- **Kill switch and cap (no restart).** `GET /v1/admin/ai/live-voice/admission` shows `{enabled, maxConcurrent, source
+  (default|admin), admitted, waiting, free, oldestWaitingSince, oldestWaitSeconds}`. `PUT /v1/admin/ai/live-voice/admission`
+  with `{"enabled":false}` lets everyone through at once (today's behaviour; waiters are released on their next poll) and
+  `{"maxConcurrent":150}` sets the cap (1..10000); either field may be omitted. Both are `AdminAiConfig`, audited as
+  `SpeakingLiveAdmissionSettingsUpdated`. **The kill switch never waits on the decision lock**: with it off every call returns
+  `Bypassed` straight away and a waiting learner's row is released by a single-row UPDATE, so it still works when a lock holder
+  is stuck. With no row the cap is `Speaking:LiveAdmission:DefaultMaxConcurrent` (100). **The admin switch is the only
+  operational lever in production**: `docker-compose.production.yml` has a closed environment list and forwards no
+  `Speaking__LiveAdmission__*` key, so those environment keys (including `Enabled=false`) do not reach the API or the ai-worker
+  ([../env/speaking.md](../env/speaking.md#live-ai-session-admission-has-no-environment-keys-in-production)).
+- **Counts are database-derived** (all API slots and the worker), not a process gauge: they are also in
+  `GET /v1/admin/ai/live-voice/health` as `admission`, and in `GET /v1/admin/ops/snapshot` (job queue depth by type, database
+  connections by `application_name` from `pg_stat_activity`, admitted and queued counts, and the remote worker node count (non-revoked `RemoteWorkers` rows, Postgres only);
+  `AdminSystemAdmin`, read-only, counts only; connections are grouped by the process's Npgsql `Application Name`: `oet-api-blue`, `oet-api-green`, `oet-ai-worker`, and
+  `(unset)` for any client connection of this database that sets none, such as an admin `psql` shell; the server's own background workers have no database and are not counted; see [../ops/db-connection-budget.md](../ops/db-connection-budget.md)).
+- **Not capacity controls** (verified dead 5 Oct 2026): `SpeakingSimulationV11TurnTelemetryService.ActiveTurnCount` and the
+  statics in `ConversationHub.SpeakingRoleplay.cs`. Every entry point of that legacy hub rejects typed sessions first, so they
+  never leave zero; they are marked as dead in code.
+- **Not done / owner decisions.** The estimate is `(place) x AverageSessionSeconds (900) / cap`, not measured. Human tutor
+  rooms are LiveKit Cloud and not part of this cap. Provider-side concurrency limits (OpenAI GPT-Live, Gemini Live) are still to be
+  confirmed against the cap. A learner who reloads the practice entry page while waiting loses the place (the page keeps the
+  session id only in memory); the abandoned row expires.
+
 ## Hard duration cap
 
 A role-play used to have no server-side limit: the 300 s was card data read by a client countdown, and a client that never

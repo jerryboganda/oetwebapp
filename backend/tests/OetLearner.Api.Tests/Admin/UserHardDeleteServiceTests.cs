@@ -1,9 +1,11 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Admin;
+using OetLearner.Api.Services.Caching;
 
 namespace OetLearner.Api.Tests.Admin;
 
@@ -69,6 +71,38 @@ public sealed class UserHardDeleteServiceTests
             Assert.Contains("LearnerUser", report.Keys);
             Assert.Contains("ApplicationUserAccount", report.Keys);
             Assert.True(report.Values.Sum() >= 4);
+        }
+        finally
+        {
+            await db.DisposeAsync();
+            conn.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task PurgeAsync_evicts_the_purged_identities_from_the_user_state_cache()
+    {
+        var (db, conn) = NewDb();
+        try
+        {
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount { Id = "acc-1", Email = "a@x.com", NormalizedEmail = "A@X.COM", PasswordHash = "h" });
+            db.Users.Add(new LearnerUser { Id = "user-1", AuthAccountId = "acc-1", DisplayName = "U1", Email = "a@x.com" });
+            await db.SaveChangesAsync();
+
+            // The purge is bulk ExecuteDelete SQL, invisible to the EF save interceptor, so the
+            // service must evict the identities itself or a cached "account alive" JWT state
+            // would outlive the deletion in this process.
+            var cache = new UserStateCache(Options.Create(new UserStateCacheOptions()));
+            var account = UserStateCacheSubjects.AuthAccount("acc-1");
+            var learner = UserStateCacheSubjects.Learner("user-1");
+            cache.Set(UserStateCacheKinds.JwtAccount, account, "-", new object(), cache.BeginRead(account), notAfter: null);
+            cache.Set(UserStateCacheKinds.Entitlement, learner, string.Empty, new object(), cache.BeginRead(learner), notAfter: null);
+
+            await new UserHardDeleteService(db, NullLogger<UserHardDeleteService>.Instance, userStateCache: cache)
+                .PurgeAsync("user-1", default);
+
+            Assert.False(cache.TryGet(UserStateCacheKinds.JwtAccount, account, "-", out object? _));
+            Assert.False(cache.TryGet(UserStateCacheKinds.Entitlement, learner, string.Empty, out object? _));
         }
         finally
         {

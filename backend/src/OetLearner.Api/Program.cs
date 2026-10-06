@@ -21,6 +21,7 @@ using OetLearner.Api.Hubs;
 using OetLearner.Api.Middleware;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Caching;
 using OetLearner.Api.Services.Otp;
 using OetLearner.Api.Services.LiveClasses;
 using OetLearner.Api.Services.OwnerAgent;
@@ -28,6 +29,9 @@ using OetLearner.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
 var oetRunModeIsWorker = OetLearner.Api.Services.Ai.AiRunMode.IsWorker(builder.Configuration);
+// Remote-worker boundary (OET-RWP/1): PostgreSQL-only (FOR UPDATE SKIP LOCKED + database clock). Decided once, here, from the
+// same connection string the DbContext uses; on SQLite/InMemory none of it is registered and no route is mapped.
+var remoteJobsPostgres = OetLearner.Api.Data.DatabaseConfiguration.IsPostgres(builder.Configuration, builder.Environment.IsDevelopment());
 var enableAiCostBearingWorkers = OetLearner.Api.Services.Ai.AiRunMode.EnableCostBearingHostedWorkers(
     builder.Configuration, builder.Environment);
 // H10: wire Sentry early so host-level startup exceptions are captured. No-op unless Sentry:Dsn is set.
@@ -123,12 +127,24 @@ builder.WebHost.ConfigureKestrel(options =>
     options.Limits.MaxRequestBodySize = storageOptions.MaxUploadBytes > 0 ? storageOptions.MaxUploadBytes : 25L * 1024 * 1024;
 });
 
+// Per-process, short-lived (15 s) cache of per-user state read on every request (JWT account
+// liveness, entitlement snapshot, freeze state). Owner-approved 2026-10-05. The interceptor
+// evicts a user's entries after every committed EF save that changes what they derive from, so
+// in-process writes are visible immediately; other processes and bulk SQL are bounded by the TTL.
+// Kill switches: Performance:UserStateCache:Enabled=false (restart) or the `user_state_cache`
+// feature flag set to disabled (runtime, ~30 s). See docs/ops/user-state-cache.md.
+builder.Services.Configure<UserStateCacheOptions>(builder.Configuration.GetSection(UserStateCacheOptions.SectionName));
+builder.Services.AddSingleton<UserStateCache>();
+builder.Services.AddSingleton<UserStateInvalidationInterceptor>();
+builder.Services.AddHostedService<UserStateCacheSwitchWorker>();
+
 builder.Services.AddDbContext<LearnerDbContext>((serviceProvider, options) =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
     var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
     var resolvedConnectionString = DatabaseConfiguration.ResolveConnectionString(configuration, environment.IsDevelopment());
     DatabaseConfiguration.ConfigureDbContext(options, resolvedConnectionString);
+    options.AddInterceptors(serviceProvider.GetRequiredService<UserStateInvalidationInterceptor>());
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -163,6 +179,7 @@ builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<OetLearner.Api.Configuration.DeviceAttestationOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.DeviceAttestationOptions.SectionName));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.Configure<SpeakingGradingOptions>(builder.Configuration.GetSection(SpeakingGradingOptions.SectionName));
+builder.Services.Configure<SpeakingLiveAdmissionOptions>(builder.Configuration.GetSection(SpeakingLiveAdmissionOptions.SectionName));
 builder.Services.Configure<SpeakingAudioAssessmentOptions>(builder.Configuration.GetSection(SpeakingAudioAssessmentOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveVoiceOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveVoiceOptions.SectionName));
@@ -313,6 +330,9 @@ if (corsOrigins.Length > 0)
                 .WithOrigins(corsOrigins)
                 .AllowAnyHeader()
                 .WithMethods("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS")
+                // GET /v1/papers returns a bare array and carries its continuation here; a
+                // cross-origin browser can only read these if they are exposed.
+                .WithExposedHeaders("X-Has-More", "X-Next-Cursor")
                 .AllowCredentials();
         });
     });
@@ -700,6 +720,15 @@ void ConfigureJwtBearer(JwtBearerOptions options)
     {
         OnMessageReceived = context =>
         {
+            // Remote-worker node tokens (orw1_...) and the fleet-service credential (ofs1_...) are NOT JWTs (they carry no dot).
+            // Never let the learner JWT pipeline parse them: it would log a failure per request, and nothing here may reach
+            // OnTokenValidated's account-liveness query for them. Their own schemes authenticate them.
+            if (OetLearner.Api.Services.RemoteJobs.RemoteTokenFormat.LooksLikeRemoteToken(context.Request.Headers.Authorization.ToString()))
+            {
+                context.NoResult();
+                return Task.CompletedTask;
+            }
+
             var accessToken = context.Request.Query["access_token"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(accessToken)
                 && (context.HttpContext.Request.Path.StartsWithSegments("/v1/notifications/hub")
@@ -740,33 +769,80 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                 ? parsedFamilyId
                 : (Guid?)null;
 
-            var accountState = await db.ApplicationUserAccounts
-                .AsNoTracking()
-                .Where(account => account.Id == authAccountId)
-                .Select(account => new
+            // Owner-approved (2026-10-05): a per-process 15 s cache of this liveness row, so a
+            // busy learner stops paying one database round trip per request. Only an ACCEPTED
+            // state is ever stored (a denial is always re-read), the learner access expiry is
+            // compared against the live clock on every request and also caps the entry, and
+            // every in-process change to the account / learner / expert / refresh-token rows
+            // evicts it (UserStateInvalidationInterceptor). Revocation made by ANOTHER process
+            // is visible after at most the TTL. See docs/ops/user-state-cache.md.
+            var userStateCache = scope.ServiceProvider.GetRequiredService<UserStateCache>();
+            var cacheSubject = UserStateCacheSubjects.AuthAccount(authAccountId);
+            var cacheVariant = sessionFamilyId?.ToString("N") ?? "-";
+            var cacheReadToken = default(UserStateReadToken);
+            JwtAccountState? accountState = null;
+            var cacheable = false;
+            if (userStateCache.TryGet(UserStateCacheKinds.JwtAccount, cacheSubject, cacheVariant, out JwtAccountState? cachedState)
+                && cachedState is not null)
+            {
+                accountState = cachedState;
+            }
+            else
+            {
+                cacheable = userStateCache.IsEnabled;
+                cacheReadToken = userStateCache.BeginRead(cacheSubject);
+                var loadedState = await db.ApplicationUserAccounts
+                    .AsNoTracking()
+                    .Where(account => account.Id == authAccountId)
+                    .Select(account => new
+                    {
+                        account.DeletedAt,
+                        account.Role,
+                        LearnerIsActive = account.Role != ApplicationUserRoles.Learner
+                            || db.Users.Any(learner =>
+                                learner.AuthAccountId == account.Id
+                                && learner.AccountStatus.ToLower() == "active"),
+                        LearnerAccessExpiresAt = account.Role == ApplicationUserRoles.Learner
+                            ? db.Users
+                                .Where(learner => learner.AuthAccountId == account.Id)
+                                .Select(learner => learner.AccessExpiresAt)
+                                .SingleOrDefault()
+                            : null,
+                        ExpertIsActive = account.Role != ApplicationUserRoles.Expert
+                            || db.ExpertUsers.Any(expert =>
+                                expert.AuthAccountId == account.Id
+                                && expert.IsActive),
+                        SessionFamilyAlive = sessionFamilyId == null || db.RefreshTokenRecords.Any(token =>
+                            token.FamilyId == sessionFamilyId.Value
+                            && token.RevokedAt == null
+                            && token.ExpiresAt > now)
+                    })
+                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+                accountState = loadedState is null
+                    ? null
+                    : new JwtAccountState(
+                        loadedState.DeletedAt,
+                        loadedState.Role,
+                        loadedState.LearnerIsActive,
+                        loadedState.LearnerAccessExpiresAt,
+                        loadedState.ExpertIsActive,
+                        loadedState.SessionFamilyAlive);
+            }
+
+            // Called only on the two paths where the token is accepted.
+            void RememberAcceptedState(JwtAccountState accepted)
+            {
+                if (cacheable)
                 {
-                    account.DeletedAt,
-                    account.Role,
-                    LearnerIsActive = account.Role != ApplicationUserRoles.Learner
-                        || db.Users.Any(learner =>
-                            learner.AuthAccountId == account.Id
-                            && learner.AccountStatus.ToLower() == "active"),
-                    LearnerAccessExpiresAt = account.Role == ApplicationUserRoles.Learner
-                        ? db.Users
-                            .Where(learner => learner.AuthAccountId == account.Id)
-                            .Select(learner => learner.AccessExpiresAt)
-                            .SingleOrDefault()
-                        : null,
-                    ExpertIsActive = account.Role != ApplicationUserRoles.Expert
-                        || db.ExpertUsers.Any(expert =>
-                            expert.AuthAccountId == account.Id
-                            && expert.IsActive),
-                    SessionFamilyAlive = sessionFamilyId == null || db.RefreshTokenRecords.Any(token =>
-                        token.FamilyId == sessionFamilyId.Value
-                        && token.RevokedAt == null
-                        && token.ExpiresAt > now)
-                })
-                .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+                    userStateCache.Set(
+                        UserStateCacheKinds.JwtAccount,
+                        cacheSubject,
+                        cacheVariant,
+                        accepted,
+                        cacheReadToken,
+                        accepted.LearnerAccessExpiresAt);
+                }
+            }
 
             if (accountState is null)
             {
@@ -827,8 +903,10 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                         details: new { reason = "subscription_expired" },
                         cancellationToken: context.HttpContext.RequestAborted);
                     context.Fail("subscription_expired");
+                    return;
                 }
 
+                RememberAcceptedState(accountState);
                 return;
             }
 
@@ -842,7 +920,10 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                     details: new { reason = "account_suspended" },
                     cancellationToken: context.HttpContext.RequestAborted);
                 context.Fail("account_suspended");
+                return;
             }
+
+            RememberAcceptedState(accountState);
         }
     };
 }
@@ -872,6 +953,16 @@ if (useDevelopmentAuth)
 else
 {
     authBuilder.AddJwtBearer(ConfigureJwtBearer);
+}
+
+// Remote-worker boundary: two dedicated bearer schemes (per-node token, fleet-service credential), selected EXPLICITLY by the
+// RemoteWorkerOnly / FleetServiceOnly policies. Registered only where the routes exist (PostgreSQL, not the ai-worker).
+if (remoteJobsPostgres && !oetRunModeIsWorker)
+{
+    authBuilder.AddScheme<AuthenticationSchemeOptions, RemoteWorkerAuthenticationHandler>(
+        OetLearner.Api.Services.RemoteJobs.RemoteWorkerAuth.NodeScheme, _ => { });
+    authBuilder.AddScheme<AuthenticationSchemeOptions, FleetServiceAuthenticationHandler>(
+        OetLearner.Api.Services.RemoteJobs.RemoteWorkerAuth.FleetScheme, _ => { });
 }
 
 builder.Services.AddAuthorization(options =>
@@ -1027,6 +1118,8 @@ builder.Services.AddAuthorization(options =>
     // (owner + X-Owner-Agent-Unlock). Owner = admin + email_verified + system_admin +
     // auth_account_id in the env-only OwnerAgent:OwnerAccountIds allow-list.
     options.AddOwnerAgentPolicies();
+    // Remote workers: RemoteWorkerOnly (node token) and FleetServiceOnly (fleet-service credential), each on its own scheme.
+    options.AddRemoteWorkerPolicies();
 });
 
 builder.Services.AddScoped<LearnerService>();
@@ -1137,6 +1230,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ILiveVoiceProviderSe
 // $0 full-corpus Speaking compatibility harness (admin, rolled back, canned grader).
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingCorpusCompatibilityService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.LiveVoiceAdvisoryWorker>();
+// Live AI Speaking admission control (owner decision 5 Oct 2026): DB-backed FIFO gate in front of the
+// credit hold and the clock at exam finish-intro and practice finish-warmup.
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingLiveAdmissionService>();
+// Read-only admin load snapshot (job queue depth, DB connections by application name, admission counts).
+builder.Services.AddScoped<OetLearner.Api.Services.Admin.AdminOpsSnapshotService>();
 // Speaking module rebuild (2026-06-11) — two-card exam orchestrator.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingLiveTutorService>();
@@ -1904,7 +2002,9 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Content.IPdfTextExtractor,
     OetLearner.Api.Services.Content.AutoPdfTextExtractor>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentTextExtractionService,
     OetLearner.Api.Services.Content.ContentTextExtractionService>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Content.ContentTextExtractionWorker>();
+// ContentTextExtractionWorker registers through AiCostBearingHostedServiceRegistration
+// (so only the ai-worker runs it in production); the extractor and service above stay
+// registered everywhere because import, recovery and companion indexing call them inline.
 
 // NOTE: The Writing sample seeder (WritingSampleSeeder) and the Writing V2
 // content seeder (WritingV2ContentSeeder) were removed permanently — the
@@ -2378,6 +2478,14 @@ OetLearner.Api.Services.Ai.AiCostBearingHostedServiceRegistration.Add(
     enableAiCostBearingWorkers,
     oetRunModeIsWorker);
 
+// Remote-worker boundary (OET-RWP/1): options always bound; services, producers, appliers, the reaper and the hosted workers
+// only on PostgreSQL. Everything is OFF until the remote_jobs_* feature flags are enabled (see docs/ops/REMOTE-WORKER.md).
+OetLearner.Api.Services.RemoteJobs.RemoteJobsServiceCollectionExtensions.AddRemoteJobs(
+    builder.Services,
+    builder.Configuration,
+    remoteJobsPostgres,
+    oetRunModeIsWorker);
+
 var app = builder.Build();
 
 // ── Dev-only one-off: emit the full EF model CREATE script and exit. ──
@@ -2787,6 +2895,12 @@ if (corsOrigins.Length > 0)
     app.UseCors("Frontend");
 }
 
+if (remoteJobsPostgres && !oetRunModeIsWorker)
+{
+    // X-Remote-Protocol / -Min and Cache-Control: no-store on EVERY response of the remote planes (401/429/5xx included).
+    OetLearner.Api.Services.RemoteJobs.RemoteWorkerMiddlewareExtensions.UseRemoteWorkerProtocolHeaders(app);
+}
+
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
@@ -2997,9 +3111,11 @@ app.MapAdminCampaignEndpoints();
 app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();
 app.MapAiOperationsAdminEndpoints();
+app.MapAdminOpsSnapshotEndpoints();
 app.MapAiEscalationAdminEndpoints();
 app.MapAiToolsAdminEndpoints();
 app.MapTypeSafeAdminEndpoints();
+app.MapUserStateCacheAdminEndpoints();
 app.MapCompanionKnowledgeAdminEndpoints();
 app.MapCompanionAccessAdminEndpoints();
 app.MapCompanionLearnerEndpoints();
@@ -3164,6 +3280,16 @@ app.MapHub<OetLearner.Api.Hubs.OwnerAgentHub>("/v1/owner-agent/hub", options =>
     })
     .RequireAuthorization(OwnerAgentPolicies.Unlocked)
     .RequireRateLimiting(OwnerAgentPolicies.HubRateLimit);
+
+// ── Remote-worker boundary (OET-RWP/1) ──────────────────────────────────────
+// Job plane (per-node token), service plane (fleet credential) and owner break-glass. Mapped only on PostgreSQL and never on the
+// ai-worker, so a SQLite host has no route and the claim/CAS SQL has nowhere to run.
+if (remoteJobsPostgres)
+{
+    app.MapRemoteWorkerEndpoints();
+    app.MapRemoteFleetEndpoints();
+    app.MapRemoteWorkerAdminEndpoints();
+}
 }
 
 await using (var scope = app.Services.CreateAsyncScope())

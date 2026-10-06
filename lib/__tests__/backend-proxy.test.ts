@@ -4,6 +4,8 @@ import {
   resolveProxyTarget,
   sanitizeProxyHeaders,
   sanitizeProxyResponseHeaders,
+  STREAM_BODY_THRESHOLD_BYTES,
+  streamedBodyLength,
   validateProxyCsrf,
   validateRequestOrigin,
   validateProxyPathSegments,
@@ -216,5 +218,79 @@ describe('backend proxy helpers', () => {
 
       expect(validateProxyCsrf(request)).toBe(true);
     }
+  });
+
+  it('exempts the speaking tutor-room hub, whose path has two segments before hub', () => {
+    // SignalR negotiate sends no x-csrf-token, and a web session's oet_rt cookie (Path=/) rides on
+    // every proxied request, so without the exemption negotiate was rejected with 403.
+    for (const hubPath of [
+      'v1/speaking/live-rooms/hub/negotiate',
+      'v1/speaking/live-rooms/hub',
+    ]) {
+      const request = new Request(`https://app.example.com/api/backend/${hubPath}?negotiateVersion=1`, {
+        method: 'POST',
+        headers: { Cookie: 'oet_rt=active-refresh' },
+      });
+
+      expect(validateProxyCsrf(request)).toBe(true);
+    }
+  });
+
+  it('does not widen the hub exemption to look-alike paths', () => {
+    for (const path of [
+      'v1/speaking/live-rooms/hubs/negotiate',
+      'v1/speaking/live-rooms/hub-admin',
+      'v1/speaking/live-rooms',
+      'v1/speaking/sessions/hub/negotiate',
+      'v1/speaking/live-rooms/42/hub/negotiate',
+    ]) {
+      const request = new Request(`https://app.example.com/api/backend/${path}`, {
+        method: 'POST',
+        headers: { Cookie: 'oet_rt=active-refresh' },
+      });
+
+      expect(validateProxyCsrf(request)).toBe(false);
+    }
+  });
+});
+
+describe('streamedBodyLength', () => {
+  const original = process.env.BFF_STREAM_REQUEST_BODIES;
+
+  afterEach(() => {
+    if (original === undefined) delete process.env.BFF_STREAM_REQUEST_BODIES;
+    else process.env.BFF_STREAM_REQUEST_BODIES = original;
+  });
+
+  function upload(length: string | null) {
+    const headers: Record<string, string> = { 'content-type': 'application/octet-stream' };
+    if (length !== null) headers['content-length'] = length;
+    return new Request('https://app.example.com/api/backend/v1/admin/uploads/u/parts/1', {
+      method: 'PUT',
+      headers,
+      body: new Uint8Array(8),
+    });
+  }
+
+  it('streams only a body whose declared length is above the threshold', () => {
+    expect(streamedBodyLength(upload(String(STREAM_BODY_THRESHOLD_BYTES + 1)))).toBe(STREAM_BODY_THRESHOLD_BYTES + 1);
+    expect(streamedBodyLength(upload(String(STREAM_BODY_THRESHOLD_BYTES)))).toBeNull();
+    expect(streamedBodyLength(upload('1024'))).toBeNull();
+  });
+
+  it('buffers a body of unknown or malformed length', () => {
+    expect(streamedBodyLength(upload(null))).toBeNull();
+    expect(streamedBodyLength(upload('abc'))).toBeNull();
+    expect(streamedBodyLength(upload('-5'))).toBeNull();
+    expect(streamedBodyLength(upload('99999999999999999999999'))).toBeNull();
+  });
+
+  it('has nothing to stream without a body', () => {
+    expect(streamedBodyLength(new Request('https://app.example.com/api/backend/v1/health', { headers: { 'content-length': '99999999' } }))).toBeNull();
+  });
+
+  it('can be switched off with BFF_STREAM_REQUEST_BODIES=0', () => {
+    process.env.BFF_STREAM_REQUEST_BODIES = '0';
+    expect(streamedBodyLength(upload(String(STREAM_BODY_THRESHOLD_BYTES * 4)))).toBeNull();
   });
 });

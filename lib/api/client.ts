@@ -191,9 +191,54 @@ function mapErrorCodeToUserMessage(code: string, rawMessage: string, status = 0)
 
 const MAX_RETRIES = 2;
 const RETRY_DELAYS = [1000, 3000];
+/**
+ * A server-sent Retry-After longer than this is not waited out: the call fails
+ * now instead of holding a request open (and a spinner up) for that long.
+ */
+export const MAX_RETRY_AFTER_MS = 10_000;
 
 export function isRetryable(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
+}
+
+/**
+ * A retry delay of 50-100% of the schedule slot. Fixed 1 s / 3 s delays made every
+ * client that failed together retry together, in synchronised waves (the
+ * 30 Sep 2026 connection-pool incident); the spread breaks that up. The upper
+ * bound is still the schedule slot, so the worst case is unchanged.
+ */
+export function retryDelayWithJitter(baseMs: number): number {
+  return Math.round(baseMs * (0.5 + Math.random() * 0.5));
+}
+
+/**
+ * The Retry-After header as milliseconds: delta-seconds or an HTTP date.
+ * Null when it is absent or unreadable.
+ */
+export function parseRetryAfter(value: string | null | undefined, nowMs = Date.now()): number | null {
+  const text = value?.trim();
+  if (!text) return null;
+  if (/^\d+$/.test(text)) return Number(text) * 1000;
+  const dateMs = Date.parse(text);
+  return Number.isNaN(dateMs) ? null : Math.max(0, dateMs - nowMs);
+}
+
+function readRetryAfterMs(response: Response): number | null {
+  try {
+    return parseRetryAfter(response.headers.get('retry-after'));
+  } catch {
+    return null;
+  }
+}
+
+/** True for any method that can change server state. */
+function isWriteMethod(method: string | undefined): boolean {
+  const normalized = (method ?? 'GET').toUpperCase();
+  return normalized !== 'GET' && normalized !== 'HEAD' && normalized !== 'OPTIONS';
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function maybe<T>(promise: Promise<T>, fallback: T | null = null): Promise<T | null> {
@@ -288,10 +333,20 @@ export async function apiRequest<T = any>(path: string, init?: RequestInit, opti
 
         const apiError = new ApiError(response.status, code, message, retryable, fieldErrors);
 
-        // Retry on 5xx/408/429, but not on 4xx client errors
-        if (retryable && attempt < maxRetries) {
+        // Retry on 5xx/408/429, but not on 4xx client errors. Exception: a 429 on a
+        // write is the server shedding load; replaying the write only adds to it, so
+        // it fails now (a user-initiated retry is still fine: apiError.retryable is unchanged).
+        const retryOnThisAttempt = retryable
+          && attempt < maxRetries
+          && !(response.status === 429 && isWriteMethod(init?.method));
+        if (retryOnThisAttempt) {
+          const retryAfterMs = readRetryAfterMs(response);
+          // The server asked for a longer pause than we are willing to sit through.
+          if (retryAfterMs !== null && retryAfterMs > MAX_RETRY_AFTER_MS) {
+            throw apiError;
+          }
           lastError = apiError;
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          await sleep(Math.max(retryDelayWithJitter(RETRY_DELAYS[attempt]), retryAfterMs ?? 0));
           continue;
         }
 
@@ -321,7 +376,7 @@ export async function apiRequest<T = any>(path: string, init?: RequestInit, opti
         const timeoutError = new ApiError(408, 'request_timeout', 'The request timed out. Please try again.', true);
         lastError = timeoutError;
         if (attempt < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          await sleep(retryDelayWithJitter(RETRY_DELAYS[attempt]));
           continue;
         }
         throw timeoutError;
@@ -330,7 +385,7 @@ export async function apiRequest<T = any>(path: string, init?: RequestInit, opti
       // Network errors (TypeError from fetch) are retryable
       lastError = err instanceof Error ? err : new Error(String(err));
       if (attempt < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+        await sleep(retryDelayWithJitter(RETRY_DELAYS[attempt]));
         continue;
       }
       throw new ApiError(0, 'network_error', 'Unable to connect to the server. Please check your internet connection.', true);

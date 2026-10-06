@@ -18,6 +18,7 @@
  */
 import { apiClient } from '@/lib/api';
 import type { AiAssessment, SpeakingIntelligibilityEvidence } from '@/lib/api/speaking-assessments';
+import type { SpeakingLiveAdmission } from '@/lib/api/speaking-admission';
 
 export type SpeakingExamMode = 'ai' | 'live_tutor';
 
@@ -77,6 +78,11 @@ export interface SpeakingExamDetail {
   consentAccepted: boolean;
   /** False = recorder fallback: each active card is recorded and uploaded to its child session. */
   liveVoiceAvailable: boolean;
+  /**
+   * Present only while the live AI session cap is full and this exam is waiting in the line: the state stays
+   * `intro`, nothing is held or timed, and the page repeats `finish-intro` until a place is free.
+   */
+  admission?: SpeakingLiveAdmission | null;
 }
 
 export interface CreateSpeakingExamInput {
@@ -235,6 +241,17 @@ export function recordSpeakingExamConsent(examId: string) {
 export function startSpeakingExamCard(examId: string) {
   return apiClient.post<SpeakingExamDetail>(
     `/v1/speaking/exams/${encodeURIComponent(examId)}/start-card`,
+    {},
+  );
+}
+
+/**
+ * Leave the live AI session admission line: releases this exam's waiting place at once so it stops counting towards
+ * the positions of everyone behind it. The exam stays in its intro. A no-op when the exam is not waiting.
+ */
+export function leaveSpeakingExamQueue(examId: string) {
+  return apiClient.post<void>(
+    `/v1/speaking/exams/${encodeURIComponent(examId)}/leave-queue`,
     {},
   );
 }

@@ -88,36 +88,68 @@ if printf '%s\n' "$active_commands" | grep -Eiq \
   exit 1
 fi
 
+# Out-of-band SSH rollouts. A workflow that rolls a compose project out over SSH keeps its
+# remote script between "# BEGIN REMOTE <NAME> ROLLOUT" and "# END REMOTE <NAME> ROLLOUT"
+# markers; that block must pull prebuilt images and start with --no-build, and may never
+# build, install, sync source, or remove/prune volumes.
+offload_fail() {
+  echo "[compute-offload] $1: $2" >&2
+  exit 1
+}
+
+# assert_pull_only_remote <label> <workflow file> <MARKER NAME>
+assert_pull_only_remote() {
+  local label="$1" workflow="$2" marker="$3" remote
+  remote="$(awk -v open_marker="# BEGIN REMOTE $marker ROLLOUT" -v close_marker="# END REMOTE $marker ROLLOUT" '
+    index($0, open_marker) { inside = 1; next }
+    index($0, close_marker) { inside = 0 }
+    inside
+  ' "$workflow" | sed '/^[[:space:]]*#/d')"
+  [ -n "$remote" ] || offload_fail "$label" "rollout script markers not found in ${workflow##*/}"
+  printf '%s\n' "$remote" | grep -Eq 'compose[^#]*[[:space:]]pull([[:space:]]|$)' \
+    || offload_fail "$label" "the VPS rollout must pull prebuilt GHCR images (compose pull)"
+  printf '%s\n' "$remote" | grep -Eq '(^|[[:space:]])up[[:space:]][^#]*--no-build' \
+    || offload_fail "$label" "the VPS rollout must start containers with up --no-build"
+  if printf '%s\n' "$remote" | grep -E '(^|[[:space:]])up[[:space:]]+-' | grep -v -- '--no-build' | grep -q .; then
+    offload_fail "$label" "every compose up in the VPS rollout must pass --no-build"
+  fi
+  if printf '%s\n' "$remote" | grep -Eiq \
+    'docker[[:space:]]+(build|buildx|builder)([[:space:]]|$)|docker[[:space:]]+image[[:space:]]+build|compose[^#]*[[:space:]]build([[:space:]]|$)|(^|[[:space:];|&(])(npm|npx|pnpm|yarn|node|dotnet|tsc|make)([[:space:]]|$)|git[[:space:]]+(clone|fetch|pull|checkout|reset|submodule)([[:space:]]|$)'; then
+    offload_fail "$label" "the VPS rollout contains a build/test/install or source-sync command"
+  fi
+  if printf '%s\n' "$remote" | grep -Eq \
+    'docker[[:space:]]+volume[[:space:]]+(rm|prune)|docker[[:space:]]+system[[:space:]]+prune|compose[^#]*[[:space:]]down[[:space:]][^#]*(-v|--volumes)([[:space:]]|$)'; then
+    offload_fail "$label" "the VPS rollout must never remove or prune volumes, or compose down -v"
+  fi
+}
+
 # Owner Agent Console (owner directive 2026-09-27): .github/workflows/agent-console.yml
 # builds on Actions and its SSH rollout (the block between the BEGIN/END
 # REMOTE AGENT-CONSOLE ROLLOUT markers) must stay pull-only as well.
 AGENT_CONSOLE_WORKFLOW="$REPO_ROOT/.github/workflows/agent-console.yml"
 AGENT_CONSOLE_COMPOSE="$REPO_ROOT/docker-compose.agent-console.yml"
-agent_console_fail() {
-  echo "[compute-offload] agent-console: $1" >&2
-  exit 1
-}
-[ -f "$AGENT_CONSOLE_WORKFLOW" ] || agent_console_fail "missing .github/workflows/agent-console.yml"
-[ -f "$AGENT_CONSOLE_COMPOSE" ] || agent_console_fail "missing docker-compose.agent-console.yml"
-agent_console_remote="$(awk '
-  /# BEGIN REMOTE AGENT-CONSOLE ROLLOUT/ { inside = 1; next }
-  /# END REMOTE AGENT-CONSOLE ROLLOUT/ { inside = 0 }
-  inside
-' "$AGENT_CONSOLE_WORKFLOW" | sed '/^[[:space:]]*#/d')"
-[ -n "$agent_console_remote" ] || agent_console_fail "rollout script markers not found in agent-console.yml"
-printf '%s\n' "$agent_console_remote" | grep -Eq 'compose[^#]*[[:space:]]pull([[:space:]]|$)' \
-  || agent_console_fail "the VPS rollout must pull prebuilt GHCR images (compose pull)"
-printf '%s\n' "$agent_console_remote" | grep -Eq '(^|[[:space:]])up[[:space:]][^#]*--no-build' \
-  || agent_console_fail "the VPS rollout must start containers with up --no-build"
-if printf '%s\n' "$agent_console_remote" | grep -E '(^|[[:space:]])up[[:space:]]+-' | grep -v -- '--no-build' | grep -q .; then
-  agent_console_fail "every compose up in the VPS rollout must pass --no-build"
-fi
-if printf '%s\n' "$agent_console_remote" | grep -Eiq \
-  'docker[[:space:]]+(build|buildx|builder)([[:space:]]|$)|docker[[:space:]]+image[[:space:]]+build|compose[^#]*[[:space:]]build([[:space:]]|$)|(^|[[:space:];|&(])(npm|npx|pnpm|yarn|node|dotnet|tsc|make)([[:space:]]|$)|git[[:space:]]+(clone|fetch|pull|checkout|reset|submodule)([[:space:]]|$)'; then
-  agent_console_fail "the VPS rollout contains a build/test/install or source-sync command"
-fi
+[ -f "$AGENT_CONSOLE_WORKFLOW" ] || offload_fail agent-console "missing .github/workflows/agent-console.yml"
+[ -f "$AGENT_CONSOLE_COMPOSE" ] || offload_fail agent-console "missing docker-compose.agent-console.yml"
+assert_pull_only_remote agent-console "$AGENT_CONSOLE_WORKFLOW" AGENT-CONSOLE
 if grep -Eq '^[[:space:]]+build:' "$AGENT_CONSOLE_COMPOSE"; then
-  agent_console_fail "docker-compose.agent-console.yml must not declare build: sections (images come from GHCR)"
+  offload_fail agent-console "docker-compose.agent-console.yml must not declare build: sections (images come from GHCR)"
 fi
+
+# Owner Fleet (owner directive 2026-10-05): .github/workflows/fleet.yml and the fleet compose
+# file(s) (platform/fleet/docker-compose*.yml or docker-compose.fleet*.yml) do not exist until
+# the fleet pipeline lands, so every check here is existence-conditional and this script passes
+# before them. Once present, the manager rollout (between the BEGIN/END REMOTE FLEET ROLLOUT
+# markers) is pull-only exactly like the console's. scripts/deploy/verify-pipeline-contract.mjs
+# holds the remaining fleet.yml identity rules.
+FLEET_WORKFLOW="$REPO_ROOT/.github/workflows/fleet.yml"
+if [ -f "$FLEET_WORKFLOW" ]; then
+  assert_pull_only_remote fleet "$FLEET_WORKFLOW" FLEET
+fi
+for fleet_compose in "$REPO_ROOT"/platform/fleet/docker-compose*.yml "$REPO_ROOT"/docker-compose.fleet*.yml; do
+  [ -f "$fleet_compose" ] || continue
+  if grep -Eq '^[[:space:]]+build:' "$fleet_compose"; then
+    offload_fail fleet "${fleet_compose##*/} must not declare build: sections (images come from GHCR)"
+  fi
+done
 
 echo "[compute-offload] Actions owns build, test, image-packaging, and migration generation; VPS rollout is pull-only."

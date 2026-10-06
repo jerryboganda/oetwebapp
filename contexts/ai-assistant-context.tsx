@@ -3,12 +3,19 @@
 /**
  * AI Assistant global context provider.
  * Wraps the app to provide assistant state, connection, and UI visibility control.
+ *
+ * The SignalR hub is a long-polling connection plus two REST reads (threads,
+ * model catalogue). It is opened lazily: nothing connects until a surface that
+ * actually shows the assistant (the floating panel, the full-page companion)
+ * calls `activate()`. Before this, every learner, expert and admin opened the
+ * hub on every page load, even when the assistant feature was switched off.
  */
 
 import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -30,6 +37,11 @@ export interface AiAssistantContextValue extends UseAiAssistantReturn {
   close: () => void;
   /** Whether the user has access to the assistant */
   hasAccess: boolean;
+  /**
+   * Opens the hub connection. Idempotent and safe to call on every mount of a
+   * surface that renders the assistant; it stays active until sign-out.
+   */
+  activate: () => void;
 }
 
 const AiAssistantContext = createContext<AiAssistantContextValue | null>(null);
@@ -39,16 +51,38 @@ const AiAssistantContext = createContext<AiAssistantContextValue | null>(null);
 export function AiAssistantProvider({ children }: { children: ReactNode }) {
   const { session, user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  // Keyed by user so a different account on the same tab never inherits the
+  // previous account's open hub.
+  const userId = user?.userId ?? null;
+  const [activatedFor, setActivatedFor] = useState<string | null>(null);
+  const activated = userId !== null && activatedFor === userId;
 
   const token = session?.accessToken ?? null;
   const userRole = user?.role ?? null;
   const hasAccess = canAccessAssistant(userRole);
 
-  // Only connect when user has access
-  const assistant = useAiAssistant(hasAccess ? token : null, userRole);
+  // Only connect when the user has access AND a surface asked for the hub.
+  const assistant = useAiAssistant(
+    { token: hasAccess ? token : null, autoConnect: activated },
+    userRole,
+  );
 
-  const toggle = useCallback(() => setIsOpen((v) => !v), []);
-  const open = useCallback(() => setIsOpen(true), []);
+  useEffect(() => {
+    if (userId === null) setActivatedFor(null);
+  }, [userId]);
+
+  const activate = useCallback(() => {
+    if (userId !== null) setActivatedFor(userId);
+  }, [userId]);
+
+  const toggle = useCallback(() => {
+    activate();
+    setIsOpen((v) => !v);
+  }, [activate]);
+  const open = useCallback(() => {
+    activate();
+    setIsOpen(true);
+  }, [activate]);
   const close = useCallback(() => setIsOpen(false), []);
 
   const value = useMemo<AiAssistantContextValue>(
@@ -59,8 +93,9 @@ export function AiAssistantProvider({ children }: { children: ReactNode }) {
       open,
       close,
       hasAccess,
+      activate,
     }),
-    [assistant, isOpen, toggle, open, close, hasAccess],
+    [assistant, isOpen, toggle, open, close, hasAccess, activate],
   );
 
   return (

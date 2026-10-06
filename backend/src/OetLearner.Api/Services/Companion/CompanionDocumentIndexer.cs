@@ -51,23 +51,9 @@ public sealed class CompanionDocumentIndexer(
     IEmbeddingService embeddings,
     IPdfTextExtractor extractor,
     IFileStorage storage,
-    ILogger<CompanionDocumentIndexer> logger) : ICompanionDocumentIndexer
+    ILogger<CompanionDocumentIndexer> logger,
+    IRemoteCompanionIndexPrep? remote = null) : ICompanionDocumentIndexer
 {
-    /// <summary>
-    /// Longest page kept whole. Beyond this the page is split, because a single
-    /// chunk larger than the retriever's per-source verbatim cap can only ever be
-    /// returned truncated — the tail would be unreachable no matter what a
-    /// learner asked.
-    /// </summary>
-    private const int MaxChunkChars = 1100;
-
-    /// <summary>
-    /// Pages shorter than this are merged forward. A PDF of mostly slide titles
-    /// otherwise produces hundreds of two-word chunks that match everything
-    /// weakly and crowd out real evidence.
-    /// </summary>
-    private const int MinChunkChars = 200;
-
     /// <summary>
     /// Cap per run. Extraction is CPU-bound and may call a paid OCR provider, so
     /// a first reindex over a large library must not become an unbounded job.
@@ -75,6 +61,11 @@ public sealed class CompanionDocumentIndexer(
     /// walk through the backlog.
     /// </summary>
     private const int MaxDocumentsPerRun = 200;
+
+    /// <summary>How long a file that produced no chunks is deferred behind the rest of the backlog (per process).</summary>
+    private static readonly TimeSpan FailureBackoff = TimeSpan.FromHours(1);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset> RecentFailures = new(StringComparer.Ordinal);
 
     public async Task<CompanionIndexResult> IndexAsync(bool embed, CancellationToken ct)
     {
@@ -100,11 +91,29 @@ public sealed class CompanionDocumentIndexer(
                 "of scope. They belong on the NOT INGESTED list.");
         }
 
-        var pdfs = files
-            .Where(x => string.Equals(x.File.Kind, "pdf", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(x => x.File.UpdatedAt)
-            .Take(MaxDocumentsPerRun)
+        // Walk the backlog instead of re-extracting the same oldest files on every run: a file never indexed (or edited since)
+        // goes first, then the least recently indexed. WriteAsync stamps the source row on every pass, so successive runs
+        // advance through any number of PDFs. (Ordering by File.UpdatedAt alone never reached anything beyond the first
+        // MaxDocumentsPerRun, because nothing here ever updates it.)
+        // Grouped in memory: the SQLite desktop provider cannot translate Max over a DateTimeOffset, and one row per material
+        // version is a small set.
+        var lastIndexed = await db.CompanionSources
+            .AsNoTracking()
+            .Where(s => s.SourceKey.StartsWith("material:"))
+            .Select(s => new { s.SourceKey, s.UpdatedAt })
+            .ToListAsync(ct);
+        var lastIndexedBySource = lastIndexed
+            .GroupBy(x => x.SourceKey, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Max(x => x.UpdatedAt), StringComparer.Ordinal);
+
+        var pdfs = CompanionIndexSelection.Take(
+                files.Where(x => string.Equals(x.File.Kind, "pdf", StringComparison.OrdinalIgnoreCase)),
+                x => x.File.UpdatedAt,
+                x => lastIndexedBySource.TryGetValue($"material:{x.File.Id}", out var at) ? at : (DateTimeOffset?)null,
+                MaxDocumentsPerRun,
+                x => RecentFailures.TryGetValue(x.File.Id, out var failedAt) && DateTimeOffset.UtcNow - failedAt < FailureBackoff)
             .ToList();
+        var pendingRemote = 0;
 
         if (pdfs.Count == 0) return new CompanionIndexResult(0, 0, 0, 0, warnings);
 
@@ -123,11 +132,54 @@ public sealed class CompanionDocumentIndexer(
         {
             ct.ThrowIfCancellationRequested();
 
-            var pages = await ExtractAsync(item.Asset, warnings, ct);
-            if (pages.Count == 0) continue;
+            var sourceKey = $"material:{item.File.Id}";
 
-            var chunks = BuildChunks(pages);
-            if (chunks.Count == 0) continue;
+            // Optional remote preparation (enqueue-and-poll). Without it, or on any doubt, the answer is Local: the path below.
+            CompanionPrepPlan? plan = null;
+            if (remote is not null)
+            {
+                plan = await remote.PlanAsync(item.Asset, sourceKey, ct);
+                if (plan.Action == CompanionPrepAction.Pending)
+                {
+                    pendingRemote++;
+                    continue;
+                }
+
+                if (plan.Action == CompanionPrepAction.Skip)
+                {
+                    warnings.Add($"Material \"{item.File.Title}\": {plan.Note}");
+                    // Nothing is written, so no source row is stamped: without this the file would stay "never indexed" at the
+                    // head of CompanionIndexSelection on every run and enough of them would pin the whole window.
+                    RecentFailures[item.File.Id] = DateTimeOffset.UtcNow;
+                    continue;
+                }
+            }
+
+            IReadOnlyList<CompanionChunkDraft> chunks;
+            string version;
+            if (plan is { Action: CompanionPrepAction.Ready })
+            {
+                chunks = plan.Chunks!;
+                version = plan.Version!;
+            }
+            else
+            {
+                var pages = await ExtractAsync(item.Asset, warnings, ct);
+                if (pages.Count == 0)
+                {
+                    RecentFailures[item.File.Id] = DateTimeOffset.UtcNow;
+                    continue;
+                }
+
+                chunks = CompanionChunker.Build(pages);
+                if (chunks.Count == 0)
+                {
+                    RecentFailures[item.File.Id] = DateTimeOffset.UtcNow;
+                    continue;
+                }
+
+                version = CompanionChunker.ChecksumVersion(pages);
+            }
 
             var folder = item.Folder;
             var restrictedPlans = folder is { AudienceMode: MaterialAudienceMode.Restricted }
@@ -160,8 +212,9 @@ public sealed class CompanionDocumentIndexer(
                 scope = ModuleKeys.MaterialsLibrary;
             }
 
+            var warningsBeforeWrite = warnings.Count;
             var result = await CompanionIndexWriter.WriteAsync(
-                db, embeddings, logger, $"material:{item.File.Id}", ChecksumVersion(pages),
+                db, embeddings, logger, sourceKey, version,
                 source =>
                 {
                     source.SourceType = "material_pdf";
@@ -187,6 +240,31 @@ public sealed class CompanionDocumentIndexer(
             chunksWritten += result.ChunksWritten;
             chunksUnchanged += result.ChunksUnchanged;
             chunksEmbedded += result.ChunksEmbedded;
+
+            // A successful write counts every chunk as written or unchanged and stamps the source row. Zero of both means the
+            // writer rejected the source (corpus guard) and stamped nothing, so defer it like any other file that yielded nothing.
+            if (result.SourcesWritten == 0 && result.ChunksWritten == 0 && result.ChunksUnchanged == 0)
+            {
+                RecentFailures[item.File.Id] = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                RecentFailures.TryRemove(item.File.Id, out _);
+            }
+
+            // A clean write consumes the parked remote result; a write with warnings (for example a failed embedding pass)
+            // leaves it so the next pass can retry without extracting again.
+            if (plan is { Action: CompanionPrepAction.Ready } && remote is not null)
+            {
+                await remote.CompleteAsync(plan, fullyCommitted: warnings.Count == warningsBeforeWrite, ct);
+            }
+        }
+
+        if (pendingRemote > 0)
+        {
+            warnings.Add(
+                $"{pendingRemote} material PDF(s) are being prepared on a helper; run the reindex again shortly to index them " +
+                "(they are picked up automatically once the result is in).");
         }
 
         return new CompanionIndexResult(sourcesWritten, chunksWritten, chunksUnchanged, chunksEmbedded, warnings);
@@ -221,93 +299,9 @@ public sealed class CompanionDocumentIndexer(
     }
 
     /// <summary>
-    /// One chunk per page, merging pages too short to stand alone and splitting
-    /// pages too long to be returned whole.
+    /// One chunk per page, merging pages too short to stand alone and splitting pages too long to be returned whole. The
+    /// algorithm lives in <see cref="CompanionChunker"/> so a fleet helper can run the identical code; this stays as the
+    /// stable entry point the existing tests call.
     /// </summary>
-    internal static IReadOnlyList<CompanionChunkDraft> BuildChunks(IReadOnlyList<string> pages)
-    {
-        var chunks = new List<CompanionChunkDraft>();
-        var carried = new StringBuilder();
-        var carriedFrom = 0;
-
-        for (var index = 0; index < pages.Count; index++)
-        {
-            var page = pages[index].Trim();
-            if (page.Length == 0) continue;
-
-            var pageNumber = index + 1;
-
-            if (carried.Length == 0) carriedFrom = pageNumber;
-            if (carried.Length > 0) carried.AppendLine();
-            carried.Append(page);
-
-            if (carried.Length < MinChunkChars && index < pages.Count - 1) continue;
-
-            Flush(chunks, carried.ToString(), carriedFrom);
-            carried.Clear();
-        }
-
-        if (carried.Length > 0) Flush(chunks, carried.ToString(), carriedFrom);
-
-        return chunks;
-    }
-
-    private static void Flush(List<CompanionChunkDraft> chunks, string text, int pageNumber)
-    {
-        text = text.Trim();
-        if (text.Length == 0) return;
-
-        if (text.Length <= MaxChunkChars)
-        {
-            chunks.Add(new CompanionChunkDraft($"Page {pageNumber}", text, PageNumber: pageNumber));
-            return;
-        }
-
-        // Split on line boundaries so a rule or worked example is not cut in
-        // half, and fall back to a hard cut only for a single line with no
-        // boundary to use.
-        var part = 1;
-        var builder = new StringBuilder();
-
-        void Emit()
-        {
-            var body = builder.ToString().Trim();
-            builder.Clear();
-            if (body.Length == 0) return;
-
-            chunks.Add(new CompanionChunkDraft($"Page {pageNumber} ({part})", body, PageNumber: pageNumber));
-            part++;
-        }
-
-        foreach (var line in text.Split('\n'))
-        {
-            // A line longer than the whole cap has no boundary to split on, so it
-            // is cut into pieces. Whatever is already buffered goes out first,
-            // otherwise the pieces would appear before the text that preceded them.
-            var remaining = line;
-            while (remaining.Length > MaxChunkChars)
-            {
-                Emit();
-                chunks.Add(new CompanionChunkDraft(
-                    $"Page {pageNumber} ({part})", remaining[..MaxChunkChars], PageNumber: pageNumber));
-                part++;
-                remaining = remaining[MaxChunkChars..];
-            }
-
-            if (builder.Length > 0 && builder.Length + remaining.Length + 1 > MaxChunkChars) Emit();
-            if (builder.Length > 0) builder.Append('\n');
-            builder.Append(remaining);
-        }
-
-        Emit();
-    }
-
-    /// <summary>
-    /// Version stamp derived from the extracted content, so re-uploading the same
-    /// file is a no-op while a genuinely revised handout supersedes its previous
-    /// version instead of sitting alongside it. Materials carry no version field
-    /// of their own.
-    /// </summary>
-    private static string ChecksumVersion(IReadOnlyList<string> pages) =>
-        CompanionIndexWriter.Sha256(string.Join("\n", pages))[..16].ToLowerInvariant();
+    internal static IReadOnlyList<CompanionChunkDraft> BuildChunks(IReadOnlyList<string> pages) => CompanionChunker.Build(pages);
 }

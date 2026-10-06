@@ -1,0 +1,139 @@
+@page "{id}"
+@model Fleet.Manager.Pages.Operations.DetailModel
+@{
+    var view = Model.Detail;
+    var op = view.Operation;
+    var path = "/Operations/Detail/" + Uri.EscapeDataString(op.Id);
+    var isEnroll = op.Kind == "enroll";
+    ViewData["Title"] = isEnroll ? "Enrollment progress" : Fmt.KindLabel(op.Kind);
+    var cancelNote = "Cancelling erases any stored temporary key" + (isEnroll ? "; a helper that never got past the host-key check is dropped from the list." : ".");
+}
+<div class="page-head">
+    <h1>@(isEnroll ? "Enrollment progress" : Fmt.KindLabel(op.Kind))</h1>
+    <span class="head-links">
+        @if (view.Host is not null)
+        {
+            <a href="@("/Hosts/Detail/" + Uri.EscapeDataString(view.Host.Id))">@view.HostName</a>
+        }
+        else
+        {
+            <span>@view.HostName</span>
+        }
+        <a href="/Operations">All operations</a>
+    </span>
+</div>
+@await Html.PartialAsync("_Messages", Model)
+
+<div id="op-live" data-live-url="@(path + "?handler=Fragment")" data-live-events="operation.updated,host.updated,credential.updated" data-live-every="5" data-reload-on-change="true">
+    @await Html.PartialAsync("_OperationLive", view)
+</div>
+
+@if (op.State == "HostKeyPending")
+{
+    <section class="panel" aria-labelledby="hk-h">
+        <h2 id="hk-h">Check the host key</h2>
+        <p>The console reached the server and it offers the SSH host key below. <strong>Do not trust it yet</strong>: this fingerprint came over the same network path you are about to use. Open your VPS provider's console (or its API) and read the server's SSH key fingerprint there. If it matches, type its first 8 characters.</p>
+        @if (op.HostKeyCandidates.Count == 0)
+        {
+            <p class="notice warn">The server did not offer a host key. Cancel and check the address and port.</p>
+        }
+        else
+        {
+            var pinnedAlgorithm = HostKeyChoice.PinnedAlgorithm(op.HostKeyCandidates);
+            <p class="hint">The server may offer several keys, but only the one marked below is pinned. Compare and type that one (your provider can show the fingerprint of each key type).</p>
+            <div class="table-wrap" role="region" aria-label="Offered host keys" tabindex="0">
+                <table class="data compact">
+                    <caption class="sr-only">Host keys the server offers (display only until you confirm)</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">Algorithm</th>
+                        <th scope="col">SHA256 fingerprint</th>
+                        <th scope="col">Pinned if you confirm</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var candidate in op.HostKeyCandidates)
+                    {
+                        <tr>
+                            <td>@Fmt.Untrusted(candidate.Algorithm, 30)</td>
+                            <td><code class="break">@Fmt.Untrusted(candidate.Fingerprint, 80)</code></td>
+                            <td>@(candidate.Algorithm == pinnedAlgorithm ? "Yes: compare this one" : "No")</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+        @if (view.SavedKey is not null)
+        {
+            <p class="notice ok">A temporary SSH key is saved for this server (fingerprint <code>@view.SavedKey.Hint</code>, erased @Fmt.Until(view.SavedKey.ExpiresAt, view.Now)). It is used as soon as you confirm the host key.</p>
+        }
+        <form method="post" action="@(path + "?handler=ConfirmKey")" asp-antiforgery="true" autocomplete="off">
+            <div class="field narrow">
+                <label for="Fingerprint">First 8 characters of the fingerprint, after the SHA256: prefix</label>
+                <input id="Fingerprint" name="Fingerprint" type="text" maxlength="80" minlength="8" autocomplete="off" autocapitalize="off" spellcheck="false" required />
+            </div>
+            @await Html.PartialAsync("_StepUp", "confirm")
+            <div class="actions">
+                <button type="submit" class="btn primary">The fingerprint matches: pin this key</button>
+            </div>
+        </form>
+    </section>
+}
+
+@if (view.KeyAcceptance != Fleet.Manager.Operations.OwnerKeyAcceptance.No)
+{
+    <section class="panel" aria-labelledby="key-h">
+        <h2 id="key-h">@(view.SavedKey is null ? "Provide the temporary SSH key" : "Replace the saved SSH key")</h2>
+        @if (view.KeyAcceptance == Fleet.Manager.Operations.OwnerKeyAcceptance.Stage)
+        {
+            <p class="muted">The key is saved now and used automatically once you have confirmed the host key.</p>
+        }
+        else
+        {
+            <p class="muted">The operation is waiting for this key. Submitting it continues straight away.</p>
+        }
+        @if (view.SavedKey is not null)
+        {
+            <p class="notice ok">A key is saved: fingerprint <code>@view.SavedKey.Hint</code>, erased @Fmt.Until(view.SavedKey.ExpiresAt, view.Now).</p>
+            if (op.State == "HostKeyConfirmed")
+            {
+                <form method="post" action="@(path + "?handler=Continue")" asp-antiforgery="true" autocomplete="off">
+                    @await Html.PartialAsync("_StepUp", "continue")
+                    <div class="actions">
+                        <button type="submit" class="btn primary">Continue with the saved key</button>
+                    </div>
+                </form>
+            }
+        }
+        <form method="post" action="@(path + "?handler=Key")" asp-antiforgery="true" autocomplete="off">
+            @await Html.PartialAsync("_KeyFields", new KeyFieldsModel("op", Model.SshUser))
+            @await Html.PartialAsync("_StepUp", "key")
+            <div class="actions">
+                <button type="submit" class="btn @(view.SavedKey is null ? "primary" : string.Empty)">@(view.KeyAcceptance == Fleet.Manager.Operations.OwnerKeyAcceptance.Stage ? "Save the key" : "Use this key and continue")</button>
+            </div>
+        </form>
+    </section>
+}
+
+@if (view.CanRetry || view.CanCancel)
+{
+    <section class="panel" aria-labelledby="ctl-h">
+        <h2 id="ctl-h">Retry or cancel</h2>
+        <div class="button-row">
+            @if (view.CanRetry)
+            {
+                <form method="post" action="@(path + "?handler=Retry")" asp-antiforgery="true" class="inline-form">
+                    <button type="submit" class="btn primary">Retry from the failed step</button>
+                </form>
+            }
+            @if (view.CanCancel)
+            {
+                <form method="post" action="@(path + "?handler=Cancel")" asp-antiforgery="true" class="inline-form">
+                    <button type="submit" class="btn danger">Cancel this operation</button>
+                </form>
+            }
+        </div>
+        <p class="hint">Retry resumes at the step that failed and never repeats a finished one. @cancelNote</p>
+    </section>
+}

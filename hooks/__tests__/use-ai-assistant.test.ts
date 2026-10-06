@@ -185,6 +185,40 @@ describe('useAiAssistant hook', () => {
       expect(result.current.error).toBe('No authentication token');
       expect(result.current.connectionState).not.toBe('connected');
     });
+
+    it('does not open the hub while autoConnect is false, then connects once it flips on', async () => {
+      const { result, rerender } = renderHook(
+        ({ autoConnect }: { autoConnect: boolean }) =>
+          useAiAssistant({ token: 'test-token', autoConnect }),
+        { initialProps: { autoConnect: false } },
+      );
+
+      await act(async () => {});
+
+      expect(createAssistantConnection).not.toHaveBeenCalled();
+      expect(mockConnection.start).not.toHaveBeenCalled();
+      expect(result.current.connectionState).toBe('disconnected');
+
+      rerender({ autoConnect: true });
+      await act(async () => {});
+
+      expect(createAssistantConnection).toHaveBeenCalledTimes(1);
+      expect(mockConnection.start).toHaveBeenCalled();
+      expect(result.current.connectionState).toBe('connected');
+    });
+
+    it('still allows an explicit connect() while autoConnect is false', async () => {
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token', autoConnect: false }),
+      );
+
+      await act(async () => {
+        await result.current.connect();
+      });
+
+      expect(createAssistantConnection).toHaveBeenCalledTimes(1);
+      expect(result.current.connectionState).toBe('connected');
+    });
   });
 
   describe('Sending messages', () => {

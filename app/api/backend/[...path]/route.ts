@@ -5,12 +5,16 @@ import {
   resolveProxyTarget,
   sanitizeProxyHeaders,
   sanitizeProxyResponseHeaders,
+  streamedBodyLength,
   validateProxyCsrf,
   validateRequestOrigin,
 } from '../../../../lib/backend-proxy';
 
 function isAnalyticsEventPath(path: string[]) {
-  return path.length === 3 && path[0] === 'v1' && path[1] === 'analytics' && path[2] === 'events';
+  return path[0] === 'v1'
+    && path[1] === 'analytics'
+    && path[2] === 'events'
+    && (path.length === 3 || (path.length === 4 && path[3] === 'batch'));
 }
 
 async function proxyRequest(request: Request, context: { params: Promise<{ path: string[] }> }) {
@@ -33,19 +37,30 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
 
   const headers = sanitizeProxyHeaders(request.headers);
 
-  let body: ArrayBuffer | undefined;
+  let body: BodyInit | undefined;
+  let streamed = false;
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    try {
-      body = await request.arrayBuffer();
-    } catch (error) {
-      if (isAnalyticsEventPath(path)) {
-        return new Response(null, { status: 204 });
-      }
+    const length = isAnalyticsEventPath(path) ? null : streamedBodyLength(request);
+    if (length !== null) {
+      // Pass the body through. The sanitizer strips content-length (it is hop-by-hop
+      // bookkeeping), so restore the declared length: the API then sees the same framing
+      // it saw when the body was buffered, rather than chunked transfer encoding.
+      body = request.body ?? undefined;
+      streamed = true;
+      headers.set('content-length', String(length));
+    } else {
+      try {
+        body = await request.arrayBuffer();
+      } catch (error) {
+        if (isAnalyticsEventPath(path)) {
+          return new Response(null, { status: 204 });
+        }
 
-      throw error;
+        throw error;
+      }
     }
   }
-  const hasBody = Boolean(body && body.byteLength > 0);
+  const hasBody = streamed || (body instanceof ArrayBuffer && body.byteLength > 0);
 
   if (isAnalyticsEventPath(path)) {
     if (!hasBody) {
@@ -58,13 +73,16 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
     headers.delete('content-encoding');
   }
 
-  const upstreamResponse = await fetch(targetUrl, {
+  // `duplex: 'half'` is required by fetch for a streamed request body.
+  const upstreamInit: RequestInit & { duplex?: 'half' } = {
     method: request.method,
     headers,
     body: hasBody ? body : undefined,
     redirect: 'manual',
     signal: request.signal,
-  });
+    ...(streamed ? { duplex: 'half' as const } : {}),
+  };
+  const upstreamResponse = await fetch(targetUrl, upstreamInit);
 
   const responseHeaders = sanitizeProxyResponseHeaders(upstreamResponse.headers);
 

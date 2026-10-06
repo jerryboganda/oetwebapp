@@ -649,6 +649,124 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
         Assert.True((join.Mp3[0] == 0x49 && join.Mp3[1] == 0x44 && join.Mp3[2] == 0x33) || join.Mp3[0] == 0xFF);
     }
 
+    // ── A join a helper prepared (media.speaking-join): optional, never waited for, local is always the fallback ──
+
+    [Fact]
+    public async Task Assess_UsesAJoinAHelperPrepared_WhenOneMatchesTheClips_AndNeverRunsTheLocalTranscoder()
+    {
+        var remote = new FakeRemoteJoin { Serve = new SpeakingAudioJoin([9, 9, 9], 7_000, 2, false) };
+        await using var h = new Harness(_options, remote);
+        await h.AddClipAsync("s1", "rec-a", [1], "audio/webm");
+        await h.AddClipAsync("s1", "rec-b", [2], "audio/webm");
+        h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+
+        var evidence = await h.Service.AssessAsync(Request(Segments(
+            ("candidate", "Hello, I am the doctor.", "rec-b"),
+            ("candidate", "How are you feeling?", "rec-a"))), default);
+
+        Assert.True(evidence.IsAudio);
+        Assert.Equal(7_000, evidence.DurationMs);
+        Assert.Equal(2, evidence.ClipCount);
+        Assert.Empty(h.Transcoder.Clips); // the local ffmpeg never ran
+        var audio = Assert.Single(Assert.Single(h.Gateway.Requests).AudioAttachments!);
+        Assert.Equal(new byte[] { 9, 9, 9 }, audio.Data);
+        var asked = Assert.Single(remote.Serves);
+        Assert.Equal("s1", asked.SessionId);
+        Assert.Equal(2, asked.Shas.Count);
+        Assert.All(asked.Shas, sha => Assert.Equal(new string('a', 64), sha));
+    }
+
+    [Fact]
+    public async Task Assess_WhenNoPreparedJoinExists_JoinsLocallyAsAlways()
+    {
+        var remote = new FakeRemoteJoin();
+        await using var h = new Harness(_options, remote);
+        await h.AddClipAsync("s1", "rec-a", [1], "audio/webm");
+        h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+
+        var evidence = await h.Service.AssessAsync(Request(Segments(("candidate", "Hello, I am the doctor.", "rec-a"))), default);
+
+        Assert.True(evidence.IsAudio);
+        Assert.Single(remote.Serves);
+        Assert.Single(h.Transcoder.Clips);
+        Assert.Equal(h.Transcoder.Join.Mp3, Assert.Single(Assert.Single(h.Gateway.Requests).AudioAttachments!).Data);
+    }
+
+    [Fact]
+    public async Task Assess_WhenThePreparedJoinCannotBeUsed_JoinsLocally_AndTheGradeGoesOn()
+    {
+        var remote = new FakeRemoteJoin { Throw = new InvalidOperationException("storage hiccup") };
+        await using var h = new Harness(_options, remote);
+        await h.AddClipAsync("s1", "rec-a", [1], "audio/webm");
+        h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+
+        var evidence = await h.Service.AssessAsync(Request(Segments(("candidate", "Hello, I am the doctor.", "rec-a"))), default);
+
+        Assert.True(evidence.IsAudio);
+        Assert.Single(h.Transcoder.Clips);
+    }
+
+    [Fact]
+    public async Task Assess_AClipWithNoKnownHash_CannotMatchAPreparedJoin_SoItIsNeverAsked()
+    {
+        var remote = new FakeRemoteJoin { Serve = new SpeakingAudioJoin([9], 7_000, 1, false) };
+        await using var h = new Harness(_options, remote);
+        await h.AddClipAsync("s1", "rec-a", [1], "audio/webm", sha256: string.Empty);
+        h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+
+        var evidence = await h.Service.AssessAsync(Request(Segments(("candidate", "Hello, I am the doctor.", "rec-a"))), default);
+
+        Assert.True(evidence.IsAudio);
+        Assert.Empty(remote.Serves);
+        Assert.Single(h.Transcoder.Clips);
+    }
+
+    [Fact]
+    public async Task Assess_WhenTheCallerCancelsWhileAskingForAPreparedJoin_TheCancellationIsNotSwallowed()
+    {
+        using var cancelled = new CancellationTokenSource();
+        var remote = new FakeRemoteJoin { CancelOnServe = cancelled };
+        await using var h = new Harness(_options, remote);
+        await h.AddClipAsync("s1", "rec-a", [1], "audio/webm");
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            h.Service.AssessAsync(Request(Segments(("candidate", "Hello.", "rec-a"))), cancelled.Token));
+        Assert.Empty(h.Transcoder.Clips);
+    }
+
+    [Fact]
+    public async Task Assess_ALookupThatTimesOutOnItsOwn_IsAFallbackToTheLocalJoin_NotAFailure()
+    {
+        var remote = new FakeRemoteJoin { Throw = new OperationCanceledException() };
+        await using var h = new Harness(_options, remote);
+        await h.AddClipAsync("s1", "rec-a", [1], "audio/webm");
+        h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+
+        var evidence = await h.Service.AssessAsync(Request(Segments(("candidate", "Hello, I am the doctor.", "rec-a"))), default);
+
+        Assert.True(evidence.IsAudio);
+        Assert.Single(h.Transcoder.Clips);
+    }
+
+    [Fact]
+    public async Task Assess_PicksTheSameClipsInTheSameOrder_WhetherOrNotAHelperIsConsulted()
+    {
+        // The remote precompute reads the clips through the SAME query as the audio stage, so its key can match.
+        var remote = new FakeRemoteJoin();
+        await using var h = new Harness(_options, remote);
+        await h.AddClipAsync("s1", "rec-1", [1], "audio/webm", sha256: new string('1', 64));
+        await h.AddClipAsync("s1", "rec-2", [2], "audio/webm", sha256: new string('2', 64));
+        await h.AddClipAsync("s1", "rec-old", [9], "audio/webm", archived: true, sha256: new string('9', 64));
+        await h.AddClipAsync("s1", "rec-warm", [8], "audio/webm", warmup: true, sha256: new string('8', 64));
+        h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+
+        await h.Service.AssessAsync(Request(Segments(
+            ("candidate", "Hello, I am the doctor.", "rec-2"),
+            ("candidate", "How are you feeling?", "rec-1"))), default);
+
+        Assert.Equal(new[] { new string('2', 64), new string('1', 64) }, Assert.Single(remote.Serves).Shas);
+    }
+
     // ── Builders ───────────────────────────────────────────────────────────────────────────
 
     private static SpeakingAudioAssessRequest Request(string segmentsJson, bool grant = false)
@@ -784,11 +902,11 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
     {
         private readonly string _root = Path.Combine(Path.GetTempPath(), $"oet-audio-evidence-{Guid.NewGuid():N}");
 
-        public Harness(DbContextOptions<LearnerDbContext> options)
+        public Harness(DbContextOptions<LearnerDbContext> options, IRemoteSpeakingJoin? remoteJoin = null)
         {
             Db = new LearnerDbContext(options);
             Storage = new LocalFileStorage(new TestHostEnvironment(_root), Options.Create(new StorageOptions { LocalRootPath = _root }));
-            Service = new SpeakingAudioEvidenceService(Db, Storage, Transcoder, Gateway);
+            Service = new SpeakingAudioEvidenceService(Db, Storage, Transcoder, Gateway, remoteJoin: remoteJoin);
         }
 
         public LearnerDbContext Db { get; }
@@ -799,7 +917,7 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
 
         public async Task AddClipAsync(
             string sessionId, string recordingId, byte[] bytes, string mimeType,
-            bool archived = false, bool warmup = false, bool writeBlob = true)
+            bool archived = false, bool warmup = false, bool writeBlob = true, string? sha256 = null)
         {
             var key = $"audio/{recordingId}.bin";
             if (writeBlob) await Storage.WriteAsync(key, new MemoryStream(bytes), default);
@@ -822,7 +940,7 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
                 Source = SpeakingRecordingSource.ConversationHub,
                 DurationSeconds = 5,
                 SizeBytes = bytes.Length,
-                Sha256 = new string('a', 64),
+                Sha256 = sha256 ?? new string('a', 64),
                 MimeType = mimeType,
                 IsArchived = archived,
                 IsWarmup = warmup,
@@ -899,5 +1017,32 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
 
             return Join with { ClipCount = clips.Count };
         }
+    }
+
+    private sealed class FakeRemoteJoin : IRemoteSpeakingJoin
+    {
+        public SpeakingAudioJoin? Serve { get; set; }
+        public Exception? Throw { get; set; }
+        public CancellationTokenSource? CancelOnServe { get; set; }
+        public List<(string SessionId, IReadOnlyList<string> Shas)> Serves { get; } = new();
+
+        public Task<SpeakingAudioJoin?> TryServeAsync(string sessionId, IReadOnlyList<string> clipSha256s, CancellationToken ct)
+        {
+            Serves.Add((sessionId, clipSha256s.ToList()));
+            if (CancelOnServe is not null)
+            {
+                // The caller gives up while the lookup is in flight.
+                CancelOnServe.Cancel();
+                ct.ThrowIfCancellationRequested();
+            }
+
+            if (Throw is { } failure) throw failure;
+            return Task.FromResult(Serve);
+        }
+
+        public Task<SpeakingJoinEnqueue> EnqueueForSessionAsync(string sessionId, CancellationToken ct)
+            => Task.FromResult(SpeakingJoinEnqueue.Disabled);
+
+        public Task DeleteForSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct) => Task.CompletedTask;
     }
 }

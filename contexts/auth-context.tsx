@@ -30,7 +30,7 @@ import type {
   SignInResult,
   UserRole,
 } from '@/lib/types/auth';
-import { initializeAnalyticsTransport } from '@/lib/analytics';
+import { flushAnalytics, initializeAnalyticsTransport } from '@/lib/analytics';
 import { resetAllStores } from '@/lib/stores/registry';
 import { clearOfflineEncryptionKey, setOfflineEncryptionKey } from '@/lib/mobile/offline-sync';
 import { getQueryClient } from '@/components/providers/query-provider';
@@ -75,6 +75,9 @@ export interface AuthContextValue extends AuthState {
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
+
+/** The longest sign-out waits for queued analytics to be sent before it ends the session anyway. */
+const SIGN_OUT_ANALYTICS_FLUSH_MAX_WAIT_MS = 1500;
 
 function toMessage(error: unknown): string {
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
@@ -226,6 +229,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     async signOut() {
       setState((current) => ({ ...current, loading: true, error: null }));
+
+      // Analytics is batched; send what is queued while the session can still authenticate it.
+      // Waited for (briefly), because a batch that goes out after the sign-out call has no token
+      // left to send with. A slow network never holds the sign-out for more than this.
+      await flushAnalytics(SIGN_OUT_ANALYTICS_FLUSH_MAX_WAIT_MS);
 
       try {
         await signOutFromBackend();

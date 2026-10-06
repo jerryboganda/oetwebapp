@@ -104,7 +104,7 @@ Anthropic ephemeral cache on persona system block + rulebook context block. Mult
 
 1. Add provider account row via admin UI.
 2. Re-point feature route → new provider at 10% rollout.
-3. Monitor latency + error rate (Grafana `speaking-quality` dashboard).
+3. Monitor latency + error rate (admin AI usage pages and Sentry; the old Grafana `speaking-quality` dashboard queried metrics nothing emitted and was removed, see `ops/README.md`).
 4. Promote / rollback.
 
 ## TTS + ASR

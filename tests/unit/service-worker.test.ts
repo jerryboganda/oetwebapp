@@ -46,4 +46,25 @@ describe('service worker', () => {
   it('still serves other API reads network-first', () => {
     expect(apiGet('/api/backend/v1/writing/my-work')).toHaveBeenCalledTimes(1);
   });
+
+  it('never intercepts SignalR hub traffic, so long-polls are not cached one entry per poll', () => {
+    // Every long-poll URL is unique (`&_=<timestamp>`), so a cached poll is never reused.
+    expect(apiGet('/api/backend/v1/notifications/hub?id=abc&_=1767225600000')).not.toHaveBeenCalled();
+    expect(apiGet('/api/backend/v1/ai-assistant/hub?id=abc&_=1767225600001')).not.toHaveBeenCalled();
+    expect(apiGet('/api/backend/v1/conversations/hub')).not.toHaveBeenCalled();
+    expect(apiGet('/api/backend/v1/speaking/live-rooms/hub?id=abc')).not.toHaveBeenCalled();
+    // Direct-to-API hubs (Writing, mock live room) are matched on any origin.
+    expect(apiGet('/v1/mocks/live-room/hub')).not.toHaveBeenCalled();
+    expect(apiGet('/hubs/writing-submissions')).not.toHaveBeenCalled();
+  });
+
+  it('only treats a whole path segment named hub as a SignalR hub', () => {
+    expect(apiGet('/api/backend/v1/github/hubspot-sync')).toHaveBeenCalledTimes(1);
+    expect(apiGet('/api/backend/v1/hubble/status')).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a fresh cache version so v7 hub long-poll entries are purged on activate', () => {
+    const source = readFileSync(path.join(process.cwd(), 'public/sw.js'), 'utf8');
+    expect(source).toContain("const CACHE_VERSION = 'oet-v8';");
+  });
 });

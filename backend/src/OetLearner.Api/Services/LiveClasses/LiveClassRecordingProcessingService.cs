@@ -28,6 +28,15 @@ namespace OetLearner.Api.Services.LiveClasses;
 /// retry/backoff policy and finally marks the recording <c>Failed</c> when
 /// retries are exhausted (see <c>MarkResourceFailedAfterFinalRetryAsync</c>).
 /// </para>
+///
+/// <para>
+/// Recordings larger than <see cref="MaxTranscriptionAttachmentBytes"/> cannot be sent to the gateway in one call. When a remote
+/// helper has extracted them into mp3 chunks (<c>media.audio-extract</c>, a chunk manifest on the recording row), the transcribe
+/// stage makes ONE gateway call per chunk — each with its own <c>AiUsageRecord</c>, exactly like the single call — and joins the
+/// transcripts in order. Every chunk transcript is saved as soon as it exists, so a retry resumes instead of paying again, and the
+/// chunk audio is deleted once the recording is fully transcribed. Without a manifest (small recording, flag off, no node) nothing
+/// changes: the single-call path runs, and an oversize recording fails exactly as before.
+/// </para>
 /// </summary>
 public sealed class LiveClassRecordingProcessingService(
     LearnerDbContext db,
@@ -36,10 +45,31 @@ public sealed class LiveClassRecordingProcessingService(
     IRuntimeSettingsProvider runtimeSettings,
     TimeProvider timeProvider,
     ILogger<LiveClassRecordingProcessingService> logger,
-    OetLearner.Api.Services.AiAssistant.Indexing.IEmbeddingService? embeddingService = null)
+    OetLearner.Api.Services.AiAssistant.Indexing.IEmbeddingService? embeddingService = null,
+    IRemoteAudioExtraction? remoteAudio = null,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.RemoteJobsOptions>? remoteJobsOptions = null)
 {
     private const long MaxTranscriptionAttachmentBytes = 24L * 1024L * 1024L;
     private const int TranscriptionReadBufferBytes = 81920;
+
+    private readonly TimeSpan? _chunkRunBudget;
+
+    /// <summary>
+    /// Wall-clock budget of one transcribe run over chunks (<c>RemoteJobs:LiveClassChunkRunBudgetMinutes</c>, a few minutes by default).
+    /// A job that ran this long queues a continuation and finishes. The background processor runs its jobs one after another, so one
+    /// run holds that process's whole pipeline (and every job it already claimed) for as long as it lasts: a long budget would stall
+    /// the other jobs, and running into the processor's 20-minute execution ceiling would fail the recording for being long. The
+    /// continuation is free, because every chunk transcript is saved as soon as it exists.
+    /// </summary>
+    internal TimeSpan ChunkRunBudget
+    {
+        get => _chunkRunBudget
+            ?? TimeSpan.FromMinutes((remoteJobsOptions?.Value ?? new OetLearner.Api.Configuration.RemoteJobsOptions()).Normalized().LiveClassChunkRunBudgetMinutes);
+        init => _chunkRunBudget = value;
+    }
+
+    /// <summary>How long a recording waits between looks at its (remote) audio extraction.</summary>
+    internal TimeSpan RemoteExtractionPollDelay { get; init; } = TimeSpan.FromSeconds(45);
 
     // The cached system prompt from the plan §14.3. Stays static so the
     // model's prompt-cache hit-rate stays high — every summary on every
@@ -125,90 +155,16 @@ public sealed class LiveClassRecordingProcessingService(
         {
             // Whisper/native-audio path — call the AI gateway with the stored
             // recording bytes so ASR-capable providers can inspect the media.
-            var prompt = aiGateway.BuildGroundedPrompt(new AiGroundingContext
+            // A recording too large for one call is transcribed chunk by chunk
+            // (one gateway call per chunk) once a helper has extracted the chunks.
+            var outcome = await TranscribeRecordingAudioAsync(recording, ct);
+            if (outcome.IsPending)
             {
-                Kind = RuleKind.Grammar,
-                Profession = ExamProfession.Medicine,
-                Task = AiTaskMode.Coach,
-            });
-
-            var audioKey = !string.IsNullOrWhiteSpace(recording.S3AudioKey)
-                ? recording.S3AudioKey
-                : recording.S3VideoKey;
-            if (string.IsNullOrWhiteSpace(audioKey))
-            {
-                throw new InvalidOperationException($"Recording {recordingId} has no stored audio or video file to transcribe.");
+                // A continuation job is already queued: Summarize waits for the real transcript.
+                return;
             }
 
-            var audioRead = await fileStorage.OpenReadWithMetadataAsync(audioKey, ct);
-            await using var audioStream = audioRead.Stream;
-            var length = audioRead.Length;
-            if (length > MaxTranscriptionAttachmentBytes)
-            {
-                throw new InvalidOperationException(
-                    $"Recording {recordingId} is {length} bytes, which exceeds the {MaxTranscriptionAttachmentBytes} byte transcription upload limit.");
-            }
-            if (length <= 0)
-            {
-                throw new InvalidOperationException($"Recording {recordingId} storage object is empty and cannot be transcribed.");
-            }
-
-            // The gateway attachment contract currently requires byte[]. Read
-            // once into an exact-sized buffer instead of growing a MemoryStream
-            // and duplicating it with ToArray().
-            var audioBytes = GC.AllocateUninitializedArray<byte>(checked((int)length));
-            var offset = 0;
-            while (offset < audioBytes.Length)
-            {
-                var requested = Math.Min(
-                    TranscriptionReadBufferBytes, audioBytes.Length - offset);
-                var read = await audioStream.ReadAsync(
-                    audioBytes.AsMemory(offset, requested), ct);
-                if (read == 0)
-                {
-                    throw new EndOfStreamException(
-                        $"Recording {recordingId} ended after {offset} of {length} bytes.");
-                }
-                offset += read;
-            }
-
-            var userMessage = "Transcribe the attached OET class recording. Return plain text only.";
-
-            try
-            {
-                var result = await aiGateway.CompleteAsync(new AiGatewayRequest
-                {
-                    Prompt = prompt,
-                    UserInput = userMessage,
-                    FeatureCode = AiFeatureCodes.ClassRecordingTranscribe,
-                    UserId = null,
-                    Temperature = 0.0,
-                    AudioAttachments = new[]
-                    {
-                        new AiProviderAudioAttachment
-                        {
-                            MimeType = GuessAudioMimeType(audioKey),
-                            Data = audioBytes,
-                        },
-                    },
-                }, ct);
-
-                var transcript = result.Completion?.Trim();
-                if (string.IsNullOrWhiteSpace(transcript))
-                {
-                    logger.LogWarning("ProcessTranscribeAsync: empty transcript from gateway for recording {RecordingId}.", recordingId);
-                    recording.TranscriptText = "[Transcript empty — Whisper returned no text]";
-                }
-                else
-                {
-                    recording.TranscriptText = transcript;
-                }
-            }
-            catch (PromptNotGroundedException pex)
-            {
-                logger.LogError(pex, "ProcessTranscribeAsync: prompt-not-grounded refusal for recording {RecordingId}.", recordingId);
-                throw;
-            }
+            recording.TranscriptText = outcome.Transcript;
         }
 
         // Queue next stage.
@@ -219,6 +175,325 @@ public sealed class LiveClassRecordingProcessingService(
         logger.LogInformation(
             "ProcessTranscribeAsync: recording {RecordingId} transcribed ({Length} chars) — Summarize queued.",
             recordingId, recording.TranscriptText?.Length ?? 0);
+    }
+
+    /// <summary>Where the audio stage stands: a finished transcript, or "come back later" (a continuation job is queued).</summary>
+    private sealed record AudioTranscription(string? Transcript, bool IsPending)
+    {
+        public static AudioTranscription Done(string transcript) => new(transcript, false);
+
+        public static readonly AudioTranscription Pending = new(null, true);
+    }
+
+    /// <summary>Thrown when the extracted chunks can no longer be used (blob gone, size or hash changed): the manifest is dropped and the audio is extracted again.</summary>
+    private sealed class AudioChunksUnavailableException(string message) : Exception(message);
+
+    private async Task<AudioTranscription> TranscribeRecordingAudioAsync(LiveClassRecording recording, CancellationToken ct)
+    {
+        var recordingId = recording.Id;
+        var prompt = aiGateway.BuildGroundedPrompt(new AiGroundingContext
+        {
+            Kind = RuleKind.Grammar,
+            Profession = ExamProfession.Medicine,
+            Task = AiTaskMode.Coach,
+        });
+
+        var audioKey = !string.IsNullOrWhiteSpace(recording.S3AudioKey)
+            ? recording.S3AudioKey
+            : recording.S3VideoKey;
+        if (string.IsNullOrWhiteSpace(audioKey))
+        {
+            throw new InvalidOperationException($"Recording {recordingId} has no stored audio or video file to transcribe.");
+        }
+
+        // A helper already extracted this recording into chunks: one gateway call per chunk.
+        var manifest = LiveClassAudioManifest.TryParse(recording.AudioChunksJson);
+        if (manifest is not null)
+        {
+            try
+            {
+                return await TranscribeChunksAsync(recording, manifest, prompt, ct);
+            }
+            catch (AudioChunksUnavailableException ex)
+            {
+                // The chunks (or their integrity) are gone: forget the manifest and extract again below.
+                logger.LogWarning(ex, "ProcessTranscribeAsync: extracted chunks of recording {RecordingId} are unusable; extracting again.", recordingId);
+                recording.AudioChunksJson = null;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(recording.AudioChunksJson))
+        {
+            // Not a well-formed manifest: never trust it, never read a key from it.
+            logger.LogWarning("ProcessTranscribeAsync: recording {RecordingId} carries an unreadable chunk manifest; ignoring it.", recordingId);
+            recording.AudioChunksJson = null;
+            await db.SaveChangesAsync(ct);
+        }
+
+        var audioRead = await fileStorage.OpenReadWithMetadataAsync(audioKey, ct);
+        long length;
+        byte[]? audioBytes = null;
+        await using (var audioStream = audioRead.Stream)
+        {
+            length = audioRead.Length;
+            if (length > 0 && length <= MaxTranscriptionAttachmentBytes)
+            {
+                audioBytes = await ReadExactAsync(audioStream, length, $"Recording {recordingId}", ct);
+            }
+        }
+
+        if (length > MaxTranscriptionAttachmentBytes)
+        {
+            return await HandleOversizeRecordingAsync(recording, audioKey, length, ct);
+        }
+        if (length <= 0)
+        {
+            throw new InvalidOperationException($"Recording {recordingId} storage object is empty and cannot be transcribed.");
+        }
+
+        var transcript = await CompleteTranscriptionAsync(
+            prompt,
+            audioBytes!,
+            GuessAudioMimeType(audioKey),
+            "Transcribe the attached OET class recording. Return plain text only.",
+            recordingId,
+            ct);
+        if (string.IsNullOrWhiteSpace(transcript))
+        {
+            logger.LogWarning("ProcessTranscribeAsync: empty transcript from gateway for recording {RecordingId}.", recordingId);
+            return AudioTranscription.Done("[Transcript empty — Whisper returned no text]");
+        }
+
+        return AudioTranscription.Done(transcript);
+    }
+
+    /// <summary>
+    /// The gateway attachment contract requires byte[]: read once into an exact-sized buffer instead of growing a MemoryStream and
+    /// duplicating it with ToArray().
+    /// </summary>
+    private static async Task<byte[]> ReadExactAsync(Stream stream, long length, string description, CancellationToken ct)
+    {
+        var bytes = GC.AllocateUninitializedArray<byte>(checked((int)length));
+        var offset = 0;
+        while (offset < bytes.Length)
+        {
+            var requested = Math.Min(TranscriptionReadBufferBytes, bytes.Length - offset);
+            var read = await stream.ReadAsync(bytes.AsMemory(offset, requested), ct);
+            if (read == 0)
+            {
+                throw new EndOfStreamException($"{description} ended after {offset} of {length} bytes.");
+            }
+
+            offset += read;
+        }
+
+        return bytes;
+    }
+
+    /// <summary>One transcription call through the AI gateway (the coordinator writes the AiUsageRecord for the physical call).</summary>
+    private async Task<string> CompleteTranscriptionAsync(
+        AiGroundedPrompt prompt,
+        byte[] audioBytes,
+        string mimeType,
+        string userMessage,
+        string recordingId,
+        CancellationToken ct)
+    {
+        try
+        {
+            var result = await aiGateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = prompt,
+                UserInput = userMessage,
+                FeatureCode = AiFeatureCodes.ClassRecordingTranscribe,
+                UserId = null,
+                Temperature = 0.0,
+                AudioAttachments = new[]
+                {
+                    new AiProviderAudioAttachment
+                    {
+                        MimeType = mimeType,
+                        Data = audioBytes,
+                    },
+                },
+            }, ct);
+
+            return result.Completion?.Trim() ?? string.Empty;
+        }
+        catch (PromptNotGroundedException pex)
+        {
+            logger.LogError(pex, "ProcessTranscribeAsync: prompt-not-grounded refusal for recording {RecordingId}.", recordingId);
+            throw;
+        }
+    }
+
+    // ───────────────────────────────────────────────────────────────────
+    // Oversize recordings — remote audio extraction, then one call per chunk
+    // ───────────────────────────────────────────────────────────────────
+
+    private async Task<AudioTranscription> HandleOversizeRecordingAsync(
+        LiveClassRecording recording,
+        string audioKey,
+        long length,
+        CancellationToken ct)
+    {
+        var recordingId = recording.Id;
+        var tooLarge = new InvalidOperationException(
+            $"Recording {recordingId} is {length} bytes, which exceeds the {MaxTranscriptionAttachmentBytes} byte transcription upload limit.");
+        if (remoteAudio is null) throw tooLarge;
+
+        var plan = await remoteAudio.PlanAsync(recordingId, audioKey, length, ct);
+        switch (plan.Action)
+        {
+            case AudioExtractAction.Pending:
+                logger.LogInformation(
+                    "ProcessTranscribeAsync: recording {RecordingId} is {Length} bytes; its audio is being extracted by a remote helper — retrying shortly.",
+                    recordingId, length);
+                await QueueContinuationAsync(recordingId, RemoteExtractionPollDelay, ct);
+                return AudioTranscription.Pending;
+
+            case AudioExtractAction.Failed:
+                throw new InvalidOperationException($"Recording {recordingId} cannot be transcribed: {plan.Note}");
+
+            default:
+                // No remote path applies: an oversize recording fails exactly as it always did.
+                throw tooLarge;
+        }
+    }
+
+    private async Task<AudioTranscription> TranscribeChunksAsync(
+        LiveClassRecording recording,
+        LiveClassAudioManifest manifest,
+        AiGroundedPrompt prompt,
+        CancellationToken ct)
+    {
+        var recordingId = recording.Id;
+        var started = timeProvider.GetUtcNow();
+        var budget = ChunkRunBudget;
+        var ordered = manifest.Chunks.OrderBy(chunk => chunk.Index).ToList();
+
+        foreach (var chunk in ordered)
+        {
+            // Already transcribed by an earlier run: never pay for it twice.
+            if (chunk.Transcript is not null) continue;
+
+            if (manifest.AudioDeleted)
+            {
+                throw new AudioChunksUnavailableException("The chunk audio was deleted before every chunk had a transcript.");
+            }
+
+            // A long recording must neither stall the single-threaded background processor nor run into its execution ceiling:
+            // finish this run, continue in the next (the transcripts so far are already saved).
+            if (timeProvider.GetUtcNow() - started >= budget)
+            {
+                logger.LogInformation(
+                    "ProcessTranscribeAsync: recording {RecordingId} chunk run budget reached at chunk {Index}/{Count}; continuing in a new job.",
+                    recordingId, chunk.Index, ordered.Count);
+                await QueueContinuationAsync(recordingId, TimeSpan.Zero, ct);
+                return AudioTranscription.Pending;
+            }
+
+            var bytes = await ReadChunkAsync(chunk, ct);
+            var userMessage =
+                $"Transcribe the attached audio, which is part {chunk.Index + 1} of {ordered.Count} of an OET class recording. "
+                + "Transcribe only this audio. Return plain text only.";
+            var transcript = await CompleteTranscriptionAsync(prompt, bytes, LiveClassAudioManifest.MimeType, userMessage, recordingId, ct);
+
+            // Saved per chunk: a failure later in the recording resumes here instead of paying for this chunk again.
+            chunk.Transcript = transcript;
+            recording.AudioChunksJson = manifest.ToJson();
+            await db.SaveChangesAsync(ct);
+        }
+
+        var joined = manifest.JoinTranscripts();
+        if (string.IsNullOrWhiteSpace(joined))
+        {
+            logger.LogWarning("ProcessTranscribeAsync: empty transcript from gateway for recording {RecordingId}.", recordingId);
+            joined = "[Transcript empty — Whisper returned no text]";
+        }
+
+        // Persist the transcript BEFORE the chunk audio is deleted: if the delete step fails the transcript is not lost, and a
+        // re-run finds every chunk transcribed and only retries the delete.
+        recording.TranscriptText = joined;
+        await db.SaveChangesAsync(ct);
+        await DeleteChunkAudioAsync(recording, manifest, ct);
+
+        return AudioTranscription.Done(joined);
+    }
+
+    /// <summary>Reads one chunk and verifies it is the object the extraction produced (size and SHA-256).</summary>
+    private async Task<byte[]> ReadChunkAsync(LiveClassAudioChunk chunk, CancellationToken ct)
+    {
+        byte[] bytes;
+        try
+        {
+            var read = await fileStorage.OpenReadWithMetadataAsync(chunk.StorageKey, ct);
+            await using var stream = read.Stream;
+            if (read.Length != chunk.SizeBytes || read.Length <= 0 || read.Length > MaxTranscriptionAttachmentBytes)
+            {
+                throw new AudioChunksUnavailableException($"Chunk {chunk.Index} changed size since it was extracted.");
+            }
+
+            bytes = await ReadExactAsync(stream, read.Length, $"Chunk {chunk.Index}", ct);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException or KeyNotFoundException
+                                       || ex is Amazon.S3.AmazonS3Exception { StatusCode: System.Net.HttpStatusCode.NotFound })
+        {
+            throw new AudioChunksUnavailableException($"Chunk {chunk.Index} is no longer in storage.");
+        }
+
+        var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+        if (!string.Equals(sha, chunk.Sha256, StringComparison.Ordinal))
+        {
+            throw new AudioChunksUnavailableException($"Chunk {chunk.Index} no longer matches its recorded SHA-256.");
+        }
+
+        return bytes;
+    }
+
+    /// <summary>Delete-on-complete: the learner voices in the chunk audio are not kept once the recording is transcribed (the transcripts stay).</summary>
+    private async Task DeleteChunkAudioAsync(LiveClassRecording recording, LiveClassAudioManifest manifest, CancellationToken ct)
+    {
+        if (manifest.AudioDeleted) return;
+
+        var allGone = true;
+        foreach (var chunk in manifest.Chunks)
+        {
+            try
+            {
+                await fileStorage.DeleteAsync(chunk.StorageKey, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // The retention sweep of the remote-job outputs removes whatever is left; the transcript is already saved,
+                // so a failed delete never fails the stage.
+                allGone = false;
+                logger.LogWarning(ex, "ProcessTranscribeAsync: could not delete chunk {Index} of recording {RecordingId}.", chunk.Index, recording.Id);
+            }
+        }
+
+        if (!allGone) return;
+
+        manifest.AudioDeleted = true;
+        recording.AudioChunksJson = manifest.ToJson();
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Queues another transcribe run for the recording (once: a run already waiting is enough).</summary>
+    private async Task QueueContinuationAsync(string recordingId, TimeSpan delay, CancellationToken ct)
+    {
+        var alreadyWaiting = await db.BackgroundJobs.AnyAsync(
+            job => job.Type == JobType.LiveClassRecordingTranscribe
+                && job.ResourceId == recordingId
+                && job.State == AsyncState.Queued,
+            ct);
+        if (!alreadyWaiting)
+        {
+            var now = timeProvider.GetUtcNow();
+            QueueJob(JobType.LiveClassRecordingTranscribe, recordingId, now, now + delay);
+        }
+
+        await db.SaveChangesAsync(ct);
     }
 
     private static string GuessAudioMimeType(string key)
@@ -573,7 +848,8 @@ public sealed class LiveClassRecordingProcessingService(
         return chunks;
     }
 
-    private static bool IsPlaceholderTranscript(string text)
+    /// <summary>True for the bracketed stand-ins this pipeline writes when there is no real transcript (also read by the extraction applier).</summary>
+    internal static bool IsPlaceholderTranscript(string text)
         => text.StartsWith("[Transcript", StringComparison.Ordinal);
 
     private static ParsedSummary? TryParseSummaryJson(string? completion)
@@ -639,7 +915,7 @@ public sealed class LiveClassRecordingProcessingService(
         await db.SaveChangesAsync(ct);
     }
 
-    private void QueueJob(JobType type, string resourceId, DateTimeOffset now)
+    private void QueueJob(JobType type, string resourceId, DateTimeOffset now, DateTimeOffset? availableAt = null)
     {
         db.BackgroundJobs.Add(new BackgroundJobItem
         {
@@ -647,7 +923,7 @@ public sealed class LiveClassRecordingProcessingService(
             Type = type,
             ResourceId = resourceId,
             State = AsyncState.Queued,
-            AvailableAt = now,
+            AvailableAt = availableAt ?? now,
             CreatedAt = now,
         });
     }

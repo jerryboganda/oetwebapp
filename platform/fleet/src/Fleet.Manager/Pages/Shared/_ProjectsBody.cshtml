@@ -1,0 +1,93 @@
+@model Fleet.Manager.Dashboard.ProjectsView
+@{
+    var p = Model;
+    var primary = p.Primary;
+    var oet = p.Oet;
+}
+<div data-live-state="projects">
+    <section class="panel" aria-labelledby="prim-h">
+        <h2 id="prim-h">Primary VPS (shared by every project on it)</h2>
+        <dl class="kv">
+            <dt>CPU pressure (10 s average)</dt>
+            <dd>@(primary.PressureReadable ? Fmt.PercentPoints(primary.CpuSomeAvg10) : "unreadable") <span class="sub">limit @Fleet.Core.Placement.PrimaryHeadroom.CpuSomeAvg10Max</span></dd>
+            <dt>Memory pressure (10 s average)</dt>
+            <dd>@(primary.PressureReadable ? Fmt.PercentPoints(primary.MemorySomeAvg10) : "unreadable") <span class="sub">limit @Fleet.Core.Placement.PrimaryHeadroom.MemorySomeAvg10Max</span></dd>
+            <dt>Memory in use</dt>
+            <dd>@(primary.PressureReadable ? Fmt.PercentPoints(primary.MemoryWorkingSetPct) : "unreadable") <span class="sub">limit @Fleet.Core.Placement.PrimaryHeadroom.WorkingSetMaxPct</span></dd>
+            <dt>Headroom for local work</dt>
+            <dd><span class="badge @(primary.HasHeadroom ? "ok" : "warn")">@(primary.HasHeadroom ? "Yes" : "No")</span> <span class="sub">unreadable figures count as no headroom</span></dd>
+        </dl>
+        <p class="hint">These are host-wide figures read from the kernel. The console cannot split them by project: it has no container runtime access on purpose, so it never sees the other projects' containers.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="proj-h">
+        <h2 id="proj-h">Projects on the primary</h2>
+        <div class="table-wrap" role="region" aria-label="Projects" tabindex="0">
+            <table class="data">
+                <caption class="sr-only">Projects hosted on the primary and what the console knows about each</caption>
+                <thead>
+                <tr>
+                    <th scope="col">Project</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">What the console knows</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var project in p.Projects)
+                {
+                    <tr>
+                        <th scope="row">@project.Name</th>
+                        <td>@project.Role</td>
+                        <td><span class="badge @Fmt.BadgeClass(project.Status)">@(project.Status == "ok" ? "Healthy" : project.Status == "bad" ? "Problem" : "Unknown")</span></td>
+                        <td>@project.Detail</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel" aria-labelledby="oet-h">
+        <h2 id="oet-h">OET integration</h2>
+        <dl class="kv">
+            <dt>OET API</dt>
+            <dd>
+                <span class="badge @(oet.ApiReachable ? "ok" : "bad")">@(oet.ApiReachable ? "reachable" : "not reachable")</span>
+                <span class="sub">polled @Fmt.Ago(oet.LastPollAt, p.Now)@(oet.ApiError is null ? string.Empty : ", last error " + oet.ApiError)</span>
+            </dd>
+            <dt>Fleet service credential</dt>
+            <dd><span class="badge @(oet.CredentialProvisioned ? "ok" : "bad")">@(oet.CredentialProvisioned ? "provisioned" : "missing")</span> <span class="sub">a secret file; never shown</span></dd>
+            <dt>Service plane</dt>
+            <dd>
+                @if (oet.StatusFetched)
+                {
+                    <span>protocol @(oet.ProtocolCurrent?.ToString() ?? "?"), minimum @(oet.ProtocolMinimum?.ToString() ?? "?")</span>
+                }
+                else
+                {
+                    <span class="muted">not available (@Fmt.OrDash(oet.StatusError))</span>
+                }
+            </dd>
+            <dt>Job kinds the API knows</dt>
+            <dd>
+                @if (oet.Kinds.Count == 0)
+                {
+                    <span class="muted">none reported</span>
+                }
+                @foreach (var kind in oet.Kinds)
+                {
+                    <span class="tag"><code>@kind</code></span>
+                }
+            </dd>
+            <dt>Helpers registered</dt>
+            <dd>@oet.NodesRegistered registered, @oet.NodesActive active, @oet.NodesOnline online</dd>
+            <dt>Image releases</dt>
+            <dd>current <code>@(oet.CurrentRelease ?? "none approved")</code>, @oet.UnapprovedReleases waiting for approval</dd>
+            <dt>CI sync endpoint</dt>
+            <dd><span class="badge @(oet.SyncEndpointEnabled ? "ok" : "muted")">@(oet.SyncEndpointEnabled ? "enabled" : "off")</span> <span class="sub">exists only while its token file is present</span></dd>
+            <dt>Metrics scrape token</dt>
+            <dd><span class="badge @(oet.MetricsTokenPresent ? "ok" : "muted")">@(oet.MetricsTokenPresent ? "present" : "absent")</span> <span class="sub">without it only an owner session can read /metrics</span></dd>
+        </dl>
+    </section>
+</div>

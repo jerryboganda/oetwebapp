@@ -11,7 +11,8 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 | POST | `/v1/speaking/sessions` | Create session. Mode `ai_exam` is refused (409 `speaking_session_exam_managed`): exam cards are created by their exam, which is what takes their credit hold ([state-machines.md](state-machines.md#credits-ai-exam-and-practice-card)) |
 | GET | `/v1/speaking/sessions/{id}` | Session detail (owner); carries `liveVoiceAvailable` (at least one live voice provider usable, else the recorder fallback) and `rolePlayEndsAt` (the role-play **deadline**, null until it starts) |
 | POST | `/v1/speaking/sessions/{id}/start-warmup` | WarmUp transition |
-| POST | `/v1/speaking/sessions/{id}/finish-warmup` | WarmUp → Prep |
+| POST | `/v1/speaking/sessions/{id}/finish-warmup` | WarmUp → Prep. An AI practice card first passes the live-session admission gate: while the cap is full it answers 200 with the state still `warmup` and `admission {status:"waiting", position, queueLength, estimatedWaitSeconds, pollAfterSeconds}`, with no credit held and no clock started; the page repeats the call ([live-voice.md](live-voice.md#admission-control-live-session-cap-and-wait-queue)) |
+| POST | `/v1/speaking/sessions/{id}/leave-queue` | Leave the live AI session admission line: releases this card's **waiting** place at once (204; the card stays in warm-up; a no-op when not waiting; owner-checked) ([live-voice.md](live-voice.md#admission-control-live-session-cap-and-wait-queue)) |
 | POST | `/v1/speaking/sessions/{id}/start-roleplay` | Prep → Active; stamps `RolePlayStartedAt`, the anchor of every server deadline. Exam cards are timed by the exam clock: 409 `speaking_session_exam_managed` |
 | POST | `/v1/speaking/sessions/{id}/end` | Active → Finished (learner). The server also finishes an abandoned Active role-play at its hard stop, see [live-voice.md](live-voice.md#hard-duration-cap) |
 | POST | `/v1/speaking/sessions/{id}/submit` | Finished → submitted for marking (needs a recording or a transcript with words) |
@@ -80,6 +81,9 @@ Auth scopes: `LearnerOnly`, `ExpertOnly`, `AdminOnly` (+ granular admin permissi
 | POST | `/v1/admin/speaking/recordings/{id}/access` | Log + grant access |
 | GET | `/v1/admin/ai/live-voice/health` | Live voice provider health: catalog probe, circuit, last failure, counters (`AdminAiConfig`) |
 | POST | `/v1/admin/ai/live-voice/{provider}/reset` | Close a provider's circuit (`openai` \| `gemini`); audited as `LiveVoiceProviderCircuitReset` |
+| GET | `/v1/admin/ai/live-voice/admission` | Live AI session admission gate: effective cap, kill switch, admitted / waiting counts (`AdminAiConfig`) |
+| PUT | `/v1/admin/ai/live-voice/admission` | Set the live-session cap (1..10000) and/or the kill switch; audited as `SpeakingLiveAdmissionSettingsUpdated` ([live-voice.md](live-voice.md#admission-control-live-session-cap-and-wait-queue)) |
+| GET | `/v1/admin/ops/snapshot` | Read-only load snapshot: job queue depth by type, DB connections by application name, admission counts, remote-worker placeholder (`AdminSystemAdmin`) |
 
 ## Live voice notes
 

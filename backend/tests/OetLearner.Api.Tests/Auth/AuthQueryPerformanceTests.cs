@@ -107,6 +107,98 @@ public sealed class AuthQueryPerformanceTests : IAsyncLifetime
         }
     }
 
+    private async Task<AuthenticateResult> AuthenticateBearerAsync(string accessToken)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var httpContext = new DefaultHttpContext
+        {
+            RequestServices = scope.ServiceProvider
+        };
+        httpContext.Request.Headers.Authorization = $"Bearer {accessToken}";
+
+        return await scope.ServiceProvider
+            .GetRequiredService<IAuthenticationService>()
+            .AuthenticateAsync(httpContext, JwtBearerDefaults.AuthenticationScheme);
+    }
+
+    [Fact]
+    public async Task JwtValidation_ServesAnAcceptedAccountFromTheShortLivedCache_AndAnInProcessSuspensionEvictsItImmediately()
+    {
+        var issuedToken = await SeedScenarioAndIssueTokenAsync("learner-active");
+
+        // First request: a miss, the one fail-closed account-state command.
+        _factory.Commands.Clear();
+        var first = await AuthenticateBearerAsync(issuedToken.AccessToken);
+        Assert.True(first.Succeeded);
+        Assert.Single(_factory.Commands.ReaderCommands, c => c.Contains("ApplicationUserAccounts", StringComparison.Ordinal));
+
+        // Second request: served from the 15 s per-process cache, so no database command at all.
+        _factory.Commands.Clear();
+        var second = await AuthenticateBearerAsync(issuedToken.AccessToken);
+        Assert.True(second.Succeeded);
+        Assert.Empty(_factory.Commands.ReaderCommands);
+
+        // A tracked save of the learner row (admin suspension) evicts the entry: the very next
+        // request re-reads the account and is rejected, with no TTL wait.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var learner = await db.Users.SingleAsync(user => user.AuthAccountId == issuedToken.AuthAccountId);
+            learner.AccountStatus = "suspended";
+            await db.SaveChangesAsync();
+        }
+
+        _factory.Commands.Clear();
+        var third = await AuthenticateBearerAsync(issuedToken.AccessToken);
+        Assert.False(third.Succeeded);
+        Assert.Contains(_factory.Commands.ReaderCommands, c => c.Contains("ApplicationUserAccounts", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task JwtValidation_NeverServesACachedAcceptanceAfterTheLearnerAccessExpiry()
+    {
+        var issuedToken = await SeedScenarioAndIssueTokenAsync("learner-active");
+
+        // Warm-up: the first execution pays the query compilation, which must not eat the
+        // short expiry window below.
+        Assert.True((await AuthenticateBearerAsync(issuedToken.AccessToken)).Succeeded);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var learner = await db.Users.SingleAsync(user => user.AuthAccountId == issuedToken.AuthAccountId);
+            learner.AccessExpiresAt = DateTimeOffset.UtcNow.AddSeconds(3);
+            await db.SaveChangesAsync();
+        }
+
+        Assert.True((await AuthenticateBearerAsync(issuedToken.AccessToken)).Succeeded); // fills the cache, capped at the expiry
+        Assert.True((await AuthenticateBearerAsync(issuedToken.AccessToken)).Succeeded); // served from it
+
+        // Well inside the 15 s TTL, but past the access-expiry instant the entry is capped at.
+        await Task.Delay(TimeSpan.FromSeconds(3.5));
+
+        Assert.False((await AuthenticateBearerAsync(issuedToken.AccessToken)).Succeeded);
+    }
+
+    [Fact]
+    public async Task JwtValidation_AdmitsAReinstatedLearnerOnTheNextRequest()
+    {
+        var issuedToken = await SeedScenarioAndIssueTokenAsync("learner-suspended");
+
+        Assert.False((await AuthenticateBearerAsync(issuedToken.AccessToken)).Succeeded);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var learner = await db.Users.SingleAsync(user => user.AuthAccountId == issuedToken.AuthAccountId);
+            learner.AccountStatus = "active";
+            await db.SaveChangesAsync();
+        }
+
+        // A denial is never cached, so a reinstated learner is let back in at once.
+        Assert.True((await AuthenticateBearerAsync(issuedToken.AccessToken)).Succeeded);
+    }
+
     [Fact]
     public async Task LearnerSignIn_LoadsAuthenticationProfileOnce()
     {

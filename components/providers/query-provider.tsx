@@ -20,9 +20,23 @@ import { QueryClient, QueryClientProvider, isServer } from '@tanstack/react-quer
  *   back-navigation is instant.
  * - `refetchOnWindowFocus: false` — OET screens often have timers / audio
  *   streams; refetch-on-focus would cause user-visible flicker during practice.
- * - `retry: 1` — one gentle retry; long retry chains mask real backend errors
- *   (and AGENTS.md mandates visible error paths).
+ * - `retry: shouldRetryQuery` — one gentle retry; long retry chains mask real
+ *   backend errors (and AGENTS.md mandates visible error paths). It skips
+ *   failures `apiRequest` has already retried with backoff (see below).
  */
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 1) return false;
+  // `apiRequest` already retries transient failures (5xx/408/429/network) twice with
+  // jittered backoff and honours Retry-After. An ApiError marked retryable that still
+  // reaches a query is that budget spent: another round here made it up to six
+  // attempts and multiplied load exactly when the API was struggling. Everything else
+  // keeps its one retry (a 401 caught mid token-refresh recovers on it).
+  const alreadyRetried = error instanceof Error
+    && error.name === 'ApiError'
+    && (error as Error & { retryable?: boolean }).retryable === true;
+  return !alreadyRetried;
+}
+
 function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
@@ -30,7 +44,7 @@ function makeQueryClient(): QueryClient {
         staleTime: 30_000,
         gcTime: 5 * 60_000,
         refetchOnWindowFocus: false,
-        retry: 1,
+        retry: shouldRetryQuery,
       },
       mutations: {
         retry: 0,

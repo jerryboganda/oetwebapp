@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const {
   mockFetchConfig,
@@ -36,6 +37,9 @@ vi.mock('@/components/billing/paypal-expanded-checkout', () => ({
 
 vi.mock('@/lib/api/speaking-exams', () => ({ createSpeakingExamFromBooking: vi.fn() }));
 vi.mock('@/lib/analytics', () => ({ analytics: { track: vi.fn() } }));
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ user: { userId: 'learner-1' } }),
+}));
 
 vi.mock('@/lib/api', () => ({
   fetchPrivateSpeakingConfig: mockFetchConfig,
@@ -54,8 +58,18 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import PrivateSpeakingPage from './page';
+import { queryKeys } from '@/lib/query/keys';
 
 const UNAVAILABLE = 'Live tutor sessions are temporarily unavailable.';
+
+// The entitlement snapshot is the shared dashboard query, so the page needs a QueryClient (fresh per render).
+function renderPage(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  return render(
+    <QueryClientProvider client={client}>
+      <PrivateSpeakingPage />
+    </QueryClientProvider>,
+  );
+}
 
 const baseConfig = {
   isEnabled: true,
@@ -102,10 +116,51 @@ describe('Private speaking booking — tutor room availability (B9)', () => {
     mockCreateBooking.mockResolvedValue({ bookingId: 'psb-1', entitlementUsed: true, speakingSessionsRemaining: 0 });
   });
 
+  it('reuses the entitlement snapshot the dashboard already cached instead of fetching it again', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(queryKeys.dashboard.entitlement('learner-1'), { speakingSessionsRemaining: 2, speakingAddonsEnabled: true });
+
+    renderPage(client);
+
+    expect(await screen.findByRole('combobox')).toBeInTheDocument();
+    expect(mockFetchEntitlement).not.toHaveBeenCalled();
+  });
+
+  it('writes the new balance into the shared snapshot and refetches it after a booking', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(queryKeys.dashboard.entitlement('learner-1'), { speakingSessionsRemaining: 1, speakingAddonsEnabled: true });
+    // The refetch stays pending, so what the cache holds right after the booking is the written balance.
+    mockFetchEntitlement.mockImplementation(() => new Promise(() => undefined));
+    const user = userEvent.setup();
+    renderPage(client);
+
+    await user.selectOptions(await screen.findByRole('combobox'), 'any');
+    await user.click(await screen.findByRole('button', { name: /09:00/ }));
+    await user.click(screen.getByRole('button', { name: 'Use Session Credit & Book' }));
+
+    await waitFor(() => expect(mockCreateBooking).toHaveBeenCalled());
+    await waitFor(() => expect(client.getQueryData(queryKeys.dashboard.entitlement('learner-1'))).toEqual(
+      expect.objectContaining({ speakingSessionsRemaining: 0, speakingAddonsEnabled: true }),
+    ));
+    // Marked stale and fetched again, so the two-minute cache cannot keep the old count on screen.
+    await waitFor(() => expect(mockFetchEntitlement).toHaveBeenCalledTimes(1));
+  });
+
+  it('hides slot browsing for a learner whose snapshot says they cannot book a tutor', async () => {
+    mockFetchEntitlement.mockResolvedValue({ speakingSessionsRemaining: 0, speakingAddonsEnabled: false });
+
+    renderPage();
+
+    expect(await screen.findByTestId('live-tutor-ineligible')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Browse Slots' })).not.toBeInTheDocument();
+    expect(mockFetchAllSlots).not.toHaveBeenCalled();
+    expect(mockFetchSlots).not.toHaveBeenCalled();
+  });
+
   it('shows the unavailable state and hides slot browsing when liveRoomsAvailable is false', async () => {
     mockFetchConfig.mockResolvedValue({ ...baseConfig, liveRoomsAvailable: false });
 
-    render(<PrivateSpeakingPage />);
+    renderPage();
 
     expect(await screen.findByTestId('tutor-rooms-unavailable')).toHaveTextContent(UNAVAILABLE);
     expect(screen.queryByRole('tab', { name: 'Browse Slots' })).not.toBeInTheDocument();
@@ -116,7 +171,7 @@ describe('Private speaking booking — tutor room availability (B9)', () => {
   it('shows the unavailable state when slot listing answers 503 tutor_rooms_unavailable', async () => {
     mockFetchAllSlots.mockRejectedValue({ code: 'tutor_rooms_unavailable', message: UNAVAILABLE });
 
-    render(<PrivateSpeakingPage />);
+    renderPage();
 
     expect(await screen.findByTestId('tutor-rooms-unavailable')).toHaveTextContent(UNAVAILABLE);
     expect(screen.queryByRole('tab', { name: 'Browse Slots' })).not.toBeInTheDocument();
@@ -124,7 +179,7 @@ describe('Private speaking booking — tutor room availability (B9)', () => {
 
   it('offers "Any available tutor" and books the chosen slot with tutorProfileId "any"', async () => {
     const user = userEvent.setup();
-    render(<PrivateSpeakingPage />);
+    renderPage();
 
     const tutorFilter = await screen.findByRole('combobox');
     // The control the unavailable-state tests expect to be absent really is this tab.
@@ -144,7 +199,7 @@ describe('Private speaking booking — tutor room availability (B9)', () => {
   it('switches to the unavailable state when booking answers 503 tutor_rooms_unavailable', async () => {
     mockCreateBooking.mockRejectedValue({ code: 'tutor_rooms_unavailable', message: UNAVAILABLE });
     const user = userEvent.setup();
-    render(<PrivateSpeakingPage />);
+    renderPage();
 
     await user.selectOptions(await screen.findByRole('combobox'), 'any');
     await user.click(await screen.findByRole('button', { name: /09:00/ }));

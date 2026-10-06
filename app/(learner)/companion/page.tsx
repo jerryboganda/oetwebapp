@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
@@ -80,7 +81,14 @@ export default function CompanionPage() {
     selectThread,
     createNewThread,
     hasAccess,
+    activate,
   } = useAiAssistantContext();
+
+  // The assistant hub connects lazily: only once this page can actually chat.
+  const companionEnabled = session.data?.enabled === true;
+  useEffect(() => {
+    if (companionEnabled && hasAccess) activate();
+  }, [activate, companionEnabled, hasAccess]);
 
   const statusLabel = isConnected
     ? t('companion.status.connected')

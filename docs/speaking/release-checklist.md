@@ -46,7 +46,7 @@ Every gate below must be green before flipping `Features__SpeakingV2 = true` for
 - [ ] LiveKit Cloud project provisioned + S3 egress bucket created
 - [ ] Anthropic + OpenAI keys rotated within last 90 days
 - [ ] On-call rota set (primary + secondary)
-- [ ] Grafana dashboards imported (`ops/dashboards/speaking-*.json`)
+- [ ] Speaking operational views exist (Sentry, `/v1/admin/ai/live-voice/health`, admin AI usage pages; no Grafana dashboards ship, see `ops/README.md`)
 - [ ] Alert routes configured (PagerDuty / Slack)
 
 ## G. Sign-off

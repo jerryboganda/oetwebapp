@@ -4,7 +4,10 @@
 //   1. deny     anything touching the console's own containers (oet-agent-*),
 //               the console volumes, or (additive hardening, see below) the
 //               console networks, the Docker socket / data root, and deletion
-//               of the protected production data volumes.
+//               of the protected production data volumes. Also ANY container,
+//               volume or network named oet-fleet* (the Owner Fleet manager,
+//               owner directive 2026-10-05): reads, logs, lifecycle, exec,
+//               mounts and network attach are all denied, never gated.
 //   2. allow    GET reads of OET-named objects (^/?(oet-|oetwebsite)); container
 //               inspect has Config.Env values redacted; list/event responses are
 //               filtered to OET names.
@@ -27,6 +30,12 @@ import { asArray, asRecord, asStringArray, str, stripSlash, truncate } from './u
 
 export const OET_NAME = /^\/?(oet-|oetwebsite)/;
 export const CONSOLE_CONTAINER = /^\/?oet-agent-/;
+// Owner Fleet (owner directive 2026-10-05): the fleet manager is the isolated compose
+// project `oet-fleet` and holds the SSH keys able to administer every helper VPS.
+// It is untouchable for console engines. Deliberately a broad prefix (not oet-fleet-)
+// so a container, volume or network named oet-fleet-manager, oet-fleet_fleet_data,
+// oet-fleet_default or a later rename can never fall through to the generic OET rules.
+export const FLEET_NAME = /^\/?oet-fleet/;
 export const CONSOLE_VOLUMES: ReadonlySet<string> = new Set([
   'oet-agent-console_oet_agent_home',
   'oet-agent-console_oet_agent_workspace',
@@ -39,6 +48,9 @@ export const PROTECTED_DATA_VOLUMES: ReadonlySet<string> = new Set([
   'oetwebsite_oet_db_backups',
   'oetwebsite_oet_clamav_data',
   'oetwebsite_oet_with_dr_hesham_storage',
+  // Owner Fleet manager state (inventory, encrypted host keys, audit chain); also
+  // listed in scripts/deploy/protect-production-data.sh.
+  'oet-fleet_fleet_data',
 ]);
 export const ALLOWED_BIND_ROOTS: readonly string[] = ['/opt/oetwebapp', '/var/opt/oet-learner/releases'];
 // The containerd socket / state are equivalent to the Docker socket (a client
@@ -71,18 +83,23 @@ export function isConsoleContainer(name: string): boolean {
   return CONSOLE_CONTAINER.test(name);
 }
 
-/** Visible in lists/events: OET-named and not one of the console's own containers. */
+/** Container, volume or network that belongs to the Owner Fleet manager (oet-fleet*). */
+export function isFleetName(name: string): boolean {
+  return FLEET_NAME.test(name);
+}
+
+/** Visible in lists/events: OET-named and not one of the console's own or the fleet's containers. */
 export function isVisibleContainerName(name: string): boolean {
   const n = stripSlash(name);
-  return isOetName(n) && !isConsoleContainer(n);
+  return isOetName(n) && !isConsoleContainer(n) && !isFleetName(n);
 }
 
 export function isVisibleVolumeName(name: string): boolean {
-  return isOetName(name) && !CONSOLE_VOLUMES.has(name);
+  return isOetName(name) && !CONSOLE_VOLUMES.has(name) && !isFleetName(name);
 }
 
 export function isVisibleNetworkName(name: string): boolean {
-  return isOetName(name) && !CONSOLE_NETWORKS.has(name);
+  return isOetName(name) && !CONSOLE_NETWORKS.has(name) && !isFleetName(name);
 }
 
 export function isExecApprovalContainer(name: string): boolean {
@@ -208,9 +225,13 @@ function analyzeCreate(body: unknown, nameParam: string, nameOf: (ref: string) =
   if (out.name !== '' && isConsoleContainer(out.name)) {
     out.denyReasons.push(`container name ${out.name} impersonates the Owner Agent Console`);
   }
+  if (out.name !== '' && isFleetName(out.name)) {
+    out.denyReasons.push(`container name ${out.name} impersonates the Owner Fleet manager`);
+  }
 
   const namedVolume = (volume: string): void => {
     if (CONSOLE_VOLUMES.has(volume)) out.denyReasons.push(`mounts console volume ${volume}`);
+    else if (isFleetName(volume)) out.denyReasons.push(`mounts Owner Fleet volume ${volume}`);
     else if (PROTECTED_DATA_VOLUMES.has(volume)) out.approvalReasons.push(`mounts protected production volume ${volume}`);
   };
   const bindSource = (raw: string): void => {
@@ -250,6 +271,7 @@ function analyzeCreate(body: unknown, nameParam: string, nameOf: (ref: string) =
     const name = nameOf(ref);
     out.touchedContainers.push(name);
     if (isConsoleContainer(name)) out.denyReasons.push(`references console container ${name}`);
+    if (isFleetName(name)) out.denyReasons.push(`references Owner Fleet container ${name}`);
   }
 
   const namespaces: Array<[string, string]> = [
@@ -272,6 +294,7 @@ function analyzeCreate(body: unknown, nameParam: string, nameOf: (ref: string) =
   out.networks.push(...Object.keys(asRecord(asRecord(b.NetworkingConfig).EndpointsConfig)));
   for (const network of out.networks) {
     if (CONSOLE_NETWORKS.has(network)) out.denyReasons.push(`attaches to console network ${network}`);
+    if (isFleetName(network)) out.denyReasons.push(`attaches to Owner Fleet network ${network}`);
   }
 
   if (hc.Privileged === true) out.approvalReasons.push('privileged container');
@@ -349,8 +372,14 @@ export function evaluateParsed(methodInput: string, parsed: ParsedPath, input: P
   if (containerName !== undefined && isConsoleContainer(containerName)) {
     return decision('deny', 1, [`${containerName} belongs to the Owner Agent Console`], request, containerName);
   }
+  if (containerName !== undefined && isFleetName(containerName)) {
+    return decision('deny', 1, [`${containerName} belongs to the Owner Fleet manager`], request, containerName);
+  }
   if (route.kind === 'volume' && CONSOLE_VOLUMES.has(route.name)) {
     return decision('deny', 1, [`${route.name} is an Owner Agent Console volume`], request, route.name);
+  }
+  if (route.kind === 'volume' && isFleetName(route.name)) {
+    return decision('deny', 1, [`${route.name} is an Owner Fleet volume`], request, route.name);
   }
   if (route.kind === 'volume' && method === 'DELETE' && PROTECTED_DATA_VOLUMES.has(route.name)) {
     return decision('deny', 1, [`${route.name} is a protected production data volume (AGENTS.md storage law)`], request, route.name);
@@ -358,13 +387,22 @@ export function evaluateParsed(methodInput: string, parsed: ParsedPath, input: P
   if (route.kind === 'network' && networkName !== undefined && CONSOLE_NETWORKS.has(networkName) && !isRead) {
     return decision('deny', 1, [`${networkName} is an Owner Agent Console network`], request, networkName);
   }
+  if (route.kind === 'network' && networkName !== undefined && isFleetName(networkName)) {
+    return decision('deny', 1, [`${networkName} is an Owner Fleet network`], request, networkName);
+  }
   if (route.kind === 'networks-create' && CONSOLE_NETWORKS.has(str(asRecord(body).Name))) {
     return decision('deny', 1, [`network name ${str(asRecord(body).Name)} is reserved for the Owner Agent Console`], request, str(asRecord(body).Name));
+  }
+  if (route.kind === 'networks-create' && isFleetName(str(asRecord(body).Name))) {
+    return decision('deny', 1, [`network name ${str(asRecord(body).Name)} is reserved for the Owner Fleet manager`], request, str(asRecord(body).Name));
   }
   if (route.kind === 'network' && (route.action === 'connect' || route.action === 'disconnect')) {
     const container = nameOf(str(asRecord(body).Container));
     if (container !== '' && isConsoleContainer(container)) {
       return decision('deny', 1, [`${container} belongs to the Owner Agent Console`], request, container);
+    }
+    if (container !== '' && isFleetName(container)) {
+      return decision('deny', 1, [`${container} belongs to the Owner Fleet manager`], request, container);
     }
   }
   let create: CreateAnalysis | undefined;

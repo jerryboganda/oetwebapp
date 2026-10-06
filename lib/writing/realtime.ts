@@ -49,6 +49,17 @@ function nextDelay(attempt: number, opts: Required<BackoffOptions>): number {
   return Math.min(opts.initialMs * 2 ** attempt, opts.maxMs);
 }
 
+/**
+ * SignalR calls the token factory on every (re)connect and every long-poll. A token captured
+ * once at connect time expires (access tokens are short-lived), so a fixed one made every
+ * automatic reconnect after expiry fail with 401. Ask for a fresh token each time and fall back
+ * to the one the connection started with only if refreshing fails (mirrors lib/ai-assistant/signalr.ts).
+ */
+async function freshHubAccessToken(initialToken: string | null | undefined): Promise<string> {
+  const refreshed = await ensureFreshAccessToken().catch(() => null);
+  return refreshed ?? initialToken ?? '';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // URL resolvers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -322,7 +333,7 @@ export function connectWritingSubmissionStream(
       const hubUrl = `${resolveRealtimeHttpBase()}/hubs/writing-submissions`;
       connection = new HubConnectionBuilder()
         .withUrl(hubUrl, {
-          accessTokenFactory: () => token ?? '',
+          accessTokenFactory: () => freshHubAccessToken(token),
         })
         .withAutomaticReconnect({
           nextRetryDelayInMilliseconds(ctx) {
@@ -424,7 +435,7 @@ export function connectWritingTodayStream(handlers: TodayStreamHandlers): Dispos
       const hubUrl = `${resolveRealtimeHttpBase()}/hubs/writing-today`;
       connection = new HubConnectionBuilder()
         .withUrl(hubUrl, {
-          accessTokenFactory: () => token ?? '',
+          accessTokenFactory: () => freshHubAccessToken(token),
         })
         .withAutomaticReconnect({
           nextRetryDelayInMilliseconds(ctx) {

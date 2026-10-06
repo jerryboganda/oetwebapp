@@ -3,16 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { loadWhop } from '@whop/elements';
 import { Checkout, CheckoutElement, WhopElements } from '@whop/elements-react';
+import { isWhopCheckoutSessionId, isWhopPlanId } from '@/lib/billing/whop-ids';
 
-export function isWhopPlanId(value: string | null | undefined): value is string {
-  return typeof value === 'string' && value.startsWith('plan_');
-}
+// Re-exported so existing imports keep working. New code that only needs the id checks should
+// import them from '@/lib/billing/whop-ids', which does not pull in the Whop SDK.
+export { isWhopCheckoutSessionId, isWhopPlanId };
 
-export function isWhopCheckoutSessionId(value: string | null | undefined): value is string {
-  return typeof value === 'string' && value.startsWith('ch_');
-}
-
-type WhopEmbeddedCheckoutProps = {
+export type WhopEmbeddedCheckoutProps = {
   planId: string;
   checkoutUrl: string;
   returnUrl: string;

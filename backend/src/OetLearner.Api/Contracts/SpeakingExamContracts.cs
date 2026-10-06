@@ -40,7 +40,9 @@ public record SpeakingExamClock(
 /// the prep/active phases of the current card; intro and completed phases
 /// carry a null card. `CurrentSessionId` is the child SpeakingSession the
 /// frontend hands to the native realtime voice control plane for the AI
-/// patient, or to the LiveKit room for a human tutor.</summary>
+/// patient, or to the LiveKit room for a human tutor. <c>Admission</c> is non-null only while the live
+/// AI session cap is full and this exam is waiting in the line (state stays <c>intro</c>; nothing is
+/// timed or held); see <see cref="SpeakingLiveAdmissionView"/>.</summary>
 public record SpeakingExamDetail(
     string ExamId,
     string Mode,
@@ -56,7 +58,8 @@ public record SpeakingExamDetail(
     string? LiveRoomId = null,
     bool ConsentAccepted = false,
     bool LiveVoiceAvailable = false,
-    IReadOnlyList<SpeakingExamCardSession>? Cards = null);
+    IReadOnlyList<SpeakingExamCardSession>? Cards = null,
+    SpeakingLiveAdmissionView? Admission = null);
 
 /// <summary>Each exam card's child Speaking session id (null until that card
 /// is revealed), used by the recorder fallback to upload per card via

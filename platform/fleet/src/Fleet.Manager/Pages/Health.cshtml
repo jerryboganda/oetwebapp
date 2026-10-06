@@ -1,0 +1,31 @@
+@page
+@model HealthModel
+@{
+    ViewData["Title"] = "Manager health";
+    var report = Model.Report;
+}
+<div class="page-head">
+    <h1>Manager health</h1>
+</div>
+<p class="notice @(report.Ok ? "ok" : "bad")" role="status">@(report.Ok ? "All startup and integrity checks passed." : "Attention needed: see the details below.")</p>
+<section class="panel" aria-labelledby="health-h">
+    <h2 id="health-h">Checks</h2>
+    <table class="data kv-table">
+        <caption class="sr-only">The manager's startup and integrity checks</caption>
+        <tbody>
+        <tr><th scope="row">Version</th><td>@report.Version</td></tr>
+        <tr><th scope="row">Database</th><td>@(report.Database ? "reachable" : "unreachable")</td></tr>
+        <tr><th scope="row">Vault master key</th><td>@(report.MasterKeyId ?? "not loaded")</td></tr>
+        <tr><th scope="row">Audit hash chain</th><td>@(report.AuditChainIntact ? "intact" : "BROKEN")</td></tr>
+        <tr><th scope="row">Operations hash chain</th><td>@(report.OperationsChainIntact ? "intact" : "BROKEN")</td></tr>
+        @if (report.IntegrityProblem is not null)
+        {
+            <tr><th scope="row">Integrity problem</th><td>@report.IntegrityProblem</td></tr>
+        }
+        <tr><th scope="row">OET API</th><td>@(report.ApiReachable ? "reachable" : "not reachable (yet)")</td></tr>
+        <tr><th scope="row">Last API poll</th><td>@(report.LastPollAt?.ToString("u") ?? "never")</td></tr>
+        <tr><th scope="row">Nodes</th><td>@report.Nodes</td></tr>
+        <tr><th scope="row">Open operations</th><td>@report.OpenOperations</td></tr>
+        </tbody>
+    </table>
+</section>

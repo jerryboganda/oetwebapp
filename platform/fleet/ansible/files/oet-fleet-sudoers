@@ -1,0 +1,3 @@
+# Installed by the OET fleet manager (step S2) as /etc/sudoers.d/oet-fleet, mode 0440.
+# The restricted fleet user may run exactly one program as root. oet-fleet-ctl validates every argument itself.
+oetfleet ALL=(root) NOPASSWD: /usr/local/sbin/oet-fleet-ctl

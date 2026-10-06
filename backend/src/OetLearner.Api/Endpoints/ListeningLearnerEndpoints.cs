@@ -14,6 +14,12 @@ public static class ListeningLearnerEndpoints
 {
     public sealed record ListeningSubmitRequest(Dictionary<string, string?>? Answers);
 
+    /// <summary>Several attempt events in one request (<c>.../integrity-events/batch</c>).</summary>
+    public sealed record ListeningIntegrityEventBatchRequest(List<ListeningIntegrityEventRequest?>? Events);
+
+    /// <summary>Upper bound on events accepted in one batch; a larger request is rejected, not truncated.</summary>
+    private const int MaxIntegrityEventBatch = 50;
+
     // Question-paper PDF annotations (Part B/C). Mirrors the Reading DTO shape so
     // the shared PDF viewer's create/delete callbacks work unchanged. Persisted in
     // the module-agnostic ReadingPaperAnnotation store (keyed user + paper + asset).
@@ -343,6 +349,47 @@ public static class ListeningLearnerEndpoints
             .RequireRateLimiting("PerUserWrite")
             .WithName("RecordListeningIntegrityEvent")
             .WithSummary("Record an OET@Home Listening integrity event");
+
+        // The attempt-event stream (answer changes, highlights, buffering, reading time) arrives in
+        // batches instead of one request per click. Events are applied one by one, in the order sent,
+        // through exactly the same service call as the single route, so every per-event rule holds.
+        // Only events that cannot reorder anything that matters are batched client side.
+        group.MapPost("/attempts/{attemptId}/integrity-events/batch", async (
+            string attemptId,
+            ListeningIntegrityEventBatchRequest request,
+            HttpContext http,
+            ListeningLearnerService service,
+            CancellationToken ct) =>
+        {
+            var events = request.Events;
+            if (events is null || events.Count == 0)
+            {
+                return Results.NoContent();
+            }
+
+            if (events.Count > MaxIntegrityEventBatch)
+            {
+                throw ApiException.Validation(
+                    "listening_integrity_batch_too_large",
+                    $"At most {MaxIntegrityEventBatch} events can be sent in one batch.");
+            }
+
+            var userId = http.UserId();
+            foreach (var integrityEvent in events)
+            {
+                if (integrityEvent is null)
+                {
+                    continue;
+                }
+
+                await service.RecordIntegrityEventAsync(userId, attemptId, integrityEvent, ct);
+            }
+
+            return Results.NoContent();
+        })
+            .RequireRateLimiting("PerUserWrite")
+            .WithName("RecordListeningIntegrityEventsBatch")
+            .WithSummary("Record several Listening attempt events in one request");
 
         group.MapPost("/attempts/{attemptId}/submit", async (
             string attemptId,

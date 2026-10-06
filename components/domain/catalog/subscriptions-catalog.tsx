@@ -13,12 +13,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CatalogEntitlementSummary } from './catalog-sections';
 import { PromoHeroSlider } from './promo-hero-slider';
 import { AppDownloadPromo } from '@/components/marketing/app-download-promo';
-import {
-  fetchPublicCatalog,
-  fetchAiPackages,
-  fetchMyEntitlementSnapshot,
-  type MyEntitlementSnapshot,
-} from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
+import { fetchPublicCatalog, fetchAiPackages } from '@/lib/api';
+import { useEntitlementSnapshot } from '@/lib/query/hooks';
 import type { PublicCatalogPlanRow, PublicCatalogResponse } from '@/lib/types/admin';
 import type { AiPackagesResponse } from '@/lib/billing-types';
 import { formatPrice, type PublicCatalogResponseWithPresentation } from '@/lib/catalog-presentation';
@@ -239,7 +236,11 @@ export function SubscriptionsCatalog() {
   const searchParams = useSearchParams();
   const [catalog, setCatalog] = useState<PublicCatalogResponseWithPresentation | null>(null);
   const [ai, setAi] = useState<AiPackagesResponse | null>(null);
-  const [entitlement, setEntitlement] = useState<MyEntitlementSnapshot | null>(null);
+  const { user } = useAuth();
+  const userId = user?.userId ?? '';
+  // Owned-plan context for the page. The shared entitlement query (cached, deduped with the
+  // shell and dashboard), not a private fetch; no request at all for a signed-out visitor.
+  const entitlement = useEntitlementSnapshot(userId, { enabled: Boolean(userId) }).data ?? null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeProfession, setActiveProfession] = useState('all');
@@ -258,21 +259,6 @@ export function SubscriptionsCatalog() {
         }
       } finally {
         if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const snapshot = await fetchMyEntitlementSnapshot();
-        if (!cancelled) setEntitlement(snapshot);
-      } catch {
-        // Entitlement context is optional; ignore failures.
       }
     })();
     return () => {

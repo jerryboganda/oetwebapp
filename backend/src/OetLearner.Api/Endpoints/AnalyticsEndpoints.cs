@@ -8,6 +8,9 @@ namespace OetLearner.Api.Endpoints;
 public static class AnalyticsEndpoints
 {
     private const int MaxAnalyticsBodyBytes = 16 * 1024;
+    // A batch carries several single-event bodies, so it gets a proportionally larger body cap.
+    private const int MaxAnalyticsBatchBodyBytes = 64 * 1024;
+    private const int MaxAnalyticsBatchEvents = 50;
     private static readonly JsonSerializerOptions AnalyticsJsonOptions = new(JsonSerializerDefaults.Web);
 
     public static IEndpointRouteBuilder MapAnalyticsEndpoints(this IEndpointRouteBuilder app)
@@ -58,7 +61,71 @@ public static class AnalyticsEndpoints
             }
         });
 
+        // Several events in one request. Same tolerance as the single-event route: an empty,
+        // malformed or oversized body is acknowledged and ignored (telemetry must never fail the
+        // page), and an invalid entry is skipped without costing the others.
+        analytics.MapPost("/events/batch", async (
+            HttpContext http,
+            AnalyticsIngestionService service,
+            CancellationToken ct) =>
+        {
+            if (http.Request.ContentLength > MaxAnalyticsBatchBodyBytes)
+            {
+                return Results.NoContent();
+            }
+
+            // Bounded read: a chunked body with no Content-Length is never pulled past the cap
+            // (up to Kestrel's 30 MB default) before it is judged. Over the cap -> ignored.
+            var body = await ReadBodyWithinAsync(http.Request.Body, MaxAnalyticsBatchBodyBytes, ct);
+            if (string.IsNullOrWhiteSpace(body))
+            {
+                return Results.NoContent();
+            }
+
+            try
+            {
+                var request = JsonSerializer.Deserialize<AnalyticsTrackBatchRequest>(body, AnalyticsJsonOptions);
+                var events = request?.Events;
+                if (events is null || events.Count == 0)
+                {
+                    return Results.NoContent();
+                }
+
+                await service.RecordBatchAsync(http.UserId(), events.Take(MaxAnalyticsBatchEvents).ToList(), ct);
+                return Results.NoContent();
+            }
+            catch (JsonException)
+            {
+                return Results.NoContent();
+            }
+        });
+
         return app;
+    }
+
+    /// <summary>
+    /// Reads at most <paramref name="maxBytes"/> bytes of the request body as UTF-8 text. Returns null when the
+    /// body is larger than that (one extra byte is read to tell "exactly at the cap" from "over it").
+    /// </summary>
+    private static async Task<string?> ReadBodyWithinAsync(Stream body, int maxBytes, CancellationToken ct)
+    {
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(maxBytes + 1);
+        try
+        {
+            var total = 0;
+            while (total <= maxBytes)
+            {
+                var read = await body.ReadAsync(buffer.AsMemory(total, maxBytes + 1 - total), ct);
+                if (read == 0) break;
+                total += read;
+            }
+
+            return total > maxBytes ? null : System.Text.Encoding.UTF8.GetString(buffer, 0, total);
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     private static string UserId(this HttpContext httpContext)

@@ -131,7 +131,27 @@ public sealed class SpeakingExamAutoAdvanceWorker(
         {
             logger.LogError(ex, "Speaking role-play provider hang-up sweep failed");
         }
+
+        // Housekeeping of the live-session admission table: expires abandoned waiters, purges old rows. Not
+        // load-bearing (every admission decision expires stale rows itself), so it runs last and on its own.
+        try
+        {
+            await SweepAdmissionsAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Speaking live admission housekeeping failed");
+        }
         return changed;
+    }
+
+    /// <summary>Expires abandoned waiters and purges ended rows of the live-session admission table. A host
+    /// without the admission service registered (a test) does nothing. Returns the rows changed. Exposed for tests.</summary>
+    public async Task<int> SweepAdmissionsAsync(CancellationToken ct)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var admission = scope.ServiceProvider.GetService<SpeakingLiveAdmissionService>();
+        return admission is null ? 0 : await admission.SweepAsync(ct);
     }
 
     private async Task<int> SweepExamsAsync(DateTimeOffset now, CancellationToken ct)
@@ -150,15 +170,23 @@ public sealed class SpeakingExamAutoAdvanceWorker(
         if (active.Count == 0) return 0;
 
         var service = scope.ServiceProvider.GetRequiredService<SpeakingExamService>();
+        // Optional (a host without the admission service registered, a test, has no queue to protect).
+        var admission = scope.ServiceProvider.GetService<SpeakingLiveAdmissionService>();
         var changed = 0;
         foreach (var exam in active)
         {
             try
             {
-                // Expire exams left idle in the unscored Intro.
+                // Expire exams left idle in the unscored Intro. A learner queued for a live AI place is NOT idle: the
+                // queue never touches the exam, IntroStartedAt is its only clock, and the line's own maximum wait
+                // (2 h, counted from joining it) starts after the intro, so the clock alone would expire the tail of
+                // a long line. The read is the queue's own rule (fresh heartbeat, inside the maximum wait), so an
+                // abandoned waiter is expired on the next sweep and a queued one is never swept from under its page.
                 if (exam.State == SpeakingExamState.Intro
                     && exam.IntroStartedAt is { } started
-                    && now - started > SpeakingExamService.IdleExpiry)
+                    && now - started > SpeakingExamService.IdleExpiry
+                    && (admission is null
+                        || await admission.GetWaitingViewAsync(SpeakingLiveAdmissionKinds.Exam, exam.Id, ct) is null))
                 {
                     exam.State = SpeakingExamState.Expired;
                     exam.CompletedAt = now;

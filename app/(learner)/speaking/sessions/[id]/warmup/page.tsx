@@ -18,10 +18,18 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { SpeakingAdmissionWait } from '@/components/domain/speaking/SpeakingAdmissionWait';
 import { ApiError } from '@/lib/api';
+import {
+  isAlreadyPastGateConflict,
+  isTransientAdmissionFailure,
+  isWaitingForAdmission,
+  type SpeakingLiveAdmission,
+} from '@/lib/api/speaking-admission';
 import {
   finishSpeakingWarmup,
   getSpeakingSession,
+  leaveSpeakingSessionQueue,
   startSpeakingWarmup,
   type SpeakingSessionDetail,
 } from '@/lib/api/speaking-sessions';
@@ -42,6 +50,9 @@ export default function SpeakingWarmupPage() {
   const [secondsLeft, setSecondsLeft] = useState(WARMUP_SECONDS);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set while the live AI session cap is full: warm-up is not finished (nothing held or timed) and the wait
+  // panel repeats finish-warmup until a place is free.
+  const [waitingAdmission, setWaitingAdmission] = useState<SpeakingLiveAdmission | null>(null);
   const trackedWarmupStartRef = useRef(false);
 
   // Bootstrap: fetch session, transition to WarmUp if needed.
@@ -96,22 +107,63 @@ export default function SpeakingWarmupPage() {
     return () => window.clearInterval(t);
   }, [session, secondsLeft]);
 
+  function openPrep(id: string, finished: SpeakingSessionDetail | null) {
+    showCreditFeedback(finished?.feedbackMessage);
+    trackSpeaking('warmup_finished', {
+      sessionId: id,
+      durationSeconds: WARMUP_SECONDS - secondsLeft,
+    });
+    router.push(`/speaking/sessions/${encodeURIComponent(id)}/prep`);
+  }
+
   async function finish() {
     if (!sessionId || busy) return;
     setBusy(true);
     setError(null);
     try {
       const finished = await finishSpeakingWarmup(sessionId);
-      showCreditFeedback(finished.feedbackMessage);
-      trackSpeaking('warmup_finished', {
-        sessionId,
-        durationSeconds: WARMUP_SECONDS - secondsLeft,
-      });
-      router.push(`/speaking/sessions/${encodeURIComponent(sessionId)}/prep`);
+      if (isWaitingForAdmission(finished.admission)) {
+        // The live AI session cap is full: nothing is held or timed. Wait in the line, same session.
+        setWaitingAdmission(finished.admission);
+        setBusy(false);
+        return;
+      }
+      openPrep(sessionId, finished);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not finish warm-up.');
       setBusy(false);
     }
+  }
+
+  // One admission retry from the wait panel: the same finish-warmup call (it doubles as the heartbeat that keeps
+  // the place). The call that finds a free place holds the credit and opens prep.
+  async function retryAdmission() {
+    if (!sessionId) return;
+    try {
+      const finished = await finishSpeakingWarmup(sessionId);
+      if (isWaitingForAdmission(finished.admission)) {
+        setWaitingAdmission(finished.admission);
+        return;
+      }
+      setWaitingAdmission(null);
+      openPrep(sessionId, finished);
+    } catch (err) {
+      if (err instanceof ApiError && isAlreadyPastGateConflict(err.status, err.code)) {
+        // Already past warm-up (another tab was admitted): prep is open.
+        setWaitingAdmission(null);
+        openPrep(sessionId, null);
+        return;
+      }
+      setError(err instanceof ApiError ? err.userMessage : 'Could not finish warm-up.');
+      // A refusal that waiting cannot fix (credits, plan) ends the wait: the buttons are shown again.
+      if (!isTransientAdmissionFailure(err instanceof ApiError ? err.status : undefined)) setWaitingAdmission(null);
+    }
+  }
+
+  // "Leave the queue": give the place back at once (best effort; the heartbeat window frees it anyway), then go.
+  function leaveQueue() {
+    if (sessionId) void leaveSpeakingSessionQueue(sessionId).catch(() => undefined);
+    router.push('/speaking');
   }
 
   if (!sessionId) {
@@ -142,6 +194,13 @@ export default function SpeakingWarmupPage() {
 
         {!session ? (
           <Skeleton className="h-48 w-full rounded-xl" />
+        ) : waitingAdmission ? (
+          <SpeakingAdmissionWait
+            subject="practice"
+            admission={waitingAdmission}
+            onAttempt={retryAdmission}
+            onLeave={leaveQueue}
+          />
         ) : (
           <Card className="space-y-6 p-6">
             <div className="flex items-center justify-between">

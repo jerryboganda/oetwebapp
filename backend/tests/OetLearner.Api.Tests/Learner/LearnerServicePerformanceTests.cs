@@ -65,6 +65,9 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
         Assert.Equal(47, cards.GetProperty("pendingExpertReviews").GetProperty("count").GetInt32());
         Assert.True(json.GetProperty("partialData").GetBoolean());
         Assert.True(_sql.Commands.Count <= 7, DumpCommands());
+        // A dashboard read leaves no pending analytics write behind (the dead server-side
+        // "readiness_viewed" RecordEventAsync is gone; the client tracks the view).
+        Assert.Empty(db.ChangeTracker.Entries<AnalyticsEventRecord>());
         // No unbounded client-side ID lists: `IN (SELECT …)` subqueries and
         // short enum lists like `IN (1, 3, 4)` are fine (bounded,
         // server-side); only a literal/parameter list grown from history size
@@ -104,6 +107,7 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
             bootstrap.GetProperty("user").GetProperty("freeze").GetRawText());
         Assert.Equal("oet", bootstrap.GetProperty("goals").GetProperty("examFamilyCode").GetString());
         Assert.True(_sql.Commands.Count <= 7, DumpCommands());
+        Assert.Empty(db.ChangeTracker.Entries<AnalyticsEventRecord>());
         Assert.Single(_sql.Commands.Where(command =>
             command.Contains("FROM \"Users\"", StringComparison.OrdinalIgnoreCase)
             && command.Contains("Goals", StringComparison.OrdinalIgnoreCase)));

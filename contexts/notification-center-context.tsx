@@ -55,6 +55,12 @@ interface NotificationCenterContextValue {
   updatePreferences: (payload: NotificationPreferencePatchRequest) => Promise<NotificationPreferencePayload>;
   subscribeToPush: () => Promise<void>;
   unsubscribeFromPush: () => Promise<void>;
+  /**
+   * Loads the notification preferences and the browser-push configuration.
+   * Neither is needed to show the bell, so they are fetched on first use: a
+   * settings surface calls this when it mounts. Idempotent.
+   */
+  ensureSettingsLoaded: () => void;
 }
 
 /**
@@ -64,7 +70,14 @@ interface NotificationCenterContextValue {
  */
 type NotificationActionsValue = Pick<
   NotificationCenterContextValue,
-  'refreshFeed' | 'loadMore' | 'markRead' | 'markAllRead' | 'updatePreferences' | 'subscribeToPush' | 'unsubscribeFromPush'
+  | 'refreshFeed'
+  | 'loadMore'
+  | 'markRead'
+  | 'markAllRead'
+  | 'updatePreferences'
+  | 'subscribeToPush'
+  | 'unsubscribeFromPush'
+  | 'ensureSettingsLoaded'
 >;
 type NotificationStateValue = Omit<NotificationCenterContextValue, keyof NotificationActionsValue>;
 
@@ -86,6 +99,15 @@ function normalizeError(error: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+/**
+ * Page Visibility, not the runtime bridge's `data-app-active` (which is also
+ * false for a visible-but-unfocused window): a tab the learner can still see
+ * keeps its fallback poll.
+ */
+function isDocumentHidden(): boolean {
+  return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
 
 function mergeFeedItems(existingItems: NotificationFeedItem[], incomingItems: NotificationFeedItem[]) {
@@ -250,6 +272,12 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
   const [isUpdatingPush, setIsUpdatingPush] = useState(false);
   const [toastState, setToastState] = useState<{ message: string; variant: ToastVariant } | null>(null);
   const hubConnectionRef = useRef<HubConnection | null>(null);
+  // Preferences and the push configuration are only needed by the settings
+  // surfaces, so they load on first use (ensureSettingsLoaded) instead of on
+  // every page load. A learner who already granted browser push keeps the
+  // push-configuration fetch at mount: their registration sync depends on it.
+  const [settingsRequested, setSettingsRequested] = useState(false);
+  const settingsRequestedRef = useRef(false);
 
   const pushSupported =
     typeof window !== 'undefined'
@@ -257,12 +285,29 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     && 'PushManager' in window
     && pushPermission !== 'unsupported';
   const pushPublicKeyConfigured = Boolean(webPushPublicKey);
+  const pushConfigurationWanted = settingsRequested || pushPermission === 'granted';
+
+  const ensureSettingsLoaded = useCallback(() => {
+    if (settingsRequestedRef.current) {
+      return;
+    }
+
+    settingsRequestedRef.current = true;
+    // Flip loading together with the request so a settings surface never
+    // renders an empty "no preferences" state between mount and first fetch.
+    setIsPreferencesLoading(true);
+    setSettingsRequested(true);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
       // Unauthenticated: use the public runtime-config VAPID key (DB-driven)
       // with the NEXT_PUBLIC_* build-time value as the final fallback.
       setWebPushPublicKey(fallbackWebPushPublicKey);
+      return;
+    }
+
+    if (!pushConfigurationWanted) {
       return;
     }
 
@@ -283,7 +328,7 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     return () => {
       active = false;
     };
-  }, [isAuthenticated, fallbackWebPushPublicKey]);
+  }, [isAuthenticated, fallbackWebPushPublicKey, pushConfigurationWanted]);
 
   const refreshFeed = useCallback(async (options?: { reset?: boolean; silent?: boolean }) => {
     if (!isAuthenticated) {
@@ -531,14 +576,22 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
       setPushPermission(getPushPermission());
       setPushEnabled(false);
       writeStoredPushRegistration(null);
+      // The next account starts lazy again (see ensureSettingsLoaded).
+      settingsRequestedRef.current = false;
+      setSettingsRequested(false);
       return;
     }
 
-    void Promise.all([
-      refreshFeed({ reset: true }),
-      loadPreferences(),
-    ]);
-  }, [isAuthenticated, loadPreferences, loading, refreshFeed]);
+    void refreshFeed({ reset: true });
+  }, [isAuthenticated, loading, refreshFeed]);
+
+  useEffect(() => {
+    if (loading || !isAuthenticated || !settingsRequested) {
+      return;
+    }
+
+    void loadPreferences();
+  }, [isAuthenticated, loadPreferences, loading, settingsRequested]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -576,94 +629,116 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
       }, retryDelayMs);
     };
 
+    // True while a connection exists that is up or is still coming up. The
+    // focus and visibilitychange handlers (and the retry timer) used to
+    // treat "not Connected" as "dead", so a tab regaining focus while the
+    // first hub was still Connecting or Reconnecting opened a SECOND hub and
+    // overwrote hubConnectionRef, leaking the first one.
+    const hubIsLiveOrStarting = () => {
+      const state = hubConnectionRef.current ? String(hubConnectionRef.current.state) : '';
+      return state === 'Connected' || state === 'Connecting' || state === 'Reconnecting';
+    };
+    // Covers the window before hubConnectionRef is set (the dynamic import).
+    let connectInFlight = false;
+
     // FE-022: lazy-load @microsoft/signalr so it stays out of the shared client
     // bundle on every authenticated page (this provider mounts app-wide via the
     // app shell). It is only needed once a notification hub connection is opened.
     const connectHub = async () => {
       if (disposed) return;
+      if (connectInFlight || hubIsLiveOrStarting()) return;
+      connectInFlight = true;
       clearRetry();
 
-      const { HubConnectionBuilder, HttpTransportType, LogLevel } = await import('@microsoft/signalr');
-      if (disposed) return;
-
-      // `/api/backend` is a Next route handler that can proxy HTTP but not a
-      // SignalR WebSocket upgrade — fall back to long polling on that topology.
-      const transport = env.apiBaseUrl.startsWith('/')
-        ? HttpTransportType.LongPolling
-        : HttpTransportType.WebSockets;
-
-      const connection = new HubConnectionBuilder()
-        .withUrl(`${env.apiBaseUrl}/v1/notifications/hub`, {
-          accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
-          transport,
-        })
-        .configureLogging(LogLevel.None)
-        .withAutomaticReconnect([0, 2_000, 5_000, 10_000])
-        .build();
-
-      hubConnectionRef.current = connection;
-      setConnectionStatus('connecting');
-      connection.on('notification', (envelope: NotificationRealtimeEnvelope) => {
-        handleRealtimeEnvelope(envelope);
-      });
-      // Security spec §3.1: another sign-in (or an admin/self revoke) killed
-      // THIS session. Broadcast a DOM event first so anything mounted right
-      // now (e.g. the video player) can react immediately — pause, show a
-      // "signed in elsewhere" overlay — before the hard navigation below
-      // unmounts everything anyway.
-      connection.on('session_revoked', (payload?: { reason?: string; message?: string }) => {
-        window.dispatchEvent(new CustomEvent('oet:session-revoked', { detail: payload }));
-        const reason: Parameters<typeof forceSignOutAndRedirect>[0] =
-          payload?.reason === 'device_replaced'
-            ? 'device_replaced'
-            : payload?.reason === 'device_limit_replaced'
-              ? 'device_limit_replaced'
-              : payload?.reason === 'device_limit_reduced'
-                ? 'device_limit_reduced'
-                : payload?.reason === 'admin_device_revoke'
-                  ? 'session_revoked'
-                  : 'signed_out_elsewhere';
-        forceSignOutAndRedirect(reason);
-      });
-      connection.onreconnecting(() => {
-        setConnectionStatus('reconnecting');
-      });
-      connection.onreconnected(() => {
-        retryDelayMs = 1_000;
-        setConnectionStatus('connected');
-        void refreshFeed({ silent: true });
-      });
-      connection.onclose(() => {
-        if (disposed) return;
-        setConnectionStatus('disconnected');
-        // SignalR has given up (auto-reconnect exhausted or was never established).
-        // Keep trying in the background so a tab left open across a deploy — or any
-        // other transient outage — recovers real-time delivery on its own instead of
-        // requiring a manual page reload.
-        scheduleRetry();
-      });
-
       try {
-        await connection.start();
-        if (!disposed) {
+        const { HubConnectionBuilder, HttpTransportType, LogLevel } = await import('@microsoft/signalr');
+        if (disposed) return;
+
+        // `/api/backend` is a Next route handler that can proxy HTTP but not a
+        // SignalR WebSocket upgrade — fall back to long polling on that topology.
+        const transport = env.apiBaseUrl.startsWith('/')
+          ? HttpTransportType.LongPolling
+          : HttpTransportType.WebSockets;
+
+        const connection = new HubConnectionBuilder()
+          .withUrl(`${env.apiBaseUrl}/v1/notifications/hub`, {
+            accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
+            transport,
+          })
+          .configureLogging(LogLevel.None)
+          .withAutomaticReconnect([0, 2_000, 5_000, 10_000])
+          .build();
+
+        hubConnectionRef.current = connection;
+        setConnectionStatus('connecting');
+        connection.on('notification', (envelope: NotificationRealtimeEnvelope) => {
+          handleRealtimeEnvelope(envelope);
+        });
+        // Security spec §3.1: another sign-in (or an admin/self revoke) killed
+        // THIS session. Broadcast a DOM event first so anything mounted right
+        // now (e.g. the video player) can react immediately — pause, show a
+        // "signed in elsewhere" overlay — before the hard navigation below
+        // unmounts everything anyway.
+        connection.on('session_revoked', (payload?: { reason?: string; message?: string }) => {
+          window.dispatchEvent(new CustomEvent('oet:session-revoked', { detail: payload }));
+          const reason: Parameters<typeof forceSignOutAndRedirect>[0] =
+            payload?.reason === 'device_replaced'
+              ? 'device_replaced'
+              : payload?.reason === 'device_limit_replaced'
+                ? 'device_limit_replaced'
+                : payload?.reason === 'device_limit_reduced'
+                  ? 'device_limit_reduced'
+                  : payload?.reason === 'admin_device_revoke'
+                    ? 'session_revoked'
+                    : 'signed_out_elsewhere';
+          forceSignOutAndRedirect(reason);
+        });
+        connection.onreconnecting(() => {
+          setConnectionStatus('reconnecting');
+        });
+        connection.onreconnected(() => {
           retryDelayMs = 1_000;
           setConnectionStatus('connected');
-        }
-      } catch {
-        if (!disposed) {
+          void refreshFeed({ silent: true });
+        });
+        connection.onclose(() => {
+          if (disposed) return;
+          // A newer connection already replaced this one: its own lifecycle
+          // owns the status and the retry timer.
+          if (hubConnectionRef.current !== connection) return;
           setConnectionStatus('disconnected');
+          // SignalR has given up (auto-reconnect exhausted or was never established).
+          // Keep trying in the background so a tab left open across a deploy — or any
+          // other transient outage — recovers real-time delivery on its own instead of
+          // requiring a manual page reload.
           scheduleRetry();
+        });
+
+        try {
+          await connection.start();
+          if (!disposed) {
+            retryDelayMs = 1_000;
+            setConnectionStatus('connected');
+          }
+        } catch {
+          if (!disposed) {
+            setConnectionStatus('disconnected');
+            scheduleRetry();
+          }
         }
+      } finally {
+        connectInFlight = false;
       }
     };
 
     // A user returning to a backgrounded/inactive tab is the single most likely
     // moment the connection has silently died (device sleep, network change) —
-    // retry immediately instead of waiting out the backoff timer.
+    // retry immediately instead of waiting out the backoff timer. A hub that is
+    // up, still connecting or already reconnecting is left alone.
     const handleVisibilityOrFocus = () => {
       if (disposed) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      if (hubConnectionRef.current?.state === 'Connected') return;
+      if (isDocumentHidden()) return;
+      if (hubIsLiveOrStarting()) return;
       void connectHub();
     };
 
@@ -687,12 +762,24 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
       return;
     }
 
+    // Fallback poll while the hub is down. A hidden tab cannot show anything,
+    // so its ticks are skipped; the tab catches up the moment it is visible.
     const interval = window.setInterval(() => {
+      if (isDocumentHidden()) {
+        return;
+      }
       void refreshFeed({ silent: true });
     }, POLL_INTERVAL_MS);
+    const catchUpWhenVisible = () => {
+      if (!isDocumentHidden()) {
+        void refreshFeed({ silent: true });
+      }
+    };
+    document.addEventListener('visibilitychange', catchUpWhenVisible);
 
     return () => {
       window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', catchUpWhenVisible);
     };
   }, [connectionStatus, isAuthenticated, refreshFeed]);
 
@@ -728,8 +815,10 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     updatePreferences: updatePreferencesHandler,
     subscribeToPush,
     unsubscribeFromPush,
+    ensureSettingsLoaded,
   }), [
     connectionStatus,
+    ensureSettingsLoaded,
     error,
     isLoading,
     isPreferencesLoading,
@@ -804,7 +893,17 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     updatePreferences: updatePreferencesHandler,
     subscribeToPush,
     unsubscribeFromPush,
-  }), [refreshFeed, loadMore, markRead, markAllRead, updatePreferencesHandler, subscribeToPush, unsubscribeFromPush]);
+    ensureSettingsLoaded,
+  }), [
+    refreshFeed,
+    loadMore,
+    markRead,
+    markAllRead,
+    updatePreferencesHandler,
+    subscribeToPush,
+    unsubscribeFromPush,
+    ensureSettingsLoaded,
+  ]);
 
   return (
     <NotificationCenterContext.Provider value={contextValue}>

@@ -8,6 +8,8 @@ import {
   useLocalParticipant,
   useRemoteParticipants,
 } from '@livekit/components-react';
+// Imported here (not in the /speaking layout) so the LiveKit stylesheet loads only with a live-tutor room.
+import '@livekit/components-styles';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { LiveRoomRealtimeProvider } from './LiveRoomRealtime';

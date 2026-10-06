@@ -405,6 +405,19 @@ public sealed class SpeakingAudioRetentionWorker(
 
         await db.SaveChangesAsync(ct);
 
+        // A derivative of a deleted clip (the remote Speaking audio join) must not outlive it. Best effort and a no-op unless the
+        // remote-worker boundary is registered: the join also expires on its own TTL.
+        if (archivedCount > 0)
+        {
+            var remoteJoin = scope.ServiceProvider.GetService<IRemoteSpeakingJoin>();
+            if (remoteJoin is not null)
+            {
+                await remoteJoin.DeleteForSessionsAsync(
+                    due.Where(x => x.IsArchived).Select(x => x.SpeakingSessionId).Distinct(StringComparer.Ordinal).ToArray(),
+                    ct);
+            }
+        }
+
         var redactedSessions = archivedCount > 0
             ? await RedactExpiredSessionEvidenceAsync(
                 db,

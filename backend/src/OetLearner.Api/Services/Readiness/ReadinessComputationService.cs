@@ -29,6 +29,29 @@ public sealed class ReadinessComputationService(
 
     private static readonly string[] SubtestCodes = ["writing", "speaking", "reading", "listening"];
 
+    // Per-learner single-flight for the stale-snapshot path. A learner opening the
+    // dashboard, bootstrap and readiness page together used to start one ~13-query
+    // compute each (all racing to upsert the same snapshot row). Striped rather than
+    // one-semaphore-per-user so nothing has to be cleaned up; a collision only makes
+    // two different learners wait for each other's compute, never skips one.
+    // ponytail: process-local; the active API slot is the only one serving learners.
+    private const int ComputeGateStripes = 64;
+    private static readonly SemaphoreSlim[] ComputeGates = CreateComputeGates();
+
+    private static SemaphoreSlim[] CreateComputeGates()
+    {
+        var gates = new SemaphoreSlim[ComputeGateStripes];
+        for (var i = 0; i < gates.Length; i++)
+        {
+            gates[i] = new SemaphoreSlim(1, 1);
+        }
+
+        return gates;
+    }
+
+    private static SemaphoreSlim ComputeGateFor(string userId)
+        => ComputeGates[(StringComparer.Ordinal.GetHashCode(userId) & int.MaxValue) % ComputeGateStripes];
+
     public async Task<ReadinessSnapshot> GetOrComputeAsync(string userId, CancellationToken ct)
     {
         var latest = await GetLatestSnapshotAsync(userId, ct);
@@ -37,7 +60,25 @@ public sealed class ReadinessComputationService(
             return latest;
         }
 
-        return await ComputeAsync(userId, ct);
+        var gate = ComputeGateFor(userId);
+        await gate.WaitAsync(ct);
+        try
+        {
+            // The learner's other request may have recomputed while this one waited.
+            // Re-read untracked: a tracked re-read would hand back the stale entity this
+            // context already holds (EF never refreshes tracked values on a re-query).
+            var recomputed = await GetLatestSnapshotAsync(userId, ct, tracked: false);
+            if (recomputed is not null && recomputed.ExpiresAt > DateTimeOffset.UtcNow)
+            {
+                return recomputed;
+            }
+
+            return await ComputeAsync(userId, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task<ReadinessSnapshot> ForceRefreshAsync(string userId, CancellationToken ct)
@@ -95,11 +136,23 @@ public sealed class ReadinessComputationService(
 
         var isSqlite = db.Database.IsSqlite();
 
-        var allAttempts = await db.Attempts.AsNoTracking()
-            .Where(a => a.UserId == userId && a.State == AttemptState.Completed)
-            .Select(a => new { a.Id, a.SubtestCode, a.CompletedAt, a.AnalysisJson })
+        // The 90-day window is applied in SQL (a learner's whole completed history, with
+        // its large AnalysisJson column, used to be loaded and filtered in memory; the
+        // column is not read here, so it is no longer selected). SQLite cannot compare
+        // DateTimeOffset in SQL (same reason as the branches below), so it filters in memory.
+        IQueryable<Attempt> completedAttempts = db.Attempts.AsNoTracking()
+            .Where(a => a.UserId == userId && a.State == AttemptState.Completed);
+        if (!isSqlite)
+        {
+            completedAttempts = completedAttempts.Where(a => a.CompletedAt >= cutoff);
+        }
+
+        var completedAttemptRows = await completedAttempts
+            .Select(a => new { a.Id, a.SubtestCode, a.CompletedAt })
             .ToListAsync(ct);
-        var attemptIds = allAttempts.Where(a => a.CompletedAt.HasValue && a.CompletedAt.Value >= cutoff).ToList();
+        var attemptIds = isSqlite
+            ? completedAttemptRows.Where(a => a.CompletedAt.HasValue && a.CompletedAt.Value >= cutoff).ToList()
+            : completedAttemptRows;
 
         var attemptIdList = attemptIds.Select(a => a.Id).ToList();
         var evaluations = attemptIdList.Count == 0
@@ -166,7 +219,7 @@ public sealed class ReadinessComputationService(
                 code,
                 target,
                 mockReports,
-                attemptsForSubtest.Select(a => (a.Id, a.CompletedAt, a.AnalysisJson)).ToList(),
+                attemptsForSubtest.Select(a => (a.Id, a.CompletedAt)).ToList(),
                 evaluationsByAttemptId,
                 reviewsForSubtest,
                 now);
@@ -235,9 +288,14 @@ public sealed class ReadinessComputationService(
         return snapshot;
     }
 
-    private async Task<ReadinessSnapshot?> GetLatestSnapshotAsync(string userId, CancellationToken ct)
+    private async Task<ReadinessSnapshot?> GetLatestSnapshotAsync(string userId, CancellationToken ct, bool tracked = true)
     {
-        var query = db.ReadinessSnapshots.Where(x => x.UserId == userId);
+        IQueryable<ReadinessSnapshot> query = db.ReadinessSnapshots.Where(x => x.UserId == userId);
+        if (!tracked)
+        {
+            query = query.AsNoTracking();
+        }
+
         if (!db.Database.IsSqlite())
         {
             return await query.OrderByDescending(x => x.ComputedAt).FirstOrDefaultAsync(ct);
@@ -472,7 +530,7 @@ public sealed class ReadinessComputationService(
         string subtestCode,
         decimal target,
         IReadOnlyList<MockReport> mocks,
-        IReadOnlyList<(string Id, DateTimeOffset? CompletedAt, string AnalysisJson)> attempts,
+        IReadOnlyList<(string Id, DateTimeOffset? CompletedAt)> attempts,
         IReadOnlyDictionary<string, Evaluation> evaluationsByAttemptId,
         IReadOnlyList<ReviewRequest> reviews,
         DateTimeOffset now)

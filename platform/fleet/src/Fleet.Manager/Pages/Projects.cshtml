@@ -1,0 +1,11 @@
+@page
+@model ProjectsModel
+@{
+    ViewData["Title"] = "Projects";
+}
+<div class="page-head">
+    <h1>Projects</h1>
+</div>
+<div id="projects-live" data-live-url="/Projects?handler=Fragment" data-live-events="node.updated,api.unreachable,host.updated" data-live-every="30">
+    @await Html.PartialAsync("_ProjectsBody", Model.Projects)
+</div>

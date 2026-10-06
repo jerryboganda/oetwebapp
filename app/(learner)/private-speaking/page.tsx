@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User, Download, ShoppingBag, Globe } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
@@ -26,15 +27,17 @@ import {
   fetchLearnerPrivateSpeakingBookings,
   cancelPrivateSpeakingBooking,
   downloadPrivateSpeakingCalendarInvite,
-  fetchMyEntitlementSnapshot,
   ratePrivateSpeakingSession,
   safePaymentRedirect,
   isApiError,
+  type MyEntitlementSnapshot,
   type PaymentCaptureResult,
 } from '@/lib/api';
-import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
+import { LazyPayPalExpandedCheckout } from '@/components/billing/lazy-paypal-expanded-checkout';
 import { createSpeakingExamFromBooking } from '@/lib/api/speaking-exams';
 import { analytics } from '@/lib/analytics';
+import { useAuth } from '@/contexts/auth-context';
+import { queryKeys, useEntitlementSnapshot } from '@/lib/query/hooks';
 
 type Config = {
   isEnabled: boolean; defaultPriceMinorUnits: number; currency: string;
@@ -207,7 +210,18 @@ export default function PrivateSpeakingPage() {
   const [tutors, setTutors] = useState<Tutor[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const userId = user?.userId ?? '';
+  // The entitlement snapshot is the dashboard's own query (same shared key, in-flight
+  // requests deduped with the shell and dashboard). staleTime 0 on THIS observer keeps
+  // the old freshness for booking: cached data paints at once but is refetched on every
+  // visit, so an admin grant or a change from another device is never shown stale here.
+  const entitlementQuery = useEntitlementSnapshot(userId, { enabled: Boolean(userId), staleTime: 0 });
+  const entitlement = entitlementQuery.data ?? null;
+  const [dataLoading, setDataLoading] = useState(true);
+  // Eligibility and the session count are part of what the first paint needs, so the
+  // page stays in its skeleton until the snapshot is in (as when it was fetched here).
+  const loading = dataLoading || (Boolean(userId) && entitlementQuery.isPending);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('browse');
@@ -228,11 +242,24 @@ export default function PrivateSpeakingPage() {
   const [cancelConfirm, setCancelConfirm] = useState<Booking | null>(null);
   const [cancelInProgress, setCancelInProgress] = useState(false);
   const [rescheduleConfirmOpen, setRescheduleConfirmOpen] = useState(false);
-  const [entitlementRemaining, setEntitlementRemaining] = useState<number | null>(null);
+  const entitlementRemaining = entitlement?.speakingSessionsRemaining ?? null;
+  const queryClient = useQueryClient();
+  // A booking spends a session and a cancellation can give one back. The snapshot is shared with the
+  // dashboard and cached for two minutes, so the change is written into it (when the server answered
+  // the new balance) and the snapshot is refetched: neither this page nor the dashboard keeps the old count.
+  function refreshEntitlementAfterChange(remaining?: number | null) {
+    const key = queryKeys.dashboard.entitlement(userId);
+    if (typeof remaining === 'number') {
+      queryClient.setQueryData<MyEntitlementSnapshot>(key, (current) => (
+        current ? { ...current, speakingSessionsRemaining: remaining } : current
+      ));
+    }
+    void queryClient.invalidateQueries({ queryKey: key });
+  }
   // FINAL 2026-09-06: Live Tutor booking is entitlement-gated. Only holders of
   // an eligible main course/package or the Speaking Crash Course
   // (plan flag SpeakingAddonsEnabled, resolved server-side) may book.
-  const [liveTutorEligible, setLiveTutorEligible] = useState<boolean | null>(null);
+  const liveTutorEligible: boolean | null = entitlement ? entitlement.speakingAddonsEnabled === true : null;
   // B9: LiveKit not configured → no slot browsing, booking or joining.
   const [roomsUnavailable, setRoomsUnavailable] = useState(false);
   const [joiningBookingId, setJoiningBookingId] = useState<string | null>(null);
@@ -253,20 +280,22 @@ export default function PrivateSpeakingPage() {
       fetchPrivateSpeakingConfig(),
       fetchPrivateSpeakingTutors(),
       fetchLearnerPrivateSpeakingBookings(),
-      fetchMyEntitlementSnapshot(),
-    ]).then(([cfg, tut, bk, entitlement]) => {
+    ]).then(([cfg, tut, bk]) => {
       setConfig(cfg as Config);
       if ((cfg as Config).liveRoomsAvailable === false) setRoomsUnavailable(true);
       setTutors(tut as Tutor[]);
       setBookings(bk as Booking[]);
-      setEntitlementRemaining(entitlement.speakingSessionsRemaining);
-      setLiveTutorEligible(entitlement.speakingAddonsEnabled === true);
-      setLoading(false);
+      setDataLoading(false);
     }).catch(() => {
       setError('Could not load private speaking sessions.');
-      setLoading(false);
+      setDataLoading(false);
     });
   }, []);
+
+  // An unreadable snapshot fails the page exactly as it did when it was fetched above.
+  useEffect(() => {
+    if (entitlementQuery.isError) setError('Could not load private speaking sessions.');
+  }, [entitlementQuery.isError]);
 
   // Ineligible learners land on My Bookings (slot browsing is hidden for them).
   useEffect(() => {
@@ -326,9 +355,7 @@ export default function PrivateSpeakingPage() {
       // Fallback: refresh bookings
       setSelectedSlot(null);
       setBookingNotes('');
-      if (result.speakingSessionsRemaining !== undefined) {
-        setEntitlementRemaining(result.speakingSessionsRemaining ?? null);
-      }
+      refreshEntitlementAfterChange(result.speakingSessionsRemaining);
       const updated = await fetchLearnerPrivateSpeakingBookings() as Booking[];
       setBookings(updated);
       setViewMode('bookings');
@@ -436,6 +463,7 @@ export default function PrivateSpeakingPage() {
     setError(null);
     try {
       await cancelPrivateSpeakingBooking(bookingId);
+      refreshEntitlementAfterChange();
       setCancelConfirm(null);
       // Refresh from the server so refund/penalty outcome fields are surfaced.
       const updated = await fetchLearnerPrivateSpeakingBookings() as Booking[];
@@ -924,7 +952,7 @@ export default function PrivateSpeakingPage() {
                   Cancel
                 </Button>
               </div>
-              <PayPalExpandedCheckout
+              <LazyPayPalExpandedCheckout
                 createOrder={() => Promise.resolve(paypalOrderId ?? '')}
                 onCaptured={handlePaypalBookingCaptured}
                 onError={(message) => setError(message)}

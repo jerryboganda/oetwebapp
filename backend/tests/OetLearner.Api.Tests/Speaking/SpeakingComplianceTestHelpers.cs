@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Tests.Speaking;
 
@@ -105,15 +106,18 @@ internal sealed class SingleInstanceScopeFactory : IServiceScopeFactory, IServic
     private readonly LearnerDbContext _db;
     private readonly IFileStorage _storage;
     private readonly IOptions<SpeakingComplianceOptions> _options;
+    private readonly IRemoteSpeakingJoin? _remoteJoin;
 
     public SingleInstanceScopeFactory(
         LearnerDbContext db,
         IFileStorage storage,
-        IOptions<SpeakingComplianceOptions> options)
+        IOptions<SpeakingComplianceOptions> options,
+        IRemoteSpeakingJoin? remoteJoin = null)
     {
         _db = db;
         _storage = storage;
         _options = options;
+        _remoteJoin = remoteJoin;
     }
 
     public IServiceScope CreateScope() => this;
@@ -125,6 +129,7 @@ internal sealed class SingleInstanceScopeFactory : IServiceScopeFactory, IServic
         if (serviceType == typeof(LearnerDbContext)) return _db;
         if (serviceType == typeof(IFileStorage)) return _storage;
         if (serviceType == typeof(IOptions<SpeakingComplianceOptions>)) return _options;
+        if (serviceType == typeof(IRemoteSpeakingJoin)) return _remoteJoin;
         return null;
     }
 
@@ -132,4 +137,22 @@ internal sealed class SingleInstanceScopeFactory : IServiceScopeFactory, IServic
     {
         // The shared LearnerDbContext is owned by the outer test fixture.
     }
+}
+
+/// <summary>Records which sessions the remote Speaking join cleanup was asked to forget (retention sweep, learner erasure).</summary>
+internal sealed class RecordingRemoteSpeakingJoin : IRemoteSpeakingJoin
+{
+    public List<string[]> Deleted { get; } = new();
+
+    public Task DeleteForSessionsAsync(IReadOnlyCollection<string> sessionIds, CancellationToken ct)
+    {
+        Deleted.Add(sessionIds.ToArray());
+        return Task.CompletedTask;
+    }
+
+    public Task<SpeakingJoinEnqueue> EnqueueForSessionAsync(string sessionId, CancellationToken ct)
+        => Task.FromResult(SpeakingJoinEnqueue.Disabled);
+
+    public Task<SpeakingAudioJoin?> TryServeAsync(string sessionId, IReadOnlyList<string> clipSha256s, CancellationToken ct)
+        => Task.FromResult<SpeakingAudioJoin?>(null);
 }

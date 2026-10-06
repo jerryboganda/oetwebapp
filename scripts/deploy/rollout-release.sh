@@ -199,9 +199,24 @@ current_sha="$deploy_sha"
 
 echo "ACTIVE_SLOT=$target_slot" > .deploy/active-slot.env
 
-if [ -n "$previous_slot" ] && [ "${KEEP_PREVIOUS_SLOT_RUNNING:-true}" != "true" ]; then
-  echo "[rollout] stopping previous slot because KEEP_PREVIOUS_SLOT_RUNNING is false: $previous_slot"
-  ACTIVE_SLOT="$target_slot" compose stop "learner-api-$previous_slot" "web-$previous_slot"
+# Owner directive 2026-10-05: the previous slot is stopped by default
+# (KEEP_PREVIOUS_SLOT_RUNNING defaults to false). A second, idle API slot still runs
+# its whole set of hosted services and holds a 25-connection Npgsql pool against a
+# 100-connection Postgres; see docs/ops/db-connection-budget.md. Set
+# KEEP_PREVIOUS_SLOT_RUNNING=true to keep it warm for a one-off rollout.
+#
+# Rollback does not need the slot running. Every failure path above (public gates)
+# flips the routers back BEFORE this point, while the previous slot is still up, and
+# after this point rollback is `gh workflow run production-deploy.yml -f sha=<previous-sha>`
+# (images are already in GHCR), which recreates the inactive slot from the compose
+# file whether its containers are running, stopped or missing.
+#
+# The stop is best-effort: the release is already live and recorded above, so a
+# failure to stop the old slot must not turn a good rollout into a failed one.
+if [ -n "$previous_slot" ] && [ "${KEEP_PREVIOUS_SLOT_RUNNING:-false}" != "true" ]; then
+  echo "[rollout] stopping previous slot (KEEP_PREVIOUS_SLOT_RUNNING is not true): $previous_slot"
+  ACTIVE_SLOT="$target_slot" compose stop "learner-api-$previous_slot" "web-$previous_slot" \
+    || echo "[rollout] WARNING: could not stop previous slot $previous_slot; it keeps running and is recreated by the next rollout." >&2
 fi
 
 echo "[rollout] release is healthy and recorded as previous-good: $current_sha on $target_slot"

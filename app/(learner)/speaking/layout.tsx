@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import '@livekit/components-styles';
+// The LiveKit stylesheet is imported by LearnerLiveRoomShell itself, so only a human live-tutor room loads it
+// (it used to ride on every /speaking route, including AI exams that never mount LiveKit).
 
 export const metadata: Metadata = {
   title: 'OET Speaking',

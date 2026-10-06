@@ -30,6 +30,21 @@ describe('loadPlacementAccess', () => {
     expect(fetchPlacementStatus).toHaveBeenCalledTimes(1);
   });
 
+  it('forgets the cached answer when the client stores are reset on sign-out', async () => {
+    const { loadPlacementAccess, ApiError } = await freshModule();
+    const { resetAllStores } = await import('@/lib/stores/registry');
+    fetchPlacementStatus.mockRejectedValue(new ApiError(404, 'placement_disabled', 'The placement test is not available yet.', false));
+
+    expect(await loadPlacementAccess()).toBe(false);
+    expect(fetchPlacementStatus).toHaveBeenCalledTimes(1);
+
+    resetAllStores();
+
+    // The next account on this tab must be asked, not handed the previous account's answer.
+    expect(await loadPlacementAccess()).toBe(false);
+    expect(fetchPlacementStatus).toHaveBeenCalledTimes(2);
+  });
+
   it('asks again after a transient failure', async () => {
     const { loadPlacementAccess, ApiError } = await freshModule();
     fetchPlacementStatus.mockRejectedValue(new ApiError(503, 'service_unavailable', 'Try again.', true));

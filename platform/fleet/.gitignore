@@ -1,0 +1,52 @@
+# Nothing sensitive may ever reach the public-when-working repository (AGENTS.md: GitHub Actions on a public-when-working repo).
+# The fleet holds SSH keys, a master key, SQLite state with encrypted vault rows and real helper addresses: all of it
+# lives on the primary (named volume, /run/secrets), never in the tree.
+bin/
+obj/
+.vs/
+TestResults/
+
+# state
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# keys and trust material
+id_*
+*.pem
+*.key
+known_hosts
+known_hosts.*
+*.known_hosts
+fleet_master_key*
+fleet_api_credential*
+fleet_sync_token*
+fleet_metrics_token*
+secrets/
+fleet-secrets/
+.deploy/
+
+# real inventories and vault dumps (the checked-in ansible/inventory/target.yml is a template with no host data)
+ansible/inventory/*
+!ansible/inventory/target.yml
+inventory.local*
+vault*.json
+vault*.bin
+*.vault
+wg*.conf
+
+# local overrides
+*.local.*
+.env
+.env.*
+
+# python bytecode left behind when the tests load the helper scripts as modules
+__pycache__/
+*.pyc
+
+# produced by the build-only fleet workflow (the agent track): the directory the images are built from; *.trx is a manual-run leftover
+publish/
+*.trx

@@ -1,0 +1,12 @@
+---
+# Writes the machine-readable result of a step for the manager (the manager parses this file; it never
+# scrapes Ansible's console output). It runs on the controller, also in check mode, and never counts as a change.
+- name: Record the step result
+  delegate_to: localhost
+  become: false
+  check_mode: false
+  changed_when: false
+  ansible.builtin.copy:
+    dest: "{{ fleet_result_file }}"
+    mode: "0600"
+    content: "{{ fleet_result_json }}"

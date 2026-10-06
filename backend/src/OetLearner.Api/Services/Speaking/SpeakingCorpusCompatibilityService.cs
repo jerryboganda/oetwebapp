@@ -476,7 +476,13 @@ public sealed class SpeakingCorpusCompatibilityService(
             await sessions.StartWarmupAsync(userId, sessionId, ct);
 
             step = "finish_warmup";
-            await sessions.FinishWarmupAsync(userId, sessionId, ct);
+            var warmupDone = await sessions.FinishWarmupAsync(userId, sessionId, ct);
+            if (warmupDone.Admission is not null)
+            {
+                // The live-session cap is full (admission queue): the harness cannot judge the prep timer.
+                throw new HarnessCheckException(
+                    $"live Speaking capacity is full (queue position {warmupDone.Admission.Position}); retry when it frees");
+            }
             var prepClock = await sessions.GetClockAsync(userId, sessionId, ct);
             if (prepClock.Stage != "prep" || prepClock.StageEndsAt is null)
                 throw new HarnessCheckException($"prep timer not running (stage={prepClock.Stage})");

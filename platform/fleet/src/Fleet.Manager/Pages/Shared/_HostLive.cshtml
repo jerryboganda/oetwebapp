@@ -1,0 +1,339 @@
+@model Fleet.Manager.Dashboard.HostPageView
+@{
+    var v = Model;
+    var line = v.Line;
+    var host = line.Host;
+    var node = line.Node;
+    var report = line.Report;
+    var policy = v.Policy.Effective;
+    var beat = line.HeartbeatAge is { } age ? Fmt.Age(age) + " ago" : "never";
+    var synced = host.DesiredRevision == host.AppliedRevision;
+    var cores = host.CpuCores ?? report?.CpuCores;
+    var memTotal = host.MemMib ?? report?.MemTotalMiB;
+    var uptime = report?.UptimeSeconds is { } seconds ? Fmt.Age(TimeSpan.FromSeconds(seconds)) : "—";
+    var slotCap = node is null ? 0 : Fleet.Manager.Dashboard.DashboardService.SlotCap(node);
+}
+<div data-live-state="@(host.Lifecycle + "|" + host.Alert)">
+    <section class="panel" aria-labelledby="sum-h">
+        <h2 id="sum-h">Summary</h2>
+        <dl class="kv">
+            <dt>State</dt>
+            <dd>
+                <span class="badge @Fmt.BadgeClass(host.Lifecycle)">@host.Lifecycle</span>
+                @if (node is not null)
+                {
+                    <span class="badge @Fmt.BadgeClass(node.Status)">API: @node.Status</span>
+                }
+                @if (host.Alert is not null)
+                {
+                    <span class="badge bad">@Fmt.Untrusted(host.Alert, 40)</span>
+                }
+            </dd>
+            <dt>Address</dt>
+            <dd>@(host.Address + ":" + host.SshPort)</dd>
+            <dt>Node reference</dt>
+            <dd><code>@host.NodeRef</code></dd>
+            <dt>Region and provider</dt>
+            <dd>@Fmt.OrDash(host.Region) / @Fmt.OrDash(host.Provider)</dd>
+            <dt>Health</dt>
+            <dd>
+                @if (node is null)
+                {
+                    <span class="muted">not registered with the OET API yet</span>
+                }
+                else
+                {
+                    <span class="badge @Fmt.BadgeClass(node.Health)">@node.Health</span>
+                    <span class="sub">last heartbeat @beat</span>
+                }
+            </dd>
+            <dt>Pinned host key</dt>
+            <dd>
+                @if (host.HostKeyFingerprint is null)
+                {
+                    <span class="muted">not pinned yet</span>
+                }
+                else
+                {
+                    <code>@Fmt.Untrusted(host.HostKeyAlgorithm, 30)</code>
+                    <code class="break">@Fmt.Untrusted(host.HostKeyFingerprint, 80)</code>
+                    <span class="sub">pinned @Fmt.Timestamp(host.HostKeyPinnedAt)</span>
+                }
+            </dd>
+            <dt>Policy revision</dt>
+            <dd>wanted @host.DesiredRevision, applied @host.AppliedRevision <span class="badge @(synced ? "ok" : "warn")">@(synced ? "in sync" : "applying")</span></dd>
+            <dt>SSH status poll</dt>
+            <dd>@Fmt.Ago(host.LastStatusAt, v.Now)@(report?.CtlLatencyMs is { } latency ? ", " + latency + " ms round trip" : string.Empty)</dd>
+            <dt>Open operation</dt>
+            <dd>
+                @if (line.Operation is null)
+                {
+                    <span class="muted">none</span>
+                }
+                else
+                {
+                    <a href="@("/Operations/Detail/" + Uri.EscapeDataString(line.Operation.Id))">@Fmt.KindLabel(line.Operation.Kind)</a>
+                    <span class="badge @Fmt.BadgeClass(line.Operation.State)">@Fmt.StateLabel(line.Operation.State)</span>
+                }
+            </dd>
+        </dl>
+    </section>
+
+    <section class="panel" aria-labelledby="hw-h">
+        <h2 id="hw-h">Hardware</h2>
+        <dl class="kv">
+            <dt>Operating system</dt>
+            <dd>@Fmt.OrDash(Fmt.Untrusted(report?.Os ?? host.Os, 80)) <span class="sub">@Fmt.OrDash(Fmt.Untrusted(report?.Arch ?? host.Arch, 20))</span></dd>
+            <dt>CPU cores</dt>
+            <dd>@(cores is null ? "—" : cores.ToString())</dd>
+            <dt>Memory</dt>
+            <dd>@Fmt.MiB(memTotal) total, @Fmt.MiB(report?.MemAvailableMiB) available</dd>
+            <dt>Disk</dt>
+            <dd>@Fmt.GiB(report?.DiskFreeGiB) free now <span class="sub">@Fmt.GiB(host.DiskGib) free when enrolled</span></dd>
+            <dt>Swap</dt>
+            <dd>@Fmt.MiB(report?.SwapMiB) <span class="sub">must be 0</span></dd>
+            <dt>Uptime</dt>
+            <dd>@uptime</dd>
+            <dt>Time sync</dt>
+            <dd>
+                @if (report?.TimeSyncOk is { } timeOk)
+                {
+                    <span class="badge @(timeOk ? "ok" : "bad")">@(timeOk ? "in sync" : "not in sync")</span>
+                }
+                else
+                {
+                    <span class="muted">&mdash;</span>
+                }
+            </dd>
+        </dl>
+    </section>
+
+    <section class="panel" aria-labelledby="comp-h">
+        <h2 id="comp-h">Installed components</h2>
+        @if (report is null)
+        {
+            <p class="empty">No SSH status yet. Active helpers are asked every 5 minutes.</p>
+        }
+        else if (!report.CtlReported)
+        {
+            <p class="notice warn">The last SSH status call failed: @Fmt.Untrusted(report.CtlFailure, 80).</p>
+        }
+        <dl class="kv">
+            <dt>Docker engine</dt>
+            <dd>
+                @Fmt.OrDash(Fmt.Untrusted(report?.DockerVersion, 30))
+                @if (report?.DockerRunning is { } dockerUp)
+                {
+                    <span class="badge @(dockerUp ? "ok" : "bad")">@(dockerUp ? "running" : "stopped")</span>
+                }
+            </dd>
+            <dt>Agent container</dt>
+            <dd>
+                @if (report?.AgentPresent is { } present)
+                {
+                    <span class="badge @(present ? Fmt.BadgeClass(report.AgentState) : "bad")">@(present ? Fmt.Untrusted(report.AgentState, 20) : "missing")</span>
+                    <span class="sub">restarts @(report.AgentRestartCount?.ToString() ?? "—"), started @Fmt.Ago(report.AgentStartedAt, v.Now)</span>
+                    if (report.AgentOomKilled == true)
+                    {
+                        <span class="badge bad">killed for memory</span>
+                    }
+                }
+                else
+                {
+                    <span class="muted">&mdash;</span>
+                }
+            </dd>
+            <dt>Agent image</dt>
+            <dd><code>@Fmt.ShortDigest(host.AgentDigest)</code> <span class="sub">version @Fmt.OrDash(Fmt.Untrusted(node?.Agent?.Version, 30)), protocol @(node?.Agent?.Protocol?.ToString() ?? "—")</span></dd>
+            <dt>Restricted tooling</dt>
+            <dd>oet-fleet-ctl version @(report?.CtlVersion?.ToString() ?? "—")</dd>
+            <dt>Fleet-owned</dt>
+            <dd class="sub">The <code>oetfleet</code> account, the gate and ctl scripts, <code>/etc/oet-fleet</code>, the systemd unit, the agent container and agent-repository images. Removal touches only these; Docker, the firewall, other containers and volumes are left alone.</dd>
+        </dl>
+    </section>
+
+    <section class="panel" aria-labelledby="wl-h">
+        <h2 id="wl-h">Assigned workloads and limits</h2>
+        <p class="muted">@(v.Policy.IsOverride ? "This helper has its own limits." : "This helper follows the global policy.")</p>
+        <div class="table-wrap" role="region" aria-label="Workloads and limits" tabindex="0">
+            <table class="data compact">
+                <caption class="sr-only">Allowed job kinds with caps, and the helper's concurrency, budgets, pressure and polling limits</caption>
+                <thead>
+                <tr>
+                    <th scope="col">Limit</th>
+                    <th scope="col">Value</th>
+                </tr>
+                </thead>
+                <tbody>
+                <tr>
+                    <th scope="row">Allowed kinds</th>
+                    <td>
+                        @if (policy.AllowedKinds.Count == 0)
+                        {
+                            <span class="muted">none: the helper takes no work</span>
+                        }
+                        @foreach (var kind in policy.AllowedKinds)
+                        {
+                            <span class="tag"><code>@kind</code> cap @(policy.PerKind.TryGetValue(kind, out var cap) ? cap : policy.MaxConcurrency)</span>
+                        }
+                    </td>
+                </tr>
+                <tr><th scope="row">Maximum concurrent jobs</th><td>@policy.MaxConcurrency</td></tr>
+                <tr><th scope="row">Running now</th><td>@(node is null ? "—" : node.Leases?.Count + " jobs, weight " + node.Leases?.Weight + " of " + slotCap + " slots")</td></tr>
+                <tr><th scope="row">Free for new work</th><td>@(node?.Capacity is null ? "—" : node.Capacity.HeavySlotsFree + " slots, " + Fmt.Cores(node.Capacity.CpuBudgetFreeMilli) + ", " + Fmt.MiB(node.Capacity.MemBudgetFreeMiB) + " memory, " + Fmt.MiB(node.Capacity.TmpFreeMiB) + " scratch")</td></tr>
+                <tr><th scope="row">Budgets</th><td>@Fmt.Cores(policy.Budgets.CpuMilli), @Fmt.MiB(policy.Budgets.MemMiB) memory, @Fmt.MiB(policy.Budgets.TmpMiB) scratch</td></tr>
+                <tr><th scope="row">Slows down</th><td>above @(policy.Pressure.ReduceCpuPct)% CPU or below @(policy.Pressure.ReduceMemFreePct)% free memory; restores after @(policy.Pressure.RestoreAfterSeconds) s below @(policy.Pressure.RestoreCpuPct)% CPU and above @(policy.Pressure.RestoreMemFreePct)% free memory</td></tr>
+                <tr><th scope="row">Asks for work every</th><td>@(policy.PollSeconds.Idle) s idle, @(policy.PollSeconds.Min) to @(policy.PollSeconds.Max) s</td></tr>
+                <tr>
+                    <th scope="row">Kinds the agent can run</th>
+                    <td>
+                        @if (node?.Agent?.Kinds is { Count: > 0 } kinds)
+                        {
+                            foreach (var kind in kinds)
+                            {
+                                <span class="tag"><code>@Fmt.Untrusted(kind.Kind, 48)</code> schema @(string.Join(",", kind.SchemaVersions ?? Array.Empty<int>()))</span>
+                            }
+                        }
+                        else
+                        {
+                            <span class="muted">not reported yet</span>
+                        }
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel" aria-labelledby="hist-h">
+        <h2 id="hist-h">Health history</h2>
+        @if (v.Health.Count == 0)
+        {
+            <p class="empty">No change has been seen since this console started. Durable events are in the audit trail below.</p>
+        }
+        else
+        {
+            <div class="table-wrap" role="region" aria-label="Health history" tabindex="0">
+                <table class="data compact">
+                    <caption class="sr-only">Changes of the helper's API status and health since the console started, newest first</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">When</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Health</th>
+                        <th scope="col">Before</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var change in v.Health.Take(30))
+                    {
+                        <tr>
+                            <td>@Fmt.Timestamp(change.At)</td>
+                            <td><span class="badge @Fmt.BadgeClass(change.Status)">@change.Status</span></td>
+                            <td><span class="badge @Fmt.BadgeClass(change.Health)">@change.Health</span></td>
+                            <td class="sub">@(change.FromStatus is null ? "first seen" : change.FromStatus + " / " + change.FromHealth)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="panel" aria-labelledby="ops-h">
+        <h2 id="ops-h">Provisioning, repair and maintenance history</h2>
+        @if (v.Operations.Count == 0)
+        {
+            <p class="empty">No operations yet.</p>
+        }
+        else
+        {
+            <div class="table-wrap" role="region" aria-label="Operations of this helper" tabindex="0">
+                <table class="data compact">
+                    <caption class="sr-only">Operations of this helper, newest first</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">Operation</th>
+                        <th scope="col">State</th>
+                        <th scope="col">Started</th>
+                        <th scope="col">Finished</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var op in v.Operations.Take(20))
+                    {
+                        <tr>
+                            <th scope="row"><a href="@("/Operations/Detail/" + Uri.EscapeDataString(op.Id))">@Fmt.KindLabel(op.Kind)</a></th>
+                            <td>
+                                <span class="badge @Fmt.BadgeClass(op.State)">@Fmt.StateLabel(op.State)</span>
+                                @if (op.FailureReason is not null)
+                                {
+                                    <span class="sub"><code>@op.FailureReason</code></span>
+                                }
+                            </td>
+                            <td>@Fmt.Timestamp(op.StartedAt)</td>
+                            <td>@Fmt.Timestamp(op.FinishedAt)</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section class="panel" aria-labelledby="cred-h">
+        <h2 id="cred-h">Credentials (write-only)</h2>
+        @if (v.Credentials.Count == 0)
+        {
+            <p class="empty">No credential is stored for this helper.</p>
+        }
+        else
+        {
+            <ul class="plain-list">
+                @foreach (var credential in v.Credentials)
+                {
+                    <li>
+                        <strong>@(credential.Purpose == "owner-bootstrap" ? "Temporary owner SSH key" : credential.Purpose == "manager-ssh" ? "Manager SSH key" : "Node token (last rendered)")</strong>
+                        <span class="sub">fingerprint <code>@credential.Hint</code>, stored @Fmt.Ago(credential.CreatedAt, v.Now)@(credential.ExpiresAt is { } expires ? ", expires " + Fmt.Until(expires, v.Now) : string.Empty)</span>
+                    </li>
+                }
+            </ul>
+        }
+        <p class="hint">Values are never shown. Manage them on the <a href="/Credentials">Credentials</a> page.</p>
+    </section>
+
+    <section class="panel" aria-labelledby="audit-h">
+        <h2 id="audit-h">Audit trail of this helper</h2>
+        @if (v.Audit.Count == 0)
+        {
+            <p class="empty">Nothing recorded.</p>
+        }
+        else
+        {
+            <div class="table-wrap" role="region" aria-label="Audit trail" tabindex="0">
+                <table class="data compact">
+                    <caption class="sr-only">Audit records that name this helper, newest first</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">When</th>
+                        <th scope="col">Who</th>
+                        <th scope="col">What</th>
+                        <th scope="col">Details</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var entry in v.Audit.Take(20))
+                    {
+                        <tr>
+                            <td>@Fmt.Timestamp(entry.At)</td>
+                            <td>@entry.Actor</td>
+                            <td><code>@entry.Action</code></td>
+                            <td class="sub break">@entry.Details</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+</div>

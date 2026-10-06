@@ -9,7 +9,7 @@ a module sub-doc, or a dated record; check its date before trusting it.
 - [ARCHITECTURE.md](ARCHITECTURE.md) — repository map: where each concern lives and where new code goes.
 - [README.md](../README.md) — stack, local URLs, desktop shell notes.
 - [CONTEXT.md](../CONTEXT.md) — domain glossary: canonical terms and the words to avoid.
-- [adr/](adr/) — decisions: hand-authored EF migrations (0001), scoring via canonical helpers (0002), AI via the grounded gateway (0003), media via `IFileStorage` (0004).
+- [adr/](adr/) — decisions: hand-authored EF migrations (0001), scoring via canonical helpers (0002), AI via the grounded gateway (0003), media via `IFileStorage` (0004), [fleet manager and remote workers (0005)](adr/0005-fleet-manager-and-remote-workers.md).
 
 ## Continuity & verification
 
@@ -46,8 +46,14 @@ Where agent working memory lives. Layers have exclusive ownership — no file ha
 
 - [DEPLOY-MANUAL.md](../DEPLOY-MANUAL.md) — how production deploys (`build-images.yml` + `production-deploy.yml` → GHCR → blue/green); [DEPLOYMENT.md](../DEPLOYMENT.md) for env, compose files and disaster recovery.
 - [ops/production-compute-offload.md](ops/production-compute-offload.md) — what runs on Actions vs the VPS; [PRIVATE-CI-SELF-HOSTED-RUNNER.md](PRIVATE-CI-SELF-HOSTED-RUNNER.md) for the optional private runner.
+- [ops/backend-hot-path-optimizations.md](ops/backend-hot-path-optimizations.md) and [ops/user-state-cache.md](ops/user-state-cache.md) — API hot-path changes and the 15 s per-process user-state cache (invalidation table, worst-case revocation latency, kill switch).
+- [ops/frontend-bff-optimizations.md](ops/frontend-bff-optimizations.md) — web/BFF changes (lazy SDKs and hub, batched flags and telemetry, retry policy, request-body streaming and its `BFF_STREAM_REQUEST_BODIES=0` kill switch) and the owner QA checklist.
+- [ops/REMOTE-WORKER.md](ops/REMOTE-WORKER.md) — the API side of the remote-worker boundary (OET-RWP/1): switches (all default off), bring-up order, state machines, kill switches, diagnostics.
+- [ops/FLEET.md](ops/FLEET.md) — the owner fleet manager and its helper VPSs: runbook for enrollment, rollout and recovery (decision record: [adr/0005-fleet-manager-and-remote-workers.md](adr/0005-fleet-manager-and-remote-workers.md)).
+- [ops/db-connection-budget.md](ops/db-connection-budget.md) — Postgres connection budget per process (`application_name`) against `max_connections`, and how to measure it on the live database.
 - [ADMIN-RUNTIME-SETTINGS.md](ADMIN-RUNTIME-SETTINGS.md) — secrets and settings managed from `/admin/settings`.
 - [ops/deploy-gate.md](ops/deploy-gate.md) and [ops/incident-response-runbook.md](ops/incident-response-runbook.md) — deploy approval, rollback and incidents.
+- [ops/LOAD-TESTING.md](ops/LOAD-TESTING.md) — the k6 capacity harness under `tests/load/`: inert manual tools the owner runs from a self-provisioned load generator (no CI runs it, agents never run it); [ops/PROMETHEUS-SCRAPE-TARGETS.md](ops/PROMETHEUS-SCRAPE-TARGETS.md) — what to scrape and how helper-node metrics travel.
 - [security/README.md](security/README.md) — security evidence pack and runbooks.
 
 ## Releases

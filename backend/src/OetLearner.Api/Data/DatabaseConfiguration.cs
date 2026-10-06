@@ -31,6 +31,31 @@ public static class DatabaseConfiguration
         throw new InvalidOperationException("ConnectionStrings:DefaultConnection must be configured outside the Development environment.");
     }
 
+    /// <summary>
+    /// True when a connection string selects PostgreSQL (everything that is neither <c>InMemory:</c> nor SQLite). Used to register
+    /// Postgres-only subsystems (the remote-worker boundary) at startup, from the same string the DbContext will use.
+    /// </summary>
+    public static bool IsPostgresConnectionString(string connectionString)
+        => !string.IsNullOrWhiteSpace(connectionString)
+           && !connectionString.StartsWith("InMemory:", StringComparison.OrdinalIgnoreCase)
+           && !IsSqliteConnectionString(connectionString);
+
+    /// <summary>
+    /// <see cref="IsPostgresConnectionString"/> for the host's configuration; a missing connection string outside Development
+    /// (which would fail later, when the DbContext is first built) is simply "not PostgreSQL" here.
+    /// </summary>
+    public static bool IsPostgres(IConfiguration configuration, bool isDevelopment)
+    {
+        try
+        {
+            return IsPostgresConnectionString(ResolveConnectionString(configuration, isDevelopment));
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
     public static void ConfigureDbContext(DbContextOptionsBuilder optionsBuilder, string connectionString)
     {
         optionsBuilder.AddInterceptors(BillingCatalogVersionImmutability);

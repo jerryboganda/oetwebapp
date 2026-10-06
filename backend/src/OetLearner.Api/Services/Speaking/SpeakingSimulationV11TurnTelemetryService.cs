@@ -10,12 +10,24 @@ namespace OetLearner.Api.Services.Speaking;
 /// local because SignalR turns are process-local work; the persisted rows are
 /// the cross-instance audit/analytics source. A turn that exceeds the
 /// approved concurrency, latency, or cost budget is never silently scored.
+///
+/// NOT A CAPACITY CONTROL FOR LIVE AI SPEAKING (verified 5 Oct 2026). The only caller of
+/// <see cref="TryAcquireAsync"/> is the legacy SignalR role-play turn in
+/// <c>ConversationHub.SpeakingRoleplay.cs</c>, and every entry point of that hub rejects typed Speaking
+/// sessions first (<c>RejectLegacySpeakingVoicePathAsync</c> always returns true), so the static
+/// <see cref="ActiveTurnCount"/> never leaves 0 for a real learner. Live AI session capacity is the
+/// database-backed <see cref="SpeakingLiveAdmissionService"/>. Only <see cref="HasTechnicalReviewBreachAsync"/>
+/// is still read by a live path (the v1.1 assessor); the lease, <c>TryAcquireAsync</c> and the telemetry
+/// writes are reached only from that legacy hub.
 /// </summary>
 public sealed class SpeakingSimulationV11TurnTelemetryService(
     LearnerDbContext db,
     SpeakingSimulationV11ReleaseGate releaseGate,
     ILogger<SpeakingSimulationV11TurnTelemetryService> logger)
 {
+    /// <summary>DEAD LIMITER: a process-local counter touched only by the unreachable legacy hub path (see the
+    /// class summary). Do not read it as a concurrency or capacity gauge; use
+    /// <see cref="SpeakingLiveAdmissionService.GetCountsAsync"/>.</summary>
     internal static int ActiveTurnCount;
 
     public async Task<SpeakingSimulationV11TurnLease?> TryAcquireAsync(

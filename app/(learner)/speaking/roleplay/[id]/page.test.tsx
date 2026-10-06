@@ -9,16 +9,19 @@ const {
   mockRecordConsent,
   mockStartWarmup,
   mockFinishWarmup,
+  mockLeaveQueue,
   mockListFreeSamples,
   MockApiError,
 } = vi.hoisted(() => {
   class MockApiError extends Error {
     status: number;
     userMessage: string;
-    constructor(status: number, message: string) {
+    code: string;
+    constructor(status: number, message: string, code = '') {
       super(message);
       this.status = status;
       this.userMessage = message;
+      this.code = code;
     }
   }
   return {
@@ -29,6 +32,7 @@ const {
     mockRecordConsent: vi.fn(),
     mockStartWarmup: vi.fn(),
     mockFinishWarmup: vi.fn(),
+    mockLeaveQueue: vi.fn(),
     mockListFreeSamples: vi.fn(),
     MockApiError,
   };
@@ -55,6 +59,7 @@ vi.mock('@/lib/api/speaking-sessions', () => ({
   recordConsent: mockRecordConsent,
   startSpeakingWarmup: mockStartWarmup,
   finishSpeakingWarmup: mockFinishWarmup,
+  leaveSpeakingSessionQueue: mockLeaveQueue,
 }));
 
 vi.mock('@/lib/api/free-samples', () => ({ listFreeSamples: mockListFreeSamples }));
@@ -85,6 +90,7 @@ describe('Speaking role-play entry: Rules + consent before any timer', () => {
     mockRecordConsent.mockResolvedValue({ consentVersion: 'recording.v1', acceptedAt: '2026-09-23T00:00:00Z' });
     mockStartWarmup.mockResolvedValue({});
     mockFinishWarmup.mockResolvedValue({ feedbackMessage: null });
+    mockLeaveQueue.mockResolvedValue(undefined);
     mockListFreeSamples.mockResolvedValue([]);
   });
 
@@ -158,5 +164,105 @@ describe('Speaking role-play entry: Rules + consent before any timer', () => {
 
     expect(await screen.findByText('Free sample completed')).toBeInTheDocument();
     expect(screen.queryByTestId('speaking-rules-consent')).not.toBeInTheDocument();
+  });
+
+  describe('the live AI session queue (owner decision 5 Oct 2026)', () => {
+    const waitingDetail = (position: number) => ({
+      feedbackMessage: null,
+      state: 'warmup',
+      admission: { status: 'waiting', position, queueLength: 4, estimatedWaitSeconds: 95, pollAfterSeconds: 2 },
+    });
+
+    it('waits in the line when the cap is full, keeps the same session, and opens prep once admitted', async () => {
+      const user = userEvent.setup();
+      mockFinishWarmup
+        .mockResolvedValueOnce(waitingDetail(3))
+        .mockResolvedValueOnce(waitingDetail(1))
+        .mockResolvedValueOnce({ feedbackMessage: null, state: 'prep' });
+      render(<RoleCardPreview />);
+
+      await user.click(await screen.findByRole('checkbox'));
+      await user.click(screen.getByRole('button', { name: /start preparation/i }));
+
+      // Cap full: the learner is shown the line, not the prep timer, and nothing navigates.
+      expect(await screen.findByTestId('speaking-admission-wait')).toBeInTheDocument();
+      expect(screen.getByTestId('speaking-admission-position')).toHaveTextContent('Position 3 of 4');
+      expect(screen.queryByTestId('speaking-rules-consent')).not.toBeInTheDocument();
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // The page repeats finish-warmup on its own; the first retry moves the learner up the line.
+      await waitFor(
+        () => expect(screen.getByTestId('speaking-admission-position')).toHaveTextContent('Position 1 of 4'),
+        { timeout: 5_000 },
+      );
+      expect(mockPush).not.toHaveBeenCalled();
+
+      // The retry that finds a free place opens prep.
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/speaking/sessions/sess-1/prep'), { timeout: 5_000 });
+      expect(mockCreateSession).toHaveBeenCalledTimes(1);
+      expect(mockRecordConsent).toHaveBeenCalledTimes(1);
+      expect(mockFinishWarmup).toHaveBeenCalledTimes(3);
+    });
+
+    it('ends the wait with the server message when a retry is refused for a reason waiting cannot cure', async () => {
+      const user = userEvent.setup();
+      mockFinishWarmup
+        .mockResolvedValueOnce(waitingDetail(1))
+        .mockRejectedValueOnce(new MockApiError(402, 'You do not have enough credits to start this activity.'));
+      render(<RoleCardPreview />);
+
+      await user.click(await screen.findByRole('checkbox'));
+      await user.click(screen.getByRole('button', { name: /start preparation/i }));
+      expect(await screen.findByTestId('speaking-admission-wait')).toBeInTheDocument();
+
+      expect(await screen.findByRole('alert', {}, { timeout: 5_000 }))
+        .toHaveTextContent('You do not have enough credits to start this activity.');
+      expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
+      expect(screen.getByTestId('speaking-rules-consent')).toBeInTheDocument();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('shows why, and never opens prep, when the learner already has another live session (409, not "already admitted")', async () => {
+      const user = userEvent.setup();
+      mockFinishWarmup.mockRejectedValueOnce(
+        new MockApiError(
+          409,
+          'You already have a live Speaking session open or waiting.',
+          'speaking_live_session_active',
+        ),
+      );
+      render(<RoleCardPreview />);
+
+      await user.click(await screen.findByRole('checkbox'));
+      await user.click(screen.getByRole('button', { name: /start preparation/i }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('You already have a live Speaking session open or waiting.');
+      expect(mockPush).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('speaking-admission-wait')).not.toBeInTheDocument();
+    });
+
+    it('still reads any other 409 on the first start as "already past warm-up" and opens prep', async () => {
+      const user = userEvent.setup();
+      mockFinishWarmup.mockRejectedValueOnce(new MockApiError(409, 'Warm-up can only finish from the warm-up state.', 'speaking_session_invalid_state'));
+      render(<RoleCardPreview />);
+
+      await user.click(await screen.findByRole('checkbox'));
+      await user.click(screen.getByRole('button', { name: /start preparation/i }));
+
+      await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/speaking/sessions/sess-1/prep'));
+    });
+
+    it('gives the place back when the learner leaves the queue, then goes to the Speaking home', async () => {
+      const user = userEvent.setup();
+      mockFinishWarmup.mockResolvedValue(waitingDetail(3));
+      render(<RoleCardPreview />);
+
+      await user.click(await screen.findByRole('checkbox'));
+      await user.click(screen.getByRole('button', { name: /start preparation/i }));
+      await user.click(await screen.findByRole('button', { name: /leave the queue/i }));
+
+      expect(mockLeaveQueue).toHaveBeenCalledWith('sess-1');
+      expect(mockPush).toHaveBeenCalledWith('/speaking');
+    });
   });
 });

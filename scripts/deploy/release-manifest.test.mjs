@@ -9,7 +9,8 @@ import { stripVTControlCharacters } from 'node:util';
 import test from 'node:test';
 import { COMPONENTS, apiNeedsMigrations, buildInputParityFailures, buildInputsChanged, changedPaths, classifyInputs, comparisonContainsSha,
   eligibleBuild, validateManifest, verifySqlArtifact } from './release-manifest.mjs';
-import { activeLines, checkContract, scanRepo } from './verify-pipeline-contract.mjs';
+import { PROD_SSH_WORKFLOWS, activeLines, checkContract, fleetWorkflowFailures, listTextFiles,
+  platformSourceFailures, remoteRolloutBlock, scanRepo } from './verify-pipeline-contract.mjs';
 import { reportPipelineContract } from '../ship/pre-push-gate.mjs';
 import { acquireLock, main as shipMain, parseArgs, readJson as readShipState, requireHolderValue,
   selfTest as shipSelfTest, validateReleaseOptions, writeJson as writeShipState } from '../ship/ship.mjs';
@@ -284,11 +285,237 @@ for (const [name, file, mutate, message] of [
   ['native console/workstation holder coverage', 'scripts/ship/ship.mjs',
     (s) => s.replaceAll('if (readRemoteHolders().length)', 'if (false)'),
     /ship.mjs must keep if \(readRemoteHolders/],
+  ['exactly four release components (no fifth fleet component)', 'scripts/deploy/release-manifest.mjs',
+    (s) => s.replace("COMPONENTS = ['web', 'api', 'db-backup', 'agent-gateway'];",
+      "COMPONENTS = ['web', 'api', 'db-backup', 'agent-gateway', 'fleet'];"),
+    /release-manifest\.mjs must keep export const COMPONENTS/],
 ]) {
   test(`mandatory accelerated baseline rejects loss of ${name}`, () => {
     assert.ok(mutatedContract(file, mutate).some((failure) => message.test(failure)));
   });
 }
+
+// ---- Owner Fleet governance (owner directive 2026-10-05) -------------------------------
+// Everything fleet-related is existence-conditional: the checker passes today, with no
+// fleet.yml and no platform/, and starts enforcing the moment either appears.
+
+/** A fleet.yml that satisfies every rule. Each test below mutates exactly one property. */
+const fleetWorkflow = [
+  'name: Fleet (build + rollout)',
+  'on:',
+  '  push:',
+  '    branches: [main]',
+  '  workflow_dispatch:',
+  'concurrency:',
+  '  group: fleet',
+  '  cancel-in-progress: false',
+  'jobs:',
+  '  guards:',
+  '    steps:',
+  '      - run: node scripts/deploy/verify-pipeline-contract.mjs',
+  '      - run: bash scripts/deploy/verify-compute-offload.sh',
+  '  deploy:',
+  "    if: github.ref == 'refs/heads/main'",
+  '    environment: production',
+  '    steps:',
+  '      - run: |',
+  '          # BEGIN REMOTE FLEET ROLLOUT',
+  '          echo "node token rotated"',
+  '          docker compose -p oet-fleet pull',
+  '          docker compose -p oet-fleet up -d --no-build --wait',
+  '          # END REMOTE FLEET ROLLOUT',
+  '',
+].join('\n');
+const privateKeyHeader = ['-----BEGIN', 'OPENSSH PRIVATE KEY-----'].join(' ');
+const nodeTokenLiteral = ['orw1', '0123456789abcdef', 'A'.repeat(43)].join('_');
+
+/** checkContract over the real checkout plus extra workflow files and platform/** files. */
+function contractWith({ workflows = {}, platform = {}, files = {} } = {}) {
+  const read = (file) => files[file] ?? platform[file] ?? readFileSync(join(root, file), 'utf8');
+  return checkContract({
+    listWorkflows: () => ['build-images.yml', 'production-deploy.yml', ...Object.keys(workflows)],
+    readWorkflow: (file) => workflows[file] ?? read(`.github/workflows/${file}`),
+    readFile: read,
+    listFiles: (dir) => Object.keys(platform).filter((file) => file.startsWith(`${dir}/`)),
+  });
+}
+
+test('only the audited workflows may hold a production SSH credential; a new one is a visible contract edit', () => {
+  for (const file of ['agent-console.yml', 'fleet.yml', 'mobile-release.yml', 'production-deploy.yml', 'publish-existing-desktop-to-vps.yml',
+    'publish-existing-mobile-to-vps.yml', 'tauri-desktop-release.yml', 'writing-ai.yml']) {
+    assert.ok(PROD_SSH_WORKFLOWS.includes(file), `${file} is an audited SSH workflow and must stay on the allow-list`);
+  }
+  for (const file of PROD_SSH_WORKFLOWS) {
+    assert.ok(existsSync(join(root, '.github', 'workflows', file)), `${file} is on the allow-list but missing`);
+  }
+  const ssh = (line) => `name: Helper\non:\n  workflow_dispatch:\njobs:\n  x:\n    steps:\n      - env:\n          ${line}\n`;
+  for (const line of ['SSH_KEY: ${{ secrets.PROD_SSH_KEY }}', 'KEY: ${{ secrets.FLEET_SSH_KEY }}',
+    'HOST: ${{ secrets.VPS_HOST }}', 'HELPER: ${{ secrets.HELPER_ROOT_PASSWORD }}',
+    'OPTS: -o StrictHostKeyChecking=accept-new', 'RUN: ssh-keyscan -p 22 example.invalid']) {
+    assert.ok(contractWith({ workflows: { 'helper.yml': ssh(line) } })
+      .some((failure) => failure.includes('helper.yml: holds an SSH/VPS credential but is not in PROD_SSH_WORKFLOWS')), line);
+  }
+  // A comment is not a credential, and an unrelated secret is not SSH access.
+  assert.deepEqual(contractWith({ workflows: { 'helper.yml': ssh('# SSH_KEY: ${{ secrets.PROD_SSH_KEY }}') } }), []);
+  assert.deepEqual(contractWith({ workflows: { 'helper.yml': ssh('TOKEN: ${{ secrets.TYPESAFE_API_KEY }}') } }), []);
+});
+
+test('a conforming fleet.yml passes; fleet.yml gets no exemption from the single rollout path or the no-QA rule', () => {
+  assert.deepEqual(fleetWorkflowFailures(fleetWorkflow), []);
+  assert.deepEqual(contractWith({ workflows: { 'fleet.yml': fleetWorkflow } }), []);
+  assert.ok(contractWith({ workflows: { 'fleet.yml': `${fleetWorkflow}      - run: bash scripts/deploy/auto-deploy-ghcr.sh\n` } })
+    .some((failure) => failure.includes('production rollout must live in exactly')));
+  // Owner directive 2026-10-06: fleet.yml is BUILD-ONLY, so any test/QA runner fails the shared rule 3.
+  for (const command of ['dotnet test platform/fleet/tests/Fleet.Manager.Tests', 'pnpm exec vitest run', 'dotnet playwright install',
+    'k6 run load.js', 'node --test platform/fleet/x.test.mjs']) {
+    assert.ok(contractWith({ workflows: { 'fleet.yml': `${fleetWorkflow}      - run: ${command}\n` } })
+      .some((failure) => failure.includes('fleet.yml: runs a test/QA runner')), command);
+  }
+  // fleet.yml is the one allow-listed SSH workflow of the Owner Fleet exception: holding PROD_SSH_KEY is not a violation by itself
+  // (its pull-only block, pinned host key and sync-job scoping are judged by the fleet rules).
+  assert.ok(!contractWith({ workflows: { 'fleet.yml': `${fleetWorkflow}      - env:\n          K: \${{ secrets.PROD_SSH_KEY }}\n` } })
+    .some((failure) => failure.includes('holds an SSH/VPS credential but is not in PROD_SSH_WORKFLOWS')));
+});
+
+test('fleet.yml is BUILD-ONLY: benchmark, parity and conformance jobs fail the contract, comments and image builds do not', () => {
+  for (const line of ['  benchmark:', '  parity-check:', '  conformance:', '      - run: hyperfine ./agent', '      - run: dotnet run --project Bench.BenchmarkDotNet']) {
+    const changed = `${fleetWorkflow}${line}\n`;
+    assert.ok(fleetWorkflowFailures(changed).some((failure) => failure.includes('BUILD-ONLY')), line);
+    assert.ok(contractWith({ workflows: { 'fleet.yml': changed } }).some((failure) => failure.includes('BUILD-ONLY')), line);
+  }
+  assert.deepEqual(fleetWorkflowFailures(`# no benchmark or parity job here\n${fleetWorkflow}`), []);
+  assert.deepEqual(fleetWorkflowFailures(fleetWorkflow.replace('  deploy:\n',
+    '  build:\n    steps:\n      - run: docker buildx build --push -t ghcr.io/o/r-fleet-manager:${{ github.sha }} platform/fleet\n  deploy:\n')), []);
+});
+
+for (const [name, mutate, message] of [
+  ['its distinct workflow name', (s) => s.replace('name: Fleet (build + rollout)', 'name: Deploy production'),
+    /fleet\.yml is missing name: Fleet \(build \+ rollout\)/],
+  ['its serialized concurrency group', (s) => s.replace('group: fleet', 'group: ${{ github.sha }}'), /missing group: fleet/],
+  ['non-cancelling rollouts', (s) => s.replace('cancel-in-progress: false', 'cancel-in-progress: true'),
+    /missing cancel-in-progress: false/],
+  ['main-only rollout', (s) => s.replace("github.ref == 'refs/heads/main'", 'true'), /missing github\.ref == 'refs\/heads\/main'/],
+  ['the protected environment', (s) => s.replace('    environment: production\n', ''), /missing environment: production/],
+  ['its own pipeline-contract guard', (s) => s.replace('node scripts/deploy/verify-pipeline-contract.mjs', 'echo skipped'),
+    /missing node scripts\/deploy\/verify-pipeline-contract\.mjs/],
+  ['its own pull-only guard', (s) => s.replace('bash scripts/deploy/verify-compute-offload.sh', 'echo skipped'),
+    /missing bash scripts\/deploy\/verify-compute-offload\.sh/],
+  ['a manual-only trigger set (schedule)', (s) => s.replace('  workflow_dispatch:\n', '  workflow_dispatch:\n  schedule:\n    - cron: "0 4 * * 1"\n'),
+    /must not run on schedule/],
+  ['a manual-only trigger set (pull_request_target)', (s) => s.replace('  workflow_dispatch:\n', '  workflow_dispatch:\n  pull_request_target:\n'),
+    /must not run on pull_request_target/],
+  ['immutable images (no :latest)', (s) => s.replace('echo "node token rotated"', 'echo ghcr.io/o/r-fleet-agent:latest'),
+    /must not publish or consume mutable :latest/],
+  ['its rollout markers', (s) => s.replace('          # BEGIN REMOTE FLEET ROLLOUT\n', ''),
+    /must delimit its SSH rollout script/],
+  ['compose pull', (s) => s.replace('compose -p oet-fleet pull', 'compose -p oet-fleet ps'), /must pull prebuilt GHCR images/],
+  ['up --no-build', (s) => s.replace('up -d --no-build --wait', 'up -d --wait'), /must start containers with up --no-build/],
+  ['pull-only: compose build', (s) => s.replace('echo "node token rotated"', 'docker compose -p oet-fleet build'),
+    /build\/test\/install or source-sync/],
+  ['pull-only: docker buildx', (s) => s.replace('echo "node token rotated"', 'docker buildx build .'),
+    /build\/test\/install or source-sync/],
+  ['pull-only: git clone', (s) => s.replace('echo "node token rotated"', 'git clone https://example.invalid/r.git'),
+    /build\/test\/install or source-sync/],
+  ['pull-only: npm', (s) => s.replace('echo "node token rotated"', 'CI=1 npm ci'), /build\/test\/install or source-sync/],
+  ['pull-only: dotnet', (s) => s.replace('echo "node token rotated"', 'sudo dotnet publish -c Release'),
+    /build\/test\/install or source-sync/],
+  ['pull-only: pip', (s) => s.replace('echo "node token rotated"', 'cd x && pip3 install ansible'),
+    /build\/test\/install or source-sync/],
+  ['pull-only: ansible on the primary', (s) => s.replace('echo "node token rotated"', 'ansible-playbook -i hosts play.yml'),
+    /build\/test\/install or source-sync/],
+  ['data safety: volume prune', (s) => s.replace('echo "node token rotated"', 'docker volume prune -f'),
+    /must never remove or prune volumes/],
+  ['data safety: compose down -v', (s) => s.replace('echo "node token rotated"', 'docker compose -p oet-fleet down -v'),
+    /must never remove or prune volumes/],
+]) {
+  test(`fleet.yml rejects loss of ${name}`, () => {
+    const changed = mutate(fleetWorkflow);
+    assert.notEqual(changed, fleetWorkflow, `${name}: regression mutation did not apply`);
+    assert.ok(fleetWorkflowFailures(changed).some((failure) => message.test(failure)), fleetWorkflowFailures(changed).join('\n'));
+    assert.ok(contractWith({ workflows: { 'fleet.yml': changed } }).some((failure) => message.test(failure)));
+  });
+}
+
+test('commands outside the marked VPS block, and words in log lines, are not mistaken for a source build', () => {
+  const outside = fleetWorkflow.replace('  deploy:\n', '  build:\n    steps:\n      - run: pnpm install && dotnet publish platform/fleet\n  deploy:\n');
+  assert.notEqual(outside, fleetWorkflow);
+  assert.deepEqual(fleetWorkflowFailures(outside), []);
+  assert.deepEqual(fleetWorkflowFailures(fleetWorkflow.replace('echo "node token rotated"',
+    'echo "make sure node and git are healthy"')), []);
+});
+
+test('remoteRolloutBlock reads the raw marker comments and returns comment-free script text', () => {
+  const source = ['a: 1', '          # BEGIN REMOTE X ROLLOUT', '          # a comment', '          docker compose pull # trailing',
+    '          # END REMOTE X ROLLOUT', 'b: 2', ''].join('\n');
+  assert.equal(remoteRolloutBlock(source, 'X'), '          docker compose pull');
+  assert.equal(remoteRolloutBlock(source, 'Y'), null);
+  assert.equal(remoteRolloutBlock(source.replace('BEGIN', 'START'), 'X'), null);
+  assert.equal(remoteRolloutBlock(['# END REMOTE X ROLLOUT', '# BEGIN REMOTE X ROLLOUT', ''].join('\n'), 'X'), null);
+  assert.equal(remoteRolloutBlock(undefined, 'X'), null);
+});
+
+test('platform/** may not carry private keys or live tokens, and fleet code may not weaken SSH host-key trust', () => {
+  const file = 'platform/fleet/ansible/roles/agent/tasks/main.yml';
+  for (const line of [privateKeyHeader, `token: ${nodeTokenLiteral}`, `PrivateKey = ${'A'.repeat(43)}=`]) {
+    assert.ok(platformSourceFailures([file], () => line).some((failure) => failure.startsWith(`${file}:1: `)), line);
+    assert.deepEqual(platformSourceFailures([file], () => `${line} secret-scan:allow`), [], 'a marked fixture is allowed');
+  }
+  const weak = ['ssh -o StrictHostKeyChecking=accept-new host', 'ansible_ssh_common_args: "-o StrictHostKeyChecking=no"',
+    'ssh -o UserKnownHostsFile=/dev/null host', 'host_key_checking = False', 'ANSIBLE_HOST_KEY_CHECKING=false ansible-playbook x.yml'];
+  for (const line of weak) {
+    assert.equal(platformSourceFailures(['platform/fleet/src/Fleet.Manager/Ssh.cs'], () => line).length, 1, line);
+    assert.equal(platformSourceFailures(['platform/fleet/src/Fleet.Manager/Ssh.cs'], () => `// ${line} secret-scan:allow`).length, 0);
+    for (const exempt of ['platform/fleet/README.md', 'platform/fleet/tests/Fleet.Manager.Tests/SshTests.cs',
+      'platform/fleet/Fleet.Manager.Tests/SshTests.cs']) {
+      assert.deepEqual(platformSourceFailures([exempt], () => line), [], `${exempt}: documents and tests may name the forbidden option`);
+    }
+  }
+  assert.deepEqual(platformSourceFailures(['platform/fleet/src/Fleet.Manager/Ssh.cs'],
+    () => 'ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/run/known_hosts host; host_key_checking = True'), []);
+  assert.deepEqual(platformSourceFailures([file], () => 'token: orw1_<tokenId>_<secret>'), [], 'format placeholders are not tokens');
+});
+
+test('platform/** and fleet.yml cannot exist without the owner-written Owner Fleet exception in AGENTS.md', () => {
+  const agents = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+  assert.ok(agents.includes('Owner Fleet exception'), 'AGENTS.md must carry the Owner Fleet exception');
+  const without = { 'AGENTS.md': agents.replaceAll('Owner Fleet exception', 'Owner Fleet note') };
+  assert.ok(contractWith({ files: without, workflows: { 'fleet.yml': fleetWorkflow } })
+    .some((failure) => failure.includes('AGENTS.md must keep Owner Fleet exception')));
+  assert.ok(contractWith({ files: without, platform: { 'platform/fleet/README.md': 'x' } })
+    .some((failure) => failure.includes('AGENTS.md must keep Owner Fleet exception')));
+  assert.deepEqual(contractWith({ files: without }), [], 'nothing is required while no fleet exists');
+  assert.deepEqual(contractWith({ platform: { 'platform/fleet/README.md': 'x' } }), []);
+});
+
+test('listTextFiles skips build output, dependencies and binaries, and tolerates a missing directory', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oet-platform-scan-'));
+  try {
+    assert.deepEqual(listTextFiles(dir, 'platform'), []);
+    for (const file of ['platform/fleet/src/A.cs', 'platform/fleet/ansible/main.yml', 'platform/fleet/bin/Debug/B.cs',
+      'platform/fleet/obj/C.cs', 'platform/fleet/node_modules/pkg/index.js', 'platform/fleet/logo.png', 'platform/fleet/state.db']) {
+      mkdirSync(dirname(join(dir, file)), { recursive: true });
+      writeFileSync(join(dir, file), 'x');
+    }
+    assert.deepEqual(listTextFiles(dir, 'platform'), ['platform/fleet/ansible/main.yml', 'platform/fleet/src/A.cs']);
+    writeFileSync(join(dir, 'platform-file'), 'x');
+    assert.deepEqual(listTextFiles(dir, 'platform-file'), [], 'a file where a directory is expected is not walked');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the real scan finds platform/** secrets through the real file walker', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oet-platform-secret-'));
+  try {
+    mkdirSync(join(dir, 'platform', 'fleet'), { recursive: true });
+    writeFileSync(join(dir, 'platform', 'fleet', 'leak.txt'), `${privateKeyHeader}\n`);
+    const failures = platformSourceFailures(listTextFiles(dir, 'platform'), (file) => readFileSync(join(dir, file), 'utf8'));
+    assert.equal(failures.length, 1);
+    assert.match(failures[0], /^platform\/fleet\/leak\.txt:1: private key material/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test('missing pipeline checker fails the real local gate closed', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'oet-missing-contract-'));

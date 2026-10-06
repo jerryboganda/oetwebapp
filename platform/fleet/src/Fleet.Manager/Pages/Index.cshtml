@@ -1,0 +1,15 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Fleet overview";
+}
+<div class="page-head">
+    <h1>Fleet overview</h1>
+    <form method="post" action="/?handler=Refresh" asp-antiforgery="true" class="inline-form">
+        <button type="submit" class="btn">Refresh now</button>
+    </form>
+</div>
+@await Html.PartialAsync("_Messages", Model)
+<div id="fleet-live" data-live-url="/?handler=Fragment" data-live-events="node.updated,host.updated,operation.updated,alert.raised,alert.cleared,api.unreachable,policy.updated,credential.updated" data-live-every="15">
+    @await Html.PartialAsync("_FleetBody", Model.Overview)
+</div>

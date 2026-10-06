@@ -1,0 +1,57 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 7 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 240 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(OET Remote Worker Canary Document) Tj
+0 -24 Td
+(This page proves that a helper extracts text exactly like the primary server.) Tj
+0 -24 Td
+(Known answer test: one two three four five six seven eight nine ten.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 6 0 R /Resources << /Font << /F1 7 0 R >> >> >>
+endobj
+6 0 obj
+<< /Length 183 >>
+stream
+BT
+/F1 12 Tf
+72 720 Td
+(Second page of the canary document with a few more words to extract.) Tj
+0 -24 Td
+(Ledger 2026 alpha bravo charlie delta echo foxtrot golf hotel india.) Tj
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 8
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000537 00000 n 
+0000000663 00000 n 
+0000000896 00000 n 
+trailer
+<< /Size 8 /Root 1 0 R >>
+startxref
+993
+%%EOF

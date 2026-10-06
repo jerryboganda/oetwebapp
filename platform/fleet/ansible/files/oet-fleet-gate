@@ -1,0 +1,73 @@
+#!/usr/bin/python3
+"""oet-fleet-gate: the SSH forced command of the manager key (OET-RWP/1 section 7.4).
+
+authorized_keys line:  restrict,command="/usr/local/sbin/oet-fleet-gate",no-pty ssh-ed25519 AAAA... oet-fleet-manager
+
+sshd puts whatever the client asked to run into SSH_ORIGINAL_COMMAND and runs THIS script instead. The
+gate accepts exactly one shape, "oet-fleet-ctl <verb> <args>", with the arguments matching the per-verb
+pattern below, and executes `sudo -n /usr/local/sbin/oet-fleet-ctl <verb> <args>` (the sudoers drop-in
+allows exactly that one program). Everything else is refused with exit status 126. No shell is ever involved.
+
+The VERBS table is identical to platform/fleet/src/Fleet.Core/Ssh/FleetCtlVerbs.cs and to oet-fleet-ctl;
+a repository test fails if the three drift apart.
+"""
+import json
+import os
+import re
+import sys
+
+CTL = "/usr/local/sbin/oet-fleet-ctl"
+
+VERBS = {
+    "status": r"",
+    "harden-check": r"",
+    "login": r"--registry ghcr\.io",
+    "pull": r"ghcr\.io/jerryboganda/oetwebapp-fleet-agent@sha256:[0-9a-f]{64}",
+    "verify": r"sha256:[0-9a-f]{64}( sha256:[0-9a-f]{64})?",
+    "logout": r"",
+    "put-env": r"",
+    "run": r"sha256:[0-9a-f]{64}",
+    "stop": r"(--grace ([1-9]|[1-9][0-9]|1[01][0-9]|120))?",
+    "restart": r"",
+    "logs": r"--tail ([1-9]|[1-9][0-9]|1[0-9][0-9]|200)",
+    "prune": r"",
+    "wipe-scratch": r"",
+    "unit-sync": r"",
+    "uninstall": r"",
+}
+
+
+def reject(message):
+    sys.stderr.write("oet-fleet-gate: " + message + "\n")
+    sys.exit(126)
+
+
+def main(argv):
+    # --print-argv is for the repository test only: a remote client cannot pass program arguments, only SSH_ORIGINAL_COMMAND.
+    print_only = len(argv) > 1 and argv[1] == "--print-argv"
+    original = os.environ.get("SSH_ORIGINAL_COMMAND", "")
+    if not original or len(original) > 512:
+        reject("no command, or too long")
+    if re.fullmatch(r"[A-Za-z0-9._:@/=+ -]+", original) is None:
+        reject("characters not allowed")
+    parts = original.split(" ")
+    if any(part == "" for part in parts):
+        reject("malformed command")
+    if parts[0] != "oet-fleet-ctl" or len(parts) < 2:
+        reject("only oet-fleet-ctl is allowed")
+    verb = parts[1]
+    args = parts[2:]
+    if verb not in VERBS:
+        reject("unknown verb")
+    if re.fullmatch(VERBS[verb], " ".join(args)) is None:
+        reject("arguments rejected")
+    command = ["sudo", "-n", CTL, verb] + args
+    if print_only:
+        print(json.dumps(command))
+        return 0
+    os.execv("/usr/bin/sudo", command)
+    return 126
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

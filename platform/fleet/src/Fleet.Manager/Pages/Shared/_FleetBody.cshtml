@@ -1,0 +1,253 @@
+@model Fleet.Manager.Dashboard.FleetOverview
+@{
+    var o = Model;
+    var totals = o.Totals;
+    var primary = o.Primary;
+    var helperSub = totals.Active + " active, " + totals.Draining + " draining, " + totals.Disabled + " disabled"
+        + (totals.Enrolling > 0 ? ", " + totals.Enrolling + " enrolling" : string.Empty)
+        + (totals.Failed > 0 ? ", " + totals.Failed + " failed" : string.Empty);
+    var slotsPct = totals.Utilisation is { } slotsUtil ? (int)Math.Round(slotsUtil * 100) : 0;
+}
+<div data-live-state="@(o.ApiReachable ? "api-up" : "api-down")">
+@if (o.Attention.Count > 0)
+{
+    <section class="panel" aria-labelledby="attention-h">
+        <h2 id="attention-h">Needs your attention</h2>
+        <ul class="attention">
+            @foreach (var item in o.Attention)
+            {
+                <li class="attn @item.Severity">
+                    <span class="badge @item.Severity">@(item.Severity == "bad" ? "Problem" : item.Severity == "warn" ? "Warning" : "To do")</span>
+                    <span class="attn-text">@item.Text</span>
+                    @if (item.Href is not null)
+                    {
+                        <a href="@item.Href">Open</a>
+                    }
+                </li>
+            }
+        </ul>
+    </section>
+}
+else
+{
+    <p class="notice ok" role="status">Nothing needs your attention.</p>
+}
+
+<section class="stats" aria-label="Fleet totals">
+    <div class="stat">
+        <span class="stat-label">Helpers</span>
+        <span class="stat-value">@totals.Helpers</span>
+        <span class="stat-sub">@helperSub</span>
+    </div>
+    <div class="stat">
+        <span class="stat-label">Slots in use</span>
+        <span class="stat-value">@(totals.SlotsUsed + " / " + totals.SlotsTotal)</span>
+        <meter min="0" max="100" low="60" high="85" optimum="10" value="@slotsPct" aria-label="Slots in use across active, online helpers">@slotsPct%</meter>
+    </div>
+    <div class="stat">
+        <span class="stat-label">Fleet utilisation</span>
+        <span class="stat-value">@Fmt.Percent(totals.Utilisation)</span>
+        <span class="stat-sub">of the slots helpers can use now</span>
+    </div>
+    <div class="stat">
+        <span class="stat-label">Offline helpers</span>
+        <span class="stat-value @(totals.Offline > 0 ? "bad-text" : string.Empty)">@totals.Offline</span>
+        <span class="stat-sub">active or draining, not online</span>
+    </div>
+    <div class="stat">
+        <span class="stat-label">Free CPU budget</span>
+        <span class="stat-value">@Fmt.Cores(totals.CpuBudgetFreeMilli)</span>
+        <span class="stat-sub">across online helpers</span>
+    </div>
+    <div class="stat">
+        <span class="stat-label">Free memory budget</span>
+        <span class="stat-value">@Fmt.MiB(totals.MemBudgetFreeMiB)</span>
+        <span class="stat-sub">across online helpers</span>
+    </div>
+</section>
+
+<section class="panel" aria-labelledby="primary-h">
+    <h2 id="primary-h">Primary VPS</h2>
+    <p class="muted">Shared by every project hosted on it. Helpers take work off it; it runs work itself only while it has headroom.</p>
+    <dl class="kv">
+        <dt>CPU pressure (10 s average)</dt>
+        <dd>@(primary.PressureReadable ? Fmt.PercentPoints(primary.CpuSomeAvg10) : "unreadable") <span class="sub">limit @Fleet.Core.Placement.PrimaryHeadroom.CpuSomeAvg10Max</span></dd>
+        <dt>Memory pressure (10 s average)</dt>
+        <dd>@(primary.PressureReadable ? Fmt.PercentPoints(primary.MemorySomeAvg10) : "unreadable") <span class="sub">limit @Fleet.Core.Placement.PrimaryHeadroom.MemorySomeAvg10Max</span></dd>
+        <dt>Memory in use</dt>
+        <dd>@(primary.PressureReadable ? Fmt.PercentPoints(primary.MemoryWorkingSetPct) : "unreadable") <span class="sub">limit @Fleet.Core.Placement.PrimaryHeadroom.WorkingSetMaxPct</span></dd>
+        <dt>Headroom for local work</dt>
+        <dd><span class="badge @(primary.HasHeadroom ? "ok" : "warn")">@(primary.HasHeadroom ? "Yes" : "No")</span> <span class="sub">unreadable figures count as no headroom</span></dd>
+        <dt>This console</dt>
+        <dd>@(primary.ConsoleWorkingSetMiB + " MiB working set, up " + Fmt.Age(primary.ConsoleUptime))</dd>
+    </dl>
+</section>
+
+<section class="panel" aria-labelledby="helpers-h">
+    <div class="panel-head">
+        <h2 id="helpers-h">Helpers</h2>
+        <a class="btn" href="/Hosts/Add">Add helper</a>
+    </div>
+    @if (o.Helpers.Count == 0)
+    {
+        <p class="empty">No helpers yet. Rent a small VPS, then <a href="/Hosts/Add">add it</a>: the console prepares it, proves it with a self-test and only then gives it work.</p>
+    }
+    else
+    {
+        <div class="table-wrap" role="region" aria-label="Helpers" tabindex="0">
+            <table class="data">
+                <caption class="sr-only">Helpers with their state, health, load, capacity, latency and open operations</caption>
+                <thead>
+                <tr>
+                    <th scope="col">Helper</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Health</th>
+                    <th scope="col">Load</th>
+                    <th scope="col">Capacity</th>
+                    <th scope="col">Latency</th>
+                    <th scope="col">Agent</th>
+                    <th scope="col">Open operation</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var line in o.Helpers)
+                {
+                    var host = line.Host;
+                    var node = line.Node;
+                    var report = line.Report;
+                    var detailHref = "/Hosts/Detail/" + Uri.EscapeDataString(host.Id);
+                    var address = host.Address + ":" + host.SshPort;
+                    var beat = line.HeartbeatAge is { } age ? Fmt.Age(age) + " ago" : "never";
+                    var utilPct = line.Utilisation is { } util ? (int)Math.Round(util * 100) : -1;
+                    var slots = node is null ? "—" : (node.Leases?.Weight ?? 0) + " / " + Fleet.Manager.Dashboard.DashboardService.SlotCap(node);
+                    var cores = host.CpuCores ?? report?.CpuCores;
+                    var memTotal = host.MemMib ?? report?.MemTotalMiB;
+                    var disk = host.DiskGib ?? report?.DiskFreeGiB;
+                    var latency = report?.CtlLatencyMs is { } ms ? ms + " ms" : "—";
+                    <tr>
+                        <th scope="row">
+                            <a href="@detailHref">@host.DisplayName</a>
+                            <span class="sub">@host.NodeRef</span>
+                            <span class="sub">@address</span>
+                        </th>
+                        <td>
+                            <span class="badge @Fmt.BadgeClass(host.Lifecycle)">@host.Lifecycle</span>
+                            @if (node is not null && node.Status != host.Lifecycle)
+                            {
+                                <span class="badge @Fmt.BadgeClass(node.Status)">API: @node.Status</span>
+                            }
+                            @if (host.Alert is not null)
+                            {
+                                <span class="badge bad">@Fmt.Untrusted(host.Alert, 40)</span>
+                            }
+                        </td>
+                        <td>
+                            @if (node is null)
+                            {
+                                <span class="muted">not registered</span>
+                            }
+                            else
+                            {
+                                <span class="badge @Fmt.BadgeClass(node.Health)">@node.Health</span>
+                                <span class="sub">heartbeat @beat</span>
+                            }
+                        </td>
+                        <td>
+                            @if (node is null)
+                            {
+                                <span class="muted">&mdash;</span>
+                            }
+                            else
+                            {
+                                <span>CPU @Fmt.PercentPoints(node.Load?.CpuPct), free memory @Fmt.PercentPoints(node.Load?.MemFreePct)</span>
+                                <span class="sub">slots @slots</span>
+                                if (utilPct >= 0)
+                                {
+                                    <meter min="0" max="100" low="60" high="85" optimum="10" value="@utilPct" aria-label="@("Slots in use on " + host.DisplayName)">@utilPct%</meter>
+                                }
+                            }
+                        </td>
+                        <td>
+                            <span>@(cores is null ? "—" : cores + " cores")</span>
+                            <span class="sub">@Fmt.MiB(memTotal) RAM, @Fmt.GiB(disk) disk</span>
+                        </td>
+                        <td>@latency</td>
+                        <td>
+                            @if (node?.Agent is not null)
+                            {
+                                <span>@Fmt.Untrusted(node.Agent.Version, 30)</span>
+                            }
+                            <span class="sub">@Fmt.ShortDigest(host.AgentDigest)</span>
+                        </td>
+                        <td>
+                            @if (line.Operation is not null)
+                            {
+                                <a href="@("/Operations/Detail/" + Uri.EscapeDataString(line.Operation.Id))">@Fmt.KindLabel(line.Operation.Kind)</a>
+                                <span class="badge @Fmt.BadgeClass(line.Operation.State)">@Fmt.StateLabel(line.Operation.State)</span>
+                                if (line.Operation.NextAction.Length > 0)
+                                {
+                                    <span class="sub">@line.Operation.NextAction</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="muted">&mdash;</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<section class="panel" aria-labelledby="inflight-h">
+    <div class="panel-head">
+        <h2 id="inflight-h">Running and waiting operations</h2>
+        <a href="/Operations">All operations</a>
+    </div>
+    @if (o.InFlight.Count == 0)
+    {
+        <p class="empty">Nothing is running. Enrollments and maintenance keep going on the server if you close this page.</p>
+    }
+    else
+    {
+        <div class="table-wrap" role="region" aria-label="Open operations" tabindex="0">
+            <table class="data compact">
+                <caption class="sr-only">Operations that are running or waiting</caption>
+                <thead>
+                <tr>
+                    <th scope="col">Operation</th>
+                    <th scope="col">Helper</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Step</th>
+                    <th scope="col">Updated</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var op in o.InFlight)
+                {
+                    <tr>
+                        <th scope="row"><a href="@("/Operations/Detail/" + Uri.EscapeDataString(op.Id))">@Fmt.KindLabel(op.Kind)</a></th>
+                        <td>@op.HostName</td>
+                        <td>
+                            <span class="badge @Fmt.BadgeClass(op.State)">@Fmt.StateLabel(op.State)</span>
+                            @if (op.NextAction.Length > 0)
+                            {
+                                <span class="sub">@op.NextAction</span>
+                            }
+                        </td>
+                        <td>@Fmt.StepLabel(op.CurrentStep)</td>
+                        <td>@Fmt.Ago(op.UpdatedAt, o.Now)</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>
+
+<p class="muted small">API polled @Fmt.Ago(o.LastPollAt, o.Now)@(o.ApiReachable ? string.Empty : " (last attempt failed: " + (o.ApiError ?? "unknown") + ")").
+    Registry pull token: @(o.PullTokenHeld ? "held in memory" : "not held").</p>
+</div>

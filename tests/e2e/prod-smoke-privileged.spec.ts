@@ -88,10 +88,14 @@ function shouldMockExpectedProductionMutation(url: string) {
     const apiUrl = new URL(API_URL);
     const appUrl = new URL(PROD_URL);
 
+    // The web client sends analytics singly or, when several events are queued, as one batch.
+    const analyticsPaths = ['/v1/analytics/events', '/v1/analytics/events/batch'];
+
     return (
-      requestUrl.origin === apiUrl.origin && requestUrl.pathname === '/v1/analytics/events'
+      requestUrl.origin === apiUrl.origin && analyticsPaths.includes(requestUrl.pathname)
     ) || (
-      requestUrl.origin === appUrl.origin && requestUrl.pathname === '/api/backend/v1/analytics/events'
+      requestUrl.origin === appUrl.origin
+      && analyticsPaths.map((path) => `/api/backend${path}`).includes(requestUrl.pathname)
     );
   } catch {
     return false;

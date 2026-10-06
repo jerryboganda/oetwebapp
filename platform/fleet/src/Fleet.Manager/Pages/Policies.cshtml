@@ -1,0 +1,88 @@
+@page
+@model PoliciesModel
+@{
+    ViewData["Title"] = "Policies";
+    var data = Model.Policies;
+}
+<div class="page-head">
+    <h1>Policies</h1>
+</div>
+@await Html.PartialAsync("_Messages", Model)
+
+<section class="panel" aria-labelledby="glob-h">
+    <h2 id="glob-h">Global policy</h2>
+    <p class="muted">@(data.GlobalIsDefault ? "No policy has been saved yet: this is the built-in default for a 4 vCPU, 8 GiB helper." : "The saved policy every helper follows unless it has limits of its own.") Saving pushes it to every helper straight away.</p>
+    @if (!data.RegistryKnown)
+    {
+        <p class="notice warn">The OET API's list of job kinds could not be read, so kind names are not checked against it until it can.</p>
+    }
+    <form method="post" action="/Policies?handler=Save" asp-antiforgery="true" autocomplete="off">
+        @await Html.PartialAsync("_PolicyFields", Model.Input)
+        @await Html.PartialAsync("_StepUp", "policy")
+        <div class="actions">
+            <button type="submit" class="btn primary">Save and push to every helper</button>
+        </div>
+    </form>
+</section>
+
+<section class="panel" aria-labelledby="fb-h">
+    <h2 id="fb-h">Priorities and fallback</h2>
+    <p class="muted">These rules are fixed by the platform (OET-RWP/1). They are shown so you know what the numbers above do.</p>
+    <dl class="kv">
+        <dt>Which helper gets a job</dt>
+        <dd>Only an active, online helper that allows the kind, advertises the exact kind version and has a free slot and budget. Among those, the one with the lowest share of its slots in use; a tie goes to the one with more free slots, then by name.</dd>
+        <dt>Priorities between kinds</dt>
+        <dd>The cap per kind limits how many slots one kind can take, so a busy kind cannot starve the others. There is no other ranking.</dd>
+        <dt>No helper can take it</dt>
+        <dd>The job runs on the primary only while the primary has headroom: CPU pressure under @Fleet.Core.Placement.PrimaryHeadroom.CpuSomeAvg10Max, memory pressure under @Fleet.Core.Placement.PrimaryHeadroom.MemorySomeAvg10Max and memory in use under @(Fleet.Core.Placement.PrimaryHeadroom.WorkingSetMaxPct)%. A figure that cannot be read counts as no headroom.</dd>
+        <dt>No headroom either</dt>
+        <dd>The job waits. After 60 minutes it runs on the primary regardless, one at a time, so work never waits for ever.</dd>
+        <dt>A job that keeps failing</dt>
+        <dd>It is quarantined and never run on the primary automatically. You requeue it from the OET admin tools.</dd>
+        <dt>A helper under pressure</dt>
+        <dd>It lowers its own concurrency after 15 seconds above the reduce thresholds and raises it again only after the calm period set under "Pressure and polling".</dd>
+    </dl>
+</section>
+
+<section class="panel" aria-labelledby="hosts-h">
+    <h2 id="hosts-h">Helpers and their limits</h2>
+    @if (data.Hosts.Count == 0)
+    {
+        <p class="empty">No helper is registered yet.</p>
+    }
+    else
+    {
+        <div class="table-wrap" role="region" aria-label="Helper limits" tabindex="0">
+            <table class="data compact">
+                <caption class="sr-only">Each helper's effective limits and whether the OET API has applied them</caption>
+                <thead>
+                <tr>
+                    <th scope="col">Helper</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Limits</th>
+                    <th scope="col">Max concurrent</th>
+                    <th scope="col">Allowed kinds</th>
+                    <th scope="col">Revision</th>
+                </tr>
+                </thead>
+                <tbody>
+                @foreach (var line in data.Hosts)
+                {
+                    var inSync = line.DesiredRevision == line.AppliedRevision;
+                    <tr>
+                        <th scope="row"><a href="@("/Hosts/Detail/" + Uri.EscapeDataString(line.HostId))">@line.HostName</a></th>
+                        <td><span class="badge @Fmt.BadgeClass(line.Lifecycle)">@line.Lifecycle</span></td>
+                        <td>@(line.HasOverride ? "Own limits" : "Global policy")</td>
+                        <td>@line.MaxConcurrency</td>
+                        <td>@Fmt.OrDash(line.Kinds)</td>
+                        <td>
+                            <span class="badge @(inSync ? "ok" : "warn")">@(inSync ? "applied" : "applying")</span>
+                            <span class="sub">wanted @line.DesiredRevision, applied @line.AppliedRevision</span>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</section>

@@ -1,0 +1,113 @@
+---
+# S7 harden-ssh: no passwords, no keyboard-interactive, no X11, 3 auth tries, no agent forwarding.
+# Never lock the operator out (OET-RWP/1 section 8.2):
+#   1. the manager's own restricted login must already work (second connection, from the controller),
+#   2. the drop-in is written, validated with sshd -t and sshd is RELOADED (the owner session stays up),
+#   3. the manager login is verified AGAIN in a brand-new connection,
+#   4. on any doubt the drop-in is removed, sshd is reloaded and the step fails with lockout_risk.
+# Root's authorized_keys and root login policy are not touched. The drop-in is named 00-* because sshd keeps the
+# FIRST value it reads, so a cloud-init "PasswordAuthentication yes" in 50-* can never override it.
+- name: Harden sshd (S7)
+  hosts: target
+  gather_facts: false
+  vars:
+    fleet_dropin: /etc/ssh/sshd_config.d/00-oet-fleet.conf
+  tasks:
+    - name: Harden
+      block:
+        - name: Refuse to touch sshd without a manager key to verify with
+          ansible.builtin.assert:
+            that:
+              - fleet_manager_key_file is defined
+              - fleet_manager_key_file is not none
+              - (fleet_manager_key_file | string | length) > 0
+            fail_msg: "no manager key available"
+            quiet: true
+
+        - name: The manager login works before the change
+          when: not (fleet_check_mode | bool)
+          delegate_to: localhost
+          become: false
+          check_mode: false
+          changed_when: false
+          ansible.builtin.command:
+            argv: "{{ ['ssh'] + fleet_ssh_common_args.split() + ['-i', fleet_manager_key_file, '-p', (fleet_target_port | string), fleet_fleet_user ~ '@' ~ fleet_target_address, '--', 'oet-fleet-ctl', 'status'] }}"
+
+        - name: Make sure the sshd drop-in directory exists
+          ansible.builtin.file:
+            path: /etc/ssh/sshd_config.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Write the hardening drop-in
+          ansible.builtin.copy:
+            dest: "{{ fleet_dropin }}"
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              # Managed by the OET fleet manager (S7).
+              PasswordAuthentication no
+              KbdInteractiveAuthentication no
+              X11Forwarding no
+              MaxAuthTries 3
+              AllowAgentForwarding no
+          register: fleet_sshd_dropin
+
+        - name: Validate the sshd configuration
+          when: fleet_sshd_dropin is changed
+          ansible.builtin.command: sshd -t
+
+        - name: Reload sshd (the current session stays connected)
+          when: fleet_sshd_dropin is changed
+          ansible.builtin.systemd:
+            name: ssh
+            state: reloaded
+
+        - name: The manager login works in a NEW connection after the change
+          when: not (fleet_check_mode | bool)
+          delegate_to: localhost
+          become: false
+          check_mode: false
+          changed_when: false
+          ansible.builtin.command:
+            argv: "{{ ['ssh'] + fleet_ssh_common_args.split() + ['-i', fleet_manager_key_file, '-p', (fleet_target_port | string), fleet_fleet_user ~ '@' ~ fleet_target_address, '--', 'oet-fleet-ctl', 'status'] }}"
+
+        - name: Confirm the effective settings
+          when: not (fleet_check_mode | bool)
+          ansible.builtin.shell: "sshd -T | grep -Ei '^(passwordauthentication no|kbdinteractiveauthentication no|x11forwarding no|maxauthtries 3|allowagentforwarding no)$' | wc -l"
+          register: fleet_sshd_effective
+          changed_when: false
+          check_mode: false
+          failed_when: (fleet_sshd_effective.stdout | trim | int) < 5
+
+        - name: Record success
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': true, 'summary': 'sshd hardened; manager login verified in a new connection'} | to_json }}"
+
+      rescue:
+        - name: Roll the drop-in back
+          when: not (fleet_check_mode | default(false) | bool)
+          ansible.builtin.file:
+            path: "{{ fleet_dropin }}"
+            state: absent
+          register: fleet_rollback
+
+        - name: Reload sshd after the rollback
+          when: not (fleet_check_mode | default(false) | bool) and fleet_rollback is changed
+          ansible.builtin.systemd:
+            name: ssh
+            state: reloaded
+          failed_when: false
+
+        - name: Record the failure
+          ansible.builtin.include_tasks: tasks/record-result.yml
+          vars:
+            fleet_result_json: "{{ {'ok': false, 'reason': 'lockout_risk', 'detail': 'harden-ssh', 'summary': 'sshd hardening was rolled back'} | to_json }}"
+
+        - name: Fail the play
+          ansible.builtin.fail:
+            msg: "harden-ssh failed"

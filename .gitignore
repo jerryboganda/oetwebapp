@@ -70,6 +70,15 @@ _previous_chat_history/
 dmb_*.py
 n u l  
 
+# Load / benchmark run output (never commit): k6 leg summaries, merged reports, seed and ledger reports, bench build
+k6-summary*.json
+leg[0-9]*.json
+seed-report.json
+ledger-audit.json
+pdf-bench.json
+pdf-bench.md
+bench-out/
+
 # Local test/build/audit output (never commit)
 nul
 *_out.txt
@@ -293,3 +302,41 @@ backend/TestResults/
 
 tests/writing-regression/_sys.txt
 tests/writing-regression/runs/
+
+# --- Owner Fleet (owner directive 2026-10-05): helper/fleet secrets - NEVER commit ---
+# This repository is flipped public while work ships, so nothing that identifies or
+# can sign in to a helper VPS may ever reach it. Helper IPs, SSH keys, node tokens
+# and the vault live only in the fleet manager's encrypted store (docs/ops/FLEET.md).
+# Two layers: these ignore rules, and the platform/** secret scan inside
+# scripts/deploy/verify-pipeline-contract.mjs (private-key blocks and node/fleet
+# token literals; a deliberate test fixture carries a `secret-scan:allow` marker).
+# Patterns are deliberately NOT bare `inventory*` / `vault*`: with core.ignorecase
+# (every Windows checkout) those would silently ignore the manager's own
+# Inventory*.cs / Vault*.cs sources and any Inventory/ or Vault/ source directory.
+platform/**/*.db
+platform/**/*.db-shm
+platform/**/*.db-wal
+platform/**/*.sqlite
+platform/**/*.sqlite3
+platform/**/*.sqlite-shm
+platform/**/*.sqlite-wal
+platform/**/id_*
+platform/**/known_hosts
+platform/**/known_hosts.*
+platform/**/wg*.conf
+platform/**/inventory.ini
+platform/**/inventory.yml
+platform/**/inventory.yaml
+platform/**/inventory.json
+platform/**/inventory-*.yml
+platform/**/hosts.ini
+platform/**/*.vault
+platform/**/vault.yml
+platform/**/vault.yaml
+platform/**/vault.json
+platform/**/vault.txt
+platform/**/vault.pass
+platform/**/vault_pass*
+platform/**/vault-pass*
+platform/**/.vault_pass*
+platform/**/fleet_master_key*

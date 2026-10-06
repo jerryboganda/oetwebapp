@@ -168,18 +168,33 @@ public partial class BackgroundJobProcessor
             cancellationToken);
     }
 
+    /// <summary>
+    /// Freeze records that are due a lifecycle transition right now: a Scheduled one
+    /// whose start has passed, or an Active one whose end has passed. These are
+    /// exactly the two conditions the loop in <see cref="ReconcileFreezeLifecycleAsync"/>
+    /// acts on, evaluated in SQL (indexed on Status + ScheduledStartAt / EndedAt) so
+    /// the common case (nothing due) loads no rows. The sweep used to load every
+    /// Scheduled and Active record, tracked, and filter in memory.
+    /// </summary>
+    internal static IQueryable<AccountFreezeRecord> DueFreezeRecords(LearnerDbContext db, DateTimeOffset now)
+        => db.AccountFreezeRecords.Where(x =>
+            (x.Status == FreezeStatus.Scheduled && x.ScheduledStartAt != null && x.ScheduledStartAt <= now)
+            || (x.Status == FreezeStatus.Active && x.EndedAt != null && x.EndedAt <= now));
+
     private static async Task ReconcileFreezeLifecycleAsync(IServiceProvider services, LearnerDbContext db, CancellationToken cancellationToken)
     {
         var notifications = services.GetRequiredService<NotificationService>();
         var now = DateTimeOffset.UtcNow;
-        var recordsQuery = db.AccountFreezeRecords
-            .Where(x => x.Status == FreezeStatus.Scheduled || x.Status == FreezeStatus.Active);
 
+        // SQLite cannot translate DateTimeOffset comparisons, so it keeps the old
+        // load-then-filter shape (the loop below re-checks both conditions anyway).
         var records = db.Database.IsSqlite()
-            ? (await recordsQuery.ToListAsync(cancellationToken))
+            ? (await db.AccountFreezeRecords
+                    .Where(x => x.Status == FreezeStatus.Scheduled || x.Status == FreezeStatus.Active)
+                    .ToListAsync(cancellationToken))
                 .OrderBy(x => x.ScheduledStartAt)
                 .ToList()
-            : await recordsQuery
+            : await DueFreezeRecords(db, now)
                 .OrderBy(x => x.ScheduledStartAt)
                 .ToListAsync(cancellationToken);
 

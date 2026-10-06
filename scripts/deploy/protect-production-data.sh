@@ -24,6 +24,10 @@ PROTECTED_VOLUMES=(
   oet-agent-console_oet_agent_home
   oet-agent-console_oet_agent_workspace
   oet-agent-console_oet_agent_sessions
+  # Owner Fleet manager (platform/fleet/docker-compose.fleet.yml, compose project
+  # oet-fleet): host inventory, encrypted SSH keys, audit chain. Not reconstructable
+  # without the owner re-enrolling every helper.
+  oet-fleet_fleet_data
 )
 
 if [ ! -x "$REAL_DOCKER" ]; then

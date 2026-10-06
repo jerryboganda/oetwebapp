@@ -1,0 +1,64 @@
+@inject Fleet.Manager.Monitoring.FleetState State
+@{
+    var current = ViewContext.RouteData.Values["page"] as string ?? string.Empty;
+    var title = ViewData["Title"] as string ?? "Fleet";
+    // Sub-pages light up their parent in the navigation.
+    var section = current switch
+    {
+        "/Hosts/Detail" => "/Index",
+        "/Operations/Detail" => "/Operations/Index",
+        _ => current,
+    };
+    var nav = new[]
+    {
+        (Page: "/Index", Href: "/", Label: "Fleet"),
+        (Page: "/Hosts/Add", Href: "/Hosts/Add", Label: "Add helper"),
+        (Page: "/Workloads", Href: "/Workloads", Label: "Workloads"),
+        (Page: "/Policies", Href: "/Policies", Label: "Policies"),
+        (Page: "/Operations/Index", Href: "/Operations", Label: "Operations"),
+        (Page: "/Credentials", Href: "/Credentials", Label: "Credentials"),
+        (Page: "/Projects", Href: "/Projects", Label: "Projects"),
+        (Page: "/Health", Href: "/Health", Label: "Health"),
+    };
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="light dark" />
+    <title>@title - OET Fleet</title>
+    <link rel="stylesheet" href="/css/console.css" />
+    <script src="/js/console.js" defer></script>
+</head>
+<body class="console">
+<a class="skip-link" href="#main">Skip to the content</a>
+<header class="topbar">
+    <div class="topbar-inner">
+        <a class="brand" href="/">OET Fleet</a>
+        <nav class="nav" aria-label="Console sections">
+            <ul>
+                @foreach (var item in nav)
+                {
+                    <li><a href="@item.Href" aria-current="@(item.Page == section ? "page" : null)">@item.Label</a></li>
+                }
+            </ul>
+        </nav>
+        <div class="topbar-tools">
+            <span class="chip @(State.ApiReachable ? "ok" : "warn")" id="api-chip">OET API @(State.ApiReachable ? "reachable" : "not reachable")</span>
+            <span class="chip muted" id="live-state" role="status" aria-live="polite">Live updates: off</span>
+            <form method="post" action="/Logout" asp-antiforgery="true" class="inline-form">
+                <button type="submit" class="btn quiet">Sign out</button>
+            </form>
+        </div>
+    </div>
+</header>
+<main id="main" class="main" tabindex="-1">
+    @RenderBody()
+</main>
+<footer class="foot">
+    <p>Reached only through the SSH tunnel. Secrets are write-only: this console never displays a key, token or password after you submit it.</p>
+</footer>
+</body>
+</html>

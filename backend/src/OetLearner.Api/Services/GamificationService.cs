@@ -43,19 +43,11 @@ public class GamificationService(LearnerDbContext db)
 
         await db.SaveChangesAsync(ct);
 
-        // Queue achievement check
-        db.BackgroundJobs.Add(new BackgroundJobItem
-        {
-            Id = $"job-achv-{Guid.NewGuid():N}",
-            Type = JobType.AchievementCheck,
-            State = AsyncState.Queued,
-            ResourceId = userId,
-            PayloadJson = JsonSupport.Serialize(new { userId, trigger = "xp_awarded", amount, reason }),
-            CreatedAt = DateTimeOffset.UtcNow,
-            AvailableAt = DateTimeOffset.UtcNow,
-            LastTransitionAt = DateTimeOffset.UtcNow
-        });
-        await db.SaveChangesAsync(ct);
+        // This used to queue a JobType.AchievementCheck row here (one per XP award,
+        // i.e. one per answered Reading question) and save a second time. No handler
+        // ever existed for it, so each row was claimed, run as a silent no-op and
+        // completed: pure queue and write load. Achievements are evaluated inline by
+        // CheckAndAwardAchievementsAsync.
 
         return new { awarded = amount, reason, xp = MapXp(xp) };
     }

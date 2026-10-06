@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+
+  <!--
+    OET fleet helper agent (OET-RWP/1). Stateless executor: claims fenced jobs from the OET API over HTTPS,
+    runs them in isolated child processes and reports results. No database, storage, AI-provider or
+    docker-socket access exists in this project by construction (protocol section 1.3, H5/H6).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>Fleet.Agent</AssemblyName>
+    <RootNamespace>Fleet.Agent</RootNamespace>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <UseAppHost>false</UseAppHost>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Same ICU/culture behaviour as the API image (protocol 6.1.4 item 4): never set invariant globalization. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Fleet.Agent.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
+    <!-- MUST equal the version in backend/src/OetLearner.Api/OetLearner.Api.csproj (protocol RW-101); the fleet.yml push paths watch that csproj. -->
+    <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
+  </ItemGroup>
+
+  <!--
+    LINK-COMPILED, never copied (protocol 6.1.4, 6.2, 6.4): the exact in-process sources are compiled into the agent so the
+    helper output and its engine version strings are byte-identical to what the API computes. All five files are pure (System,
+    PdfPig and implicit usings only) and exist in the tree on purpose: a missing or moved file FAILS this build instead of
+    silently dropping a job kind. The fleet.yml push paths list every one of them, so a change to any rebuilds the agent.
+    The two shims in Shim/ declare the interface and record the API keeps beside its EF-bound services.
+  -->
+  <PropertyGroup>
+    <FleetRepoRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..', '..', '..', '..'))</FleetRepoRoot>
+    <FleetApiServicesDir>$(FleetRepoRoot)backend/src/OetLearner.Api/Services/</FleetApiServicesDir>
+    <DefineConstants>$(DefineConstants);FLEET_HAS_COMPANION_CHUNKER;FLEET_HAS_PCM_JOINER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(FleetApiServicesDir)Content/PdfPigPdfTextExtractor.cs" Link="Linked/PdfPigPdfTextExtractor.cs" />
+    <!-- PdfPigPdfTextExtractor.ExtractAsync reports its log-line facts here (AsyncLocal; a no-op with no scope open). -->
+    <Compile Include="$(FleetApiServicesDir)Content/PdfExtractionFacts.cs" Link="Linked/PdfExtractionFacts.cs" />
+    <!-- PdfTextEngine.LayoutRevision / EngineVersion: the identity both processes derive (protocol 6.1.4 item 3). -->
+    <Compile Include="$(FleetApiServicesDir)Content/PdfTextEngine.cs" Link="Linked/PdfTextEngine.cs" />
+    <!-- companion.index-prep: the pure CompanionChunker (protocol 6.2). -->
+    <Compile Include="$(FleetApiServicesDir)Companion/CompanionChunker.cs" Link="Linked/CompanionChunker.cs" />
+    <!-- media.speaking-join: the pure PcmJoiner (protocol 6.4). -->
+    <Compile Include="$(FleetApiServicesDir)Speaking/PcmJoiner.cs" Link="Linked/PcmJoiner.cs" />
+  </ItemGroup>
+
+</Project>

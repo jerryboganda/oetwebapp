@@ -619,7 +619,7 @@ public partial class LearnerService
         var content = await LoadSpeakingTaskOfAttemptAsync(attempt, cancellationToken);
         var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
         var examFamilyLabel = FormatExamFamilyLabel(examFamilyCode);
-        await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
+        // No server-side "evaluation_viewed" write on this read path: the client tracks the view.
 
         // Stable Wave 1 contract: criterion-keyed feedback + readiness band.
         // See docs/SPEAKING-MODULE-PLAN.md §3 Wave 1.

@@ -1,0 +1,7 @@
+# The helper scripts run on Linux (shebang scripts, sudoers): never let a Windows checkout turn LF into CRLF.
+ansible/files/* text eol=lf
+ansible/**/*.yml text eol=lf
+ansible/ansible.cfg text eol=lf
+Dockerfile text eol=lf
+*.cshtml text eol=lf
+scripts/*.sh text eol=lf

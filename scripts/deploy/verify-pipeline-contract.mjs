@@ -23,11 +23,20 @@
  *      PR, and never builds on the VPS;
  *   6. the rollout script stays pull-only (--no-build, no docker build);
  *   7. the measured accelerated build/reuse/cache/runtime contract survives;
- *   8. agent entrypoints inherit it and shipping cannot skip verified completion.
+ *   8. agent entrypoints inherit it and shipping cannot skip verified completion;
+ *   9. only the audited workflows in PROD_SSH_WORKFLOWS may hold an SSH/VPS
+ *      credential, so a new SSH workflow is always a visible edit of this file;
+ *  10. Owner Fleet (owner directive 2026-10-05), every rule existence-conditional
+ *      so nothing is required until the file/directory exists: a fleet.yml keeps
+ *      its identity, serialization, own guards and a pull-only SSH block between
+ *      BEGIN/END REMOTE FLEET ROLLOUT markers, stays BUILD-ONLY (rule 3 plus no
+ *      benchmark/parity/conformance runner); platform/** never carries private
+ *      keys or node/fleet token literals and fleet code never weakens SSH host-key
+ *      trust; the release stays exactly four components.
  *
  * Compute policy: static file reads only.
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -36,6 +45,59 @@ const workflowDir = join(root, '.github', 'workflows');
 
 export const PLAYWRIGHT_COMMAND =
   /(pnpm exec playwright|npx playwright|playwright install|playwright test|merge-reports|playwright@)/;
+
+/**
+ * The ONLY workflows that may hold a production/VPS SSH credential (owner directive
+ * 2026-10-05, list re-audited 2026-10-06). The pull-only rollout rules are judged per
+ * workflow, so a new SSH workflow must appear as a visible edit of this list in the same
+ * commit instead of slipping in beside the audited ones. Adding to it also requires an
+ * owner-written AGENTS.md exception. fleet.yml is the eighth (Owner Fleet exception (f)): only
+ * its dispatch-only, main-only, pull-only `sync` job holds PROD_SSH_KEY and the pinned host key.
+ */
+export const PROD_SSH_WORKFLOWS = [
+  'agent-console.yml',
+  'fleet.yml',
+  'mobile-release.yml',
+  'production-deploy.yml',
+  'publish-existing-desktop-to-vps.yml',
+  'publish-existing-mobile-to-vps.yml',
+  'tauri-desktop-release.yml',
+  'writing-ai.yml',
+];
+export const SSH_ACCESS =
+  /(secrets\.(?:PROD|VPS|FLEET|HELPER)_[A-Z0-9_]+|secrets\.[A-Z0-9_]*SSH[A-Z0-9_]*|webfactory\/ssh-agent|appleboy\/(?:ssh|scp)-action|\bssh-keyscan\b|\bssh-add\b|StrictHostKeyChecking)/;
+
+// Owner Fleet: required identity and gates of .github/workflows/fleet.yml, once it exists.
+const FLEET_REQUIRED = [
+  ['name: Fleet (build + rollout)', 'distinct workflow name (watchers, triage and docs match it; never Build images or Deploy production)'],
+  ['group: fleet', 'serialized fleet concurrency group'],
+  ['cancel-in-progress: false', 'fleet rollouts must never cancel each other mid-rollout'],
+  ["github.ref == 'refs/heads/main'", 'the SSH rollout runs from main only'],
+  ['environment: production', 'the protected environment that holds the SSH secret'],
+  ['node scripts/deploy/verify-pipeline-contract.mjs', 'its own pipeline-contract guard (build-images guards do not run for a platform-only push)'],
+  ['bash scripts/deploy/verify-compute-offload.sh', 'its own pull-only rollout guard (neither ship:gate nor build-images runs it for a platform-only push)'],
+];
+// The VPS rollout script of fleet.yml: command-position tools only, so words like "node" in a
+// log message are not mistaken for a source build.
+const FLEET_REMOTE_COMMAND =
+  /(?:^|[;&|(]|\$\()\s*(?:sudo\s+)?(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:npm|npx|pnpm|yarn|node|dotnet|tsc|make|pip3?|cargo|ansible(?:-[a-z]+)?)(?:\s|$)/m;
+const FLEET_REMOTE_BUILD =
+  /docker\s+(?:build|buildx|builder)(?:\s|$)|docker\s+image\s+build|compose[^#\n]*\sbuild(?:\s|$)|git\s+(?:clone|fetch|pull|checkout|reset|submodule)(?:\s|$)/im;
+const FLEET_REMOTE_DESTRUCTIVE =
+  /docker\s+volume\s+(?:rm|prune)|docker\s+system\s+prune|compose[^#\n]*\sdown\s[^#\n]*(?:-v|--volumes)(?:\s|$)/m;
+// fleet.yml is BUILD-ONLY (owner directive 2026-10-06). QA_COMMAND (rule 3) already bars every test
+// runner; this adds the benchmark / parity / conformance runners it does not name.
+const FLEET_QA_EXTRA = /(\bbenchmark\w*|\bparity\b|\bconformance\b|\bhyperfine\b|\bBenchmarkDotNet\b)/i;
+
+// platform/** is public while work ships: never private keys or live credentials.
+const PRIVATE_KEY_BLOCK = /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/;
+const WIREGUARD_PRIVATE_KEY = /^\s*PrivateKey\s*=\s*[A-Za-z0-9+\/]{43}=\s*$/;
+const FLEET_TOKEN_LITERAL = /(?:orw1|ofs1)_[0-9a-f]{16}_[A-Za-z0-9_-]{43}/;
+const WEAK_HOST_KEY_TRUST =
+  /StrictHostKeyChecking[=\s"']+(?:accept-new|no|off)\b|UserKnownHostsFile[=\s"']+\/dev\/null|host_key_checking[=:\s"']+(?:false|no|0)\b/i;
+const SCAN_SKIP_DIRS = new Set(['node_modules', '.git', 'bin', 'obj', 'dist', '.next', 'TestResults']);
+const SCAN_BINARY = /\.(?:png|jpe?g|gif|ico|webp|woff2?|ttf|otf|eot|dll|exe|so|dylib|zip|gz|tgz|tar|7z|pdf|db|sqlite3?|nupkg|snk)$/i;
+const SCAN_MAX_BYTES = 2_000_000;
 
 /**
  * Test / QA runners. Owner directive 2026-10-06 (permanent): CI never runs automated QA - the owner
@@ -94,7 +156,99 @@ export function jobBlock(source, name) {
   return collected.join('\n');
 }
 
-export function checkContract({ readWorkflow, listWorkflows, readFile }) {
+/**
+ * The SSH rollout script of an out-of-band workflow: the text between its
+ * `# BEGIN REMOTE <NAME> ROLLOUT` and `# END REMOTE <NAME> ROLLOUT` marker lines,
+ * comment-free. Markers are comments, so this reads the RAW workflow source.
+ * Returns null when either marker is missing or they are out of order.
+ */
+export function remoteRolloutBlock(source, name) {
+  const begin = `# BEGIN REMOTE ${name} ROLLOUT`;
+  const end = `# END REMOTE ${name} ROLLOUT`;
+  const raw = String(source ?? '');
+  if (!raw.includes(begin) || !raw.includes(end) || raw.indexOf(end) < raw.indexOf(begin)) return null;
+  const collected = [];
+  let inside = false;
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.includes(begin)) inside = true;
+    else if (line.includes(end)) inside = false;
+    else if (inside) collected.push(line);
+  }
+  return activeLines(collected.join('\n'));
+}
+
+/** Rules for .github/workflows/fleet.yml. Called only when that file exists. */
+export function fleetWorkflowFailures(source) {
+  const failures = [];
+  const fleet = activeLines(source);
+  for (const [needle, why] of FLEET_REQUIRED) {
+    if (!fleet.includes(needle)) failures.push(`fleet.yml is missing ${needle} (${why})`);
+  }
+  const on = onBlock(fleet);
+  if (!on) failures.push('fleet.yml must declare its triggers in a top-level on: block');
+  for (const trigger of ['pull_request_target', 'schedule']) {
+    if (new RegExp(`^\\s+${trigger}:`, 'm').test(on)) {
+      failures.push(`fleet.yml must not run on ${trigger} (push to main and workflow_dispatch only)`);
+    }
+  }
+  if (/:latest(?![\w.-])/.test(fleet)) {
+    failures.push('fleet.yml must not publish or consume mutable :latest (helpers pull by immutable digest only)');
+  }
+  const qaExtra = FLEET_QA_EXTRA.exec(fleet);
+  if (qaExtra) {
+    failures.push(`fleet.yml is BUILD-ONLY: it must not run a benchmark, parity or conformance job (${qaExtra[0]}); the owner QAs the fleet manually (owner directive 2026-10-06)`);
+  }
+  const remote = remoteRolloutBlock(source, 'FLEET');
+  if (remote === null) {
+    failures.push('fleet.yml must delimit its SSH rollout script with "# BEGIN REMOTE FLEET ROLLOUT" / "# END REMOTE FLEET ROLLOUT"');
+    return failures;
+  }
+  if (!/compose[^#\n]*\spull(\s|$)/m.test(remote)) {
+    failures.push('the fleet VPS rollout must pull prebuilt GHCR images (compose pull)');
+  }
+  if (!/(^|\s)up\s[^#\n]*--no-build/m.test(remote)) {
+    failures.push('the fleet VPS rollout must start containers with up --no-build');
+  }
+  if (remote.split('\n').some((line) => /(^|\s)up\s+-/.test(line) && !line.includes('--no-build'))) {
+    failures.push('every compose up in the fleet VPS rollout must pass --no-build');
+  }
+  if (FLEET_REMOTE_COMMAND.test(remote) || FLEET_REMOTE_BUILD.test(remote)) {
+    failures.push('the fleet VPS rollout contains a build/test/install or source-sync command');
+  }
+  if (FLEET_REMOTE_DESTRUCTIVE.test(remote)) {
+    failures.push('the fleet VPS rollout must never remove or prune volumes, or compose down -v');
+  }
+  return failures;
+}
+
+/**
+ * platform/** is public while work ships (owner directive 2026-10-05): no private keys, no
+ * node/fleet token literals, and fleet code never weakens SSH host-key trust. A deliberate
+ * test fixture opts out per line with a `secret-scan:allow` marker.
+ */
+export function platformSourceFailures(files, readFile) {
+  const failures = [];
+  for (const file of files) {
+    const parts = file.split('/');
+    const isDoc = /\.md$/i.test(file);
+    const isTest = parts.some((part) => /^tests?$/i.test(part) || /\.tests?$/i.test(part));
+    const isFleetCode = parts[1] === 'fleet' && !isDoc && !isTest;
+    readFile(file).split(/\r?\n/).forEach((line, index) => {
+      if (/secret-scan:allow/.test(line)) return;
+      const where = `${file}:${index + 1}`;
+      if (PRIVATE_KEY_BLOCK.test(line) || WIREGUARD_PRIVATE_KEY.test(line)) {
+        failures.push(`${where}: private key material must never be committed (the repository is public while work ships)`);
+      } else if (FLEET_TOKEN_LITERAL.test(line)) {
+        failures.push(`${where}: a node/fleet token literal must never be committed`);
+      } else if (isFleetCode && WEAK_HOST_KEY_TRUST.test(line)) {
+        failures.push(`${where}: fleet code must pin host keys (StrictHostKeyChecking=yes with a pinned file); accept-new, no and a /dev/null known_hosts are forbidden`);
+      }
+    });
+  }
+  return failures;
+}
+
+export function checkContract({ readWorkflow, listWorkflows, readFile, listFiles = () => [] }) {
   const failures = [];
   const files = listWorkflows();
   const requireTokens = (label, source, tokens) => {
@@ -127,6 +281,16 @@ export function checkContract({ readWorkflow, listWorkflows, readFile }) {
           `${file}: runs Playwright but has an '${trigger}' trigger - every browser lane must be workflow_dispatch only`,
         );
       }
+    }
+  }
+
+  // 1b. SSH/VPS credentials are an allow-list: a new SSH workflow is a visible edit here.
+  for (const file of files) {
+    if (PROD_SSH_WORKFLOWS.includes(file)) continue;
+    if (SSH_ACCESS.test(activeLines(readWorkflow(file)))) {
+      failures.push(
+        `${file}: holds an SSH/VPS credential but is not in PROD_SSH_WORKFLOWS - a new SSH workflow needs a visible edit of scripts/deploy/verify-pipeline-contract.mjs and an owner-written AGENTS.md exception`,
+      );
     }
   }
 
@@ -370,7 +534,41 @@ export function checkContract({ readWorkflow, listWorkflows, readFile }) {
     'Mandatory accelerated baseline', '510.240', 'pnpm run ship',
   ]);
 
+  // 10. Owner Fleet (owner directive 2026-10-05). The release stays exactly four components: a
+  // fifth would break every historical manifest (validateManifest requires all four) and the
+  // measured 510.240 s graph. Changing that is a visible edit of this line, with the owner.
+  requireTokens('scripts/deploy/release-manifest.mjs', readFile('scripts/deploy/release-manifest.mjs'), [
+    "export const COMPONENTS = ['web', 'api', 'db-backup', 'agent-gateway'];",
+  ]);
+  // The rules below are existence-conditional: nothing is required until fleet.yml or
+  // platform/** exists, so this checker passes before the fleet does.
+  const platformFiles = listFiles('platform');
+  if (files.includes('fleet.yml')) failures.push(...fleetWorkflowFailures(readWorkflow('fleet.yml')));
+  if (files.includes('fleet.yml') || platformFiles.length > 0) {
+    requireTokens('AGENTS.md', readFile('AGENTS.md'), ['Owner Fleet exception']);
+  }
+  failures.push(...platformSourceFailures(platformFiles, readFile));
+
   return failures;
+}
+
+/** Text files under a repo-relative directory, forward-slash paths. Empty when it does not exist. */
+export function listTextFiles(rootDir, relativeDir) {
+  const found = [];
+  const walk = (relative) => {
+    const absolute = join(rootDir, relative);
+    if (!existsSync(absolute) || !statSync(absolute).isDirectory()) return;
+    for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+      const child = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) {
+        if (!SCAN_SKIP_DIRS.has(entry.name)) walk(child);
+      } else if (entry.isFile() && !SCAN_BINARY.test(entry.name) && statSync(join(rootDir, child)).size <= SCAN_MAX_BYTES) {
+        found.push(child);
+      }
+    }
+  };
+  walk(relativeDir);
+  return found.sort();
 }
 
 /** Scan a checkout. Shared by the CLI and the pre-push gate. */
@@ -387,6 +585,7 @@ export function scanRepo(rootDir = root) {
         .sort(),
     readWorkflow: (file) => readFile(join('.github', 'workflows', file)),
     readFile,
+    listFiles: (relativeDir) => listTextFiles(rootDir, relativeDir),
   });
 }
 

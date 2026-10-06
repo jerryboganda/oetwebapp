@@ -111,7 +111,8 @@ public sealed class SpeakingAudioEvidenceService(
     ISpeakingAudioTranscoder transcoder,
     IAiGatewayService gateway,
     IOptions<SpeakingAudioAssessmentOptions>? options = null,
-    ILogger<SpeakingAudioEvidenceService>? logger = null) : ISpeakingAudioEvidenceService
+    ILogger<SpeakingAudioEvidenceService>? logger = null,
+    IRemoteSpeakingJoin? remoteJoin = null) : ISpeakingAudioEvidenceService
 {
     public const string PromptTemplateId = "speaking.audio_assess.v1";
 
@@ -167,36 +168,41 @@ public sealed class SpeakingAudioEvidenceService(
     private async Task<SpeakingAudioEvidence> AssessCoreAsync(SpeakingAudioAssessRequest request, CancellationToken ct)
     {
         var turns = ReadCandidateTurns(request.SegmentsJson);
-        var recordings = await LoadRecordingsAsync(request.SessionId, turns, ct);
+        var recordings = await SpeakingAudioClips.LoadAsync(db, request.SessionId, turns, ct);
         if (recordings.Count == 0)
         {
             return SpeakingAudioEvidence.Unavailable("no_audio");
         }
 
-        // Every clip is opened from storage and joined; none is kept or written anywhere else.
-        var streams = new List<Stream>(recordings.Count);
-        SpeakingAudioJoin join;
-        try
+        // A join a helper already prepared for exactly these clips (flag-gated, fail-soft, null when there is none) skips the local
+        // ffmpeg run. The local transcoder below is ALWAYS the fallback: the grade never waits for, or depends on, a remote job.
+        var join = await TryServePrecomputedJoinAsync(request.SessionId, recordings, ct);
+        if (join is null)
         {
-            var inputs = new List<SpeakingAudioClipInput>(recordings.Count);
-            foreach (var recording in recordings)
+            // Every clip is opened from storage and joined; none is kept or written anywhere else.
+            var streams = new List<Stream>(recordings.Count);
+            try
             {
-                var path = recording.MediaAsset?.StoragePath;
-                if (string.IsNullOrWhiteSpace(path) || !await storage.ExistsAsync(path, ct))
+                var inputs = new List<SpeakingAudioClipInput>(recordings.Count);
+                foreach (var recording in recordings)
                 {
-                    return SpeakingAudioEvidence.Unavailable("audio_missing_blob");
+                    var path = recording.StoragePath;
+                    if (string.IsNullOrWhiteSpace(path) || !await storage.ExistsAsync(path, ct))
+                    {
+                        return SpeakingAudioEvidence.Unavailable("audio_missing_blob");
+                    }
+
+                    var stream = await storage.OpenReadAsync(path, ct);
+                    streams.Add(stream);
+                    inputs.Add(new SpeakingAudioClipInput(stream, recording.MimeType));
                 }
 
-                var stream = await storage.OpenReadAsync(path, ct);
-                streams.Add(stream);
-                inputs.Add(new SpeakingAudioClipInput(stream, recording.MimeType));
+                join = await transcoder.JoinToMp3Async(inputs, ct);
             }
-
-            join = await transcoder.JoinToMp3Async(inputs, ct);
-        }
-        finally
-        {
-            foreach (var stream in streams) await stream.DisposeAsync();
+            finally
+            {
+                foreach (var stream in streams) await stream.DisposeAsync();
+            }
         }
 
         if (join.DurationMs < MinimumDurationMs)
@@ -308,34 +314,36 @@ public sealed class SpeakingAudioEvidenceService(
         return turns;
     }
 
-    private async Task<IReadOnlyList<SpeakingRecording>> LoadRecordingsAsync(
-        string sessionId, IReadOnlyList<CandidateTurn> turns, CancellationToken ct)
+    /// <summary>
+    /// The join a remote helper prepared for exactly these clips, or null (flag off, no job, a different clip list, anything doubtful).
+    /// Never throws for a remote problem and never waits: a hit only saves the local ffmpeg run.
+    /// </summary>
+    private async Task<SpeakingAudioJoin?> TryServePrecomputedJoinAsync(
+        string sessionId, IReadOnlyList<SpeakingClipRow> clips, CancellationToken ct)
     {
-        var orderedIds = turns
-            .Where(t => t.RecordingId is not null)
-            .Select(t => t.RecordingId!)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
+        if (remoteJoin is null) return null;
 
-        if (orderedIds.Count > 0)
+        var shas = new List<string>(clips.Count);
+        foreach (var clip in clips)
         {
-            // Live voice: one short clip per candidate turn, in the order the candidate spoke.
-            var rows = await db.SpeakingRecordings.AsNoTracking()
-                .Include(r => r.MediaAsset)
-                .Where(r => orderedIds.Contains(r.Id) && r.SpeakingSessionId == sessionId && !r.IsArchived && !r.IsWarmup)
-                .ToListAsync(ct);
-            var byId = rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
-            return orderedIds.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
+            // A clip with no known hash cannot be matched to a precomputed join: the local path decides.
+            if (clip.Sha256 is not { } sha) return null;
+            shas.Add(sha);
         }
 
-        // Recorder sessions: the session recording (or, failing that, whatever audio was stored for the session).
-        var recorderId = SpeakingSessionRecordingService.RecordingIdFor(sessionId);
-        var all = await db.SpeakingRecordings.AsNoTracking()
-            .Include(r => r.MediaAsset)
-            .Where(r => r.SpeakingSessionId == sessionId && !r.IsArchived && !r.IsWarmup)
-            .ToListAsync(ct);
-        var recorder = all.Where(r => string.Equals(r.Id, recorderId, StringComparison.Ordinal)).ToList();
-        return recorder.Count > 0 ? recorder : all.OrderBy(r => r.CreatedAt).ToList();
+        try
+        {
+            return await remoteJoin.TryServeAsync(sessionId, shas, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "Speaking audio stage: the precomputed join of session {SessionId} could not be used; joining locally.", sessionId);
+            return null;
+        }
     }
 
     private static int SpeechSeconds(IReadOnlyList<CandidateTurn> turns)

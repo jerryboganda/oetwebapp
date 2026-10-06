@@ -49,6 +49,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
     modelGroups,
     modelsLoading,
     setThreadModel,
+    activate,
   } = useAiAssistantContext();
 
   const [showThreadList, setShowThreadList] = useState(false);
@@ -57,6 +58,11 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
+
+  // The hub is opened lazily: showing the panel is what asks for it.
+  useEffect(() => {
+    activate();
+  }, [activate]);
 
   useEffect(() => {
     if (renamingId) renameInputRef.current?.focus();

@@ -1,0 +1,142 @@
+@model Fleet.Manager.Dashboard.WorkloadsView
+@{
+    var w = Model;
+    var oldest = w.OldestQueuedAgeSeconds is { } oldestSeconds ? Fmt.Age(TimeSpan.FromSeconds(oldestSeconds)) : "nothing is queued";
+    var eligibleTotal = w.Kinds.Sum(k => k.EligibleNodes.Count);
+}
+<div data-live-state="workloads">
+    @if (!w.StatsAvailable)
+    {
+        <p class="notice warn" role="status">The OET API's job statistics are not available right now (<code>@w.StatsError</code>). Queue depth and completion figures need the API. The placement column below still uses the last picture of the helpers.</p>
+    }
+
+    <section class="stats" aria-label="Queue totals">
+        <div class="stat">
+            <span class="stat-label">Oldest queued job</span>
+            <span class="stat-value small-value">@oldest</span>
+            <span class="stat-sub">waiting for a helper or the primary</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Running now</span>
+            <span class="stat-value">@w.LeasedCount</span>
+            <span class="stat-sub">jobs leased to helpers</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Job kinds</span>
+            <span class="stat-value">@w.Kinds.Count</span>
+            <span class="stat-sub">known to the policy, the API or a helper</span>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Primary headroom</span>
+            <span class="stat-value small-value"><span class="badge @(w.Primary.HasHeadroom ? "ok" : "warn")">@(w.Primary.HasHeadroom ? "Yes" : "No")</span></span>
+            <span class="stat-sub">needed to run work locally</span>
+        </div>
+    </section>
+
+    <section class="panel" aria-labelledby="kinds-h">
+        <h2 id="kinds-h">Job kinds</h2>
+        @if (w.Kinds.Count == 0)
+        {
+            <p class="empty">No job kind is known yet. Kinds appear once the policy allows them, the OET API lists them or a helper advertises them.</p>
+        }
+        else
+        {
+            <div class="table-wrap" role="region" aria-label="Job kinds" tabindex="0">
+                <table class="data">
+                    <caption class="sr-only">Job kinds with their queue, outcomes, eligible helpers and where the next job would run</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">Project and kind</th>
+                        <th scope="col">Queue depth</th>
+                        <th scope="col">Active jobs</th>
+                        <th scope="col">Succeeded</th>
+                        <th scope="col">Failed</th>
+                        <th scope="col">Completion rate</th>
+                        <th scope="col">Eligible helpers</th>
+                        <th scope="col">Next job goes to</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var workload in w.Kinds)
+                    {
+                        var queue = workload.Queue;
+                        <tr>
+                            <th scope="row">
+                                <code>@Fmt.Untrusted(workload.Kind, 48)</code>
+                                <span class="sub">@workload.Project</span>
+                            </th>
+                            <td>@queue.Queued</td>
+                            <td>@queue.Leased</td>
+                            <td>@queue.Succeeded</td>
+                            <td>
+                                @queue.Failed
+                                <span class="sub">@queue.Quarantined quarantined, @queue.FallbackLocal fell back to the primary, @queue.Cancelled cancelled</span>
+                            </td>
+                            <td>@Fmt.Percent(queue.CompletionRate)</td>
+                            <td>
+                                @workload.EligibleNodes.Count of @workload.AllowedNodes
+                                <span class="sub">@string.Join(", ", workload.EligibleNodes)</span>
+                            </td>
+                            <td>
+                                <span class="badge @(workload.Placement == "helper" ? "ok" : workload.Placement == "primary" ? "info" : "warn")">@(workload.Placement == "helper" ? "Helper" : workload.Placement == "primary" ? "Primary" : "Waits")</span>
+                                <span class="sub">@workload.PlacementReason</span>
+                                @if (workload.Rejections.Count > 0)
+                                {
+                                    <details>
+                                        <summary>Why not the other helpers</summary>
+                                        <ul class="plain-list">
+                                            @foreach (var rejection in workload.Rejections)
+                                            {
+                                                <li><code>@Fmt.Untrusted(rejection, 120)</code></li>
+                                            }
+                                        </ul>
+                                    </details>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+            <p class="hint">Completion rate is succeeded jobs among those that ended for good (succeeded, failed or quarantined) in the retained history of 30 days. The last column is the manager's placement engine run as a what-if: nothing is reserved and nothing changes.</p>
+        }
+    </section>
+
+    <section class="panel" aria-labelledby="nodes-h">
+        <h2 id="nodes-h">Where work is running</h2>
+        @if (w.Nodes.Count == 0)
+        {
+            <p class="empty">No helper is registered with the OET API yet. Until one is active, the primary does all the work.</p>
+        }
+        else
+        {
+            <div class="table-wrap" role="region" aria-label="Helper load" tabindex="0">
+                <table class="data compact">
+                    <caption class="sr-only">Each helper's status, running jobs and the job kinds its agent can run</caption>
+                    <thead>
+                    <tr>
+                        <th scope="col">Helper</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Health</th>
+                        <th scope="col">Running</th>
+                        <th scope="col">Kinds the agent runs</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var node in w.Nodes)
+                    {
+                        <tr>
+                            <th scope="row"><a href="@("/Hosts/Detail/" + Uri.EscapeDataString(node.HostId))">@node.NodeRef</a></th>
+                            <td><span class="badge @Fmt.BadgeClass(node.Status)">@node.Status</span></td>
+                            <td><span class="badge @Fmt.BadgeClass(node.Health)">@node.Health</span></td>
+                            <td>@node.Leases jobs, weight @node.LeasedWeight of @node.SlotCap slots</td>
+                            <td>@Fmt.OrDash(Fmt.Untrusted(node.Kinds, 200))</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+        <p class="hint">@eligibleTotal helper slot(s) are eligible across all kinds right now.</p>
+    </section>
+</div>

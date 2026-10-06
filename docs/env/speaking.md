@@ -75,6 +75,23 @@ OpenAI key and URLs for the hard-stop hang-up (without them the hang-up silently
 nothing); it does not run the catalog probe, and only the API slots hold the provider
 circuit state.
 
+### Live AI session admission has no environment keys in production
+
+The live-session admission gate
+([live-voice.md](../speaking/live-voice.md#admission-control-live-session-cap-and-wait-queue)) binds its options
+from the `Speaking:LiveAdmission` configuration section (`SpeakingLiveAdmissionOptions`), but
+`docker-compose.production.yml` has a **closed environment list** (no `env_file`) and forwards no
+`Speaking__LiveAdmission__*` key. Setting `SPEAKING__LIVEADMISSION__*` in `.env.production` therefore changes
+**nothing**: the API and the `ai-worker` run the shipped defaults (cap 100, waiter heartbeat 90 s, claim window 120 s, exam
+and practice safety TTL 45 and 20 min, maximum wait 2 h, line limit 1000 bounded by what the maximum wait can serve, poll
+4 s, retention 7 days).
+
+The operational levers need no restart and are the **admin settings**: `GET` / `PUT /v1/admin/ai/live-voice/admission`
+(the cap, 1-10000, and the kill switch; audited as `SpeakingLiveAdmissionSettingsUpdated`). To make a timing option
+reachable from the environment, forward it in the API **and** `ai-worker` env blocks of `docker-compose.production.yml`
+(`Speaking__LiveAdmission__<Name>: ${SPEAKING__LIVEADMISSION__<NAME>:-<default>}`) and document it here in the same change;
+that is a deployment-pipeline change and has not been made.
+
 ## TypeSafe SystemOne / Jev
 
 Jev validates generated role-player projections and receives non-blocking

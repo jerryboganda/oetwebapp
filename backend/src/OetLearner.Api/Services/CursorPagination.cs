@@ -60,4 +60,48 @@ public static class CursorPagination
     }
 
     private sealed record CursorPayload(DateTimeOffset Timestamp, string Id);
+
+    // ── Ranked cursor ────────────────────────────────────────────────────────
+    // Keyset position for lists ordered by `rank DESC, title ASC, id ASC` (content search:
+    // QualityScore; learner paper list: Priority). The (timestamp, id) cursor above cannot
+    // express that order. The payload names its id `Key`, not `Id`, so a cursor of one shape
+    // can never decode as the other (each TryDecode rejects the other's payload).
+
+    public readonly record struct RankedCursor(int Rank, string Title, string Id);
+
+    public static string EncodeRanked(int rank, string title, string id)
+    {
+        var payload = JsonSerializer.Serialize(new RankedCursorPayload(rank, title, id));
+        return Convert.ToBase64String(Encoding.UTF8.GetBytes(payload))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    public static bool TryDecodeRanked(string? cursor, out RankedCursor result)
+    {
+        result = default;
+        if (string.IsNullOrWhiteSpace(cursor)) return false;
+        try
+        {
+            var normalized = cursor.Replace('-', '+').Replace('_', '/');
+            switch (normalized.Length % 4)
+            {
+                case 2: normalized += "=="; break;
+                case 3: normalized += "="; break;
+                case 1: return false;
+            }
+            var json = Encoding.UTF8.GetString(Convert.FromBase64String(normalized));
+            var payload = JsonSerializer.Deserialize<RankedCursorPayload>(json);
+            if (payload is null || payload.Title is null || string.IsNullOrEmpty(payload.Key)) return false;
+            result = new RankedCursor(payload.Rank, payload.Title, payload.Key);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private sealed record RankedCursorPayload(int Rank, string Title, string Key);
 }

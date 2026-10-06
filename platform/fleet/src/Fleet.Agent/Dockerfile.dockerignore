@@ -1,0 +1,4 @@
+# Context for the fleet agent image is the repository root; only the publish output may enter it.
+**
+!platform/fleet/publish/agent/
+!platform/fleet/publish/agent/**

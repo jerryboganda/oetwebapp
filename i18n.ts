@@ -99,11 +99,21 @@ function unflattenMessages(flat: Record<string, string>): AbstractIntlMessages {
   return root as AbstractIntlMessages;
 }
 
-export async function loadAllMessages(locale: SupportedLocale): Promise<AbstractIntlMessages> {
+// Messages are static per locale, so each (locale, modules) set is merged and unflattened once per
+// server process. The root layout and `getRequestConfig` both load them on every request; before
+// this they redid the merge and the unflatten of ~700 keys each time. The cached objects are only
+// ever read (they are serialised to the client or looked up), never mutated.
+const messageCache = new Map<string, AbstractIntlMessages>();
+
+function messagesFor(locale: SupportedLocale, modules: readonly MessageModule[]): AbstractIntlMessages {
+  const cacheKey = `${locale}:${modules.join(',')}`;
+  const cached = messageCache.get(cacheKey);
+  if (cached) return cached;
+
   const baseline = MESSAGE_BUNDLES[DEFAULT_LOCALE];
   const localized = MESSAGE_BUNDLES[locale];
 
-  const merged = MESSAGE_MODULES.reduce<Record<string, string>>((messages, moduleName) => {
+  const merged = modules.reduce<Record<string, string>>((messages, moduleName) => {
     return {
       ...messages,
       ...baseline[moduleName],
@@ -111,7 +121,33 @@ export async function loadAllMessages(locale: SupportedLocale): Promise<Abstract
     };
   }, {});
 
-  return unflattenMessages(merged);
+  const unflattened = unflattenMessages(merged);
+  messageCache.set(cacheKey, unflattened);
+  return unflattened;
+}
+
+const NON_WRITING_MODULES = MESSAGE_MODULES.filter((moduleName) => moduleName !== 'writing');
+
+export interface LoadMessagesOptions {
+  /**
+   * Include the Writing bundle (default true). It is ~50 KB (en) / ~65 KB (ar) and the root
+   * layout inlines whatever it is given into every HTML response, including sign-in, admin and
+   * expert pages that never show Writing copy. The root layout therefore passes `false` and the
+   * learner layout supplies the Writing bundle for the learner routes (see `loadWritingMessages`).
+   */
+  includeWriting?: boolean;
+}
+
+export async function loadAllMessages(
+  locale: SupportedLocale,
+  options: LoadMessagesOptions = {},
+): Promise<AbstractIntlMessages> {
+  return messagesFor(locale, options.includeWriting === false ? NON_WRITING_MODULES : MESSAGE_MODULES);
+}
+
+/** The Writing module's messages alone, for the routes that show Writing copy. */
+export async function loadWritingMessages(locale: SupportedLocale): Promise<AbstractIntlMessages> {
+  return messagesFor(locale, ['writing']);
 }
 
 export default getRequestConfig(async () => {

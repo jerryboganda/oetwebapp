@@ -31,6 +31,10 @@ namespace OetLearner.Api.Services.Speaking;
 /// refunded if the exam ends without a result (see
 /// <see cref="SpeakingCreditSettlement"/>). Live-tutor exams cost no credits
 /// (pay-per-session via the Stripe booking) and are human-marked.
+///
+/// Live AI capacity (owner decision 5 Oct 2026): an AI exam takes ONE slot of the live-session cap at
+/// <see cref="FinishIntroAsync"/>, before any credit hold or clock (see <see cref="SpeakingLiveAdmissionService"/>);
+/// while the cap is full the exam stays in Intro and its detail carries <c>Admission</c>.
 /// </summary>
 public sealed class SpeakingExamService(
     LearnerDbContext db,
@@ -42,7 +46,8 @@ public sealed class SpeakingExamService(
     ISpeakingCanonicalAssessmentService? canonical = null,
     SpeakingComplianceService? compliance = null,
     LiveVoiceProviderProbeState? liveVoiceProbe = null,
-    IOptions<LiveVoiceOptions>? liveVoiceOptions = null)
+    IOptions<LiveVoiceOptions>? liveVoiceOptions = null,
+    SpeakingLiveAdmissionService? admission = null)
 {
     private const int DefaultPrepSeconds = 180;
 
@@ -337,7 +342,9 @@ public sealed class SpeakingExamService(
 
     /// <summary>Finish the unscored Intro (Part 1) and reveal Card A. Holds credit A
     /// (AI mode) first, then creates child Session A: a refused hold (402) leaves the
-    /// exam in Intro with nothing persisted.</summary>
+    /// exam in Intro with nothing persisted. An AI exam first passes the live-session
+    /// admission gate: while the cap is full the exam stays in Intro, nothing is held or
+    /// timed, and the detail carries <c>Admission</c> (the page repeats this call).</summary>
     public async Task<SpeakingExamDetail> FinishIntroAsync(string userId, string examId, CancellationToken ct)
     {
         var exam = await LoadOwnedAsync(userId, examId, ct, tracking: true);
@@ -353,47 +360,117 @@ public sealed class SpeakingExamService(
         // unpaid. Card B's hold only happens at the A->B reveal, so both cards must be fundable now: a
         // refusal there would leave Card B running with no hold. A retry that already holds Card A skips
         // the check (the hold below is adopted; its own 2 credits must not make the exam look unfundable).
-        var cardAReference = CardReference(exam, "a");
-        if (exam.Mode == SpeakingExamMode.Ai
-            && string.IsNullOrWhiteSpace(exam.CreditARefId)
-            && !await db.AiCreditReservations.AsNoTracking()
-                .AnyAsync(r => r.BusinessReference == cardAReference, ct))
+        //
+        // Live AI capacity gate (owner decision 5 Oct 2026): AFTER the read-only fundability check (an
+        // unfunded learner never queues) and BEFORE the credit hold and the clock, so a learner who has to
+        // wait has paid nothing and started nothing. Nothing on the exam or its child is touched here; a
+        // waiting exam stays in Intro and the page repeats this call until a place is free. The exam keeps
+        // its slot for both cards (Card B's reveal is not gated). With no healthy live provider the learner
+        // uses the recorder fallback and the gate does not apply. When the gate applies the check runs from
+        // inside it, only when this call is about to take a place (never on a waiting learner's repeat poll,
+        // which would cost a full wallet snapshot every few seconds), and it also refuses an account with no
+        // credit wallet at all, which the hold would refuse anyway; otherwise it runs here as it always did.
+        SpeakingLiveAdmissionResult? gate = null;
+        if (exam.Mode == SpeakingExamMode.Ai && admission is not null)
         {
-            var coveredByMockAttempt = !string.IsNullOrWhiteSpace(exam.MockAttemptId)
-                && await IsCoveredByMockAttemptAsync(exam.UserId, exam.MockAttemptId, ct);
-            await EnsureCardsFundableAsync(exam.UserId, coveredByMockAttempt, ct);
+            gate = await admission.AdmitOrQueueAsync(
+                exam.UserId,
+                SpeakingLiveAdmissionKinds.Exam,
+                exam.Id,
+                liveVoiceProbe?.IsLiveVoiceAvailable(liveVoiceOptions?.Value) == true,
+                ct,
+                beforeNewPlace: token => EnsureCardAFundableAsync(exam, refuseWalletlessAccount: true, token));
+            if (gate.MustWait)
+            {
+                return await ProjectAsync(exam, DateTimeOffset.UtcNow, ct, gate.Waiting);
+            }
         }
-        await DebitCardAsync(exam, "a", ct);
 
-        var now = DateTimeOffset.UtcNow;
-        exam.IntroEndedAt = now;
-        exam.PrepAStartedAt = now;
-        exam.State = SpeakingExamState.PrepA;
-        if (string.IsNullOrWhiteSpace(exam.SessionAId))
+        if (gate is null || gate.Outcome == SpeakingLiveAdmissionOutcome.Bypassed)
         {
-            exam.SessionAId = await CreateChildSessionAsync(exam, exam.CardAId, "a", now, ct);
+            await EnsureCardAFundableAsync(exam, refuseWalletlessAccount: false, ct);
         }
-        else
+
+        try
         {
-            var existingCard = await db.SpeakingSessions
-                .FirstOrDefaultAsync(s => s.Id == exam.SessionAId, ct);
-            if (existingCard is null)
+            await DebitCardAsync(exam, "a", ct);
+
+            var now = DateTimeOffset.UtcNow;
+            exam.IntroEndedAt = now;
+            exam.PrepAStartedAt = now;
+            exam.State = SpeakingExamState.PrepA;
+            if (string.IsNullOrWhiteSpace(exam.SessionAId))
             {
                 exam.SessionAId = await CreateChildSessionAsync(exam, exam.CardAId, "a", now, ct);
             }
             else
             {
-                existingCard.State = SpeakingSessionState.Prep;
-                existingCard.PrepStartedAt = now;
-                existingCard.RolePlayStartedAt = null;
-                existingCard.EndedAt = null;
-                existingCard.UpdatedAt = now;
+                var existingCard = await db.SpeakingSessions
+                    .FirstOrDefaultAsync(s => s.Id == exam.SessionAId, ct);
+                if (existingCard is null)
+                {
+                    exam.SessionAId = await CreateChildSessionAsync(exam, exam.CardAId, "a", now, ct);
+                }
+                else
+                {
+                    existingCard.State = SpeakingSessionState.Prep;
+                    existingCard.PrepStartedAt = now;
+                    existingCard.RolePlayStartedAt = null;
+                    existingCard.EndedAt = null;
+                    existingCard.UpdatedAt = now;
+                }
             }
-        }
-        exam.UpdatedAt = now;
-        await db.SaveChangesAsync(ct);
+            exam.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
 
-        return await ProjectAsync(exam, now, ct);
+            return await ProjectAsync(exam, now, ct);
+        }
+        catch when (gate is { TookNewPlace: true })
+        {
+            // The start failed AFTER this call took a place (a refused or failed credit hold): give the place back at
+            // once instead of leaving it idle for the claim window. Never touches a running exam; never throws.
+            if (admission is not null)
+            {
+                await admission.ReleaseAsync(SpeakingLiveAdmissionKinds.Exam, exam.Id, CancellationToken.None);
+            }
+            throw;
+        }
+    }
+
+    /// <summary>The read-only "can both cards be paid for" check that precedes the Card A hold. Skipped for a
+    /// non-AI exam and for a retry that already holds Card A (the hold below is adopted; its own 2 credits must not
+    /// make the exam look unfundable). <paramref name="refuseWalletlessAccount"/>: see
+    /// <see cref="EnsureCardsFundableAsync"/>.</summary>
+    private async Task EnsureCardAFundableAsync(SpeakingExamSession exam, bool refuseWalletlessAccount, CancellationToken ct)
+    {
+        if (exam.Mode != SpeakingExamMode.Ai || !string.IsNullOrWhiteSpace(exam.CreditARefId))
+        {
+            return;
+        }
+
+        var cardAReference = CardReference(exam, "a");
+        if (await db.AiCreditReservations.AsNoTracking().AnyAsync(r => r.BusinessReference == cardAReference, ct))
+        {
+            return;
+        }
+
+        var coveredByMockAttempt = !string.IsNullOrWhiteSpace(exam.MockAttemptId)
+            && await IsCoveredByMockAttemptAsync(exam.UserId, exam.MockAttemptId, ct);
+        await EnsureCardsFundableAsync(exam.UserId, coveredByMockAttempt, ct, refuseWalletlessAccount);
+    }
+
+    /// <summary>
+    /// The learner left the admission line ("Leave the queue"): releases this exam's WAITING place at once so it stops
+    /// counting towards the positions of everyone behind it. The exam itself stays in its intro. Owner-checked; an
+    /// exam that is not waiting is a no-op.
+    /// </summary>
+    public async Task LeaveAdmissionQueueAsync(string userId, string examId, CancellationToken ct)
+    {
+        var exam = await LoadOwnedAsync(userId, examId, ct);
+        if (admission is not null)
+        {
+            await admission.LeaveQueueAsync(SpeakingLiveAdmissionKinds.Exam, exam.Id, ct);
+        }
     }
 
     /// <summary>Start the current card's discussion (prep → active) early. The
@@ -457,6 +534,12 @@ public sealed class SpeakingExamService(
         await EndChildIfPresentAsync(exam.SessionAId, now, ct);
         await EndChildIfPresentAsync(exam.SessionBId, now, ct);
         await db.SaveChangesAsync(ct);
+        // A cancelled exam can no longer run: its live-session place (a waiting one, or one admitted but never
+        // started) is given back at once. A running exam is cancelled above first, so it is never "running" here.
+        if (admission is not null)
+        {
+            await admission.ReleaseAsync(SpeakingLiveAdmissionKinds.Exam, exam.Id, ct);
+        }
         // A cancelled exam produces no exam result, so its card holds are
         // refunded (full mock = 4 credits only for a graded result).
         if (creditReservations is not null)
@@ -1166,8 +1249,13 @@ public sealed class SpeakingExamService(
     /// Exempt: an exam covered by a mock attempt, an account with a "Full Mock Speaking Exam Access"
     /// unit (it alone funds the whole exam, see <see cref="DebitCardAsync"/>) and an account with no
     /// package wallet at all (its Card A hold is refused by <see cref="DebitCardAsync"/> instead).
-    /// Checked at creation and again when Part 2 begins, because the balance can change in between.</summary>
-    private async Task EnsureCardsFundableAsync(string userId, bool coveredByMockAttempt, CancellationToken ct)
+    /// Checked at creation and again when Part 2 begins, because the balance can change in between.
+    /// <paramref name="refuseWalletlessAccount"/> (only when the live-session gate applies, and only where credit holds
+    /// go through <c>IAiCreditReservationService</c> as in production): an account with no package wallet at all is
+    /// refused here (402 <c>ai_credits_insufficient</c>, the very code its Card A hold would answer with) instead of
+    /// being queued behind paying learners for a place it could only fail to pay for.</summary>
+    private async Task EnsureCardsFundableAsync(
+        string userId, bool coveredByMockAttempt, CancellationToken ct, bool refuseWalletlessAccount = false)
     {
         if (creditService is null || coveredByMockAttempt) return;
 
@@ -1184,6 +1272,12 @@ public sealed class SpeakingExamService(
         {
             throw ApiException.PaymentRequired("speaking_exam_insufficient_credits",
                 "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+        }
+
+        if (!hasPackageWallet && refuseWalletlessAccount && creditReservations is not null)
+        {
+            throw ApiException.PaymentRequired("ai_credits_insufficient",
+                "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
         }
     }
 
@@ -1300,8 +1394,23 @@ public sealed class SpeakingExamService(
         return exam;
     }
 
-    private async Task<SpeakingExamDetail> ProjectAsync(SpeakingExamSession exam, DateTimeOffset now, CancellationToken ct)
+    private async Task<SpeakingExamDetail> ProjectAsync(
+        SpeakingExamSession exam,
+        DateTimeOffset now,
+        CancellationToken ct,
+        SpeakingLiveAdmissionView? waitingView = null)
     {
+        // The line a waiting AI exam is in (state stays intro). Passed in by the finish-intro call that has just
+        // decided it; on a plain read it is looked up. Null whenever the exam is not waiting.
+        var admissionView = waitingView;
+        if (admissionView is null
+            && admission is not null
+            && exam.State == SpeakingExamState.Intro
+            && exam.Mode == SpeakingExamMode.Ai)
+        {
+            admissionView = await admission.GetWaitingViewAsync(SpeakingLiveAdmissionKinds.Exam, exam.Id, ct);
+        }
+
         var (prepA, discA) = await TimingAsync(exam.CardAId, ct);
         var (prepB, discB) = await TimingAsync(exam.CardBId, ct);
 
@@ -1388,6 +1497,7 @@ public sealed class SpeakingExamService(
             [
                 new SpeakingExamCardSession(1, exam.SessionAId),
                 new SpeakingExamCardSession(2, exam.SessionBId),
-            ]);
+            ],
+            Admission: admissionView);
     }
 }

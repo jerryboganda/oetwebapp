@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { isApiError } from '@/lib/api/client';
 import { canAccessPlacement, fetchPlacementStatus } from '@/lib/api/placement';
+import { registerResettable } from '@/lib/stores/registry';
 
 export const PLACEMENT_NAV_HREF = '/placement-test';
 
@@ -20,6 +21,15 @@ export function loadPlacementAccess(): Promise<boolean> {
     });
   return pending;
 }
+
+/** Forget the cached answer, so the next caller asks again (sign-out, account switch). */
+export function resetPlacementAccessCache(): void {
+  pending = null;
+}
+
+// The answer is per account but module-level, so sign-out must drop it
+// (auth-context.signOut → resetAllStores) or the next account inherits it.
+registerResettable(resetPlacementAccessCache);
 
 /**
  * Whether this learner can open the free placement test (flag on, and inside

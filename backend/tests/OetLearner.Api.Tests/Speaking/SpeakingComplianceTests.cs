@@ -192,6 +192,65 @@ public sealed class SpeakingComplianceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task RetentionWorker_ForgetsTheRemoteJoinDerivativeOfEveryClipItArchives()
+    {
+        // A helper-prepared join of the candidate's clips (media.speaking-join) is learner audio: it must go no later than the clips.
+        var (sessionId, recordingId) = await SeedSessionWithRecordingAsync(
+            "learner-retention-join",
+            retentionExpiresAt: DateTimeOffset.UtcNow.AddDays(-2));
+        var key = (await _db.MediaAssets.AsNoTracking().FirstAsync(m => m.Id != null)).StoragePath;
+        _storage.AddBlob(key, [0x01, 0x02, 0x03]);
+        var remote = new RecordingRemoteSpeakingJoin();
+        var worker = new SpeakingAudioRetentionWorker(
+            new SingleInstanceScopeFactory(_db, _storage, Options.Create(_options), remote),
+            NullLogger<SpeakingAudioRetentionWorker>.Instance);
+
+        var archived = await worker.SweepSpeakingRecordingsOnceAsync(CancellationToken.None);
+
+        Assert.True(archived >= 1);
+        Assert.True((await _db.SpeakingRecordings.AsNoTracking().FirstAsync(r => r.Id == recordingId)).IsArchived);
+        var deleted = Assert.Single(remote.Deleted);
+        Assert.Contains(sessionId, deleted);
+    }
+
+    [Fact]
+    public async Task RetentionWorker_WithNothingToArchive_NeverTouchesTheRemoteJoin()
+    {
+        await SeedSessionWithRecordingAsync("learner-retention-fresh", retentionExpiresAt: DateTimeOffset.UtcNow.AddDays(30));
+        var remote = new RecordingRemoteSpeakingJoin();
+        var worker = new SpeakingAudioRetentionWorker(
+            new SingleInstanceScopeFactory(_db, _storage, Options.Create(_options), remote),
+            NullLogger<SpeakingAudioRetentionWorker>.Instance);
+
+        Assert.Equal(0, await worker.SweepSpeakingRecordingsOnceAsync(CancellationToken.None));
+
+        Assert.Empty(remote.Deleted);
+    }
+
+    [Fact]
+    public async Task LearnerErasureOfARecording_ForgetsTheRemoteJoinDerivativeOfItsSession()
+    {
+        const string ownerId = "learner-owner-join";
+        var (sessionId, recordingId) = await SeedSessionWithRecordingAsync(ownerId);
+        var remote = new RecordingRemoteSpeakingJoin();
+        var service = new SpeakingComplianceService(
+            _db,
+            _storage,
+            Options.Create(_options),
+            NullLogger<SpeakingComplianceService>.Instance,
+            TimeProvider.System,
+            remote);
+
+        // a refused erasure (not the owner) touches nothing
+        await Assert.ThrowsAsync<ApiException>(() => service.DeleteRecordingAsync("learner-stranger-join", recordingId, CancellationToken.None));
+        Assert.Empty(remote.Deleted);
+
+        await service.DeleteRecordingAsync(ownerId, recordingId, CancellationToken.None);
+
+        Assert.Equal(new[] { sessionId }, Assert.Single(remote.Deleted));
+    }
+
+    [Fact]
     public async Task MyRecordings_IdentifiesConsentedLiveCandidateClips()
     {
         const string ownerId = "learner-live-clip-list";

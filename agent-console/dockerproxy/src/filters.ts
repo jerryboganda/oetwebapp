@@ -6,6 +6,7 @@ import { StringDecoder } from 'node:string_decoder';
 import {
   CONSOLE_VOLUMES,
   isConsoleContainer,
+  isFleetName,
   isOetImageRef,
   isVisibleContainerName,
   isVisibleNetworkName,
@@ -81,7 +82,12 @@ export function isVisibleEvent(event: unknown): boolean {
     case 'container':
       return name !== '' && isVisibleContainerName(name);
     case 'network':
-      return name !== '' && isVisibleNetworkName(name) && !isConsoleContainer(stripSlash(str(attributes.container)));
+      return (
+        name !== '' &&
+        isVisibleNetworkName(name) &&
+        !isConsoleContainer(stripSlash(str(attributes.container))) &&
+        !isFleetName(stripSlash(str(attributes.container)))
+      );
     case 'volume': {
       const volume = str(actor.ID) || name;
       return volume !== '' && isVisibleVolumeName(volume) && !CONSOLE_VOLUMES.has(volume);

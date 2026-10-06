@@ -1,0 +1,66 @@
+@page
+@model Fleet.Manager.Pages.Hosts.AddModel
+@{
+    ViewData["Title"] = "Add helper";
+}
+<div class="page-head">
+    <h1>Add a helper VPS</h1>
+</div>
+@await Html.PartialAsync("_Messages", Model)
+<div class="split">
+    <section class="panel" aria-labelledby="add-h">
+        <h2 id="add-h">The server</h2>
+        <form method="post" asp-antiforgery="true" autocomplete="off">
+            <div class="field">
+                <label for="Address">IP address or host name</label>
+                <input id="Address" name="Address" type="text" value="@Model.Address" maxlength="253" required autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="Address-hint" />
+                <p class="hint" id="Address-hint">A public IPv4 or IPv6 address, or a fully qualified host name. The primary VPS, private ranges and anything of the production deployment are refused.</p>
+            </div>
+            <div class="field-grid">
+                <div class="field">
+                    <label for="Name">Name (optional)</label>
+                    <input id="Name" name="Name" type="text" value="@Model.Name" maxlength="80" autocomplete="off" aria-describedby="Name-hint" />
+                    <p class="hint" id="Name-hint">Shown in this console. Left empty, one is derived from the address.</p>
+                </div>
+                <div class="field">
+                    <label for="Port">SSH port</label>
+                    <input id="Port" name="Port" type="number" inputmode="numeric" min="1" max="65535" step="1" value="@Model.Port" required />
+                </div>
+                <div class="field">
+                    <label for="Region">Region (optional)</label>
+                    <input id="Region" name="Region" type="text" value="@Model.Region" maxlength="64" autocomplete="off" />
+                </div>
+                <div class="field">
+                    <label for="Provider">Provider (optional)</label>
+                    <input id="Provider" name="Provider" type="text" value="@Model.Provider" maxlength="64" autocomplete="off" />
+                </div>
+            </div>
+            <details class="fieldset-details">
+                <summary>Advanced</summary>
+                <div class="field">
+                    <label for="NodeRef">Node reference</label>
+                    <input id="NodeRef" name="NodeRef" type="text" value="@Model.NodeRef" maxlength="63" pattern="[a-z0-9][a-z0-9\-]{2,62}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-describedby="NodeRef-hint" />
+                    <p class="hint" id="NodeRef-hint">The stable identifier of this helper in the OET API: lower-case letters, digits and hyphens, 3 to 63 characters. Left empty, one is derived from the name or the address.</p>
+                </div>
+            </details>
+
+            @await Html.PartialAsync("_KeyFields", new KeyFieldsModel("add", Model.SshUser))
+            <p class="hint">Leave the key empty to provide it after you have checked the host key: the next page asks for it.</p>
+
+            @await Html.PartialAsync("_StepUp", "add")
+            <div class="actions">
+                <button type="submit" class="btn primary">Add helper</button>
+            </div>
+        </form>
+    </section>
+    <aside class="panel" aria-labelledby="next-h">
+        <h2 id="next-h">What happens next</h2>
+        <ol class="plain-steps">
+            <li><strong>You compare the host key.</strong> The console shows the SSH fingerprint it sees. You check it against your provider's console and type its first 8 characters. Nothing is trusted before that.</li>
+            <li><strong>The server prepares itself.</strong> The temporary key is used once to create a restricted fleet account, install Docker, a firewall and a hardened SSH configuration. The key is then erased.</li>
+            <li><strong>The agent starts.</strong> The approved agent image is pulled by digest and started. It must report in to the OET API.</li>
+            <li><strong>Self-test, then work.</strong> A known-answer test runs on the helper. Only if it passes is the helper activated.</li>
+        </ol>
+        <p class="hint">Requirements: Ubuntu 22.04 or 24.04, or Debian 12; x86_64; systemd; 2 or more cores; 4 GiB or more RAM; 20 GiB or more free disk; a fresh VPS with no OET containers. The enrollment keeps running on the server if you close the browser: reopen it from the fleet overview.</p>
+    </aside>
+</div>

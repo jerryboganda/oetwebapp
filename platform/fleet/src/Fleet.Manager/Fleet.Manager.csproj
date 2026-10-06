@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Fleet.Manager</RootNamespace>
+    <AssemblyName>Fleet.Manager</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Fleet.Manager.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same version as backend/src/OetLearner.Api. NU1903 for the bundled e_sqlite3 is the
+         known advisory documented in the backend csproj (BUG-007); the manager's SQLite file is
+         only ever opened by this process with its own schema, never with untrusted SQL. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Fleet.Core\Fleet.Core.csproj" />
+  </ItemGroup>
+
+</Project>

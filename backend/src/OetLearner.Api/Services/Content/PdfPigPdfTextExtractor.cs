@@ -53,7 +53,10 @@ public sealed class PdfPigPdfTextExtractor : IPdfTextExtractor
     public async Task<string> ExtractAsync(Stream pdfStream, CancellationToken ct)
     {
         var pages = await ExtractPagesAsync(pdfStream, ct);
-        return string.Join(PageSeparator, pages).Trim();
+        var text = string.Join(PageSeparator, pages).Trim();
+        // Diagnostics only (the "pdf.extract.done" log line); never affects the result.
+        PdfExtractionFacts.RecordEmbedded(pages.Count, text.Length);
+        return text;
     }
 
     public async Task<IReadOnlyList<string>> ExtractPagesAsync(Stream pdfStream, CancellationToken ct)

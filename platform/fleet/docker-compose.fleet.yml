@@ -1,0 +1,104 @@
+# OET fleet manager (owner directive 2026-10-05, D1): its OWN compose project, never part of `oetwebsite`, so a
+# production release can never recreate it and it can never recreate the app.
+#
+# * NO public ingress. The only listener is published on 127.0.0.1 of the primary; the owner reaches it with an
+#   SSH tunnel:  ssh -L 8480:127.0.0.1:8480 <primary>   then   http://127.0.0.1:8480
+# * It is attached to NO production network (oetwebsite_*, npm_proxy, oet_agent_*). It gets its own bridge for
+#   outbound traffic only (the OET API over HTTPS, SSH to helpers, DNS).
+# * It mounts NO oetwebsite_* volume and NO docker socket. Its only persistent state is the external named volume
+#   oet-fleet_fleet_data (the SQLite file). NEVER `docker compose down -v` this project.
+# * Images are built by GitHub Actions and pulled (pull_policy: missing + `--no-build`); there is no build: section.
+# * Secrets are files (compose secrets), never environment variables. The host directory must be owned by uid 10020
+#   with mode 0400 files (see README "First deployment").
+#
+#   docker compose --env-file /opt/oetwebapp/.deploy/fleet.env -f platform/fleet/docker-compose.fleet.yml up -d --no-build --wait
+name: oet-fleet
+
+services:
+  fleet-manager:
+    image: ${FLEET_MANAGER_IMAGE:?Set FLEET_MANAGER_IMAGE in fleet.env}
+    container_name: oet-fleet-manager
+    hostname: oet-fleet-manager
+    pull_policy: missing
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s
+    user: "10020:10020"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 1g
+    memswap_limit: 1g
+    cpus: 1.0
+    pids_limit: 256
+    # Under host memory pressure the kernel kills this container long before oet-postgres or the API slots (which keep 0).
+    oom_score_adj: 700
+    ports:
+      - "127.0.0.1:${FLEET_MANAGER_PORT:-8480}:8080"
+    environment:
+      TZ: UTC
+      DOTNET_EnableDiagnostics: "0"
+      # Inside its own network namespace the process must listen on all interfaces for the published port to work;
+      # StartupChecks accepts the wildcard ONLY in 'container' mode and the port is published on 127.0.0.1 only.
+      ASPNETCORE_URLS: http://0.0.0.0:8080
+      Fleet__Binding__Mode: container
+      Fleet__Data__Directory: /data
+      Fleet__Secrets__Directory: /run/secrets
+      Fleet__Api__BaseUrl: ${FLEET_API_BASE_URL:-https://api.oetwithdrhesham.co.uk}
+      Fleet__Provisioning__AnsibleDirectory: /opt/fleet/ansible
+      Fleet__Provisioning__ScratchDirectory: /tmp/fleet
+      Fleet__Provisioning__DockerSource: ${FLEET_DOCKER_SOURCE:-distro}
+      Fleet__Image__Mode: ${FLEET_IMAGE_MODE:-scoped-token}
+    secrets:
+      - fleet_master_key
+      - fleet_master_key_prev
+      - fleet_api_credential
+      - fleet_sync_token
+      - fleet_metrics_token
+    volumes:
+      - fleet_data:/data
+    tmpfs:
+      # ansible-playbook and ssh need writable temp space and HOME; per-run directories live under /tmp/fleet and are deleted after each run.
+      - /tmp:rw,noexec,nosuid,nodev,size=256m,mode=1777
+      - /home/fleet:rw,nosuid,nodev,size=32m,uid=10020,gid=10020,mode=0700
+    networks:
+      - oet_fleet_net
+    healthcheck:
+      test: ["CMD", "dotnet", "/app/Fleet.Manager.dll", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+secrets:
+  # Required: 32-byte AES-256 master key (raw, 64 hex or 44 base64 characters) and the fleet-service credential
+  # minted by POST /v1/admin/remote-workers/fleet-credential.
+  fleet_master_key:
+    file: ${FLEET_SECRETS_DIR:-/opt/oetwebapp/.deploy/fleet-secrets}/fleet_master_key
+  fleet_api_credential:
+    file: ${FLEET_SECRETS_DIR:-/opt/oetwebapp/.deploy/fleet-secrets}/fleet_api_credential
+  # Optional: an EMPTY file (the /dev/null default) means "not configured".
+  fleet_master_key_prev:
+    file: ${FLEET_MASTER_KEY_PREV_FILE:-/dev/null}
+  fleet_sync_token:
+    file: ${FLEET_SYNC_TOKEN_FILE:-/dev/null}
+  fleet_metrics_token:
+    file: ${FLEET_METRICS_TOKEN_FILE:-/dev/null}
+
+# External + exact name so compose can never create an empty parallel volume or remove one on `down`.
+# Created (if absent) by the fleet deploy, exactly like the agent console volumes.
+volumes:
+  fleet_data:
+    external: true
+    name: oet-fleet_fleet_data
+
+networks:
+  oet_fleet_net:
+    name: oet_fleet_net
+    driver: bridge

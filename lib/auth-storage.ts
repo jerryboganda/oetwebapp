@@ -6,6 +6,7 @@ import {
   removeWebStorageKey,
 } from './mobile/native-storage';
 import { clearAuthTokens, getStoredAuthTokens, storeAuthTokens } from './mobile/secure-storage';
+import { clearServiceWorkerAuthCache } from './service-worker-cache';
 
 export type AuthPersistence = 'local' | 'session';
 
@@ -195,6 +196,8 @@ export function clearStoredSession(): void {
   removeWebStorageKey(SESSION_SESSION_KEY);
   void clearAuthTokens().catch(() => undefined);
   clearAuthIndicatorCookie();
+  // The service worker's offline API cache is keyed by URL only; drop it with the session.
+  clearServiceWorkerAuthCache();
 }
 
 export function savePendingMfaChallenge(challenge: PendingMfaChallenge): void {

@@ -16,6 +16,9 @@ manual) override it for console sessions.
   restart, remove or reconfigure them, their volumes or their networks — not even to "check".
 - Never touch the console's own infrastructure: `oet-agent-console`, `oet-agent-egress`,
   `oet-agent-dockerproxy`, `oet-agent-dbproxy`, their volumes, or the engines' sign-in state.
+- Never touch the Owner Fleet manager or helper VPSs: anything named `oet-fleet*` (the proxy denies it
+  outright and hides it) and any helper address, SSH key or node token. You never hold those; do not
+  ask the owner to paste them into a session.
 
 ## 2. Tools and how to use them
 
