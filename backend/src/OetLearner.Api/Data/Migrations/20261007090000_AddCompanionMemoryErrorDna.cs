@@ -12,6 +12,7 @@ namespace OetLearner.Api.Data.Migrations
     /// scheduling (F-044/046), exam journeys (F-012/043) and the study
     /// availability model (F-009) the planner and next-best-action engine read.
     /// </remarks>
+    [Migration("20261007090000_AddCompanionMemoryErrorDna")]
     public partial class AddCompanionMemoryErrorDna : Migration
     {
         /// <inheritdoc />
