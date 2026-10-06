@@ -66,11 +66,11 @@ public class SamiPlanTemplateSeeder(LearnerDbContext db, ILogger<SamiPlanTemplat
 
     private static List<StudyPlanTemplate> BuildTemplates(DateTimeOffset now) =>
     [
-        BuildExamEve(now),
-        BuildFinal3Days(now),
-        BuildEmergency7Days(now),
-        BuildIntensive14Days(now),
-        BuildSingleSubtest(now),
+        ExamEve(now),
+        Final3Days(now),
+        Emergency7Days(now),
+        Intensive14Days(now),
+        SingleSubtest(now),
         Build20Minutes(now),
     ];
 
@@ -79,7 +79,6 @@ public class SamiPlanTemplateSeeder(LearnerDbContext db, ILogger<SamiPlanTemplat
         var names = new[] { "mon", "tue", "wed", "thu", "fri", "sat", "sun" };
         return perDay.Select((slots, idx) => new StudyPlanTemplateDay
         {
-            DayIndex = idx,
             DayOfWeek = names[idx],
             Slots = slots.ToList(),
         }).ToList();
