@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Ai;
