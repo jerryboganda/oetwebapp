@@ -1,5 +1,7 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -12,6 +14,7 @@ namespace OetLearner.Api.Data.Migrations
     /// scheduling (F-044/046), exam journeys (F-012/043) and the study
     /// availability model (F-009) the planner and next-best-action engine read.
     /// </remarks>
+    [DbContext(typeof(LearnerDbContext))]
     [Migration("20261007090000_AddCompanionMemoryErrorDna")]
     public partial class AddCompanionMemoryErrorDna : Migration
     {
