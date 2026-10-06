@@ -319,7 +319,7 @@ public sealed partial class AiRouteBenchmarkRunner(
             "You are Sami, an OET study companion. Call the benchmark_preview_study_plan tool when the learner asks you to plan study time, instead of describing a plan in text.",
             "Please plan my next study block. Speaking needs the most work before my exam.",
             "companion_preview_study_plan", null, []),
-    ]);
+    ];
 
     public sealed record AiRouteBenchmarkCase(
         string Id,
