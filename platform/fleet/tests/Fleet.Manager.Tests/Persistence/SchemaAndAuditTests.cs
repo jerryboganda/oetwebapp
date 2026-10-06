@@ -184,7 +184,7 @@ public sealed class SchemaAndAuditTests : IAsyncLifetime
             new Dictionary<string, object?>
             {
                 ["token"] = token,
-                ["pem"] = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----",
+                ["pem"] = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----", // secret-scan:allow (fake PEM framing, no key material)
                 ["long"] = new string('x', 500),
                 ["n"] = 3,
             });

@@ -11,14 +11,16 @@ platform/fleet/
   Fleet.sln                         pre-registers the agent projects (src/Fleet.Agent, tests/Fleet.Agent.Tests) built on another branch
   src/Fleet.Core/                   pure domain: state machines, validation, policy, placement, audit chain, vault + auth crypto, SSH rules
   src/Fleet.Manager/                ASP.NET Core 10: services, SQLite (EF Core), Ansible/SSH provisioner, owner auth, JSON API, SSE, /metrics
-  tests/Fleet.Manager.Tests/        xUnit + WebApplicationFactory (no browser, no Playwright)
+  tests/Fleet.Manager.Tests/        inert xUnit sources for the owner's manual use; no workflow runs them (see "Tests")
   ansible/                          playbooks (S1-S7), the helper-side gate and ctl, ansible.cfg, a data-only inventory template
   Dockerfile, docker-compose.fleet.yml
 ```
 
-> `dotnet build Fleet.sln` needs the agent branch merged (the two agent projects are pre-registered here so the
-> solution is complete after the merge). Until then build/test the manager with
-> `dotnet test tests/Fleet.Manager.Tests`. Nothing is compiled or run on the workstation (AGENTS.md): CI does it.
+> The solution pre-registers the two agent projects (`src/Fleet.Agent`, `tests/Fleet.Agent.Tests`) that arrive with the
+> agent layer, so `Fleet.sln` only resolves once that layer is merged; the manager image never builds the solution, it
+> publishes `src/Fleet.Manager/Fleet.Manager.csproj` (see `Dockerfile`). Nothing is compiled or run on the workstation
+> (AGENTS.md): the only automated check on this code is compilation inside the build-only `.github/workflows/fleet.yml`
+> (also delivered with the agent layer).
 
 ## What it does
 
@@ -52,7 +54,7 @@ platform/fleet/
   addresses are refused) and reaches child processes as argv elements or JSON data, never a shell string.
   Helper-originated text is stripped of ANSI/control characters, scrubbed, capped at 500 characters and HTML-encoded.
 * **SSH.** `oet-fleet-gate` (forced command) and `oet-fleet-ctl` share one verb table with `Fleet.Core/Ssh/FleetCtlVerbs.cs`;
-  a repository test fails when they drift. Trust on first use never appears anywhere in the fleet code (OpenSSH's
+  a repository test (a manual tool, see "Tests") is written to fail when they drift. Trust on first use never appears anywhere in the fleet code (OpenSSH's
   auto-add host-key policy, `StrictHostKeyChecking=no` and a disabled Ansible host-key check are all scanned for).
 
 ## Database policy
@@ -82,7 +84,7 @@ newer than the build, or without `schema_info`, is refused. EF Core migrations a
    (`openssl rand -hex 32`), `fleet_api_credential` (the `ofs1_...` value shown once by
    `POST /v1/admin/remote-workers/fleet-credential`).
 2. `docker volume create oet-fleet_fleet_data` (the compose file pins it `external: true`).
-3. Deploy the image with `docker compose ... up -d --no-build --wait` (the fleet workflow, a separate track).
+3. Deploy the image with `docker compose ... up -d --no-build --wait` (the build-only fleet workflow's pull-only rollout).
 4. Create the owner (password on stdin, one line):
    `docker exec -i oet-fleet-manager dotnet /app/Fleet.Manager.dll owner-init` and add the printed TOTP secret to an
    authenticator app. `--reset` replaces an existing owner.
@@ -99,8 +101,8 @@ Read-only root filesystem, uid 10020, all capabilities dropped, `no-new-privileg
 temp directory and the `ssh` client needs a passwd entry and a HOME: both are provided as tmpfs, and every run uses a
 fresh 0700 directory under `/tmp/fleet` that is zeroed and deleted afterwards. No docker socket, no `oetwebsite_*`
 volume, no production network. `/tmp` is `noexec`; if a delegated-to-localhost module ever needs exec there, relax that one
-mount only. The memory limit is an estimate for `forks=2` and one helper at a time: prove it in an Actions job before
-raising concurrency.
+mount only. The memory limit is an estimate for `forks=2` and one helper at a time: the owner watches the first real
+enrollment before raising concurrency (no benchmark job exists for it, owner directive 2026-10-06).
 
 ## Helper side (ansible/)
 
@@ -120,25 +122,29 @@ old node token after a rotation); token rotation then waits for a heartbeat from
 helper without Docker (S3 proves the login before S4 installs it), `run` clamps the budgets to the machine's cores and RAM,
 and the manager runs `prune` (running image plus the two newest others are kept) after enrollment and after every rollout.
 
-The playbooks are covered by static repository tests (forbidden tokens, parity of the verb table, `restrict`), not by a
-real Ansible run: do the first enrollment against a disposable helper.
+The playbooks have never been run: nothing in this repository executes Ansible or the helper scripts automatically
+(AGENTS.md, Owner Fleet exception (b)). The first enrollment is the owner's own manual check, against a disposable helper.
+The static repository tests described under "Tests" (forbidden tokens, parity of the verb table, `restrict`) are
+manual tools too, not a gate.
 
 ## Tests
 
-`tests/Fleet.Manager.Tests` runs the real services over a temp SQLite file with a fake outside world (`FleetWorld`: clock,
-OET API, helpers, registry), so a 180-second verification window or a 60-minute credential lifetime costs no wall time.
+**Not tested, owner QA.** `tests/Fleet.Manager.Tests` is a set of inert manual tools (owner directive 2026-10-06, "NO AUTOMATED
+QA ANYWHERE"): no workflow, job or hook runs it, no agent runs it, and nothing here has ever been run, so no result of
+any kind is claimed for this code. The sources stay in git so the owner can run them by hand if wanted; they are
+never wired to CI and `pipeline:check` rejects any workflow that would. The only automated check on the fleet code is
+that it compiles inside the build-only fleet workflow.
 
-| Folder | What it proves |
+The suite is written to run the real services over a temp SQLite file with a fake outside world (`FleetWorld`: clock,
+OET API, helpers, registry), so a 180-second verification window or a 60-minute credential lifetime would cost no wall time.
+
+| Folder | What it is written to check |
 | --- | --- |
 | `Domain`, `Validation`, `Placement`, `Vault`, `Persistence` | state machine table, strict inventory validation, placement/pressure rules, AES-GCM vault and master-key rules, schema policy, hash chains |
 | `Operations` | enrollment end to end; duplicate Add; a kill at EVERY provisioner call (before and after the effect) resumes without a second user, key, container, node or token; drain, disable, enable, repair, remove (only fleet-owned components), token rotation, rolling update with halt and rollback; policy and release rules |
 | `Monitoring` | API-authoritative health, lifecycle adoption after two polls, quarantine and changed-key alerts, 14-day rotation, pressure governor, placement service, metrics format |
 | `Provisioning`, `Repository` | Ansible/ssh argument lists (no shell, `-e @file`, strict options), error mapping, the API client, secret files, host-key parsing, the helper `gate`/`ctl` (real python3 when present, refusal paths only), and static guarantees on the compose file, Dockerfile, playbooks and source |
 | `Web` | login, lockout, one-use TOTP codes, step-up, antiforgery, sessions, headers, rate limit, the JSON API, SSE, metrics, the CI sync endpoint, startup refusals, the operator CLI |
-
-Nothing has been run yet: there is no CI workflow for `platform/fleet` on this branch (the fleet workflow is a separate
-track). Until it exists, `dotnet test tests/Fleet.Manager.Tests` on a developer machine or in a throw-away Actions job is
-the way to run them.
 
 ## Deviations from the spec and open points
 
@@ -149,7 +155,7 @@ the way to run them.
   kinds as strings or objects) because the spec does not fix their envelope.
 * `repair` and `uninstall` are additions: the operation kinds listed in 8.1 needed concrete steps.
 * The helper-side Ansible in `ansible/` (flat playbooks, a Python `oet-fleet-ctl`/`oet-fleet-gate`, vars such as
-  `fleet_manager_pubkey`) is the tree `AnsibleProvisioner` drives and the repository tests guard. The `feat/fleet-agent*`
+  `fleet_manager_pubkey`) is the tree `AnsibleProvisioner` drives and the manual repository tests are written against. The `feat/fleet-agent*`
   branches ship a second, role-based tree under the same path (`roles/`, `bootstrap.yml`, a bash ctl, other variable names,
   `requirements.yml`). Exactly one of the two must survive the merge: this README and `FleetRepositoryTests` assume this one
   (builtin modules only, no `requirements.yml`, a single inventory template).

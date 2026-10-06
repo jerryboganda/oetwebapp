@@ -47,6 +47,6 @@ wg*.conf
 __pycache__/
 *.pyc
 
-# produced by the fleet CI workflow (the agent track): the directory the images are built from, and test result files
+# produced by the build-only fleet workflow (the agent track): the directory the images are built from; *.trx is a manual-run leftover
 publish/
 *.trx

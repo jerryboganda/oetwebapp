@@ -25,7 +25,7 @@ public static class FakeKeys
     public static string PublicLineFor(SecretBuffer privateKey) => PublicLine(privateKey.AsSpan().ToArray());
 
     public static string OwnerKeyText(string marker) =>
-        "-----BEGIN OPENSSH PRIVATE KEY-----\n" + marker + "\n-----END OPENSSH PRIVATE KEY-----\n";
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n" + marker + "\n-----END OPENSSH PRIVATE KEY-----\n"; // secret-scan:allow (fake PEM framing, no key material)
 
     private static void WriteString(Stream stream, byte[] value)
     {

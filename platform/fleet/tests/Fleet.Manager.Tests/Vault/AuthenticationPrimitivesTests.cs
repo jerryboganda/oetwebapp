@@ -137,7 +137,7 @@ public sealed class AuthenticationPrimitivesTests
             "gh=ghp_" + new string('x', 30),
             "jwt=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop",
             "db=postgres://user:secret@host/db",
-            "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjE\n-----END OPENSSH PRIVATE KEY-----");
+            "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjE\n-----END OPENSSH PRIVATE KEY-----"); // secret-scan:allow (fake PEM framing, no key material)
 
         var scrubbed = LogScrubber.Scrub(text, 2000);
 

@@ -199,7 +199,7 @@ public sealed class SecretFilesTests : IDisposable
             Handler = spec =>
             {
                 var keyPath = spec.Arguments[^1];
-                File.WriteAllText(keyPath, "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKE\n-----END OPENSSH PRIVATE KEY-----\n");
+                File.WriteAllText(keyPath, "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKE\n-----END OPENSSH PRIVATE KEY-----\n"); // secret-scan:allow (fake PEM framing, no key material)
                 File.WriteAllText(keyPath + ".pub", publicLine + "\n");
                 return new ProcessResult(0, string.Empty, string.Empty, false);
             },
@@ -209,7 +209,7 @@ public sealed class SecretFilesTests : IDisposable
         using var privateKey = pair.PrivateKey;
 
         Assert.Equal(publicLine, pair.PublicKeyLine);
-        Assert.Equal("-----BEGIN OPENSSH PRIVATE KEY-----\nFAKE\n-----END OPENSSH PRIVATE KEY-----\n", Encoding.UTF8.GetString(privateKey.AsSpan()));
+        Assert.Equal("-----BEGIN OPENSSH PRIVATE KEY-----\nFAKE\n-----END OPENSSH PRIVATE KEY-----\n", Encoding.UTF8.GetString(privateKey.AsSpan())); // secret-scan:allow (fake PEM framing, no key material)
         var spec = Assert.Single(runner.Specs);
         Assert.Equal("ssh-keygen", spec.FileName);
         Assert.Equal(TimeSpan.FromSeconds(30), spec.Timeout);

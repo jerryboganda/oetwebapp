@@ -365,8 +365,8 @@ public sealed class EnrollmentFlowTests : IAsyncLifetime
 
     [Theory]
     [InlineData("not a key at all")]
-    [InlineData("-----BEGIN OPENSSH PRIVATE KEY-----\nENCRYPTED PASSPHRASE-PROTECTED\n-----END OPENSSH PRIVATE KEY-----\n")]
-    [InlineData("-----BEGIN RSA PRIVATE KEY-----\nPASSPHRASE-PROTECTED\n-----END RSA PRIVATE KEY-----\n")]
+    [InlineData("-----BEGIN OPENSSH PRIVATE KEY-----\nENCRYPTED PASSPHRASE-PROTECTED\n-----END OPENSSH PRIVATE KEY-----\n")] // secret-scan:allow (fake PEM framing, no key material)
+    [InlineData("-----BEGIN RSA PRIVATE KEY-----\nPASSPHRASE-PROTECTED\n-----END RSA PRIVATE KEY-----\n")] // secret-scan:allow (fake PEM framing, no key material)
     public async Task Unusable_owner_keys_are_rejected_without_being_stored(string key)
     {
         var (operation, helper) = await _driver.AddAsync();
