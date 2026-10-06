@@ -160,7 +160,7 @@ public sealed partial class AiRouteBenchmarkRunner(
                             testCase.ToolName,
                             "Draft the learner's study-plan proposal from their available time and weakest sub-test.",
                             AiToolCategory.Read,
-                            "{\"type\":\"object\",\"properties\":{\"focus_subtest\":{\"type\":\"string\",\"enum\":[\"Reading\",\"Listening\",\"Writing\",\"Speaking\"]}},\"minutes\":{\"type\":\"integer\",\"minimum\":5,\"maximum\":120}},\"required\":[\"focus_subtest\",\"minutes\"]}"),
+                            "{\"type\":\"object\",\"properties\":{\"focus_subtest\":{\"type\":\"string\",\"enum\":[\"Reading\",\"Listening\",\"Writing\",\"Speaking\"]},\"minutes\":{\"type\":\"integer\",\"minimum\":5,\"maximum\":120}},\"required\":[\"focus_subtest\",\"minutes\"]}"),
                     ],
                     ToolChoice = testCase.ToolName is null ? null : "auto",
                     SessionKey = $"benchmark-{CorpusVersion}",
