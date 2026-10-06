@@ -49,13 +49,14 @@ export const PLAYWRIGHT_COMMAND =
 /**
  * The ONLY workflows that may hold a production/VPS SSH credential (owner directive
  * 2026-10-05, list re-audited 2026-10-06). The pull-only rollout rules are judged per
- * workflow, so an eighth SSH workflow - the Fleet pipeline is the one most likely to be
- * added - must appear as a visible edit of this list in the same commit instead of
- * slipping in beside the audited seven. Adding to it also requires an owner-written
- * AGENTS.md exception.
+ * workflow, so a new SSH workflow must appear as a visible edit of this list in the same
+ * commit instead of slipping in beside the audited ones. Adding to it also requires an
+ * owner-written AGENTS.md exception. fleet.yml is the eighth (Owner Fleet exception (f)): only
+ * its dispatch-only, main-only, pull-only `sync` job holds PROD_SSH_KEY and the pinned host key.
  */
 export const PROD_SSH_WORKFLOWS = [
   'agent-console.yml',
+  'fleet.yml',
   'mobile-release.yml',
   'production-deploy.yml',
   'publish-existing-desktop-to-vps.yml',

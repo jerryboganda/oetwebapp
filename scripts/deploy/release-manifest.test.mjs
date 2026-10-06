@@ -341,7 +341,7 @@ function contractWith({ workflows = {}, platform = {}, files = {} } = {}) {
 }
 
 test('only the audited workflows may hold a production SSH credential; a new one is a visible contract edit', () => {
-  for (const file of ['agent-console.yml', 'mobile-release.yml', 'production-deploy.yml', 'publish-existing-desktop-to-vps.yml',
+  for (const file of ['agent-console.yml', 'fleet.yml', 'mobile-release.yml', 'production-deploy.yml', 'publish-existing-desktop-to-vps.yml',
     'publish-existing-mobile-to-vps.yml', 'tauri-desktop-release.yml', 'writing-ai.yml']) {
     assert.ok(PROD_SSH_WORKFLOWS.includes(file), `${file} is an audited SSH workflow and must stay on the allow-list`);
   }
@@ -371,8 +371,10 @@ test('a conforming fleet.yml passes; fleet.yml gets no exemption from the single
     assert.ok(contractWith({ workflows: { 'fleet.yml': `${fleetWorkflow}      - run: ${command}\n` } })
       .some((failure) => failure.includes('fleet.yml: runs a test/QA runner')), command);
   }
-  assert.ok(contractWith({ workflows: { 'fleet.yml': `${fleetWorkflow}      - env:\n          K: \${{ secrets.PROD_SSH_KEY }}\n` } })
-    .some((failure) => failure.includes('fleet.yml: holds an SSH/VPS credential but is not in PROD_SSH_WORKFLOWS')));
+  // fleet.yml is the one allow-listed SSH workflow of the Owner Fleet exception: holding PROD_SSH_KEY is not a violation by itself
+  // (its pull-only block, pinned host key and sync-job scoping are judged by the fleet rules).
+  assert.ok(!contractWith({ workflows: { 'fleet.yml': `${fleetWorkflow}      - env:\n          K: \${{ secrets.PROD_SSH_KEY }}\n` } })
+    .some((failure) => failure.includes('holds an SSH/VPS credential but is not in PROD_SSH_WORKFLOWS')));
 });
 
 test('fleet.yml is BUILD-ONLY: benchmark, parity and conformance jobs fail the contract, comments and image builds do not', () => {
