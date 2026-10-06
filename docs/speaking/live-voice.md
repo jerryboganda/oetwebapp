@@ -679,7 +679,7 @@ kill switch below is the lever if it misbehaves.
   ([../env/speaking.md](../env/speaking.md#live-ai-session-admission-has-no-environment-keys-in-production)).
 - **Counts are database-derived** (all API slots and the worker), not a process gauge: they are also in
   `GET /v1/admin/ai/live-voice/health` as `admission`, and in `GET /v1/admin/ops/snapshot` (job queue depth by type, database
-  connections by `application_name` from `pg_stat_activity`, admitted and queued counts, and a placeholder for remote workers;
+  connections by `application_name` from `pg_stat_activity`, admitted and queued counts, and the remote worker node count (non-revoked `RemoteWorkers` rows, Postgres only);
   `AdminSystemAdmin`, read-only, counts only; connections are grouped by the process's Npgsql `Application Name`: `oet-api-blue`, `oet-api-green`, `oet-ai-worker`, and
   `(unset)` for any client connection of this database that sets none, such as an admin `psql` shell; the server's own background workers have no database and are not counted; see [../ops/db-connection-budget.md](../ops/db-connection-budget.md)).
 - **Not capacity controls** (verified dead 5 Oct 2026): `SpeakingSimulationV11TurnTelemetryService.ActiveTurnCount` and the

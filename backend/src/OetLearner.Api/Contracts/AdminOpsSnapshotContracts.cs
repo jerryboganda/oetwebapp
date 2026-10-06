@@ -38,7 +38,8 @@ public sealed record AdminOpsConnectionsSnapshot(
 
 public sealed record AdminOpsSpeakingSnapshot(SpeakingLiveAdmissionCounts? Admission);
 
-/// <summary>Placeholder until the remote worker fleet ships: a stable shape so a dashboard can bind to it now.</summary>
+/// <summary>The remote worker fleet at a glance. On Postgres <c>Nodes</c> counts the <c>RemoteWorkers</c> rows whose
+/// status is not <c>Revoked</c> and <c>Deployed</c> is <c>Nodes &gt; 0</c>; off Postgres it stays <c>false</c>/<c>0</c>.</summary>
 public sealed record AdminOpsRemoteWorkersSnapshot(bool Deployed, int Nodes, string Note);
 
 public sealed record AdminOpsSnapshot(

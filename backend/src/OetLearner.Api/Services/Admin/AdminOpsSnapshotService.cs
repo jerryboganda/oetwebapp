@@ -16,8 +16,8 @@ internal sealed class PgActivityRow
 
 /// <summary>
 /// The read-only load snapshot behind <c>GET /v1/admin/ops/snapshot</c> (owner programme 5 Oct 2026): background
-/// job queue depth by type, database connections by <c>application_name</c>, the live-session admission gate and a
-/// placeholder for the remote worker fleet. Four short aggregate queries, no payloads, no learner data; each block
+/// job queue depth by type, database connections by <c>application_name</c>, the live-session admission gate and the
+/// remote worker node count. Five short aggregate queries, no payloads, no learner data; each block
 /// fails soft (a block that cannot be read is reported empty, never an error for the whole snapshot).
 /// </summary>
 public sealed class AdminOpsSnapshotService(
@@ -52,10 +52,36 @@ public sealed class AdminOpsSnapshotService(
             Jobs: jobs,
             Connections: connections,
             Speaking: new AdminOpsSpeakingSnapshot(counts),
-            RemoteWorkers: new AdminOpsRemoteWorkersSnapshot(
+            RemoteWorkers: await ReadRemoteWorkersAsync(ct));
+    }
+
+    private async Task<AdminOpsRemoteWorkersSnapshot> ReadRemoteWorkersAsync(CancellationToken ct)
+    {
+        if (!db.Database.IsNpgsql())
+        {
+            return new AdminOpsRemoteWorkersSnapshot(
                 Deployed: false,
                 Nodes: 0,
-                Note: "Remote workers are not deployed on this platform yet; this block is reserved for the fleet summary."));
+                Note: "Remote workers are not deployed on this platform yet; this block is reserved for the fleet summary.");
+        }
+
+        try
+        {
+            // One indexed count (IX_RemoteWorkers_Status); a revoked node is gone for good, so it is not fleet capacity.
+            var nodes = await db.RemoteWorkers.AsNoTracking()
+                .CountAsync(w => w.Status != RemoteNodeStatus.Revoked, ct);
+            return new AdminOpsRemoteWorkersSnapshot(
+                Deployed: nodes > 0,
+                Nodes: nodes,
+                Note: nodes > 0
+                    ? "Registered remote worker nodes that are not revoked, whatever their status."
+                    : "No remote worker node is registered.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger?.LogWarning(ex, "Ops snapshot: could not read the remote worker table.");
+            return new AdminOpsRemoteWorkersSnapshot(false, 0, "The remote worker table could not be read.");
+        }
     }
 
     private async Task<AdminOpsJobsSnapshot> ReadJobsAsync(DateTimeOffset now, CancellationToken ct)
