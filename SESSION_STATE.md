@@ -2,10 +2,10 @@
 
 Session: writing-ai-p0-queue
 Goal: Fix the 6 Oct 2026 Writing P0 (letters stay Queued / no result): bound the secondary-reviewer hold, keep the 15-minute release honest, prove nothing is lost or double-charged, and unblock sample-PDF clarity.
-Mode: execute
-Updated: 2026-10-07T00:30:00Z
+Mode: verify
+Updated: 2026-10-07T01:30:00Z
 Branch: work/2026-10-05
-HEAD: fe118e785
+HEAD: 1233ea32f
 
 <!--
 The current run's working memory. This is layer 2 of three:
@@ -62,9 +62,9 @@ Owner P0 (6 Oct 2026 PDF "Live grading, timed release, reviewer verification & s
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| ship-gate (previous release b3b10fdc8) | pnpm run ship:gate | local:ship:gate | PASS |
-| Build images (previous release b3b10fdc8): API + web compiled, Writing gates green | build-images.yml | 37476424300 | PASS |
-| Deploy production (previous release b3b10fdc8): live X-Oet-Release b3b10fdc8 slot green | production-deploy.yml | 37478062712 | PASS |
+| ship-gate (P0 fix 129e1c493) | pnpm run ship:gate | local:ship:gate | PASS |
+| Build images (P0 fix 129e1c493): API + web compiled, Writing gates green | build-images.yml | 37521909385 | PASS |
+| Deploy production (P0 fix 129e1c493): live X-Oet-Release 129e1c493 slot blue, web+api serving images verified, health 200 | production-deploy.yml | 37524732572 | PASS |
 
 ## Blockers
 
@@ -75,4 +75,4 @@ Owner P0 (6 Oct 2026 PDF "Live grading, timed release, reviewer verification & s
 
 ## Next action
 
-1. Commit explicit paths, `pnpm run ship`, confirm Build images + Deploy production green for this SHA and live X-Oet-Release; then ax:record. 2. Owner: submit one letter on an allowlisted and one normal account, read /admin/writing-ai reviewer tile and writing.review.* audit events; decide the Adam White source.
+1. Owner QA on production (the P0 fix is live as 129e1c493): submit one letter on an allowlisted and one normal account, read the /admin/writing-ai reviewer tile and writing.review.* audit events; Retry any already-failed letter (it now completes at once). 2. Owner decides the Adam White source (true original, or approved verbatim vector retype).
