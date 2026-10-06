@@ -286,6 +286,11 @@ x-web-slot: &web-slot
     GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     RELEASES_ROOT: /var/opt/oet-learner/releases
     RELEASES_PUBLIC_BASE_URL: ${APP_URL}
+    # Kill switch for BFF request-body streaming (lib/backend-proxy.ts). Empty/unset keeps
+    # streaming ON; set BFF_STREAM_REQUEST_BODIES=0 in .env.production and redeploy to fall
+    # back to buffering. The web slots take this explicit list (no env_file), so the key
+    # must be declared here for the value to reach the container.
+    BFF_STREAM_REQUEST_BODIES: ${BFF_STREAM_REQUEST_BODIES:-}
   volumes:
     - ${RELEASES_HOST_PATH:-/var/opt/oet-learner/releases}:/var/opt/oet-learner/releases:ro
   expose:

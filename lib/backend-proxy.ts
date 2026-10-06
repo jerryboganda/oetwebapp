@@ -273,8 +273,10 @@ export const STREAM_BODY_THRESHOLD_BYTES = 1024 * 1024;
 
 /**
  * The declared length of a request body that should be streamed, or null when it
- * should be buffered. Setting `BFF_STREAM_REQUEST_BODIES=0` on the web container
- * switches streaming off without a code change (read per request).
+ * should be buffered. Setting `BFF_STREAM_REQUEST_BODIES=0` in `.env.production`
+ * (forwarded to the web slots by the `web-env` block in docker-compose.production.yml)
+ * switches streaming off without a code change once the slot is recreated by the
+ * next rollout (the value itself is read per request).
  */
 export function streamedBodyLength(request: Request): number | null {
   if (process.env.BFF_STREAM_REQUEST_BODIES === '0') return null;

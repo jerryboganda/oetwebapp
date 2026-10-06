@@ -24,7 +24,7 @@ lane runs them and none has been run for this change.
 | Change | Where | Effect |
 | --- | --- | --- |
 | One batched feature-flag request | `hooks/use-feature-flag-map.ts` (10 ms coalescing window), `lib/api/gamification.ts` (`fetchLearnerFeatureFlags`), API `GET /v1/features?keys=a,b,c` | The shell read several flags from several places, one request per flag per key set. Now one request, at most 16 distinct keys per call (larger sets are split). A key the API does not expose is absent and reads disabled, as the single route's 404 did. |
-| Shared entitlement query, no double credit fetch | `app/(learner)/private-speaking/page.tsx`, `components/domain/catalog/*`, `lib/credit-feedback.ts` (`seedCreditCaches`) | The private-speaking page and the catalog read the dashboard's cached entitlement query instead of a private uncached fetch. After a credit usage the fresh snapshot is written into the existing credit-card caches instead of invalidating them (which made every observer fetch the same snapshot again). |
+| Shared entitlement query, no double credit fetch | `app/(learner)/private-speaking/page.tsx`, `components/domain/catalog/*`, `lib/credit-feedback.ts` (`seedCreditCaches`) | The private-speaking page and the catalog read the dashboard's shared entitlement query instead of a private fetch; the private-speaking page still revalidates it on every visit (`staleTime: 0`), so booking eligibility and the remaining-session count are never up to 2 minutes stale there. After a credit usage the fresh snapshot is written into the existing credit-card caches instead of invalidating them (which made every observer fetch the same snapshot again). |
 | Notification preferences and push configuration load on first use | `contexts/notification-center-context.tsx` (`ensureSettingsLoaded`), the two settings surfaces | The bell no longer pays for them at app start. A learner who already granted browser push keeps the push-configuration fetch at mount. |
 | Notification hub: no second connection, hidden tab does not poll | `contexts/notification-center-context.tsx` | A tab regaining focus while the first hub was still connecting used to open a second hub and leak the first. The fallback poll skips ticks while the tab is hidden (Page Visibility) and catches up when it is visible. |
 | Product analytics and Listening attempt events are batched | `lib/telemetry/event-batcher.ts`, `lib/analytics.ts`, `lib/listening-api.ts`; API `POST /v1/analytics/events/batch`, `POST /v1/listening-papers/attempts/{id}/integrity-events/batch` | See section 4. |
@@ -66,19 +66,19 @@ lane runs them and none has been run for this change.
 
 | Change | Where | Effect |
 | --- | --- | --- |
-| Request bodies with a declared length above 1 MiB are streamed to the API | `app/api/backend/[...path]/route.ts`, `lib/backend-proxy.ts` (`streamedBodyLength`) | Speaking recordings, 8 MB admin upload chunks and whole ZIP imports were buffered whole in the web container (1 GB per blue/green slot) per request. The declared `content-length` is restored on the upstream request and `duplex: 'half'` is set, so the API sees the same framing as before. Smaller bodies, bodies of unknown length and analytics events are buffered as before. **Kill switch: set `BFF_STREAM_REQUEST_BODIES=0` on the web container** (read per request; it needs the container recreated like any env change, so it is a no-code rollback, not an instant one). |
+| Request bodies with a declared length above 1 MiB are streamed to the API | `app/api/backend/[...path]/route.ts`, `lib/backend-proxy.ts` (`streamedBodyLength`) | Speaking recordings, 8 MB admin upload chunks and whole ZIP imports were buffered whole in the web container (1 GB per blue/green slot) per request. The declared `content-length` is restored on the upstream request and `duplex: 'half'` is set, so the API sees the same framing as before. Smaller bodies, bodies of unknown length and analytics events are buffered as before. **Kill switch: put `BFF_STREAM_REQUEST_BODIES=0` in `.env.production`.** `docker-compose.production.yml` forwards it to both web slots (the `&web-env` block of `x-web-slot`, default empty = streaming on; the slots take an explicit env list, so a key that is not declared there never reaches the container). The route reads it per request, but a container only sees a changed value when it is recreated, i.e. at the next pipeline rollout of the idle slot, so it is a no-code rollback, not an instant one. The code-level alternative is the normal rollback, `gh workflow run production-deploy.yml -f sha=<previous-sha>`. |
 | The tutor-room cue hub is exempt from the proxy CSRF check | `lib/backend-proxy.ts` (`SIGNALR_HUB_PATH_PATTERN`) | `/v1/speaking/live-rooms/hub` has two path segments before `hub`, which the single-segment hubs never had. Its negotiate POST carries only the bearer token, so a browser holding the `oet_rt` cookie failed the CSRF check and the cue channel never connected. The hub is `RequireAuthorization()`. |
 
 ## 6. API surface added (backend)
 
 | Route | Notes |
 | --- | --- |
-| `POST /v1/analytics/events/batch` | `{ events: [...] }`, at most 50 events and 64 KiB; same tolerance as the single route (empty, malformed or oversized body is a 204; an invalid entry is skipped without costing the others). `AnalyticsIngestionService.RecordBatchAsync` saves once. |
+| `POST /v1/analytics/events/batch` | `{ events: [...] }`, at most 50 events and 64 KiB; same tolerance as the single route (empty, malformed or oversized body is a 204; an invalid entry is skipped without costing the others). The body is read through a bounded buffer, so a chunked request with no `Content-Length` is never read past the cap. `AnalyticsIngestionService.RecordBatchAsync` saves once. |
 | `GET /v1/features?keys=a,b,c` | `LearnerOnly`, same allow-list and per-flag code as `GET /v1/features/{key}` (`ResolveLearnerFeatureFlagAsync`), answered as `{ flags: [{ key, enabled }] }`; at most 16 distinct keys; sequential on purpose (the services share one scoped `DbContext`). |
 | `POST /v1/listening-papers/attempts/{id}/integrity-events/batch` | `PerUserWrite` rate limit, at most 50 events, applied in order through `ListeningLearnerService.RecordIntegrityEventAsync`. |
 
 No migration, no schema change, no new environment key other than the `BFF_STREAM_REQUEST_BODIES` kill
-switch above. The API additions are described in `docs/product-manual/route-api-domain-surface-index.md`.
+switch above (declared in `docker-compose.production.yml`; unset keeps streaming on). The API additions are described in `docs/product-manual/route-api-domain-surface-index.md`.
 
 ## 7. Behaviour changes (what an owner can observe)
 
@@ -108,4 +108,4 @@ switch above. The API additions are described in `docs/product-manual/route-api-
 - Sign out, sign in as a different account on the same tab: no previous-account placement / exam-date
   state, and no cached API bodies from the earlier account.
 - Tutor live room: the cue hub connects (no CSRF failure on negotiate).
-- If streaming misbehaves in production, set `BFF_STREAM_REQUEST_BODIES=0` on the web container.
+- If streaming misbehaves in production, set `BFF_STREAM_REQUEST_BODIES=0` in `.env.production`; it takes effect when the next pipeline rollout recreates the web slot (or roll back with `gh workflow run production-deploy.yml -f sha=<previous-sha>`).

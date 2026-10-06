@@ -212,9 +212,11 @@ export default function PrivateSpeakingPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const { user } = useAuth();
   const userId = user?.userId ?? '';
-  // The entitlement snapshot is the dashboard's own query (same shared key, cached),
-  // not a private uncached fetch on every visit to this page.
-  const entitlementQuery = useEntitlementSnapshot(userId, { enabled: Boolean(userId) });
+  // The entitlement snapshot is the dashboard's own query (same shared key, in-flight
+  // requests deduped with the shell and dashboard). staleTime 0 on THIS observer keeps
+  // the old freshness for booking: cached data paints at once but is refetched on every
+  // visit, so an admin grant or a change from another device is never shown stale here.
+  const entitlementQuery = useEntitlementSnapshot(userId, { enabled: Boolean(userId), staleTime: 0 });
   const entitlement = entitlementQuery.data ?? null;
   const [dataLoading, setDataLoading] = useState(true);
   // Eligibility and the session count are part of what the first paint needs, so the
