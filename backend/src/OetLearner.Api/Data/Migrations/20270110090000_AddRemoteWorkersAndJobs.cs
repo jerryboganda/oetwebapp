@@ -13,8 +13,11 @@ namespace OetLearner.Api.Data.Migrations
     /// so the blue/green slots overlap safely and the previous slot is unaffected.
     ///
     /// <para>
-    /// HAND-AUTHORED (ADR 0001): inline <c>[Migration]</c>/<c>[DbContext]</c>, no Designer file, the
-    /// ModelSnapshot is left alone. Postgres only: the claim statement uses <c>FOR UPDATE SKIP LOCKED</c>
+    /// HAND-AUTHORED (ADR 0001): inline <c>[Migration]</c>/<c>[DbContext]</c>, no Designer file. The four entities
+    /// are written into <c>LearnerDbContextModelSnapshot</c> by hand, property for property as
+    /// <c>LearnerDbContext.RemoteJobs.cs</c> configures them, so <c>dotnet ef migrations has-pending-model-changes</c>
+    /// (speaking-ci.yml / migrations-check) reports nothing; the CHECK constraints, foreign keys and partial indexes
+    /// below are DDL-only and deliberately not part of the model. Postgres only: the claim statement uses <c>FOR UPDATE SKIP LOCKED</c>
     /// and the lease/fence arithmetic uses <c>clock_timestamp()</c>; SQLite/InMemory hosts get the
     /// entities from the model and never register the services. The DDL text lives in
     /// <see cref="RemoteJobsSchemaSql"/> so the integration tests execute the very same statements.

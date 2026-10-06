@@ -5,9 +5,12 @@ namespace OetLearner.Api.Data;
 
 // Remote-worker boundary (OET-RWP/1). Hand-authored migration
 // 20270110090000_AddRemoteWorkersAndJobs creates the tables, constraints and partial indexes
-// (the ModelSnapshot is intentionally not edited, ADR 0001). The entities live in the model for
-// every provider so SQLite/InMemory hosts build; the claim/CAS/reaper SQL is Postgres-only and
-// is registered only when the configured provider is Npgsql.
+// (ADR 0001). The matching entries in LearnerDbContextModelSnapshot are hand-written and must stay
+// identical to the configuration below: every property, MaxLength, jsonb mapping and index name, or
+// `dotnet ef migrations has-pending-model-changes` (speaking-ci.yml / migrations-check) fails. Change
+// this file and the snapshot together. The entities live in the model for every provider so
+// SQLite/InMemory hosts build; the claim/CAS/reaper SQL is Postgres-only and is registered only when
+// the configured provider is Npgsql.
 public partial class LearnerDbContext
 {
     public DbSet<RemoteWorker> RemoteWorkers => Set<RemoteWorker>();
