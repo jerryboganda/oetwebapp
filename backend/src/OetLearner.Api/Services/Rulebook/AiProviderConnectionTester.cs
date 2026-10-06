@@ -786,6 +786,10 @@ public sealed class AiProviderConnectionTester(
             // OpenCode gateway: the same identity headers a real call sends (so the probe predicts
             // runtime), and none of the UBAG/Azure extras below — a third-party gateway gets only
             // what it documents, and its own key must not be echoed into a second header.
+            // DeepSeek (a reasoning model by default) spends the token budget thinking before it
+            // answers, so a 1-token probe reports finish_reason=length with empty content. The
+            // probe here tests connectivity/auth/availability, so it grants a real thinking budget.
+            maxTokens = 512;
             OpenCodeGatewayHeaders.Apply(req.Headers, sessionKey: null);
             req.Content = JsonContent.Create(new { model, max_tokens = maxTokens, messages });
             return req;
