@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.RemoteJobs;
