@@ -43,7 +43,8 @@ Two parts:
 - **Helper agent** (one container per helper): claims jobs from the API over HTTPS, executes, returns results. It never talks to the manager.
 
 Out of scope: any AI call (OCR tiers, grading, Whisper, embeddings stay on the primary), anything that needs the database, the media volume or a
-provider key, learner Writing PDFs and speaking recordings in phase 1, and any build, test or benchmark on a helper (those run on GitHub Actions).
+provider key, learner Writing PDFs and speaking recordings in phase 1, and any build, test or benchmark on a helper (builds run on GitHub Actions; no
+automated test or benchmark runs anywhere, owner directive 2026-10-06).
 
 ## 2. Hard rules
 
@@ -88,13 +89,14 @@ The manager is an isolated compose project: no `build:` sections, `pull_policy: 
 
 ## 4. Rollout order (enforced)
 
-Do not skip or reorder. Each step has a verification that is a recorded GitHub Actions run, not a local result.
+Do not skip or reorder. Each step is verified by a recorded GitHub Actions run (build, guard and rollout) plus the owner's own manual testing. No test,
+lint or typecheck run exists to claim (owner directive 2026-10-06): say "not tested - owner QA".
 
 | # | Step | Verified by |
 |---|---|---|
 | 1 | **Governance + contract**: `AGENTS.md` exception, this runbook, ADR 0005, `.gitignore` rules, the hardened pipeline contract (one `scripts/deploy/**` commit that rides one all-reuse production rollout), protected-volume and prune exclusions | `Build images` guards job (`pipeline:check`, `release-manifest.test.mjs`) then `Deploy production` for that SHA |
-| 2 | **Console isolation**: `agent-console/dockerproxy` denies `oet-fleet*` (shipped through `agent-console.yml`; a push to `main` recreates the proxy when no console turn is active, otherwise dispatch with `apply=true` or use "Apply update") | `agent-console.yml` run: `test` job (dockerproxy vitest) and the pull-only rollout |
-| 3 | **Manager deploy** through `.github/workflows/fleet.yml` (tests without a browser, images to GHCR, pull-only rollout of `oet-fleet`) | `gh run watch` on `fleet.yml` for the SHA, then `pnpm run ax:record` |
+| 2 | **Console isolation**: `agent-console/dockerproxy` denies `oet-fleet*` (shipped through `agent-console.yml`; a push to `main` recreates the proxy when no console turn is active, otherwise dispatch with `apply=true` or use "Apply update") | `agent-console.yml` run: static rollout guards, image build and the pull-only rollout (no test job); then the live deny check below |
+| 3 | **Manager deploy** through `.github/workflows/fleet.yml` (BUILD-ONLY: compile, images to GHCR, pull-only rollout of `oet-fleet`; no QA job) | `gh run watch` on `fleet.yml` for the SHA, then `pnpm run ax:record` |
 | 4 | **API remote endpoints, default-off** (hand-authored migration, `RemoteWorkerOnly`/`FleetServiceOnly`, all flags off) | normal `Build images` + `Deploy production` |
 | 5 | **Enable per node**: register, canary, enable; then one job kind at a time behind its flag | the manager UI node view and an `AuditEvent` per change |
 
@@ -133,8 +135,8 @@ re-runs the failed step safely.
    sudoers drop-in, install a manager-generated ed25519 key, install Docker Engine from the pinned vendor repository, firewall (SSH only from the
    primary), host baseline (swap off, core dumps off, volatile journald, time sync, Docker log driver with no content), sshd hardening. Before the final
    sshd reload the manager re-verifies its own login in a second connection and aborts with `lockout_risk` rather than lock the operator out.
-5. **Discard the owner key**: crypto-erased at the end of step 4 (also on cancel and on expiry). A test asserts no plaintext marker in SQLite, its WAL or
-   logs. From here only the restricted key and the `oet-fleet-ctl` verbs exist.
+5. **Discard the owner key**: crypto-erased at the end of step 4 (also on cancel and on expiry); no plaintext copy may remain in SQLite, its WAL or logs
+   (the owner checks this by hand, there is no automated test). From here only the restricted key and the `oet-fleet-ctl` verbs exist.
 6. **Image**: pull the agent by approved digest (section 7, GHCR), verify the image id, write the 0600 env file, start the container with the fixed
    hardened flags (read-only root, `--cap-drop ALL`, tmpfs scratch, no mounts, no docker socket, non-root).
 7. **Verify, canary, activate**: wait for the node's first heartbeats (`Probation`), run the known-answer canary job, then enable (`Active`). Only an
@@ -229,9 +231,9 @@ Stable manager failure reasons (RWP 8.1): `inventory_invalid`, `forbidden_host`,
 
 ## 12. Capacity numbers
 
-These are design defaults from the protocol, not measurements. **No throughput, latency or learner-count figure is claimed** until a dispatch-only
-measurement workflow has a recorded run; the 1000-learner target stays unproven until then. Any number added to this document must quote the workflow,
-run, job and step it came from.
+These are design defaults from the protocol, not measurements. **No throughput, latency or learner-count figure is claimed** until the owner has measured
+it by hand on real hardware (no workflow measures capacity: owner directive 2026-10-06); the 1000-learner target stays unproven until then. Any number
+added to this document must say who measured it, when and how.
 
 | Item | Design default |
 |---|---|
@@ -247,7 +249,7 @@ run, job and step it came from.
 | Manager on the primary | design sizing about 0.5 CPU and 512 MiB with `oom_score_adj` above Postgres and the API; re-check against `docker stats` on the real host |
 
 Sizing rule: helpers needed = peak concurrent heavy weight / (2 per node), plus one spare so a drain or an outage does not starve the queue. The rule
-needs the real peak from a recorded measurement before it is applied.
+needs the real peak from the owner's manual measurement before it is applied.
 
 ## 13. What is and is not automatic
 
@@ -267,8 +269,10 @@ Ansible itself is never "automatic" in the sense of a schedule: it runs only as 
   `platform/**` deploys nothing, so `pnpm run ship` ends with `SHIP-WATCH_NOTHING_TO_DEPLOY`; that is success for the production pipeline, not proof
   that the fleet workflow passed. Console-authored fleet PRs merge through the Ship executor and are verified the same way.
 - `scripts/deploy/verify-pipeline-contract.mjs` (`pnpm run pipeline:check`; the `guards` job of `Build images`; `pnpm run ship:gate`) enforces:
-  - the SSH allow-list `PROD_SSH_WORKFLOWS` (the eight audited workflows): any other workflow holding a production or VPS SSH credential fails, so a
-    ninth SSH workflow needs a visible edit of that list plus the `AGENTS.md` exception;
+  - the SSH allow-list `PROD_SSH_WORKFLOWS` (the seven workflows that hold `PROD_SSH_KEY` today: `agent-console`, `mobile-release`,
+    `production-deploy`, `publish-existing-desktop-to-vps`, `publish-existing-mobile-to-vps`, `tauri-desktop-release`, `writing-ai`): any other workflow
+    holding a production or VPS SSH credential fails, so an eighth SSH workflow (the one that adds `fleet.yml`) needs a visible edit of that list in the
+    same commit plus the `AGENTS.md` exception;
   - once `fleet.yml` exists: the name `Fleet (build + rollout)`, concurrency `group: fleet` with `cancel-in-progress: false`, the `main`-only deploy with
     `environment: production`, its own `guards` job running `node scripts/deploy/verify-pipeline-contract.mjs` and
     `bash scripts/deploy/verify-compute-offload.sh`, no `schedule` or `pull_request_target` trigger, no `:latest`, no reference to
@@ -277,14 +281,17 @@ Ansible itself is never "automatic" in the sense of a schedule: it runs only as 
     `agent-console.yml`);
   - `platform/**`: no private keys and no node or fleet token literals (a deliberate test fixture carries a `secret-scan:allow` marker on its line), and
     fleet code never uses `StrictHostKeyChecking=accept-new`/`no`, a `/dev/null` known_hosts or Ansible `host_key_checking = False`;
-  - every Playwright (including the .NET flavours) and k6 workflow is `workflow_dispatch` only;
+  - no workflow other than `build-images.yml` runs a test/QA runner (rule 3, owner directive 2026-10-06: vitest, `dotnet test`, Playwright, k6 and the
+    rest), and `fleet.yml` additionally runs no benchmark, parity or conformance job, so it stays BUILD-ONLY;
   - the release stays exactly four components (no fifth fleet component).
 - `scripts/deploy/verify-compute-offload.sh` applies the same pull-only block check to `fleet.yml` and rejects `build:` sections in
   `platform/fleet/docker-compose*.yml` and `docker-compose.fleet*.yml` (existence-conditional: it passes before they exist).
 - `scripts/deploy/protect-production-data.sh` blocks `docker volume rm`, `volume prune` and `compose down -v` for `oet-fleet_fleet_data`;
   `scripts/deploy/prune-stale-images.sh` never removes the fleet images.
-- The fleet UI is tested with `WebApplicationFactory` integration tests (no browser). Load and parity workflows are `workflow_dispatch` only and fail on a
-  crossed threshold.
+- **No automated QA.** No test, load, parity, conformance or benchmark workflow exists or may be added (owner directive 2026-10-06). The fleet UI, the
+  protocol behaviour and capacity are checked by the owner by hand. Fleet test source files may live in git as inert manual tools; no workflow runs them
+  and nobody claims they passed. Rust stays unbuilt; reopening it needs the owner's say-so and a benchmark that the owner runs manually (AGENTS.md
+  "Owner Fleet exception" (h)).
 
 ## 15. Residual risks (accepted)
 
@@ -300,7 +307,7 @@ Ansible itself is never "automatic" in the sense of a schedule: it runs only as 
   extractor, and strikes limit but do not eliminate a lying node.
 - **The API's forwarded-header trust** (`Proxy:KnownNetworks`) was sized for the current proxy hops; helpers behind provider NAT share rate-limit
   partitions. Per-node limits never rely on IP.
-- **Accept-new in legacy workflows.** `production-deploy.yml`, `agent-console.yml`, `writing-ai.yml` and `ubag-integration-e2e.yml` still pin host keys with
+- **Accept-new in legacy workflows.** `production-deploy.yml`, `agent-console.yml` and `writing-ai.yml` still pin host keys with
   `accept-new` (see `docs/ops/deploy-gate.md`); that is outside this program and stays an open owner item. Fleet code must not copy it.
 
 ## 16. Owner checklist before the first enrollment

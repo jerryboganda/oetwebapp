@@ -83,14 +83,17 @@ Read the `AGENTS.md` "Owner Fleet exception" before touching `platform/**`, `.gi
 - Its SSH rollout stays pull-only between `# BEGIN REMOTE FLEET ROLLOUT` and `# END REMOTE FLEET ROLLOUT` (`compose pull`, `up --no-build`; no build,
   install, source sync, volume removal or `:latest`) and `fleet.yml` runs its own `guards` job (`node scripts/deploy/verify-pipeline-contract.mjs`,
   `bash scripts/deploy/verify-compute-offload.sh`) because a platform-only push does not run the `Build images` guards.
-- Only the audited workflows in `PROD_SSH_WORKFLOWS` (`scripts/deploy/verify-pipeline-contract.mjs`) may hold a production/VPS SSH credential. A new SSH
-  workflow is a visible edit of that list plus an owner-written exception; the fleet scan also rejects `accept-new` host-key trust and committed keys or tokens.
+- Only the audited workflows in `PROD_SSH_WORKFLOWS` (`scripts/deploy/verify-pipeline-contract.mjs`; the seven that hold `PROD_SSH_KEY` today) may hold a
+  production/VPS SSH credential. A new SSH workflow (`fleet.yml` is the expected one) is a visible edit of that list in the same commit plus the owner-written
+  exception; the fleet scan also rejects `accept-new` host-key trust and committed keys or tokens.
 - Verify a fleet change with `gh run watch` on `fleet.yml` for the SHA, then `pnpm run ax:record`. A platform-only push ends `pnpm run ship` with
   `SHIP-WATCH_NOTHING_TO_DEPLOY`; never loosen the `Deploy production` watcher to cover it.
 - Helpers run prebuilt images by digest only; Ansible runs only inside the manager container after an owner UI action; agents never hold helper IPs, keys
   or tokens; console agents are denied every `oet-fleet*` container, volume and network (`agent-console/dockerproxy/src/policy.ts`).
 - `scripts/deploy/protect-production-data.sh` lists `oet-fleet_fleet_data` as protected and `scripts/deploy/prune-stale-images.sh` skips `oetwebapp-fleet-*`.
-- Load (k6) and Playwright workflows are `workflow_dispatch` only, and a crossed k6 threshold must fail the run (no `|| true`, no `continue-on-error`).
+- `fleet.yml` is **BUILD-ONLY** (owner directive 2026-10-06): compile, package, push and roll out. No test, load, parity, conformance or benchmark job in any
+  workflow (rule 3 of the pipeline contract bars every test/QA runner outside `build-images.yml`; the fleet rule adds benchmark/parity/conformance). The owner
+  QAs the fleet by hand; never claim a test passed. New fleet paths must stay under `platform/**` (not an image input of the four release components).
 
 ## VPS production operational notes
 

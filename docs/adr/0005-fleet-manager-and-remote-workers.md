@@ -3,13 +3,16 @@
 Status: accepted by the owner, 2026-10-05. Repo rules: `AGENTS.md` "Owner Fleet exception". Operations: `docs/ops/FLEET.md`.
 Wire contract: OET Remote Worker Protocol (OET-RWP/1); section numbers below refer to it.
 
+Amended 2026-10-06 to the owner's "no automated QA anywhere" and smart component deploy directives: the fleet pipeline is BUILD-ONLY, no workflow runs a
+test, load, parity or benchmark, and every capacity or parity claim comes from the owner's manual measurement.
+
 ## Context
 
 The primary VPS runs everything: the web and API slots, Postgres, the `ai-worker`, the media volume and the owner console. Some deterministic,
 CPU-heavy work (first: PdfPig text extraction of admin-uploaded PDFs; later: live-class audio extraction and speaking clip joins) competes with
 learner-facing requests for the same cores. The owner asked to share that compute load with rented helper VPSs, managed automatically, while the
 primary stays the single place that holds data, credentials and decisions. The repository's compute and deployment rules (GitHub Actions is the only
-build/test compute; the only path to production is `Build images` then `Deploy production`; the 510.240 s accelerated baseline is mandatory) were
+build compute and runs no automated QA; the only path to production is `Build images` then `Deploy production`; the 510.240 s accelerated baseline is mandatory) were
 written for a world with exactly one runtime host, so the fleet needs an explicit, narrow exception rather than a quiet bypass.
 
 ## Decision
@@ -23,8 +26,8 @@ Owner decisions of 2026-10-05 (authoritative):
    per-job scoped access; helpers hold no database, provider or storage credentials.
 3. **Transport.** Helpers talk to the primary over HTTPS with a per-node revocable token. There is no WireGuard and no overlay network.
 4. **Delivery.** Branch + PR only; the work never pushes to `main` and never runs `pnpm run ship`.
-5. **Rust is not built.** Reopened only by a labelled, dispatch-only benchmark that first shows byte-exact parity and then beats the .NET baseline by
-   at least 30% p95 or 40% CPU per job.
+5. **Rust is not built.** Reopened only on the owner's say-so, gated on a manual benchmark that the owner runs (never an agent, never a workflow) and that
+   first shows byte-exact parity and then beats the .NET baseline by at least 30% p95 or 40% CPU per job.
 6. **Max is untouched.** Helpers make no AI calls and hold no provider keys; the Claude Max route is never skipped; one `AiUsageRecord` per provider
    call stays on the primary.
 
@@ -42,7 +45,7 @@ Resulting architecture:
   once to bootstrap, then crypto-erased; only a manager-generated, restricted key remains.
 - **Helpers execute prebuilt images by immutable digest.** Bootstrap is the Docker engine plus the agent. A helper never checks out, builds, tests or
   installs source; the manager refuses `185.252.233.186` and any `oetwebsite` host.
-- **A separate pipeline.** `.github/workflows/fleet.yml` builds, tests (no browser) and rolls the manager out pull-only. There is NO fifth release
+- **A separate pipeline.** `.github/workflows/fleet.yml` builds (BUILD-ONLY, no QA) and rolls the manager out pull-only. There is NO fifth release
   component and the `Build images` graph is not edited: a fifth component would break every historical manifest and the measured baseline.
   `scripts/deploy/verify-pipeline-contract.mjs` makes that mechanical: SSH allow-list, `fleet.yml` identity and guards, `platform/**` secret scan,
   exactly four components.
@@ -64,7 +67,7 @@ concurrent live AI speaking (waiting must not start the exam timer and must not 
   `oet-fleet-ctl` surface and the manager has no public ingress.
 - The VPS vendor of each helper becomes a processor of whatever a job carries. `Region` and `Provider` are recorded per node; privacy-notice and
   transfer-assessment updates are an owner/legal task.
-- The 1000-learner target is unproven until a dispatch-only load workflow has a recorded run; no capacity figure is claimed without one.
+- The 1000-learner target is unproven until the owner has measured it by hand; no capacity figure is claimed without that measurement.
 
 ## Alternatives rejected
 
@@ -84,4 +87,5 @@ concurrent live AI speaking (waiting must not start the exam timer and must not 
 2. The dockerproxy deny rule ships through `agent-console.yml` before the first manager deploy and is verified live (a push to `main` recreates the
    proxy when no console turn is active; otherwise dispatch with `apply=true` or use the console "Apply update").
 3. Then `fleet.yml` and the manager; then the API remote endpoints default-off; then per-node enablement after a passing canary.
-4. Every parity, benchmark and k6 number is quoted from a recorded Actions run (workflow, run, job, step); none is claimed from a local run.
+4. No parity, benchmark or k6 number is claimed from CI or from a local run: no QA workflow exists. A figure is quoted only when the owner measured it by
+   hand, and then with who measured it, when and how.
