@@ -1,6 +1,6 @@
 # Feature Traceability Matrix
 
-> Source: AI Learning Companion Master Specification v3.0. This file preserves all 184 feature IDs. The PDF leaves every Accept/Defer/Reject checkbox unsigned; therefore source decision is intentionally **UNDECIDED** until product sign-off. The implementation program still carries every feature so nothing silently disappears.
+> Source: **SAMI — FINAL PRODUCTION HANDOVER & ACCEPTANCE SPECIFICATION v1.0 FINAL (effective 2 Oct 2026)** — `docs/ai-learning-companion/source/SAMI_FINAL_PRODUCTION_HANDOVER_1.0_FINAL.md` — which supersedes the AI Learning Companion Master Specification v3.0 (D-002). Owner decisions of 2026-10-07 are recorded in `docs/ai-learning-companion/DECISION_LOG.md` and supersede sections of the PDF where noted (D-003 pricing, D-005 route, D-006 scope = all 184 features). This file preserves all 184 feature IDs so nothing silently disappears.
 
 ## Operating rules
 
