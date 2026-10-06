@@ -202,7 +202,7 @@ public sealed class CoreAiProviderSeeder(
             Name: OpenCodeProviderDefaults.ProviderName,
             Category: AiProviderCategory.TextChat,
             Dialect: AiProviderDialect.OpenAiCompatible,
-            BaseUrl: OpenCodeProviderDefaults.ZenBaseUrl,
+            BaseUrl: OpenCodeProviderDefaults.GoBaseUrl,
             DefaultModel: OpenCodeProviderDefaults.DefaultModel,
             PricePer1kPromptTokens: OpenCodeProviderDefaults.DefaultPricePer1kPromptTokens,
             PricePer1kCompletionTokens: OpenCodeProviderDefaults.DefaultPricePer1kCompletionTokens,
