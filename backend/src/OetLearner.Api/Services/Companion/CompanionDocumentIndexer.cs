@@ -148,6 +148,9 @@ public sealed class CompanionDocumentIndexer(
                 if (plan.Action == CompanionPrepAction.Skip)
                 {
                     warnings.Add($"Material \"{item.File.Title}\": {plan.Note}");
+                    // Nothing is written, so no source row is stamped: without this the file would stay "never indexed" at the
+                    // head of CompanionIndexSelection on every run and enough of them would pin the whole window.
+                    RecentFailures[item.File.Id] = DateTimeOffset.UtcNow;
                     continue;
                 }
             }
@@ -238,7 +241,16 @@ public sealed class CompanionDocumentIndexer(
             chunksUnchanged += result.ChunksUnchanged;
             chunksEmbedded += result.ChunksEmbedded;
 
-            RecentFailures.TryRemove(item.File.Id, out _);
+            // A successful write counts every chunk as written or unchanged and stamps the source row. Zero of both means the
+            // writer rejected the source (corpus guard) and stamped nothing, so defer it like any other file that yielded nothing.
+            if (result.SourcesWritten == 0 && result.ChunksWritten == 0 && result.ChunksUnchanged == 0)
+            {
+                RecentFailures[item.File.Id] = DateTimeOffset.UtcNow;
+            }
+            else
+            {
+                RecentFailures.TryRemove(item.File.Id, out _);
+            }
 
             // A clean write consumes the parked remote result; a write with warnings (for example a failed embedding pass)
             // leaves it so the next pass can retry without extracting again.
