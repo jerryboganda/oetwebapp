@@ -211,6 +211,7 @@ public sealed class CompanionPreviewStudyPlanTool(
 
 /// <summary>Apply a server-held study-plan proposal. Write tool: the model only confirms.</summary>
 public sealed class CompanionCreateStudyPlanTool(
+    OetLearner.Api.Services.Planner.IStudyPlanAvailabilityShaper shaper,
     ICompanionContextResolver contexts,
     CompanionStudyPlanProposalStore store,
     IStudyPlanGenerator generator) : IAiToolExecutor
@@ -242,6 +243,17 @@ public sealed class CompanionCreateStudyPlanTool(
         try
         {
             var result = await generator.GenerateAsync(ctx.UserId!, StudyPlanGenerationTrigger.Companion, CancellationToken.None);
+            // SAMI Wave 1: fit the fresh plan to the learner’s real week (night shifts,
+            // long shifts, travel mode) before telling them it exists.
+            AvailabilityShaperReport shaperReport;
+            try
+            {
+                shaperReport = await shaper.ShapeAsync(ctx.UserId!, result.PlanId, CancellationToken.None);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                shaperReport = new AvailabilityShaperReport(0, 0, 0);
+            }
             store.Consume(ctx.UserId!, ctx.ThreadId!);
 
             return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
@@ -252,6 +264,8 @@ public sealed class CompanionCreateStudyPlanTool(
                 items_created = result.ItemsCreated,
                 items_preserved = result.ItemsPreservedFromPrior,
                 template_id = result.TemplateId,
+                rescheduled_for_shifts = shaperReport.MovedItems,
+                dropped_for_travel = shaperReport.DroppedItems,
                 url = "study.plan",
             }));
         }

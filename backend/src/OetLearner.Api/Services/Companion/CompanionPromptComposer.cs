@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services.Companion;
@@ -36,7 +37,8 @@ public interface ICompanionPromptComposer
 public sealed class CompanionPromptComposer(
     IConfiguration configuration,
     ICompanionMemoryService? memory = null,
-    IErrorDnaService? errorDna = null) : ICompanionPromptComposer
+    IErrorDnaService? errorDna = null,
+    ICompanionAvailabilityService? availability = null) : ICompanionPromptComposer
 {
     /// <summary>
     /// Configuration key for the persona name. Set via <c>Companion__PersonaName</c>
@@ -74,6 +76,18 @@ public sealed class CompanionPromptComposer(
         {
             var errorSummary = await errorDna.BuildPromptSummaryAsync(context.UserId, ct);
             if (errorSummary.Length > 0) sb.AppendLine(errorSummary);
+        }
+        if (availability is not null && !string.IsNullOrEmpty(context.UserId))
+        {
+            var row = await availability.GetAsync(context.UserId, ct);
+            var minutes = JsonSerializer.Deserialize<int[]>(row.DailyMinutesJson);
+            if (minutes is { Length: 7 })
+            {
+                sb.AppendLine($"- Study availability (Mon..Sun minutes): {string.Join(', ', minutes)}");
+                var nights = JsonSerializer.Deserialize<int[]>(row.NightShiftDaysJson) ?? [];
+                if (nights.Length > 0) sb.AppendLine($"- Night-shift days (no study): {string.Join(',', nights.Select(i => "MonTueWedThuFriSatSun"[i * 3..(i * 3) + 3]))}");
+                if (row.TravelMode) sb.AppendLine($"- Travel mode until {row.TravelUntil?.ToString("yyyy-MM-dd") ?? "further notice"}: ~{row.TravelModeMinutesPerDay} min/day, favour review over new content");
+            }
         }
         AppendEvidence(sb, retrieval);
         AppendGroundingRules(sb, retrieval);

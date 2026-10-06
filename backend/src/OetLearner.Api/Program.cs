@@ -1621,6 +1621,9 @@ builder.Services.AddScoped<OetLearner.Api.Services.Planner.ReviewItemInjector>()
 builder.Services.AddScoped<OetLearner.Api.Services.Planner.IStudyPlanGenerator,
     OetLearner.Api.Services.Planner.StudyPlanGenerator>();
 builder.Services.AddScoped<OetLearner.Api.Services.Planner.StudyPlanTemplateSeeder>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.SamiPlanTemplateSeeder>();
+builder.Services.AddScoped<OetLearner.Api.Services.Planner.IStudyPlanAvailabilityShaper,
+    OetLearner.Api.Services.Planner.StudyPlanAvailabilityShaper>();
 builder.Services.AddScoped<OetLearner.Api.Services.Planner.IPlanPersonalizer,
     OetLearner.Api.Services.Planner.RuleBasedPlanPersonalizer>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Planner.StudyPlanReminderWorker>();
@@ -3484,6 +3487,9 @@ if (app.Environment.IsDevelopment())
     try
     {
         await templateSeeder.SeedIfEmptyAsync(CancellationToken.None);
+        await seedScope.ServiceProvider
+            .GetRequiredService<OetLearner.Api.Services.Planner.SamiPlanTemplateSeeder>()
+            .SeedIfMissingAsync(CancellationToken.None);
     }
     catch (Exception ex)
     {
