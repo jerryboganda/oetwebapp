@@ -55,8 +55,8 @@ Out-of-range values are clamped (`RemoteJobsOptions.Normalized`).
 `REMOTEJOBS__<NAME>` (for example `REMOTEJOBS__VERIFYSAMPLERATE=0.05`, `REMOTEJOBS__FAIRSHAREGATE=true`). A list takes indexed
 keys: `REMOTEJOBS__FLEETALLOWEDCIDRS__0=172.18.0.0/16` (and `__1`); blank entries are ignored. A media kind's engine pin is
 `REMOTEJOBS__KINDS__MEDIA_AUDIO_EXTRACT__ENGINEVERSION` / `REMOTEJOBS__KINDS__MEDIA_SPEAKING_JOIN__ENGINEVERSION`. Defaults
-in the compose file equal the code defaults (a backend test fails the build if they drift); an option that is not in that
-list cannot be set in production. `validate-production-env.sh` rejects a malformed `REMOTEJOBS__VERIFYSAMPLERATE` (must be 0 to
+in the compose file equal the code defaults (keep them in step by hand; the test source that compares them is a manual tool,
+no CI runs it); an option that is not in that list cannot be set in production. `validate-production-env.sh` rejects a malformed `REMOTEJOBS__VERIFYSAMPLERATE` (must be 0 to
 1), `REMOTEJOBS__CLAIMRATEPERMINUTE` (integer >= 1) or `REMOTEJOBS__FAIRSHAREGATE` (true/false). Changing one needs a normal
 deploy (a container recreate) to take effect.
 
@@ -134,8 +134,12 @@ replay, strike, audit and reaper machinery is shared.
 Rules the PDF producer follows: only the PdfPig tier is remote (`provider` `auto`/`pdfpig`; `azure`/`noop` stay local; OCR
 never leaves the API); assets need a SHA-256 (backfilled with a streaming hash) and at most 100 MiB; the paper is either
 all-remote or all-local; a `FallbackLocal` job runs locally only with primary headroom (cgroup v2 pressure) or after
-`FallbackHardAfterMinutes`; every remote/skip decision bumps the paper's `UpdatedAt` so the worker's oldest-first window keeps
-rotating exactly as the local pass rotates it. Any failure of the remote path degrades to the unchanged local path.
+`FallbackHardAfterMinutes`; an asset the local pass has given up on (listed under `extractionExhausted`) is not sent remote
+either, and a remote apply clears that asset's failure marker and exhausted entry exactly as the local pass does. The producer
+touches nothing on the paper to keep the worker rotating: the worker walks its candidates with an in-memory id cursor
+(`ContentTextExtractionWorker`, 20 papers per tick), so a paper that remote jobs own is simply revisited on the next lap and
+`ContentPaper.UpdatedAt` / `RowVersion` only change when text is really applied. The producer is resolved from the per-paper
+scope the worker opens. Any failure of the remote path degrades to the unchanged local path.
 
 ## Security and hygiene (what the code guarantees)
 
@@ -166,7 +170,8 @@ rotating exactly as the local pass rotates it. Any failure of the remote path de
 2. **Quarantined nodes may still claim and finish their own canary** (and nothing else): otherwise the rule "`enable` from
    `Quarantined` needs a fresh passing canary" could never be satisfied. Table 4.0 is otherwise followed exactly.
 3. **Canary expectations are computed at runtime** by running `PdfPigPdfTextExtractor` (the oracle) over the embedded PDF
-   instead of hard-coded constants (they cannot be generated without running code); a CI test asserts the fixture yields text.
+   instead of hard-coded constants (they cannot be generated without running code); a manual test source asserts the fixture
+   yields text (nothing runs it automatically).
 4. A secret never contains `_` (regenerated until true) so the issued token splits into exactly three parts (the base64url
    alphabet would otherwise sometimes contain `_`).
 5. `IdempotencyKey` longer than 256 characters is replaced deterministically by a hash of its parts (companion keys can reach 259).
@@ -191,8 +196,16 @@ SELECT "OccurredAt","ActorId","Action","ResourceId","Details" FROM "AuditEvents"
 
 The manager's `GET /v1/internal/fleet/stats` and `/status` expose the same facts without database access.
 
-## Tests
+## Tests and verification status
 
-`backend/tests/OetLearner.Api.Tests/RemoteJobs/*` (xUnit; the `[PostgreSqlFact]` classes run on the CI Postgres service and skip
-without `OET_TEST_POSTGRES_CONNECTION`). Conformance ids are in the test names or `[Trait("RW", "...")]`. Nothing here is run
-on a workstation; `qa-smoke.yml` `backend-tests` is the authority.
+**Not tested - owner QA.** No automated QA runs anywhere (owner directive 2026-10-06): the only automated check of this layer
+is compilation in `Build images` (`dotnet publish`, plus the idempotent migration script generated from the same publish) and,
+for a change under `Data/Migrations/**` or `LearnerDbContext.cs`, the pending-model-changes check in `speaking-ci.yml`
+(`migrations-check`) - which is why the four remote entities are written into `LearnerDbContextModelSnapshot` by hand and must
+stay identical to `LearnerDbContext.RemoteJobs.cs` (ADR 0001).
+
+`backend/tests/OetLearner.Api.Tests/RemoteJobs/*` (xUnit; the `[PostgreSqlFact]` classes need
+`OET_TEST_POSTGRES_CONNECTION`) are **inert manual tools** kept in git for the owner: no workflow runs them, agents do not run
+them, and nothing in this repository may claim they passed. Conformance ids are in the test names or `[Trait("RW", "...")]`.
+The extractor golden-hash row in `RemoteEngineMigrationAndWiringTests` is a manual reminder to bump
+`PdfTextEngine.LayoutRevision` when `PdfPigPdfTextExtractor` changes behaviour.

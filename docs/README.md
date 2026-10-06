@@ -48,6 +48,7 @@ Where agent working memory lives. Layers have exclusive ownership — no file ha
 - [ops/production-compute-offload.md](ops/production-compute-offload.md) — what runs on Actions vs the VPS; [PRIVATE-CI-SELF-HOSTED-RUNNER.md](PRIVATE-CI-SELF-HOSTED-RUNNER.md) for the optional private runner.
 - [ops/backend-hot-path-optimizations.md](ops/backend-hot-path-optimizations.md) and [ops/user-state-cache.md](ops/user-state-cache.md) — API hot-path changes and the 15 s per-process user-state cache (invalidation table, worst-case revocation latency, kill switch).
 - [ops/frontend-bff-optimizations.md](ops/frontend-bff-optimizations.md) — web/BFF changes (lazy SDKs and hub, batched flags and telemetry, retry policy, request-body streaming and its `BFF_STREAM_REQUEST_BODIES=0` kill switch) and the owner QA checklist.
+- [ops/REMOTE-WORKER.md](ops/REMOTE-WORKER.md) — the API side of the remote-worker boundary (OET-RWP/1): switches (all default off), bring-up order, state machines, kill switches, diagnostics.
 - [ADMIN-RUNTIME-SETTINGS.md](ADMIN-RUNTIME-SETTINGS.md) — secrets and settings managed from `/admin/settings`.
 - [ops/deploy-gate.md](ops/deploy-gate.md) and [ops/incident-response-runbook.md](ops/incident-response-runbook.md) — deploy approval, rollback and incidents.
 - [security/README.md](security/README.md) — security evidence pack and runbooks.
