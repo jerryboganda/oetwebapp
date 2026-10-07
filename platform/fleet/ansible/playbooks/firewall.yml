@@ -118,7 +118,7 @@
         - name: Record success
           ansible.builtin.include_tasks: tasks/record-result.yml
           vars:
-            fleet_result_json: "{{ {'ok': true, 'summary': 'inbound default-deny; SSH allowed from the primary and the connecting address'} | to_json }}"
+            fleet_result_json: "{{ {'ok': true, 'summary': 'inbound default-deny; SSH allowed from the primary and the connecting address; dial ports: ' + ((fleet_dial_ports | default([])) | join(',') | default('none'))} | to_json }}"
 
       rescue:
         - name: Remove our table so the host stays reachable
