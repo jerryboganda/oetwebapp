@@ -143,6 +143,7 @@ public sealed class RegistryBackedProvider(
     // content. The model supports up to 64k output; floor raised to 16,384 so the
     // answer survives the thinking budget.
     private const int OpenCodeMinMaxTokens = 16384;
+    private const int OpenCodeLengthRetryCeiling = 32768;
 
     private static bool IsUbagFacadeRequest(string baseUrl, AiProviderRequest request)
         => string.Equals(request.ProviderCode, "ubag", StringComparison.OrdinalIgnoreCase)
@@ -333,6 +334,36 @@ public sealed class RegistryBackedProvider(
         // Tool calls are read BEFORE the empty-text check: a normal tool-calling reply has
         // content:null, and only "no text AND no tool calls" is an empty completion.
         var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
+        if (string.IsNullOrWhiteSpace(text) && toolCalls is null
+            && openCode
+            && choice.TryGetProperty("finish_reason", out var lengthEl) && lengthEl.ValueKind == JsonValueKind.String
+            && lengthEl.GetString() == "length"
+            && maxTokens < OpenCodeLengthRetryCeiling
+            && !ct.IsCancellationRequested)
+        {
+            // Effort=max reasoning can out-spend the output floor on heavy turns. One
+            // bounded retry at double budget (capped) answers instead of erroring.
+            request = new AiProviderRequest
+            {
+                ProviderCode = request.ProviderCode,
+                Model = request.Model,
+                SystemPrompt = request.SystemPrompt,
+                UserPrompt = request.UserPrompt,
+                Temperature = request.Temperature,
+                MaxTokens = Math.Min(maxTokens * 2, OpenCodeLengthRetryCeiling),
+                ApiKeyOverride = request.ApiKeyOverride,
+                BaseUrlOverride = request.BaseUrlOverride,
+                Messages = request.Messages,
+                Tools = request.Tools,
+                ToolChoice = request.ToolChoice,
+                ResponseFormatJson = request.ResponseFormatJson,
+                AudioAttachments = request.AudioAttachments,
+                ImageAttachments = request.ImageAttachments,
+                DocumentAttachment = request.DocumentAttachment,
+                SessionKey = request.SessionKey,
+            };
+            return await CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
+        }
         if (string.IsNullOrWhiteSpace(text) && toolCalls is null)
         {
             var emptyFinish = choice.TryGetProperty("finish_reason", out var emptyFinishEl) && emptyFinishEl.ValueKind == JsonValueKind.String
