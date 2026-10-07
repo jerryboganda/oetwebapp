@@ -6,11 +6,14 @@
 #
 # Runtime contract (protocol 10.1, enforced again by `oet-fleet-ctl run` flags on the helper):
 #   read-only root filesystem, /scratch and /tmp are tmpfs, non-root uid 10001, no capabilities, no docker socket,
-#   no host mounts, no swap, core dumps off, only outbound HTTPS to the API host.
+#   no swap, core dumps off, only outbound HTTPS to the API host.
+#   UBAG trust plane (decision D3, only when the manager provisioned it): one read-only host mount
+#   (/etc/oet-fleet/ubag -> /certs/ubag) and one inbound published port (7443) serving mTLS gRPC.
 #
 # Parity with the API image (protocol 6.1.4 item 4): linux/amd64 only, the same Debian-family dotnet base of the same major
-# version, ICU present, invariant globalization and LANG / LC_ALL are never set in either image.
-FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/runtime:10.0
+# version, ICU present, invariant globalization and LANG / LC_ALL are never set in either image. The ASP.NET base is
+# required by the trust plane (Kestrel is the h2/mTLS server); the OET job plane stays plain HttpClient.
+FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:10.0
 
 # ffmpeg serves media.audio-extract and media.speaking-join only (decode and encode through pipes, never a network
 # input). The agent reads the installed version at start and offers a media kind only when its engineVersion is known.
@@ -40,7 +43,10 @@ LABEL org.opencontainers.image.title="oet-fleet-agent" \
 
 USER 10001:10001
 
-# The agent exposes no port. It touches /tmp/oet-agent-health after every node heartbeat attempt; a stale file means the
+# Informational only; the host-side publish and the firewall are the helper's `oet-fleet-ctl run`/S5 decision.
+EXPOSE 7443
+
+# The agent touches /tmp/oet-agent-health after every node heartbeat attempt; a stale file means the
 # heartbeat loop is wedged.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD ["/bin/sh", "-c", "test $(( $(date +%s) - $(stat -c %Y /tmp/oet-agent-health) )) -lt 120"]

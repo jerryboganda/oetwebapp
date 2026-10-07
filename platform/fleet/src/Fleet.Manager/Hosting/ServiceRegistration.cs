@@ -68,6 +68,7 @@ public static class ServiceRegistration
         services.AddSingleton<HostStore>();
         services.AddSingleton<OperationStore>();
         services.AddSingleton<CredentialStore>();
+        services.AddSingleton<Projects.UbagTrustService>();
         services.AddSingleton<Projects.UbagAllocationService>();
 
         services.AddSingleton<IHostResolver, DnsHostResolver>();
@@ -213,7 +214,7 @@ public static class ServiceRegistration
                         }
                         else
                         {
-                            context.Response.Redirect(context.RedirectUri);
+                            context.Response.Redirect(RelativeRedirectUri(context.RedirectUri));
                         }
 
                         return Task.CompletedTask;
@@ -259,6 +260,22 @@ public static class ServiceRegistration
 
     public static bool IsApiPath(PathString path) =>
         path.StartsWithSegments("/api") || path.StartsWithSegments("/metrics") || path.StartsWithSegments("/internal");
+
+    /// <summary>
+    /// The scheme-fix middleware marks every tunneled request HTTPS, so the cookie handler builds an ABSOLUTE
+    /// redirect to <c>https://&lt;host&gt;</c> — an origin no browser on the SSH tunnel can reach. Redirects
+    /// are therefore rewritten to path+query only; the browser resolves them against the origin it actually
+    /// used (http://127.0.0.1 over the tunnel).
+    /// </summary>
+    private static string RelativeRedirectUri(string redirectUri)
+    {
+        if (Uri.TryCreate(redirectUri, UriKind.Absolute, out var absolute))
+        {
+            return absolute.PathAndQuery + absolute.Fragment;
+        }
+
+        return redirectUri;
+    }
 
     /// <summary>
     /// A request the console script makes by itself rather than the owner: the background refresh of a live region (a GET of a page with

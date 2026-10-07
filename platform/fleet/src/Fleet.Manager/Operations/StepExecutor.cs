@@ -9,6 +9,7 @@ using Fleet.Manager.Configuration;
 using Fleet.Manager.Infrastructure;
 using Fleet.Manager.Persistence;
 using Fleet.Manager.Provisioning;
+using Fleet.Manager.Projects;
 using Fleet.Manager.Vault;
 using Microsoft.Extensions.Options;
 
@@ -53,6 +54,7 @@ public sealed partial class StepExecutor
     private readonly ReleaseService _releases;
     private readonly PolicyService _policies;
     private readonly RolloutTokenHolder _rolloutToken;
+    private readonly UbagTrustService _trust;
     private readonly IOptions<FleetOptions> _options;
     private readonly TimeProvider _time;
     private readonly IDelay _delay;
@@ -71,6 +73,7 @@ public sealed partial class StepExecutor
         ReleaseService releases,
         PolicyService policies,
         RolloutTokenHolder rolloutToken,
+        UbagTrustService trust,
         IOptions<FleetOptions> options,
         TimeProvider time,
         IDelay delay,
@@ -88,6 +91,7 @@ public sealed partial class StepExecutor
         _releases = releases;
         _policies = policies;
         _rolloutToken = rolloutToken;
+        _trust = trust;
         _options = options;
         _time = time;
         _delay = delay;
@@ -254,15 +258,41 @@ public sealed partial class StepExecutor
         return VaultCipher.FingerprintHint(System.Text.Encoding.UTF8.GetBytes(secret));
     }
 
-    private Dictionary<string, string> BuildAgentEnv(string nodeId, string tokenValue, string digest, Fleet.Core.Policy.NodePolicy policy) => new(StringComparer.Ordinal)
+    private Dictionary<string, string> BuildAgentEnv(string nodeId, string tokenValue, string digest, Fleet.Core.Policy.NodePolicy policy)
     {
-        ["OET_API_BASE"] = _options.Value.Api.BaseUrl.TrimEnd('/'),
-        ["OET_NODE_ID"] = nodeId,
-        ["OET_NODE_TOKEN"] = tokenValue,
-        ["OET_AGENT_IMAGE_DIGEST"] = digest,
-        ["OET_BUDGET_CPU_MILLI"] = policy.Budgets.CpuMilli.ToString(CultureInfo.InvariantCulture),
-        ["OET_BUDGET_MEM_MIB"] = policy.Budgets.MemMiB.ToString(CultureInfo.InvariantCulture),
-        ["OET_BUDGET_TMP_MIB"] = policy.Budgets.TmpMiB.ToString(CultureInfo.InvariantCulture),
-        ["OET_LOG_LEVEL"] = "Information",
-    };
+        var env = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["OET_API_BASE"] = _options.Value.Api.BaseUrl.TrimEnd('/'),
+            ["OET_NODE_ID"] = nodeId,
+            ["OET_NODE_TOKEN"] = tokenValue,
+            ["OET_AGENT_IMAGE_DIGEST"] = digest,
+            ["OET_BUDGET_CPU_MILLI"] = policy.Budgets.CpuMilli.ToString(CultureInfo.InvariantCulture),
+            ["OET_BUDGET_MEM_MIB"] = policy.Budgets.MemMiB.ToString(CultureInfo.InvariantCulture),
+            ["OET_BUDGET_TMP_MIB"] = policy.Budgets.TmpMiB.ToString(CultureInfo.InvariantCulture),
+            ["OET_LOG_LEVEL"] = "Information",
+        };
+
+        // The trust plane keys only ever appear when the manager itself is in trust mode, and the helper
+        // paths are container-internal constants the ctl's env allow-list mirrors exactly. The listener
+        // port stays at the allocation endpoint's contract ({address}:7443) unless the owner overrides it.
+        var ubag = _options.Value.Ubag;
+        if (ubag.TrustEnabled)
+        {
+            env["OET_TRUST_ENABLED"] = "true";
+            env["OET_TRUST_PORT"] = TrustListenerPort.ToString(CultureInfo.InvariantCulture);
+            env["OET_TRUST_CERT_PATH"] = TrustCertPath;
+            env["OET_TRUST_KEY_PATH"] = TrustKeyPath;
+            env["OET_TRUST_CA_PATH"] = TrustCaPath;
+        }
+
+        return env;
+    }
+
+    /// <summary>The container-internal paths of the UBAG node certificate material (host side: /etc/oet-fleet/ubag, mounted read-only).</summary>
+    public const string TrustCertPath = "/certs/ubag/node.crt";
+    public const string TrustKeyPath = "/certs/ubag/node.key";
+    public const string TrustCaPath = "/certs/ubag/ca.crt";
+
+    /// <summary>The helper port UBAG dials (the allocation endpoint template's contract).</summary>
+    public const int TrustListenerPort = 7443;
 }

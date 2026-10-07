@@ -1,4 +1,10 @@
-using Microsoft.Extensions.Options;
+using System.Net;
+using System.Security.Authentication;
+using Fleet.Agent.Net;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 
 namespace Fleet.Agent;
 
@@ -35,7 +41,7 @@ internal static class AgentHost
             return 2;
         }
 
-        var builder = Host.CreateApplicationBuilder(args);
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { Args = args });
         builder.Logging.ClearProviders();
         builder.Logging.AddSimpleConsole(console =>
         {
@@ -47,11 +53,56 @@ internal static class AgentHost
         // Container stop grace is 90 s; the graceful path of section 5.5 needs up to ~80 s.
         builder.Services.Configure<HostOptions>(host => host.ShutdownTimeout = TimeSpan.FromSeconds(85));
         builder.Services.AddSingleton(options);
+
+        var trust = options.Trust;
+        var holder = new UbagListener.CertificateHolder();
+        builder.Services.AddSingleton(holder);
+        if (trust.Enabled)
+        {
+            ConfigureTrustListener(builder, trust, holder);
+            builder.Services.AddHostedService<UbagListener.CertificateLoader>();
+        }
+        else
+        {
+            // No trust plane: make sure the web host binds nothing reachable (loopback port 0 inside the
+            // container is invisible — the container publishes no ports in this mode).
+            builder.WebHost.UseUrls("http://127.0.0.1:0");
+        }
+
         builder.Services.AddHostedService<AgentService>();
 
-        using var app = builder.Build();
+        var app = builder.Build();
+        if (trust.Enabled)
+        {
+            UbagListener.MapEndpoints(app, trust, holder, app.Logger);
+        }
+
         await app.RunAsync().ConfigureAwait(false);
         return AgentService.ExitCode;
+    }
+
+    /// <summary>
+    /// The UBAG dial plane (decision D3): TLS 1.2/1.3 with ALPN h2/http1, our node certificate selected per
+    /// connection (the files may still be loading), and a presented client certificate accepted only when it
+    /// chains to the manager CA. Binding happens at start; connections before the certificate loads are
+    /// refused at the handshake and retried by the dialer — the OET job plane is never blocked on it.
+    /// </summary>
+    private static void ConfigureTrustListener(WebApplicationBuilder builder, TrustOptions trust, UbagListener.CertificateHolder holder)
+    {
+        builder.WebHost.UseKestrel(kestrel =>
+        {
+            kestrel.Listen(IPAddress.Any, trust.Port, listen =>
+            {
+                listen.Protocols = HttpProtocols.Http1AndHttp2;
+                listen.UseHttps(new HttpsConnectionAdapterOptions
+                {
+                    ServerCertificateSelector = (_, _) => holder.Node,
+                    ClientCertificateMode = ClientCertificateMode.AllowCertificate,
+                    ClientCertificateValidation = (certificate, _, _) => holder.ValidateClientCertificate(certificate),
+                    SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                });
+            });
+        });
     }
 }
 

@@ -382,7 +382,11 @@ jobs:
             pass_through FLEET_UBAG_ENDPOINT_TEMPLATE '^[A-Za-z0-9._{}:-]{1,253}(:[0-9]{1,5})?$'
             pass_through FLEET_UBAG_MAX_BROWSER_WORKLOADS '^(0|[1-9][0-9]{0,1}|6[0-4])$'
             pass_through FLEET_UBAG_GRANT_TTL_MINUTES '^[0-9]{1,4}$'
+            # Trust plane (decision D3): CA identity + allocation pins; see platform/fleet/README.md.
+            pass_through FLEET_UBAG_TRUST_ENABLED '^(true|false)$'
             optional_secret fleet_ubag_token FLEET_UBAG_TOKEN_FILE
+            optional_secret fleet_ca_cert FLEET_CA_CERT_FILE
+            optional_secret fleet_ca_key FLEET_CA_KEY_FILE
           } > "$tmp_env"
           chmod 600 "$tmp_env"
           mv -f "$tmp_env" "$FLEET_ENV"

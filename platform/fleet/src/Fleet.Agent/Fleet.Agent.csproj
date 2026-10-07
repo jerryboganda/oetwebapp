@@ -36,6 +36,15 @@
   </ItemGroup>
 
   <!--
+    The UBAG trust plane (decision D3) serves the mTLS gRPC surface UBAG dials on 7443. That is an
+    HTTP/2 + TLS server, i.e. Kestrel: the shared framework reference brings it in and the image base
+    switches to aspnet:10.0 to match. The OET job plane stays plain HttpClient to the API over there.
+  -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!--
     LINK-COMPILED, never copied (protocol 6.1.4, 6.2, 6.4): the exact in-process sources are compiled into the agent so the
     helper output and its engine version strings are byte-identical to what the API computes. All five files are pure (System,
     PdfPig and implicit usings only) and exist in the tree on purpose: a missing or moved file FAILS this build instead of

@@ -60,10 +60,9 @@ public sealed class UbagAllocationWire
 public sealed class UbagCertIdentityWire
 {
     /// <summary>The identity UBAG's trust plane expects on the helper certificate:
-    /// spiffe://ubag/node/&lt;node_id&gt;. The manager CA that will issue such certificates is a
-    /// planned step (UBAG decision D3); until it exists the pin below stays empty and a helper
-    /// cannot actually pass UBAG's mTLS dial, which keeps an unbuilt helper unusable rather
-    /// than trusted.</summary>
+    /// spiffe://ubag/node/&lt;node_id&gt;. Published only when the manager's CA (UBAG decision D3) has
+    /// provisioned the host — until then the pin below stays empty and a helper cannot actually pass
+    /// UBAG's mTLS dial, which keeps an unbuilt helper unusable rather than trusted.</summary>
     [JsonPropertyName("uri_san")]
     public string UriSan { get; set; } = string.Empty;
 
@@ -118,6 +117,7 @@ public sealed class UbagAllocationService
     private readonly HostStore _hosts;
     private readonly PolicyService _policies;
     private readonly FleetState _state;
+    private readonly UbagTrustService _trust;
     private readonly IOptions<FleetOptions> _options;
     private readonly TimeProvider _time;
 
@@ -125,12 +125,14 @@ public sealed class UbagAllocationService
         HostStore hosts,
         PolicyService policies,
         FleetState state,
+        UbagTrustService trust,
         IOptions<FleetOptions> options,
         TimeProvider time)
     {
         _hosts = hosts;
         _policies = policies;
         _state = state;
+        _trust = trust;
         _options = options;
         _time = time;
     }
@@ -220,13 +222,33 @@ public sealed class UbagAllocationService
             return null; // An addressable helper is a UBAG dialling assumption; never publish a blank one.
         }
 
+        // The trust plane (decision D3): the pin is published only for a certificate S10 has actually
+        // rendered. Identity and pin are set together — a URI SAN without a pin (or the reverse) would
+        // describe an identity the helper cannot present, and UBAG's strict parser deserves honesty.
+        string uriSan = string.Empty;
+        string spkiSha256 = string.Empty;
+        try
+        {
+            if (await _trust.GetIdentityAsync(host.Id, cancellationToken) is { } identity)
+            {
+                uriSan = identity.UriSan;
+                spkiSha256 = identity.SpkiSha256;
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or CryptographicException)
+        {
+            // Publish the capacity without the pin rather than failing the whole list; the trust-plane
+            // state is repaired by the next S10 (rollout or repair). No certificate material can appear
+            // in the message, and the exception itself is not logged from a poll path.
+        }
+
         return new UbagAllocationWire
         {
             SchemaVersion = 1,
             NodeId = nodeId,
             Region = SanitizeRegion(host.Region),
             Endpoint = endpoint,
-            CertIdentity = new UbagCertIdentityWire { UriSan = UriSanFor(nodeId), SpkiSha256 = string.Empty },
+            CertIdentity = new UbagCertIdentityWire { UriSan = uriSan, SpkiSha256 = spkiSha256 },
             CpuMillis = cpuMilli,
             MemoryBytes = memMibGrant * 1024L * 1024L,
             ReservationState = "known",
