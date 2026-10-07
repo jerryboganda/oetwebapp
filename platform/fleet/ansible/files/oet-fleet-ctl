@@ -7,9 +7,10 @@ depth: the gate and this script share one verb table), never uses a shell, and c
   * read host/agent status, run the host baseline check;
   * log in to GHCR with a token read from STDIN into a temporary tmpfs docker config, pull the agent image BY
     DIGEST, verify it, and log out again;
-  * write the allow-listed agent environment file, (re)create the single agent container with FIXED hardened
-    flags (`restart` RECREATES it from the current env file, because Docker bakes --env-file in at creation), stop it,
-    show its logs, prune old agent images, write the boot unit;
+  * write the allow-listed agent environment file, write the UBAG node certificate material (trust plane,
+    decision D3), (re)create the single agent container with FIXED hardened flags (`restart` RECREATES it from
+    the current env file, because Docker bakes --env-file in at creation), stop it, show its logs, prune old
+    agent images, write the boot unit;
   * uninstall: remove ONLY what this fleet installed (the agent container, images of the agent repository,
     /etc/oet-fleet, the boot unit) and lock the oetfleet account. Docker itself, the firewall table, other
     containers, other images and every volume are never touched.
@@ -29,6 +30,11 @@ AGENT_REPO = "ghcr.io/jerryboganda/oetwebapp-fleet-agent"
 CONTAINER = "oet-fleet-agent"
 CONFIG_DIR = "/etc/oet-fleet"
 ENV_FILE = "/etc/oet-fleet/agent.env"
+CERT_DIR = "/etc/oet-fleet/ubag"
+CERT_FILES = {"ca": "ca.crt", "cert": "node.crt", "key": "node.key"}
+# The agent runs as uid 10001 inside the container, so the mounted certificate files must be readable by
+# that numeric id on the host too (the same lesson as the tmpfs ownership in start_agent).
+AGENT_UID = 10001
 DOCKER_CONFIG_DIR = "/run/oet-fleet/dockercfg"
 UNIT_PATH = "/etc/systemd/system/oet-fleet-agent.service"
 SUDOERS_PATH = "/etc/sudoers.d/oet-fleet"
@@ -43,6 +49,7 @@ VERBS = {
     "verify": r"sha256:[0-9a-f]{64}( sha256:[0-9a-f]{64})?",
     "logout": r"",
     "put-env": r"",
+    "put-certs": r"",
     "run": r"sha256:[0-9a-f]{64}",
     "stop": r"(--grace ([1-9]|[1-9][0-9]|1[01][0-9]|120))?",
     "restart": r"",
@@ -62,9 +69,16 @@ ENV_KEYS = (
     "OET_BUDGET_MEM_MIB",
     "OET_BUDGET_TMP_MIB",
     "OET_LOG_LEVEL",
+    "OET_TRUST_ENABLED",
+    "OET_TRUST_PORT",
+    "OET_TRUST_CERT_PATH",
+    "OET_TRUST_KEY_PATH",
+    "OET_TRUST_CA_PATH",
 )
 ENV_VALUE = re.compile(r"[A-Za-z0-9._:/@+=-]{1,200}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+PEM_CERT = re.compile(r"-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\s-]+-----END CERTIFICATE-----")
+PEM_KEY = re.compile(r"-----BEGIN (?:EC |RSA )?PRIVATE KEY-----[A-Za-z0-9+/=\s-]+-----END (?:EC |RSA )?PRIVATE KEY-----")
 
 
 class Refused(Exception):
@@ -325,6 +339,63 @@ def verb_put_env(args):
     emit({"ok": True})
 
 
+def verb_put_certs(args):
+    """Trust plane (decision D3): write the UBAG node certificate material rendered by the manager.
+
+    stdin is one JSON object {"ca","cert","key"} of PEM strings. Every PEM is shape-checked, the leaf is
+    verified to have been signed by the CA (openssl), and the files are written atomically into
+    /etc/oet-fleet/ubag owned by the agent's numeric uid with mode 0400 (key) / 0444 (certificates).
+    """
+    payload = json.loads(read_stdin(16384))
+    if not isinstance(payload, dict) or set(payload.keys()) != set(CERT_FILES.keys()):
+        raise Refused("expected a JSON object with exactly the keys ca, cert, key")
+    for name in ("ca", "cert"):
+        if not isinstance(payload[name], str) or PEM_CERT.fullmatch(payload[name].strip()) is None:
+            raise Refused("the " + name + " PEM is malformed")
+    if not isinstance(payload["key"], str) or PEM_KEY.fullmatch(payload["key"].strip()) is None:
+        raise Refused("the key PEM is malformed")
+
+    os.makedirs(CERT_DIR, mode=0o755, exist_ok=True)
+    temporaries = {}
+    for name, filename in CERT_FILES.items():
+        temporary = os.path.join(CERT_DIR, "." + filename + ".tmp")
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+            handle.write(payload[name].strip() + "\n")
+        os.chmod(temporary, 0o400)
+        os.chown(temporary, AGENT_UID, AGENT_UID)
+        temporaries[name] = temporary
+
+    # The leaf must have been signed by this CA and match its key: a mismatched bundle would make the
+    # listener present an identity the pin in the allocation list does not describe. openssl is present
+    # on every supported OS; both probes run as argument lists, never a shell.
+    cert_path = temporaries["cert"]
+    ca_path = temporaries["ca"]
+    key_path = temporaries["key"]
+    probe_env = {"PATH": SAFE_PATH, "LC_ALL": "C.UTF-8"}
+    verify = subprocess.run(
+        ["/usr/bin/openssl", "verify", "-CAfile", ca_path, cert_path],
+        capture_output=True, text=True, env=probe_env, check=False)
+    cert_public = subprocess.run(
+        ["/usr/bin/openssl", "x509", "-in", cert_path, "-pubkey", "-noout"],
+        capture_output=True, text=True, env=probe_env, check=False)
+    key_public = subprocess.run(
+        ["/usr/bin/openssl", "pkey", "-in", key_path, "-pubout"],
+        capture_output=True, text=True, env=probe_env, check=False)
+    if verify.returncode != 0 or cert_public.returncode != 0 or key_public.returncode != 0 \
+            or cert_public.stdout.strip() != key_public.stdout.strip():
+        for temporary in temporaries.values():
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+        raise Refused("the certificate bundle does not verify against its own CA/key")
+
+    for name, temporary in temporaries.items():
+        os.replace(temporary, os.path.join(CERT_DIR, CERT_FILES[name]))
+    emit({"ok": True})
+
+
 def clamp(value, low, high):
     return max(low, min(high, value))
 
@@ -341,6 +412,20 @@ def start_agent(values, digest):
     mem_cap = max(512, total_mib) if total_mib > 0 else 262144
     mem_mib = clamp(int(values.get("OET_BUDGET_MEM_MIB", "5120")), 512, min(262144, mem_cap))
     tmp_mib = clamp(int(values.get("OET_BUDGET_TMP_MIB", "3072")), 64, mem_mib)
+    # Trust plane (decision D3): the manager only ever renders OET_TRUST_ENABLED=true after put-certs, so a
+    # missing file here means state drifted (uninstalled by hand, restored from a backup). Refuse loudly
+    # instead of silently starting a listener-less "trusted" node.
+    trust_args = []
+    if values.get("OET_TRUST_ENABLED") == "true":
+        missing = [f for f in CERT_FILES.values() if not os.path.isfile(os.path.join(CERT_DIR, f))]
+        if missing:
+            raise Failed("trust is enabled but the node certificate files are missing: put-certs first")
+        trust_args = [
+            # The only host mount and the only inbound port the fleet ever creates; the listener inside
+            # presents the node certificate and validates dialers against the manager CA.
+            "--publish", "7443:7443",
+            "--volume", CERT_DIR + ":/certs/ubag:ro",
+        ]
     docker("rm", "-f", CONTAINER, check=False)
     _, out, _ = docker(
         "run", "-d",
@@ -359,6 +444,7 @@ def start_agent(values, digest):
         # must own its scratch or ScratchManager.WipeAtStart dies with EACCES at every start (seen live on Docker 29.1.3).
         "--tmpfs", "/scratch:rw,noexec,nosuid,nodev,size=%dm,uid=10001,gid=10001,mode=1700" % tmp_mib,
         "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=256m,uid=10001,gid=10001,mode=1700",
+        *(trust_args),
         "--log-driver", "local",
         "--log-opt", "max-size=5m",
         "--log-opt", "max-file=2",
@@ -515,6 +601,7 @@ HANDLERS = {
     "verify": verb_verify,
     "logout": verb_logout,
     "put-env": verb_put_env,
+    "put-certs": verb_put_certs,
     "run": verb_run,
     "stop": verb_stop,
     "restart": verb_restart,

@@ -32,6 +32,8 @@ public static class FleetCtlVerbs
         new("verify", DigestPattern + "( " + DigestPattern + ")?", false, 0),
         new("logout", "", false, 0),
         new("put-env", "", true, 4096),
+        // Trust plane (decision D3): one JSON object {ca, cert, key} of PEM strings for the UBAG node identity.
+        new("put-certs", "", true, 16384),
         new("run", DigestPattern, false, 0),
         new("stop", "(--grace " + GracePattern + ")?", false, 0),
         new("restart", "", false, 0),

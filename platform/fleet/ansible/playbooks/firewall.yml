@@ -40,6 +40,12 @@
           ansible.builtin.set_fact:
             fleet_allow_v6_rule: >-
               {{ ('tcp dport ' ~ fleet_target_port ~ ' ip6 saddr { ' ~ (fleet_allowed_v6 | join(', ')) ~ ' } accept') if (fleet_allowed_v6 | length > 0) else '# no IPv6 source is allowed' }}
+            # Trust plane (decision D3): ports UBAG dials (mTLS, the listener presents the node certificate).
+            # Empty unless the manager runs in trust mode. Every entry must be a plain port number.
+            fleet_dial_ports: >-
+              {{ ((ubag_allow_ports | default('')) | trim | split(',')) | map('trim')
+                 | select('match', '^[0-9]{1,5}$') | map('int') | reject('equalto', 0)
+                 | difference([fleet_target_port | int]) | unique | list }}
 
         - name: Keep the rendered table for the live load and the persisted copy
           ansible.builtin.set_fact:
@@ -56,6 +62,10 @@
                   ip6 nexthdr icmpv6 accept
                   tcp dport {{ fleet_target_port }} ip saddr { {{ fleet_allowed_v4 | join(', ') }} } accept
                   {{ fleet_allow_v6_rule }}
+                  {% for port in fleet_dial_ports %}
+                  # UBAG dial plane: the mTLS listener behind it refuses everything without the node certificate.
+                  tcp dport {{ port }} accept
+                  {% endfor %}
                 }
               }
 

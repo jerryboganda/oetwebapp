@@ -14,11 +14,62 @@
             update_cache: true
             cache_valid_time: 3600
 
+        - name: Make sure the managed sources directory is active
+          ansible.builtin.lineinfile:
+            path: /etc/chrony/chrony.conf
+            line: "sourcedir /etc/chrony/sources.d"
+            state: present
+            insertafter: EOF
+            firstmatch: true
+
+        - name: Provide reachable time sources (provider NTP images often ship sources the hardened helper cannot reach)
+          ansible.builtin.copy:
+            dest: /etc/chrony/sources.d/90-oet-fleet.sources
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              # Managed by the OET fleet manager (S6). Reachable public pools; chrony picks whichever
+              # answers, so any provider-private sources in the stock configuration stay in place.
+              pool 2.debian.pool.ntp.org iburst
+              pool 2.ubuntu.pool.ntp.org iburst
+              server ntp.ubuntu.com iburst
+              server time.cloudflare.com iburst
+              server time.google.com iburst
+          register: fleet_time_sources
+
         - name: Enable time synchronisation
           ansible.builtin.systemd:
             name: chrony
             enabled: true
             state: started
+
+        - name: Reload chrony when the sources changed
+          when: fleet_time_sources is changed
+          ansible.builtin.systemd:
+            name: chrony
+            state: restarted
+
+        - name: Wait for the kernel to report the clock synchronized
+          # The same property `oet-fleet-ctl status` reports as timeSyncOk. chrony needs a moment to
+          # pick a reachable source after a restart; if nothing answers, fail the step loudly — an
+          # unsynchronized helper skews every later check (canary timestamps, token windows).
+          ansible.builtin.shell: |
+            for attempt in $(seq 1 24); do
+              state="$(/usr/bin/timedatectl show -p NTPSynchronized --value 2>/dev/null || echo no)"
+              if [ "$state" = "yes" ]; then
+                echo "synchronized after ${attempt} probe(s)"
+                exit 0
+              fi
+              sleep 5
+            done
+            echo "the kernel never reported NTPSynchronized=yes" >&2
+            /usr/sbin/chronyc sources || true
+            /usr/sbin/chronyc tracking || true
+            exit 1
+          register: fleet_time_sync
+          changed_when: false
+          check_mode: false
 
         - name: Comment out swap entries in fstab
           ansible.builtin.replace:

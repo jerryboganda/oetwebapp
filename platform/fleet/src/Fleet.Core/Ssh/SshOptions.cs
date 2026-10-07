@@ -83,6 +83,8 @@ public static class AgentEnv
     {
         "OET_API_BASE", "OET_NODE_ID", "OET_NODE_TOKEN", "OET_AGENT_IMAGE_DIGEST",
         "OET_BUDGET_CPU_MILLI", "OET_BUDGET_MEM_MIB", "OET_BUDGET_TMP_MIB", "OET_LOG_LEVEL",
+        // Trust plane (decision D3): rendered only when the manager itself runs in trust mode.
+        "OET_TRUST_ENABLED", "OET_TRUST_PORT", "OET_TRUST_CERT_PATH", "OET_TRUST_KEY_PATH", "OET_TRUST_CA_PATH",
     };
 
     /// <summary>Characters a value may contain. Identical to the pattern enforced by <c>oet-fleet-ctl put-env</c>.</summary>
