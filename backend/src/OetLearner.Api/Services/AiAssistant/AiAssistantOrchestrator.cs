@@ -130,6 +130,34 @@ public sealed class AiAssistantOrchestrator(
                 yield break;
             }
 
+            // THE companion access gate, for the turn itself (SAMI §9). The hub is
+            // reachable directly, so without this the session endpoint's paywall
+            // would be advisory: a learner whose package does not include the
+            // companion could simply stream a turn. This is the SAME decision —
+            // ICompanionAccessResolver, also used by GET /v1/companion/session and
+            // the operator read — never a second, parallel rule set. It runs before
+            // the learner's message is persisted, so a refused turn leaves no
+            // half-written thread. Admin/expert staff turns keep their own surface
+            // and are untouched.
+            //
+            // The master flag (ai_learning_companion) is deliberately NOT consulted
+            // here: the resolver is the entitlement decision, and the session
+            // endpoint already reports canChat=false when the platform switch is
+            // off, so consulting it here too would only let a client that ignores
+            // the flag contradict the decision the surface was given.
+            if (!string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(role, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase))
+            {
+                var accessDecision = await TryResolveCompanionAccessAsync(scope.ServiceProvider, userId, turnCts.Token);
+                if (accessDecision is { CanChat: false })
+                {
+                    yield return new AssistantTurnError(
+                        "COMPANION_ACCESS_DENIED",
+                        DescribeCompanionDenial(accessDecision.Reason));
+                    yield break;
+                }
+            }
+
             // Persist user message. Attachment content is NOT stored here:
             // images ride the live provider call (ubag_attachments) and the
             // document excerpt rides the prompt of this turn only, so the
@@ -590,6 +618,69 @@ public sealed class AiAssistantOrchestrator(
         ApplicationUserRoles.Admin => AiFeatureCodes.AiAssistantAdmin,
         ApplicationUserRoles.Expert => AiFeatureCodes.AiAssistantExpert,
         _ => AiFeatureCodes.AiAssistantLearner,
+    };
+
+    /// <summary>
+    /// The shared companion access decision for a learner turn, or null when the
+    /// gate itself could not be evaluated.
+    ///
+    /// <para>
+    /// A gate FAILURE (not a denial) deliberately returns null and lets the turn
+    /// continue, because the alternative — refusing every turn while the
+    /// entitlement read is broken — would take working chat away from learners who
+    /// are entitled to it, without protecting anything: the gateway still applies
+    /// its own permission and kill-switch checks on the same request, and every
+    /// call is still recorded. A denial that WAS resolved (the normal case) is
+    /// honoured strictly. Cancellation is never swallowed.
+    /// </para>
+    /// </summary>
+    private async Task<CompanionAccessDecision?> TryResolveCompanionAccessAsync(
+        IServiceProvider scopedProvider,
+        string userId,
+        CancellationToken ct)
+    {
+        try
+        {
+            var resolver = scopedProvider.GetRequiredService<ICompanionAccessResolver>();
+            return await resolver.ResolveAsync(userId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(
+                ex,
+                "Companion access could not be resolved for {UserId}; the turn continues and the gateway's own kill-switch/permission checks still apply.",
+                userId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Learner-facing wording for a denied turn. Deliberately mirrors the paywall
+    /// reasons in <c>messages/*/companion.json</c> rather than inventing a second
+    /// vocabulary: the learner sees the same explanation whether the surface asked
+    /// up front (<c>GET /v1/companion/session</c>) or the turn was refused here.
+    /// </summary>
+    private static string DescribeCompanionDenial(string reason) => reason switch
+    {
+        CompanionAccessReasons.ManuallyDisabled =>
+            "The AI Learning Companion has been switched off for your account. Contact support if you think this is wrong.",
+        CompanionAccessReasons.Expired =>
+            "Your AI Learning Companion access has ended. Choose a package that includes it to carry on.",
+        CompanionAccessReasons.PackageRequired =>
+            "The AI Learning Companion is not part of your current package. It is included with the packages built around it.",
+        CompanionAccessReasons.PlanExcludesCompanion =>
+            "Your current plan does not include the AI Learning Companion.",
+        CompanionAccessReasons.AiDisabled =>
+            "AI features are disabled on your account. Contact support if you think this is wrong.",
+        CompanionAccessReasons.KillSwitch =>
+            "AI features are temporarily paused across the platform. Please try again shortly.",
+        CompanionAccessReasons.PolicyUnavailable =>
+            "We could not read your plan just now. Please try again in a moment.",
+        CompanionAccessReasons.MonthlyCapReached =>
+            "You have used this month's AI allowance. It resets at the start of next month.",
+        CompanionAccessReasons.DailyCapReached =>
+            "You have used today's AI allowance. It resets tomorrow.",
+        _ => "The AI Learning Companion is not available for your account right now.",
     };
 
     private static List<AiAssistantMessage> BoundTaskHistory(

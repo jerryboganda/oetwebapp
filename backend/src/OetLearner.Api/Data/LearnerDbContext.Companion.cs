@@ -19,6 +19,10 @@ public partial class LearnerDbContext
     public DbSet<AiCreditCost> AiCreditCosts => Set<AiCreditCost>();
     public DbSet<CompanionHandoff> CompanionHandoffs => Set<CompanionHandoff>();
 
+    /// <summary>Per-user Sami (AI Learning Companion) access overrides, with provenance.
+    /// Resolved by <see cref="Services.Companion.CompanionAccessResolver"/>.</summary>
+    public DbSet<CompanionUserAccess> CompanionUserAccesses => Set<CompanionUserAccess>();
+
     partial void OnModelCreatingCompanion(ModelBuilder modelBuilder)
     {
         // One row per learner, keyed by user id — no surrogate key, because
@@ -122,6 +126,18 @@ public partial class LearnerDbContext
             e.HasKey(x => x.Id);
             e.HasIndex(x => new { x.UserId, x.CreatedAt });
             e.HasIndex(x => new { x.Status, x.CreatedAt });
+        });
+
+        // Per-user companion access override (SAMI §9): at most one row per learner
+        // per module, which is what makes the admin upsert a plain
+        // "update the row if it exists". The single-column UserId index mirrors the
+        // sibling override tables (UserModuleOverrides, PlanModuleOverrides) so the
+        // "what is set for this learner" read is served the same way.
+        modelBuilder.Entity<CompanionUserAccess>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.UserId);
+            e.HasIndex(x => new { x.UserId, x.ModuleKey }).IsUnique();
         });
     }
 }

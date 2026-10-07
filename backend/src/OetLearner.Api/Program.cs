@@ -1492,6 +1492,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.Indexing.IEmbeddi
     OetLearner.Api.Services.AiAssistant.Indexing.EmbeddingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionFeatureFlags,
     OetLearner.Api.Services.Companion.CompanionFeatureFlags>();
+// The one companion access gate (SAMI §9): plan module + per-plan override +
+// per-user override with provenance. Scoped because it reads through the scoped
+// LearnerDbContext, like every other companion service here.
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionAccessResolver,
+    OetLearner.Api.Services.Companion.CompanionAccessResolver>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionContextResolver,
     OetLearner.Api.Services.Companion.CompanionContextResolver>();
 // Singleton: the rolling extraction window must outlive the request scope,

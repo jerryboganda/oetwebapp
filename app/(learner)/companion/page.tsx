@@ -40,6 +40,11 @@ const REASON_KEYS: Record<CompanionAccessReason, string> = {
   plan_excludes_companion: 'companion.paywall.reason.planExcludes',
   monthly_cap_reached: 'companion.paywall.reason.monthlyCap',
   daily_cap_reached: 'companion.paywall.reason.dailyCap',
+  // Per-user overrides (SAMI §9). A learner who was switched off by hand needs a
+  // different next step from one who simply never had the package, so these are
+  // not folded into packageRequired.
+  manually_disabled: 'companion.paywall.reason.manuallyDisabled',
+  expired: 'companion.paywall.reason.expired',
 };
 
 /**

@@ -115,13 +115,18 @@ internal static class Doc06LearningCompanion
             new DocumentationSectionBlock(
                 "Commercial gating and independent kill switches",
                 "Companion access is a deliberate, admin-controlled grant rather than an automatic feature of every " +
-                "plan. `CompanionLearnerEndpoints.ResolveAccessAsync` checks, in order: whether the companion module " +
-                "is enabled for the learner's plan (a durable admin override table, surfaced at `/admin/companion/" +
-                "access`, takes precedence over the catalogue snapshot so a nightly catalogue reseed cannot silently " +
-                "revoke an admin-made grant); the AI quota policy for kill-switch and platform-only-key state; the " +
-                "plan's allowed-feature list; and monthly/daily token caps — returning the first blocking reason in " +
-                "the same order the gateway itself applies them, so the learner sees an upgrade card rather than a " +
-                "chat box that fails on the first message (EV-COMPANION-020). Independently of commercial gating, " +
+                "plan. `CompanionAccessResolver.ResolveAsync` — the one gate, reused by the learner session, the chat " +
+                "turn itself and the operator read — checks, in order: a per-USER override carrying provenance and an " +
+                "optional expiry (`/admin/companion/access/users/{userId}`, so an operator can enable a " +
+                "non-eligible learner, disable an eligible one, or grant access that lapses on its own); whether the " +
+                "companion module is enabled for the learner's plan (a durable admin override table, surfaced at " +
+                "`/admin/companion/access`, takes precedence over the catalogue snapshot so a nightly catalogue " +
+                "reseed cannot silently revoke an admin-made grant); the AI quota policy for kill-switch and " +
+                "platform-only-key state; and the plan's allowed-feature list — returning the first blocking reason " +
+                "in the same order the gateway itself applies them, so the learner sees an upgrade card rather than " +
+                "a chat box that fails on the first message (EV-COMPANION-020). Token caps are deliberately NOT part " +
+                "of this gate: Sami chat is included with an eligible package rather than metered (§1.2/§9), so a " +
+                "cap must never show a paywall the learner is not actually stopped by. Independently of commercial gating, " +
                 "`ICompanionFeatureFlags` exposes five separate operator switches backed by the platform's existing " +
                 "feature-flag table — master enable, retrieval, typed actions, new credit consumption, and numeric " +
                 "score display — so an operator can disable one dimension of companion behaviour from `/admin/flags` " +
@@ -209,8 +214,8 @@ internal static class Doc06LearningCompanion
                 "Companion voice service built on existing ASR/TTS provider selectors, capped at 1,500 spoken characters.",
                 "backend/src/OetLearner.Api/Services/Companion/CompanionVoiceService.cs"),
             new DocumentationEvidenceSeed("EV-COMPANION-020", DocumentationEvidenceType.Security,
-                "Ordered access-resolution gate: plan module grant/override, quota kill switch, allowed-feature list, token caps.",
-                "backend/src/OetLearner.Api/Endpoints/CompanionLearnerEndpoints.cs (ResolveAccessAsync)"),
+                "Ordered access-resolution gate: per-user override with provenance and expiry, plan module grant/override, quota kill switch, allowed-feature list (token caps deliberately excluded — Sami chat is included, not metered).",
+                "backend/src/OetLearner.Api/Services/Companion/CompanionAccessResolver.cs (ResolveAsync)"),
             new DocumentationEvidenceSeed("EV-COMPANION-021", DocumentationEvidenceType.Reliability,
                 "Independent companion kill switches (enable, retrieval, actions, credit consumption, score display) backed by the platform feature-flag table.",
                 "backend/src/OetLearner.Api/Services/Companion/CompanionFeatureFlags.cs"),

@@ -3,9 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
-using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Companion;
-using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -39,14 +37,14 @@ public static class CompanionLearnerEndpoints
     /// <summary>
     /// Feature codes whose written rows count as companion memory. A note the
     /// learner wrote themselves, or one authored by a different AI feature (the
-    /// Writing coach, say), is not the companion's to delete.
+    /// Writing coach, say), is not the companion's to delete. The same three codes
+    /// are what the quota plan's allow-list must contain for the companion to be
+    /// usable, so they are defined once — on
+    /// <see cref="CompanionAccessResolver"/> — and aliased here as a static field so
+    /// the EF-translated <c>Contains</c> filters in the memory queries keep their
+    /// existing shape.
     /// </summary>
-    private static readonly string[] CompanionFeatureCodes =
-    [
-        AiFeatureCodes.AiAssistantLearner,
-        AiFeatureCodes.CompanionChat,
-        AiFeatureCodes.CompanionAction,
-    ];
+    private static readonly string[] CompanionFeatureCodes = CompanionAccessResolver.CompanionFeatureCodes;
 
     public static IEndpointRouteBuilder MapCompanionLearnerEndpoints(this IEndpointRouteBuilder app)
     {
@@ -89,12 +87,10 @@ public static class CompanionLearnerEndpoints
 
     private static async Task<IResult> GetSessionAsync(
         HttpContext http,
-        LearnerDbContext db,
         ICompanionFeatureFlags flags,
         ICompanionContextResolver contexts,
         ICompanionDestinationRegistry destinations,
-        IEffectiveEntitlementResolver entitlements,
-        IAiQuotaService quota,
+        ICompanionAccessResolver access,
         IConfiguration configuration,
         CancellationToken ct)
     {
@@ -104,13 +100,23 @@ public static class CompanionLearnerEndpoints
         var enabled = await flags.IsEnabledAsync(ct);
         var context = await contexts.ResolveAsync(userId, null, ct);
 
-        var access = enabled
-            ? await ResolveAccessAsync(userId, db, entitlements, quota, ct)
-            : new CompanionAccess(false, "companion_disabled", null, null);
+        // THE access gate, resolved by the one shared resolver (also used by the
+        // operator read and by the chat turn itself). The master flag stays a
+        // caller-side concern — as it always was — so "platform switched off" is
+        // never confused with an entitlement denial, and its source stays null
+        // rather than claiming an entitlement nobody evaluated.
+        var decision = enabled
+            ? await access.ResolveAsync(userId, ct)
+            : new CompanionAccessDecision(
+                false,
+                CompanionAccessReasons.CompanionDisabled,
+                null,
+                null,
+                null);
 
         // The upgrade route is resolved through the registry like every other
         // link, so the paywall cannot point somewhere the learner cannot open.
-        var upgrade = access.CanChat ? null : await destinations.ResolveAsync("pricing", context, ct);
+        var upgrade = decision.CanChat ? null : await destinations.ResolveAsync("pricing", context, ct);
         var topUp = await destinations.ResolveAsync("ai.packages", context, ct);
 
         return Results.Ok(new
@@ -133,125 +139,19 @@ public static class CompanionLearnerEndpoints
             aiCreditsRemaining = context.AiCreditsRemaining,
             access = new
             {
-                canChat = access.CanChat,
-                reason = access.Reason,
-                planCode = access.PlanCode,
-                planName = access.PlanName,
+                canChat = decision.CanChat,
+                reason = decision.Reason,
+                // Provenance (SAMI §9 per-user layer): package_included /
+                // admin_enabled / promotional / manually_disabled / expired /
+                // none. `reason` remains the coarse block code the paywall has
+                // always consumed, so an existing client keeps working.
+                source = decision.Source,
+                planCode = decision.PlanCode,
+                planName = decision.PlanName,
                 upgradeUrl = upgrade?.Url,
             },
             topUpUrl = topUp.Allowed ? topUp.Url : null,
         });
-    }
-
-    /// <summary>
-    /// Mirrors what <c>AiQuotaService.TryReserveAsync</c> would decide, without
-    /// reserving anything — this is a display query, so it must not consume
-    /// allowance. It deliberately reports the <i>first</i> reason the learner is
-    /// blocked, in the same order the gateway applies them.
-    /// </summary>
-    private static async Task<CompanionAccess> ResolveAccessAsync(
-        string userId,
-        LearnerDbContext db,
-        IEffectiveEntitlementResolver entitlements,
-        IAiQuotaService quota,
-        CancellationToken ct)
-    {
-        // THE access gate (owner directive): the companion is reached through the
-        // packages created for it. AiCompanion is an opt-in module, so a plan that
-        // never granted it grants nothing — access is always a deliberate
-        // commercial act, never an accident of an old plan predating the feature.
-        // Grants come from two durable sources: the plan's catalog module list
-        // (snapshot) and admin-written PlanModuleOverride rows (the companion
-        // access admin section). Overrides are consulted here — the only
-        // AiCompanion enforcement point — and NOT baked into plan rows, because
-        // the catalog seeder rewrites DashboardModulesJson from the manifest on
-        // every boot and would silently wipe UI-made grants.
-        var snapshot = await entitlements.ResolveAsync(userId, ct);
-        var planOverride = await ResolveCompanionPlanOverrideAsync(db, snapshot.PlanCode, ct);
-        if (planOverride is false
-            || (!snapshot.IsModuleEnabled(ModuleKeys.AiCompanion) && planOverride is not true))
-        {
-            return new CompanionAccess(false, "package_required", snapshot.PlanCode, null);
-        }
-
-        AiUserPolicySnapshot policy;
-        try
-        {
-            policy = await quota.GetUserPolicyAsync(userId, ct);
-        }
-        catch (Exception)
-        {
-            // Fail closed on an unreadable policy: better a paywall the learner
-            // can question than a chat box that errors on every message.
-            return new CompanionAccess(false, "policy_unavailable", null, null);
-        }
-
-        if (policy.AiDisabled) return new CompanionAccess(false, "ai_disabled", policy.PlanCode, policy.PlanName);
-        // Either scope blocks the companion: its feature codes are in
-        // AiCredentialResolver.PlatformOnlyFeatures, so it is never BYOK-funded
-        // and PlatformKeysOnly stops it just as surely as AllCalls.
-        if (policy.KillSwitchActive)
-        {
-            return new CompanionAccess(false, "kill_switch", policy.PlanCode, policy.PlanName);
-        }
-
-        // An empty allow-list means "every feature"; a populated one is exhaustive.
-        var allowedCsv = await db.AiQuotaPlans
-            .AsNoTracking()
-            .Where(p => p.Code == policy.PlanCode && p.IsActive)
-            .Select(p => p.AllowedFeaturesCsv)
-            .FirstOrDefaultAsync(ct);
-
-        if (!string.IsNullOrWhiteSpace(allowedCsv))
-        {
-            var allowed = allowedCsv
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            if (!CompanionFeatureCodes.Any(allowed.Contains))
-            {
-                return new CompanionAccess(false, "plan_excludes_companion", policy.PlanCode, policy.PlanName);
-            }
-        }
-
-        // Sami chat is included with an eligible package, not metered (SAMI
-        // handover §1.2 and §9): launch must not depend on a candidate-facing
-        // AI-credit or multi-tier wallet, so the token caps no longer block or
-        // stagger the chat. AiAssistantGateway skips the matching reserve for
-        // these feature codes, so reporting a cap here would show a paywall the
-        // learner is no longer actually stopped by.
-        //
-        // Cost control is unchanged and stays invisible: the per-feature kill
-        // list (checked above), the global emergency kill switch (above),
-        // per-user rate limiting, and full AiUsageRecord telemetry on every
-        // call. `monthly_cap_reached` / `daily_cap_reached` remain defined in
-        // CompanionUserAccess and the client union for other callers, but are
-        // deliberately no longer produced on this path.
-
-        return new CompanionAccess(true, "ok", policy.PlanCode, policy.PlanName);
-    }
-
-    /// <summary>
-    /// Admin-written per-plan companion grant for the snapshot's plan code:
-    /// true = granted, false = explicitly revoked, null = no override row.
-    /// Matched case-insensitively (snapshot codes are normalized lowercase).
-    /// The whole table is read because it stays tiny (one row per plan at
-    /// most) — no translation-sensitive predicate, works on every provider.
-    /// </summary>
-    internal static async Task<bool?> ResolveCompanionPlanOverrideAsync(
-        LearnerDbContext db,
-        string? snapshotPlanCode,
-        CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(snapshotPlanCode)) return null;
-        var rows = await db.PlanModuleOverrides
-            .AsNoTracking()
-            .Where(o => o.ModuleKey == ModuleKeys.AiCompanion)
-            .Select(o => new { o.PlanCode, o.Enabled })
-            .ToListAsync(ct);
-        return rows
-            .FirstOrDefault(o => string.Equals(o.PlanCode, snapshotPlanCode, StringComparison.OrdinalIgnoreCase))
-            ?.Enabled;
     }
 
     /// <summary>
@@ -602,8 +502,6 @@ public static class CompanionLearnerEndpoints
             ? CompanionPromptComposer.DefaultPersona
             : configured.Trim();
     }
-
-    private sealed record CompanionAccess(bool CanChat, string Reason, string? PlanCode, string? PlanName);
 }
 
 /// <summary>Teaching-style update. Enum names are sent as strings so the wire

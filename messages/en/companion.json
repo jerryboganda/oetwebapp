@@ -35,6 +35,8 @@
   "companion.paywall.reason.planExcludes": "Your current plan does not include the AI Learning Companion.",
   "companion.paywall.reason.monthlyCap": "You have used this month’s AI allowance. It resets at the start of next month.",
   "companion.paywall.reason.dailyCap": "You have used today’s AI allowance. It resets tomorrow.",
+  "companion.paywall.reason.manuallyDisabled": "The AI Learning Companion has been switched off for your account. Contact support if you think this is wrong.",
+  "companion.paywall.reason.expired": "Your AI Learning Companion access has ended. Choose a package that includes it to carry on.",
   "companion.paywall.benefit.grounded": "Answers grounded in the approved OET rulebooks, with the source named",
   "companion.paywall.benefit.plan": "Guidance tied to your own attempts, weaknesses and exam date",
   "companion.paywall.benefit.actions": "Opens the right lesson or practice for you, and adds work to your plan",

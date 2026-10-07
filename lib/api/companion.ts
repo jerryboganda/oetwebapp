@@ -17,11 +17,30 @@ export type CompanionAccessReason =
   | 'package_required'
   | 'plan_excludes_companion'
   | 'monthly_cap_reached'
-  | 'daily_cap_reached';
+  | 'daily_cap_reached'
+  /** An operator switched the companion off for this learner (SAMI §9). */
+  | 'manually_disabled'
+  /** The learner's per-user grant lapsed and nothing else grants access. */
+  | 'expired';
+
+/**
+ * Provenance behind the decision (SAMI §9 per-user access layer). `reason` says
+ * which rule decided; `source` says where the entitlement came from, so an
+ * operator can see "this learner was enabled by hand" without reading a plan row.
+ * Null only while the session endpoint never evaluated the gate (master flag off).
+ */
+export type CompanionAccessSource =
+  | 'package_included'
+  | 'admin_enabled'
+  | 'promotional'
+  | 'manually_disabled'
+  | 'expired'
+  | 'none';
 
 export interface CompanionAccess {
   canChat: boolean;
   reason: CompanionAccessReason;
+  source: CompanionAccessSource | null;
   planCode: string | null;
   planName: string | null;
   /** Where to go to gain access. Server-resolved; never composed on the client. */

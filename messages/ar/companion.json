@@ -35,6 +35,8 @@
   "companion.paywall.reason.planExcludes": "باقتك الحالية لا تتضمّن المرشد التعليمي بالذكاء الاصطناعي.",
   "companion.paywall.reason.monthlyCap": "لقد استهلكت حصّة هذا الشهر من الذكاء الاصطناعي، وتتجدّد مع بداية الشهر القادم.",
   "companion.paywall.reason.dailyCap": "لقد استهلكت حصّة اليوم من الذكاء الاصطناعي، وتتجدّد غدًا.",
+  "companion.paywall.reason.manuallyDisabled": "تم إيقاف المرشد التعليمي بالذكاء الاصطناعي على حسابك. تواصل مع الدعم إذا كان ذلك غير متوقّع.",
+  "companion.paywall.reason.expired": "انتهت صلاحية وصولك إلى المرشد التعليمي بالذكاء الاصطناعي. اختر باقة تتضمّنه للمتابعة.",
   "companion.paywall.benefit.grounded": "إجابات مبنية على كتب قواعد OET المعتمدة، مع ذكر المصدر",
   "companion.paywall.benefit.plan": "إرشاد مرتبط بمحاولاتك ونقاط ضعفك وموعد امتحانك",
   "companion.paywall.benefit.actions": "يفتح لك الدرس أو التدريب المناسب، ويضيف مهامّ إلى خطتك",
