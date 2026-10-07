@@ -444,18 +444,25 @@ public sealed class LiveVoiceService(
             .ToArray();
         if (sourceRecordingIds.Length > 0)
         {
-            var ownedRecordingIds = await db.SpeakingRecordings.AsNoTracking()
+            var ownedRecordingIds = (await db.SpeakingRecordings.AsNoTracking()
                 .Where(x => sourceRecordingIds.Contains(x.Id)
                     && x.SpeakingSessionId == context.Session.Id
                     && !x.IsArchived
                     && !x.IsWarmup)
                 .Select(x => x.Id)
-                .ToListAsync(ct);
+                .ToListAsync(ct)).ToHashSet(StringComparer.Ordinal);
             if (ownedRecordingIds.Count != sourceRecordingIds.Length)
             {
-                throw ApiException.Validation(
-                    "live_voice_candidate_audio_invalid",
-                    "A candidate audio recording is not available for this Speaking session.");
+                // A stale or erased clip reference costs that segment its audio link, never the graded submission: the link is
+                // dropped (only recordings this session owns are ever linked) and the transcript is saved without it.
+                logger.LogWarning(
+                    "Live voice transcript for Speaking session {SessionId} referenced {Unavailable} candidate recording(s) that are not available; the links were dropped.",
+                    context.Session.Id, sourceRecordingIds.Length - ownedRecordingIds.Count);
+                segments = segments
+                    .Select(x => x.SourceRecordingId is not null && !ownedRecordingIds.Contains(x.SourceRecordingId)
+                        ? x with { SourceRecordingId = null }
+                        : x)
+                    .ToArray();
             }
         }
 
@@ -501,27 +508,44 @@ public sealed class LiveVoiceService(
         long durationMs,
         CancellationToken ct)
     {
-        var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Write, ct);
-        await EnsureConsentAsync(context, ct);
-        _ = await EnsureProviderSessionAsync(context.Session.Id, providerSessionId, ct);
-        if (durationMs is <= 0 or > 600_000)
+        // Every upload that reaches the service leaves one line, stored or refused (the endpoint's own pre-checks and the rate
+        // limiter log separately), so "attempted" and "stored" can be counted from the logs.
+        try
         {
-            throw ApiException.Validation(
-                "live_voice_audio_duration_invalid",
-                "The candidate audio duration is invalid.");
-        }
+            var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Write, ct);
+            await EnsureConsentAsync(context, ct);
+            _ = await EnsureProviderSessionAsync(context.Session.Id, providerSessionId, ct);
+            if (durationMs is <= 0 or > 600_000)
+            {
+                throw ApiException.Validation(
+                    "live_voice_audio_duration_invalid",
+                    "The candidate audio duration is invalid.");
+            }
 
-        var stored = await audioCapture.CaptureTurnAsync(
-            context.Session,
-            audio,
-            mimeType,
-            isWarmup: false,
-            durationMs,
-            ct);
-        return new LiveVoiceAudioCaptureResponse(
-            stored.RecordingId,
-            stored.MimeType,
-            stored.DurationSeconds);
+            var stored = await audioCapture.CaptureTurnAsync(
+                context.Session,
+                audio,
+                mimeType,
+                isWarmup: false,
+                durationMs,
+                ct);
+            var clipOrdinal = await db.SpeakingRecordings.AsNoTracking()
+                .CountAsync(x => x.SpeakingSessionId == context.Session.Id && !x.IsArchived && !x.IsWarmup, ct);
+            logger.LogInformation(
+                "Live voice candidate clip stored for Speaking session {SessionId}: recording {RecordingId}, {Bytes} bytes, {DurationMs} ms, {MimeType}, clip #{ClipOrdinal}.",
+                context.Session.Id, stored.RecordingId, audio.Length, durationMs, stored.MimeType, clipOrdinal);
+            return new LiveVoiceAudioCaptureResponse(
+                stored.RecordingId,
+                stored.MimeType,
+                stored.DurationSeconds);
+        }
+        catch (ApiException ex)
+        {
+            logger.LogWarning(
+                "Live voice candidate clip refused for Speaking session {SessionId}: {ErrorCode} (HTTP {StatusCode}), {Bytes} bytes, {DurationMs} ms.",
+                sessionId, ex.ErrorCode, ex.StatusCode, audio.Length, durationMs);
+            throw;
+        }
     }
 
     private async Task<LiveVoiceContext> LoadContextAsync(

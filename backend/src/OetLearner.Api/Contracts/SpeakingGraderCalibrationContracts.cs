@@ -107,7 +107,9 @@ public sealed record SpeakingGraderCalibrationMockSampleDetail(
     IReadOnlyList<SpeakingGraderCalibrationAudioClip> ClipsB,
     IReadOnlyList<SpeakingGraderCalibrationCriterion> Criteria,
     SpeakingGraderCalibrationLabel? Label,
-    string ExcludedReason);
+    string ExcludedReason,
+    SpeakingGraderCalibrationAudioCoverage? AudioCoverageA = null,
+    SpeakingGraderCalibrationAudioCoverage? AudioCoverageB = null);
 
 public sealed record SpeakingGraderCalibrationMockPromoteRequest(string? ExamId);
 
@@ -129,7 +131,18 @@ public sealed record SpeakingGraderCalibrationTranscriptLine(
     int EndMs,
     string Text);
 
-public sealed record SpeakingGraderCalibrationAudioClip(string RecordingId, int DurationSeconds, string MimeType);
+/// <param name="Linked">True when a transcript turn points at this clip, i.e. the audio judge can attribute it to the candidate's speech.</param>
+public sealed record SpeakingGraderCalibrationAudioClip(string RecordingId, int DurationSeconds, string MimeType, bool Linked = false);
+
+/// <summary>What the stored clips cover of the candidate's speech: how many clips, how many a transcript turn points at, their total
+/// length against the transcript's candidate speech time, and how many candidate turns carry a clip. Capture facts only.</summary>
+public sealed record SpeakingGraderCalibrationAudioCoverage(
+    int Clips,
+    int LinkedClips,
+    int AudioSeconds,
+    int CandidateSpeechSeconds,
+    int CandidateTurns,
+    int TurnsWithClip);
 
 /// <summary>What the expert has recorded so far (null until labelled).</summary>
 public sealed record SpeakingGraderCalibrationLabel(
@@ -146,7 +159,8 @@ public sealed record SpeakingGraderCalibrationSampleDetail(
     IReadOnlyList<SpeakingGraderCalibrationAudioClip> Clips,
     IReadOnlyList<SpeakingGraderCalibrationCriterion> Criteria,
     SpeakingGraderCalibrationLabel? Label,
-    string ExcludedReason);
+    string ExcludedReason,
+    SpeakingGraderCalibrationAudioCoverage? AudioCoverage = null);
 
 public sealed record SpeakingGraderCalibrationPromoteRequest(string? SessionId);
 

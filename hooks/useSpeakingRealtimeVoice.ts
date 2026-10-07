@@ -160,6 +160,21 @@ const failureCode = (error: unknown) => apiErrorInfo(error)?.code || (error inst
 const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
 /**
+ * Runs a live-voice write, retrying it when the per-user limiter (one live-voice request at a time) answered 429 because another
+ * request of this learner was still in flight. Any other failure, and a 429 that outlasts the retries, is the caller's.
+ */
+async function withRateLimitRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (caught) {
+      if (apiErrorInfo(caught)?.status !== 429 || attempt >= LIVE_VOICE_429_RETRIES) throw caught;
+      await delay(LIVE_VOICE_429_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+}
+
+/**
  * Mid-session recovery. A live link that dies after it was live, or a patient that stays silent after the
  * candidate stopped speaking, is restored on a NEW provider session for the same role-play (the server
  * replays the saved turns into its instructions). The server allows three provider sessions per role-play:
@@ -191,6 +206,25 @@ const SPEECH_LEVEL = 0.05;
 const SPEECH_END_SILENCE_MS = 700;
 const MIN_SPEECH_BURST_MS = 400;
 const PATIENT_AUDIO_TAIL_MS = 750;
+// GPT-Live reports the patient only as transcript deltas: no audio-done or turn-complete event ever clears the "patient is
+// speaking" flag (7 Oct 2026 pilot: capture stayed suppressed after the first reply, one clip stored for 3.5 minutes). The
+// patient therefore counts as finished this long after their last output; buffered Gemini audio still defers it.
+export const PATIENT_OUTPUT_IDLE_MS = 2_000;
+// A candidate clip covers one stretch of speech: it ends this long after the burst ended (a new burst inside it extends the
+// same clip) and is rotated at MAX_CLIP_MS so a long monologue is stored in parts. The clip keeps SPEECH_END_SILENCE_MS plus
+// this much trailing silence; the audio judge joins clips with a 600 ms gap and counts a pause of about 2 s as a long pause,
+// so keep the sum below that or every clip boundary reads as a hesitation.
+export const CLIP_HANGOVER_MS = 400;
+export const MAX_CLIP_MS = 30_000;
+const CLIP_TIMESLICE_MS = 1_000;
+// The clip uploads share one queue, and the API admits one live-voice request per user at a time (a second one is answered 429
+// at once, and the API client never retries a write's 429). A 429 is therefore retried here with a short backoff; everything else
+// the API client already retries itself, and a clip that still fails is parked for the final retry at stop().
+const LIVE_VOICE_429_RETRIES = 2;
+const LIVE_VOICE_429_RETRY_DELAY_MS = 1_500;
+// OpenAI's transcript timeline starts when its session was created (1-6 s before the page clock starts), so a short turn can
+// sit just outside its own clip: the final link pass takes the nearest clip within this slack.
+export const CLIP_LINK_TOLERANCE_MS = 5_000;
 
 export interface SpeechTracker {
   /** Feeds one meter sample; returns the burst that just ended (after SPEECH_END_SILENCE_MS of quiet), if any. */
@@ -203,6 +237,8 @@ export interface SpeechTracker {
 interface ActiveCandidateAudioCapture {
   recorder: MediaRecorder;
   chunks: Blob[];
+  /** True once a burst of real speech (not a click) has run during this clip; a clip without one is not stored. */
+  hadSpeech: boolean;
   startMs: number;
   providerSessionId: string;
   sessionId: string;
@@ -491,22 +527,31 @@ export interface CandidateAudioRecordingSpan {
   recordingId: string;
 }
 
+/**
+ * Links each unlinked candidate segment to the clip it overlaps most. With `toleranceMs` (the final pass at stop only: while
+ * the role-play runs the clip a segment belongs to may simply not be uploaded yet, and the first link is kept) a segment that
+ * overlaps no clip takes the nearest one within the slack; a zero-length segment (Gemini gives none timing) is a point.
+ */
 export function linkCandidateAudioToTranscript(
   segments: readonly LiveVoiceTranscriptSegmentInput[],
   recordings: readonly CandidateAudioRecordingSpan[],
+  toleranceMs = 0,
 ): LiveVoiceTranscriptSegmentInput[] {
   return segments.map((segment) => {
     if (segment.speaker !== 'candidate' || segment.sourceRecordingId) return segment;
-    const recording = recordings
-      .map((candidate) => ({
-        candidate,
-        overlapMs: Math.max(
-          0,
-          Math.min(segment.endMs, candidate.endMs) - Math.max(segment.startMs, candidate.startMs),
-        ),
-      }))
-      .filter((match) => match.overlapMs > 0)
-      .sort((left, right) => right.overlapMs - left.overlapMs)[0]?.candidate;
+    const matches = recordings.map((candidate) => ({
+      candidate,
+      overlapMs: Math.max(
+        0,
+        Math.min(segment.endMs, candidate.endMs) - Math.max(segment.startMs, candidate.startMs),
+      ),
+      gapMs: Math.max(0, candidate.startMs - segment.endMs, segment.startMs - candidate.endMs),
+    }));
+    const overlapping = matches.filter((match) => match.overlapMs > 0).sort((left, right) => right.overlapMs - left.overlapMs)[0];
+    const nearest = toleranceMs > 0
+      ? matches.filter((match) => match.gapMs <= toleranceMs).sort((left, right) => left.gapMs - right.gapMs)[0]
+      : undefined;
+    const recording = (overlapping ?? nearest)?.candidate;
     return recording ? { ...segment, sourceRecordingId: recording.recordingId } : segment;
   });
 }
@@ -735,6 +780,12 @@ export function useSpeakingRealtimeVoice(
   const patientAudioPlaybackRef = useRef(false);
   const patientAudioTailTimerRef = useRef<number | undefined>(undefined);
   const stopCandidateAudioRef = useRef<(() => Promise<boolean>) | null>(null);
+  const patientOutputIdleTimerRef = useRef<number | undefined>(undefined);
+  const clipHangoverTimerRef = useRef<number | undefined>(undefined);
+  // Every clip upload waits for the one before it; the chain never rejects.
+  const clipUploadChainRef = useRef<Promise<unknown>>(Promise.resolve());
+  // Diagnostics only: which event types the OpenAI link sent (logged once at stop()).
+  const openAiEventTypesRef = useRef<Set<string>>(new Set());
   const assignedBurstStartRef = useRef(-1);
   // One clock for the whole role-play (see markSessionLive): performance.now() when the FIRST provider session went live,
   // the same instant as Date.now() (a reload rebuilds the clock from it), and how long after the origin the CURRENT
@@ -745,12 +796,16 @@ export function useSpeakingRealtimeVoice(
   const checkpointTimerRef = useRef<number | undefined>(undefined);
 
   const finishPatientAudioPlayback = useCallback(() => {
+    window.clearTimeout(patientOutputIdleTimerRef.current);
+    patientOutputIdleTimerRef.current = undefined;
     if (!patientAudioPlaybackRef.current) return;
     patientAudioPlaybackRef.current = false;
     window.clearTimeout(patientAudioTailTimerRef.current);
+    // Once the tail is over the patient is silent, so a burst already running is the candidate's: capture starts mid-burst
+    // (the meter loop re-checks every frame) instead of losing the whole burst.
     patientAudioTailTimerRef.current = window.setTimeout(() => {
       patientAudioTailTimerRef.current = undefined;
-      if (!speechTrackerRef.current.active()) candidateAudioSuppressedRef.current = false;
+      candidateAudioSuppressedRef.current = false;
     }, PATIENT_AUDIO_TAIL_MS);
   }, []);
 
@@ -814,6 +869,8 @@ export function useSpeakingRealtimeVoice(
 
   const closeTransport = useCallback(() => {
     void stopCandidateAudioRef.current?.();
+    window.clearTimeout(clipHangoverTimerRef.current);
+    clipHangoverTimerRef.current = undefined;
     resetProviderTransport();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -902,16 +959,25 @@ export function useSpeakingRealtimeVoice(
     if (checkpointTimerRef.current === undefined) checkpointTimerRef.current = window.setTimeout(flushCheckpoint, CHECKPOINT_WRITE_DELAY_MS);
   }, [flushCheckpoint]);
 
+  // One upload at a time (a clip never collides with another clip at the per-user limiter), each retried on a 429. The chain
+  // itself never rejects; the caller gets this upload's own result.
+  const uploadCandidateClip = useCallback((capture: FailedCandidateAudioCapture) => {
+    const upload = () => withRateLimitRetry(() => captureLiveVoiceAudioTurn(capture.sessionId, {
+      providerSessionId: capture.providerSessionId,
+      audio: capture.audio,
+      durationMs: capture.durationMs,
+    }));
+    const result = clipUploadChainRef.current.then(upload, upload);
+    clipUploadChainRef.current = result.catch(() => undefined);
+    return result;
+  }, []);
+
   const saveCandidateAudio = useCallback(async (
     capture: FailedCandidateAudioCapture,
     recordings = candidateAudioRecordingsRef.current,
   ): Promise<boolean> => {
     try {
-      const stored = await captureLiveVoiceAudioTurn(capture.sessionId, {
-        providerSessionId: capture.providerSessionId,
-        audio: capture.audio,
-        durationMs: capture.durationMs,
-      });
+      const stored = await uploadCandidateClip(capture);
       recordings.push({
         startMs: capture.startMs,
         endMs: capture.endMs,
@@ -931,7 +997,7 @@ export function useSpeakingRealtimeVoice(
       }
       return false;
     }
-  }, [scheduleCheckpoint, sessionId]);
+  }, [scheduleCheckpoint, sessionId, uploadCandidateClip]);
 
   const startCandidateAudioCapture = useCallback((stream: MediaStream, startedAt: number) => {
     if (stoppingRef.current || activeCandidateAudioRef.current) return;
@@ -948,6 +1014,7 @@ export function useSpeakingRealtimeVoice(
       const capture: ActiveCandidateAudioCapture = {
         recorder,
         chunks: [],
+        hadSpeech: false,
         startMs: sinceOrigin(startedAt),
         providerSessionId,
         sessionId,
@@ -955,7 +1022,8 @@ export function useSpeakingRealtimeVoice(
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) capture.chunks.push(event.data);
       };
-      recorder.start();
+      // A timeslice keeps what was recorded so far in memory as it goes, so a tab that is suspended mid-clip loses seconds, not the clip.
+      recorder.start(CLIP_TIMESLICE_MS);
       activeCandidateAudioRef.current = capture;
     } catch {
       candidateAudioUnavailableRef.current = true;
@@ -972,6 +1040,11 @@ export function useSpeakingRealtimeVoice(
     const recordings = candidateAudioRecordingsRef.current;
     const task = new Promise<boolean>((resolve) => {
       const finish = (audio: Blob) => {
+        // A click or a cough (no burst of real speech ran during it): not a clip worth storing, and not an error.
+        if (!capture.hadSpeech) {
+          resolve(true);
+          return;
+        }
         if (audio.size === 0) {
           if (activeSessionIdRef.current === capture.sessionId) {
             candidateAudioUnavailableRef.current = true;
@@ -1019,7 +1092,21 @@ export function useSpeakingRealtimeVoice(
     patientAudioPlaybackRef.current = true;
     candidateAudioSuppressedRef.current = true;
     void stopCandidateAudioCapture();
-  }, [stopCandidateAudioCapture]);
+    // Failsafe: every patient output renews it, so a provider that never says "audio done" cannot keep capture off for good.
+    window.clearTimeout(patientOutputIdleTimerRef.current);
+    const expire = () => {
+      patientOutputIdleTimerRef.current = playbackSourcesRef.current.size > 0
+        ? window.setTimeout(expire, PATIENT_OUTPUT_IDLE_MS)
+        : undefined;
+      if (patientOutputIdleTimerRef.current !== undefined) return;
+      // The patient has been silent for the whole idle time, which is longer than the tail the real finish events wait for.
+      finishPatientAudioPlayback();
+      window.clearTimeout(patientAudioTailTimerRef.current);
+      patientAudioTailTimerRef.current = undefined;
+      candidateAudioSuppressedRef.current = false;
+    };
+    patientOutputIdleTimerRef.current = window.setTimeout(expire, PATIENT_OUTPUT_IDLE_MS);
+  }, [finishPatientAudioPlayback, stopCandidateAudioCapture]);
 
   const flushCandidateAudio = useCallback(async (): Promise<boolean> => {
     const stopped = stopCandidateAudioCapture();
@@ -1038,11 +1125,13 @@ export function useSpeakingRealtimeVoice(
     }
 
     if (failedUploads.length > 0) {
+      // Every parked clip gets its retry: one that fails again goes back into the list, the others are not abandoned with it.
       const failed = failedUploads.splice(0);
+      let retried = true;
       for (const capture of failed) {
-        if (!(await saveCandidateAudio(capture, recordings))) return false;
+        if (!(await saveCandidateAudio(capture, recordings))) retried = false;
       }
-      uploadsSucceeded = true;
+      uploadsSucceeded = retried;
     }
 
     return !unavailable && uploadsSucceeded
@@ -1079,7 +1168,9 @@ export function useSpeakingRealtimeVoice(
     // Where a provider that gives no timing (Gemini) put this speaker's words; never triggers the late-fragment rule.
     timing?: { startMs: number; endMs: number },
   ) => {
-    if (speaker === 'patient' && text.trim()) {
+    // Gemini's transcription trails its audio, and its audio parts already mark the patient as speaking (and clear it when the
+    // last one ends): a transcript chunk that lands after that must not start a new playback with no audio behind it.
+    if (speaker === 'patient' && text.trim() && (providerRef.current !== 'gemini' || playbackSourcesRef.current.size > 0)) {
       beginPatientAudioPlayback();
     }
     // GPT-Live sends the space between two words as a delta of its own: it is kept, but only on the end of the same
@@ -1141,7 +1232,7 @@ export function useSpeakingRealtimeVoice(
 
   const flushPendingTurn = useCallback(async () => {
     const turn = takePendingTurn();
-    if (turn) await persistLiveVoiceTurn(sessionId, turn);
+    if (turn) await withRateLimitRetry(() => persistLiveVoiceTurn(sessionId, turn));
   }, [sessionId, takePendingTurn]);
 
   // The per-turn rows are advisory (stop() saves the whole transcript), so a row that will not save is logged, never
@@ -1151,7 +1242,8 @@ export function useSpeakingRealtimeVoice(
     flushPromiseRef.current = flushPromiseRef.current.then(async () => {
       if (!turn) return;
       try {
-        await persistLiveVoiceTurn(sessionId, turn);
+        // A clip upload may hold the per-user live-voice permit at this moment; the row waits for it instead of being lost.
+        await withRateLimitRetry(() => persistLiveVoiceTurn(sessionId, turn));
       } catch (caught) {
         console.warn('Live voice turn row not saved.', failureCode(caught));
       }
@@ -1204,6 +1296,7 @@ export function useSpeakingRealtimeVoice(
 
   const handleOpenAiEvent = useCallback((value: Record<string, unknown>) => {
     const type = providerEventType(value).toLowerCase();
+    if (type && openAiEventTypesRef.current.size < 50) openAiEventTypesRef.current.add(type);
     if (
       (type.includes('output_audio') || type.includes('response.audio'))
       && !type.endsWith('.done')
@@ -1395,8 +1488,25 @@ export function useSpeakingRealtimeVoice(
       ) {
         candidateAudioSuppressedRef.current = false;
       }
+      // One clip per stretch of speech: it closes CLIP_HANGOVER_MS after the burst ended, unless a new burst starts first.
+      if (activeNow) {
+        window.clearTimeout(clipHangoverTimerRef.current);
+        clipHangoverTimerRef.current = undefined;
+      } else if (activeBefore) {
+        window.clearTimeout(clipHangoverTimerRef.current);
+        clipHangoverTimerRef.current = window.setTimeout(() => {
+          clipHangoverTimerRef.current = undefined;
+          void stopCandidateAudioRef.current?.();
+        }, CLIP_HANGOVER_MS);
+      }
+      const running = activeCandidateAudioRef.current;
+      if (running && activeNow && performance.now() - activeNow.startMs >= MIN_SPEECH_BURST_MS) running.hadSpeech = true;
+      if (running && sinceOrigin(performance.now()) - running.startMs >= MAX_CLIP_MS) {
+        void stopCandidateAudioRef.current?.(); // a long monologue is stored in parts; the capture below starts the next part at once
+      }
       if (activeNow && !candidateAudioSuppressedRef.current && !patientAudioPlaybackRef.current) {
-        startCandidateAudioCapture(stream, activeNow.startMs);
+        // The clip starts now, which is the burst start unless suppression only just lifted in the middle of the burst.
+        startCandidateAudioCapture(stream, performance.now());
       }
       if (span) {
         candidateSpansRef.current.push(span);
@@ -1411,7 +1521,7 @@ export function useSpeakingRealtimeVoice(
       meterFrameRef.current = window.requestAnimationFrame(tick);
     };
     meterFrameRef.current = window.requestAnimationFrame(tick);
-  }, [startCandidateAudioCapture]);
+  }, [sinceOrigin, startCandidateAudioCapture]);
 
   const waitForIce = useCallback(async (peer: RTCPeerConnection) => {
     if (peer.iceGatheringState === 'complete') return;
@@ -1861,6 +1971,7 @@ export function useSpeakingRealtimeVoice(
     const departingSegments = segmentsRef.current.map((segment) => ({ ...segment }));
     const departingRecordings = candidateAudioRecordingsRef.current;
     const departingTurns = flushPromiseRef.current;
+    const departingEventTypes = [...openAiEventTypesRef.current];
     const departingSocket = socketRef.current;
     if (!provider || !providerSessionId) {
       // Nothing ever went live, so there is nothing to save: leaving must never wait on a failed or cancelled start.
@@ -1910,19 +2021,27 @@ export function useSpeakingRealtimeVoice(
       if (current()) await flushPendingTurn().catch(() => undefined);
       const audioSaved = current()
         ? await flushCandidateAudio()
-        : !departingAudioUnavailable && departingFailedUploads.length === 0
-          && (await Promise.all([departingCapture, ...departingUploads])).every(Boolean);
-      if (!audioSaved) {
-        throw new Error('Your voice recording could not be saved. Please try again before leaving this role-play.');
-      }
+        : (await Promise.all([departingCapture, ...departingUploads])).every(Boolean)
+          && !departingAudioUnavailable && departingFailedUploads.length === 0;
+      // A clip that still cannot be stored (after the queue's retries and one more at the end) must not cost the learner the
+      // whole transcript: it is saved with the clips that were stored, and the audio stage reports what it could hear.
+      if (!audioSaved) console.warn('Live voice candidate audio is incomplete; saving the transcript with the clips that were stored.');
       // The conversation is over: release the microphone and provider before the (retryable) save.
       if (current()) closeTransport();
       // The server rejects an empty transcript, and there is nothing to grade in one.
       const finalSegments = linkCandidateAudioToTranscript(
         current() ? segmentsRef.current : departingSegments,
         current() ? candidateAudioRecordingsRef.current : departingRecordings,
+        CLIP_LINK_TOLERANCE_MS,
       );
       if (current()) segmentsRef.current = finalSegments;
+      console.info('Live voice candidate audio summary.', {
+        clips: (current() ? candidateAudioRecordingsRef.current : departingRecordings).length,
+        candidateSegments: finalSegments.filter((segment) => segment.speaker === 'candidate').length,
+        linkedCandidateSegments: finalSegments.filter((segment) => segment.speaker === 'candidate' && segment.sourceRecordingId).length,
+        audioSaved,
+        openAiEventTypes: departingEventTypes,
+      });
       if (finalSegments.length > 0) {
         await persistLiveVoiceTranscript(sessionId, {
           provider,
@@ -1935,6 +2054,8 @@ export function useSpeakingRealtimeVoice(
       releaseSession();
       if (current()) {
         if (finalSegments.length > 0) setEnded(true);
+        // A "try again before leaving" banner left by a clip that failed mid-role-play is stale now: the transcript is saved.
+        setError(null);
         setConnection('ended');
       }
       return true;
@@ -1996,6 +2117,13 @@ export function useSpeakingRealtimeVoice(
     failedCandidateAudioRef.current = [];
     window.clearTimeout(patientAudioTailTimerRef.current);
     patientAudioTailTimerRef.current = undefined;
+    window.clearTimeout(patientOutputIdleTimerRef.current);
+    patientOutputIdleTimerRef.current = undefined;
+    window.clearTimeout(clipHangoverTimerRef.current);
+    clipHangoverTimerRef.current = undefined;
+    openAiEventTypesRef.current = new Set();
+    // A departing card's uploads keep running on their own; the next card's must not queue behind them.
+    clipUploadChainRef.current = Promise.resolve();
     patientAudioPlaybackRef.current = false;
     candidateAudioUnavailableRef.current = false;
     candidateAudioSuppressedRef.current = false;

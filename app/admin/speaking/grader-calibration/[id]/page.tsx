@@ -27,6 +27,7 @@ import {
   adminGetGraderCalibration,
   adminGetGraderCalibrationSample,
   adminLabelGraderCalibrationSample,
+  describeAudioCoverage,
   graderCalibrationAudioPath,
   type GraderCalibrationAudioClip,
   type GraderCalibrationSampleDetail,
@@ -69,6 +70,7 @@ function ClipPlayer({ sampleId, clip, index }: { sampleId: string; clip: GraderC
     <div className="space-y-1">
       <p className="text-xs text-admin-fg-muted">
         Clip {index + 1} · {formatClock(clip.durationSeconds * 1000)}
+        {clip.linked === false ? ' · not linked to a transcript turn' : ''}
       </p>
       {failed ? (
         <p className="text-xs text-admin-danger" role="alert">This clip could not be loaded.</p>
@@ -181,6 +183,8 @@ export default function SpeakingGraderCalibrationSamplePage() {
     );
   }
 
+  const coverage = describeAudioCoverage(detail.audioCoverage);
+
   return (
     <AdminSettingsLayout
       title={detail.card.title || 'Mark a performance'}
@@ -220,6 +224,11 @@ export default function SpeakingGraderCalibrationSamplePage() {
         title="Audio"
         description={detail.hasAudio ? 'Listen first: intelligibility and fluency are judged from the audio.' : 'No audio was kept for this performance, so Intelligibility is judged from the transcript only.'}
       >
+        {coverage ? (
+          <p className="mb-3 text-sm text-admin-fg-muted" data-testid="calibration-audio-coverage">
+            {coverage}
+          </p>
+        ) : null}
         {detail.clips.length > 0 ? (
           <div className="space-y-3">
             {detail.clips.map((clip, index) => (

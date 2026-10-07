@@ -35,9 +35,10 @@ internal sealed record SpeakingClipRow(
 internal static class SpeakingAudioClips
 {
     /// <summary>
-    /// The candidate's clips for a session. Live voice: one short clip per candidate turn, in the order the candidate spoke (archived and
-    /// warm-up clips never count, nor do clips of another session). Recorder sessions: the session recording or, failing that, whatever
-    /// audio was stored for the session, oldest first.
+    /// The candidate's clips for a session. Live voice: the short clips of the candidate's speech, in the order the candidate spoke (the
+    /// clips the transcript links, in transcript order, then any clip recorded after the first of them that no segment links, oldest
+    /// first). Archived and warm-up clips never count, nor do clips of another session. Recorder sessions: the session recording or,
+    /// failing that, whatever audio was stored for the session, oldest first.
     /// </summary>
     public static async Task<IReadOnlyList<SpeakingClipRow>> LoadAsync(
         LearnerDbContext db,
@@ -51,23 +52,30 @@ internal static class SpeakingAudioClips
             .Distinct(StringComparer.Ordinal)
             .ToList();
 
-        if (orderedIds.Count > 0)
-        {
-            var rows = await Project(
-                    db,
-                    db.SpeakingRecordings.AsNoTracking()
-                        .Where(r => orderedIds.Contains(r.Id) && r.SpeakingSessionId == sessionId && !r.IsArchived && !r.IsWarmup))
-                .ToListAsync(ct);
-            var byId = rows.ToDictionary(r => r.Id, StringComparer.Ordinal);
-            return orderedIds.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
-        }
-
         var recorderId = SpeakingSessionRecordingService.RecordingIdFor(sessionId);
         var all = await Project(
                 db,
                 db.SpeakingRecordings.AsNoTracking()
                     .Where(r => r.SpeakingSessionId == sessionId && !r.IsArchived && !r.IsWarmup))
             .ToListAsync(ct);
+
+        if (orderedIds.Count > 0)
+        {
+            var byId = all.ToDictionary(r => r.Id, StringComparer.Ordinal);
+            var linked = orderedIds.Where(byId.ContainsKey).Select(id => byId[id]).ToList();
+            // A clip no transcript segment points to (a short turn whose time slot missed its clip, a Gemini segment with no
+            // timing) is still the candidate's speech from this role-play, so it joins the linked clips (which keep transcript
+            // order) instead of being lost. Clips recorded BEFORE the first linked one are left out: that is where the
+            // connection check ("Hi, can you hear me?"), whose segment the grader's transcript no longer has, was captured.
+            if (linked.Count == 0) return linked;
+            var firstLinkedAt = linked.Min(r => r.CreatedAt);
+            var unlinked = all
+                .Where(r => !orderedIds.Contains(r.Id) && !string.Equals(r.Id, recorderId, StringComparison.Ordinal) && r.CreatedAt >= firstLinkedAt)
+                .OrderBy(r => r.CreatedAt)
+                .ThenBy(r => r.Id, StringComparer.Ordinal);
+            return linked.Concat(unlinked).ToList();
+        }
+
         var recorder = all.Where(r => string.Equals(r.Id, recorderId, StringComparison.Ordinal)).ToList();
         return recorder.Count > 0 ? recorder : all.OrderBy(r => r.CreatedAt).ToList();
     }

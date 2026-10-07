@@ -19,6 +19,7 @@ vi.mock('@/lib/api/speaking-grader-calibration', () => ({
   adminExcludeGraderCalibrationMockSample: mockExclude,
   adminGetGraderCalibrationMocks: mockOverview,
   graderCalibrationMockAudioPath: (sampleId: string, recordingId: string) => `/audio/${sampleId}/${recordingId}`,
+  describeAudioCoverage: () => null,
 }));
 
 vi.mock('@/lib/api', async (importOriginal) => {

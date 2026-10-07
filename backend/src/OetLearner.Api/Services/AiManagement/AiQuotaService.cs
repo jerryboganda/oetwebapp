@@ -283,7 +283,10 @@ public sealed class AiQuotaService(
             && (string.Equals(featureCode, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(featureCode, AiFeatureCodes.WritingGradeReview, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(featureCode, AiFeatureCodes.SpeakingGradeReview, StringComparison.OrdinalIgnoreCase)))
+                || string.Equals(featureCode, AiFeatureCodes.SpeakingGradeReview, StringComparison.OrdinalIgnoreCase)
+                // The acoustic half of the same grade: the audio stage carries the grade's grant, so a funded session must not be
+                // refused here and silently fall back to a transcript-only Intelligibility (feature_not_in_plan on a free plan).
+                || string.Equals(featureCode, AiFeatureCodes.SpeakingAudioAssess, StringComparison.OrdinalIgnoreCase)))
         {
             return new AiQuotaDecision(
                 Allowed: true,

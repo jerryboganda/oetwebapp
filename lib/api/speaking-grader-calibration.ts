@@ -93,6 +93,26 @@ export interface GraderCalibrationAudioClip {
   recordingId: string;
   durationSeconds: number;
   mimeType: string;
+  /** True when a transcript turn points at this clip (the audio judge can attribute it to the candidate's speech). */
+  linked?: boolean;
+}
+
+/** What the stored clips cover of the candidate's speech. Capture facts only; never an AI value. */
+export interface GraderCalibrationAudioCoverage {
+  clips: number;
+  linkedClips: number;
+  audioSeconds: number;
+  candidateSpeechSeconds: number;
+  candidateTurns: number;
+  turnsWithClip: number;
+}
+
+/** One plain line for the Audio section: how much of the candidate's speech the stored clips can cover. */
+export function describeAudioCoverage(coverage: GraderCalibrationAudioCoverage | null | undefined): string | null {
+  if (!coverage || (coverage.clips === 0 && coverage.candidateTurns === 0)) return null;
+  const { clips, linkedClips, audioSeconds, candidateSpeechSeconds, candidateTurns, turnsWithClip } = coverage;
+  const share = candidateSpeechSeconds > 0 ? ` (${Math.round((audioSeconds / candidateSpeechSeconds) * 100)}%)` : '';
+  return `${clips} clip${clips === 1 ? '' : 's'} (${linkedClips} linked to the transcript), ${audioSeconds} s of audio for about ${candidateSpeechSeconds} s of candidate speech${share}. Candidate turns with a clip: ${turnsWithClip} of ${candidateTurns}.`;
 }
 
 export interface GraderCalibrationLabel {
@@ -108,6 +128,7 @@ export interface GraderCalibrationSampleDetail {
   card: GraderCalibrationCard;
   transcript: GraderCalibrationTranscriptLine[];
   clips: GraderCalibrationAudioClip[];
+  audioCoverage?: GraderCalibrationAudioCoverage | null;
   criteria: GraderCalibrationCriterion[];
   label: GraderCalibrationLabel | null;
   excludedReason: string;
@@ -193,6 +214,8 @@ export interface GraderCalibrationMockSampleDetail {
   transcriptB: GraderCalibrationTranscriptLine[];
   clipsA: GraderCalibrationAudioClip[];
   clipsB: GraderCalibrationAudioClip[];
+  audioCoverageA?: GraderCalibrationAudioCoverage | null;
+  audioCoverageB?: GraderCalibrationAudioCoverage | null;
   criteria: GraderCalibrationCriterion[];
   label: GraderCalibrationLabel | null;
   excludedReason: string;

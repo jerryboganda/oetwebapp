@@ -26,6 +26,7 @@ import {
   GEMINI_NUDGE_MS,
   GEMINI_STOP_DRAIN_MS,
   MAX_RECOVERIES,
+  PATIENT_OUTPUT_IDLE_MS,
   STALL_MS,
   useSpeakingRealtimeVoice,
   type UseSpeakingRealtimeVoiceResult,
@@ -168,7 +169,7 @@ async function openAiSays(index: number, speaker: 'candidate' | 'patient', delta
   });
 }
 
-type SavedSegment = { speaker: string; startMs: number; endMs: number; text: string };
+type SavedSegment = { speaker: string; startMs: number; endMs: number; text: string; sourceRecordingId?: string };
 const savedSegments = (call = 0) => mockTranscript.mock.calls[call][1].segments as SavedSegment[];
 
 describe('useSpeakingRealtimeVoice mid-session recovery', () => {
@@ -361,6 +362,33 @@ describe('useSpeakingRealtimeVoice mid-session recovery', () => {
     expect(FakeMediaRecorder.instances).toHaveLength(2);
 
     expect(await stopVoice(result)).toBe(true);
+  });
+
+  // Production 7 Oct 2026: GPT-Live reports the patient only as session.output_transcript.delta (no audio-done, no
+  // turn-complete), which used to keep capture suppressed after the first reply: one ~10 s clip for a 3.5 minute role-play.
+  it('stores one clip per candidate turn on GPT-Live, which never says the patient finished', async () => {
+    mockPreflight.mockResolvedValue(preflight({ provider: 'openai', candidates: ['openai', 'gemini'] }));
+    let stored = 0;
+    mockAudioCapture.mockImplementation(async () => ({ recordingId: `clip-${++stored}`, mimeType: 'audio/webm', durationSeconds: 2 }));
+    const { result } = await mount();
+    expect(await startVoice(result)).toBe(true);
+
+    const turns = 6;
+    for (let turn = 0; turn < turns; turn += 1) {
+      const at = turn * 6_000;
+      await mic('speech', 1_500);
+      await mic('quiet', 1_500); // the burst ended: its clip closes and uploads
+      await openAiSays(0, 'candidate', `Candidate question ${turn}. `, at + 200, at + 1_400);
+      await openAiSays(0, 'patient', `Patient answer ${turn}. `, at + 3_000, at + 4_000);
+      await advance(PATIENT_OUTPUT_IDLE_MS + 1_000); // no event ends the patient's turn: the idle failsafe does
+    }
+
+    expect(FakeMediaRecorder.instances).toHaveLength(turns);
+    expect(mockAudioCapture).toHaveBeenCalledTimes(turns);
+    expect(await stopVoice(result)).toBe(true);
+    const candidateSegments = savedSegments().filter((segment) => segment.speaker === 'candidate');
+    expect(candidateSegments).toHaveLength(turns);
+    expect(candidateSegments.every((segment) => 'sourceRecordingId' in segment && segment.sourceRecordingId)).toBe(true);
   });
 
   it('gives a dropped peer connection 5 s to heal before restoring it, and restores a failed one at once', async () => {

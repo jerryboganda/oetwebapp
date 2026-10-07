@@ -29,6 +29,7 @@ import {
   adminGetGraderCalibrationMocks,
   adminGetGraderCalibrationMockSample,
   adminLabelGraderCalibrationMockSample,
+  describeAudioCoverage,
   graderCalibrationMockAudioPath,
   type GraderCalibrationAudioClip,
   type GraderCalibrationMockSampleDetail,
@@ -81,6 +82,7 @@ function ClipPlayer({
     <div className="space-y-1">
       <p className="text-xs text-admin-fg-muted">
         Card {slot} · clip {index + 1} · {formatClock(clip.durationSeconds * 1000)}
+        {clip.linked === false ? ' · not linked to a transcript turn' : ''}
       </p>
       {failed ? (
         <p className="text-xs text-admin-danger" role="alert">This clip could not be loaded.</p>
@@ -190,6 +192,7 @@ export default function SpeakingGraderCalibrationMockSamplePage() {
     const card = slot === 'A' ? detail.cardA : detail.cardB;
     const transcript = slot === 'A' ? detail.transcriptA : detail.transcriptB;
     const clips = slot === 'A' ? detail.clipsA : detail.clipsB;
+    const coverage = describeAudioCoverage(slot === 'A' ? detail.audioCoverageA : detail.audioCoverageB);
     return (
       <>
         <SettingsSection
@@ -212,6 +215,11 @@ export default function SpeakingGraderCalibrationMockSamplePage() {
           title={`Card ${slot} audio`}
           description={clips.length > 0 ? 'Listen first: intelligibility and fluency are judged from the audio.' : 'No audio clips for this card.'}
         >
+          {coverage ? (
+            <p className="mb-3 text-sm text-admin-fg-muted" data-testid={`calibration-mock-audio-coverage-${slot.toLowerCase()}`}>
+              {coverage}
+            </p>
+          ) : null}
           {clips.length > 0 ? (
             <div className="space-y-3">
               {clips.map((clip, index) => (

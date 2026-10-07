@@ -996,6 +996,11 @@ Scoring rules:
                 patientVoiceBleed = audio.PatientVoiceBleed,
                 clips = audio.ClipCount,
                 durationMs = audio.DurationMs,
+                audioMs = audio.AudioMs,
+                speechMs = audio.SpeechMs,
+                turns = audio.Turns,
+                turnsWithClip = audio.TurnsWithClip,
+                coverage = audio.Coverage,
                 observations = audio.Observations,
                 fluency = audio.Fluency,
             }
@@ -1007,8 +1012,14 @@ Scoring rules:
                 confidence = audio.Confidence,
                 audioQuality = audio.AudioQuality,
                 patientVoiceBleed = false,
-                clips = 0,
-                durationMs = 0,
+                // What was stored and what was judged against it, so a thin or missing recording is visible in the grade itself.
+                clips = audio.ClipCount,
+                durationMs = audio.DurationMs,
+                audioMs = audio.AudioMs,
+                speechMs = audio.SpeechMs,
+                turns = audio.Turns,
+                turnsWithClip = audio.TurnsWithClip,
+                coverage = audio.Coverage,
                 observations = Array.Empty<SpeakingAudioObservation>(),
                 fluency = (SpeakingFluencyEvidence?)null,
             };

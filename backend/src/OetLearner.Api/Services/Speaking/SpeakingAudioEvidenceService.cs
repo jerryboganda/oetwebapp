@@ -44,6 +44,21 @@ public sealed record SpeakingAudioEvidence
     public int ClipCount { get; init; }
     public int DurationMs { get; init; }
 
+    /// <summary>How much of the candidate's speech the clips could cover: the transcript's total candidate speech time, its candidate
+    /// turns and how many of them carry a clip. Stored with the grade (also when the audio was unavailable) so a thin or missing
+    /// recording can be told apart from a stage that never ran.</summary>
+    public int SpeechMs { get; init; }
+    public int Turns { get; init; }
+    public int TurnsWithClip { get; init; }
+
+    /// <summary>The joined audio without the silence inserted between clips (<see cref="DurationMs"/> includes it).</summary>
+    public int AudioMs { get; init; }
+
+    /// <summary>Clip audio over candidate speech time, or null when the transcript has no usable speech timing.</summary>
+    public double? Coverage => SpeechMs >= SpeakingAudioEvidenceService.MinimumSpeechMsForCoverage
+        ? Math.Round(AudioMs / (double)SpeechMs, 2)
+        : null;
+
     public bool IsAudio => Status == StatusAudio;
 
     public static SpeakingAudioEvidence Unavailable(string reason) => new() { Status = StatusUnavailable, Reason = reason };
@@ -169,9 +184,37 @@ public sealed class SpeakingAudioEvidenceService(
     {
         var turns = ReadCandidateTurns(request.SegmentsJson);
         var recordings = await SpeakingAudioClips.LoadAsync(db, request.SessionId, turns, ct);
+        var speechMs = turns.Sum(t => Math.Max(0, t.EndMs - t.StartMs));
+
+        // Every outcome, usable or not, records how much audio there was against how much speech: "the recording was thin" and
+        // "the stage never ran" must be told apart from the stored grade alone.
+        // The silence the join inserts between clips is not speech: coverage counts the clips' own audio.
+        int AudioMsOf(int clips, int durationMs) => Math.Max(0, durationMs - Math.Max(0, clips - 1) * _options.GapMilliseconds);
+
+        SpeakingAudioEvidence Described(SpeakingAudioEvidence evidence, int clips, int durationMs)
+        {
+            var described = evidence with
+            {
+                ClipCount = clips,
+                DurationMs = durationMs,
+                AudioMs = AudioMsOf(clips, durationMs),
+                SpeechMs = speechMs,
+                Turns = turns.Count,
+                TurnsWithClip = turns.Count(t => t.RecordingId is not null),
+            };
+            if (!described.IsAudio)
+            {
+                logger?.LogInformation(
+                    "Speaking audio stage unavailable for session {SessionId}: {Reason} ({Clips} clip(s), {AudioMs} ms of audio, {SpeechMs} ms of candidate speech, {WithClip}/{Turns} turns with a clip).",
+                    request.SessionId, described.Reason, clips, durationMs, speechMs, described.TurnsWithClip, described.Turns);
+            }
+
+            return described;
+        }
+
         if (recordings.Count == 0)
         {
-            return SpeakingAudioEvidence.Unavailable("no_audio");
+            return Described(SpeakingAudioEvidence.Unavailable("no_audio"), 0, 0);
         }
 
         // A join a helper already prepared for exactly these clips (flag-gated, fail-soft, null when there is none) skips the local
@@ -189,7 +232,7 @@ public sealed class SpeakingAudioEvidenceService(
                     var path = recording.StoragePath;
                     if (string.IsNullOrWhiteSpace(path) || !await storage.ExistsAsync(path, ct))
                     {
-                        return SpeakingAudioEvidence.Unavailable("audio_missing_blob");
+                        return Described(SpeakingAudioEvidence.Unavailable("audio_missing_blob"), recordings.Count, 0);
                     }
 
                     var stream = await storage.OpenReadAsync(path, ct);
@@ -207,18 +250,44 @@ public sealed class SpeakingAudioEvidenceService(
 
         if (join.DurationMs < MinimumDurationMs)
         {
-            return SpeakingAudioEvidence.Unavailable("audio_too_short");
+            return Described(SpeakingAudioEvidence.Unavailable("audio_too_short"), join.ClipCount, join.DurationMs);
+        }
+
+        // A few seconds of a long performance is not a judgement of that performance: stay transcript-limited, and spare the call.
+        // Only when the transcript carries speech timing to measure against (a transcript with none cannot show a shortfall).
+        var audioMs = AudioMsOf(join.ClipCount, join.DurationMs);
+        if (speechMs >= MinimumSpeechMsForCoverage && audioMs < speechMs * Math.Clamp(_options.MinimumCoverage, 0, 1))
+        {
+            return Described(SpeakingAudioEvidence.Unavailable("audio_insufficient_coverage"), join.ClipCount, join.DurationMs);
         }
 
         var result = await JudgeAsync(
             join, request.ProfessionId, request.CardToken, turns.Count, SpeechSeconds(turns),
             request.UserId, request.FreeSampleGrant, request.Context, ct);
 
-        var firstCandidateText = turns.FirstOrDefault(t => !string.IsNullOrWhiteSpace(t.Text))?.Text;
-        // Some turns have a clip and some do not: the judgement covers only part of the candidate's speech.
-        var partialCoverage = turns.Any(t => t.RecordingId is null) && turns.Any(t => t.RecordingId is not null);
-        return ParseResponse(result.Completion, firstCandidateText, result.ResolvedModel, join.ClipCount, join.DurationMs, partialCoverage);
+        // The audio opens with whichever clip came first, which need not belong to the transcript's first turn (that turn may have
+        // no clip, or its clip may also hold the connection check): the opening is checked against the first few turns.
+        var openings = turns
+            .Where(t => !string.IsNullOrWhiteSpace(t.Text))
+            .Take(3)
+            .Concat(turns.Where(t => t.RecordingId is not null && !string.IsNullOrWhiteSpace(t.Text)).Take(1))
+            .Select(t => t.Text)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        // The clips cover well under the speech (measured, not inferred from which turns link: unlinked clips are joined too):
+        // the judgement is kept and said to be limited.
+        var partialCoverage = speechMs >= MinimumSpeechMsForCoverage && audioMs < speechMs * PartialCoverageBelow;
+        var evidence = ParseResponse(
+            result.Completion, openings.FirstOrDefault(), result.ResolvedModel, join.ClipCount, join.DurationMs, partialCoverage,
+            openings.Skip(1).ToList());
+        return Described(evidence, join.ClipCount, join.DurationMs);
     }
+
+    /// <summary>Below this much candidate speech time (ms) the transcript's timing is not trusted to measure audio coverage against.</summary>
+    internal const int MinimumSpeechMsForCoverage = 5_000;
+
+    /// <summary>A judgement from audio covering less than this share of the speech is kept but marked low confidence.</summary>
+    private const double PartialCoverageBelow = 0.8;
 
     public async Task<SpeakingAudioProbeResult> ProbeAsync(Stream audio, string mimeType, string spokenPhrase, CancellationToken ct)
     {
@@ -415,7 +484,8 @@ public sealed class SpeakingAudioEvidenceService(
 
     /// <summary>Parses and verifies the model's reply. Pure: unit-tested directly.</summary>
     internal static SpeakingAudioEvidence ParseResponse(
-        string? completion, string? firstCandidateText, string? model, int clipCount, int durationMs, bool partialCoverage)
+        string? completion, string? firstCandidateText, string? model, int clipCount, int durationMs, bool partialCoverage,
+        IReadOnlyList<string>? otherOpenings = null)
     {
         var json = AiProviderPayloadBuilder.ExtractFirstJsonValue(completion);
         if (json is null) return SpeakingAudioEvidence.Unavailable("parse_error");
@@ -435,7 +505,7 @@ public sealed class SpeakingAudioEvidenceService(
             // opening. If it does not, it did not listen to this audio and nothing it judged can be trusted.
             var heard = ReadString(root, "heardOpening");
             if (!string.IsNullOrWhiteSpace(firstCandidateText)
-                && (string.IsNullOrWhiteSpace(heard) || !OpeningMatches(heard, firstCandidateText)))
+                && (string.IsNullOrWhiteSpace(heard) || !HeardMatchesAny(heard, firstCandidateText, otherOpenings)))
             {
                 return SpeakingAudioEvidence.Unavailable("audio_unverified") with { HeardOpening = heard };
             }
@@ -486,6 +556,25 @@ public sealed class SpeakingAudioEvidenceService(
         {
             return SpeakingAudioEvidence.Unavailable("parse_error");
         }
+    }
+
+    /// <summary>True when what the model heard fits the opening of any of the given turns. The audio can still hold the
+    /// connection check ("Hi, can you hear me?") that the transcript no longer has, so the heard words are also tried
+    /// without it.</summary>
+    private static bool HeardMatchesAny(string heard, string firstCandidateText, IReadOnlyList<string>? otherOpenings)
+    {
+        var withoutChatter = SpeakingTranscriptEvidence.StripLeadingChatterText(heard);
+        // A one- or two-word turn ("Yes.") is contained in almost any opening, so it cannot vouch for the audio; only the first turn,
+        // as before, is accepted whatever its length.
+        var openings = new List<string> { firstCandidateText };
+        if (otherOpenings is not null) openings.AddRange(otherOpenings.Where(o => Words(o).Count() >= 3));
+        foreach (var opening in openings)
+        {
+            if (OpeningMatches(heard, opening)) return true;
+            if (!string.IsNullOrWhiteSpace(withoutChatter) && OpeningMatches(withoutChatter, opening)) return true;
+        }
+
+        return false;
     }
 
     /// <summary>True when what the model heard fits the first words of the transcript: enough shared words, or one is
@@ -648,6 +737,7 @@ public sealed class SpeakingAudioEvidenceService(
         "no_audio" => "no audio recording was kept for this attempt",
         "audio_missing_blob" or "audio_too_short" or "audio_unusable" => "the recording could not be used",
         "audio_unverified" => "the audio could not be matched to the transcript",
+        "audio_insufficient_coverage" => "the audio covered only part of the candidate's speech",
         "audio_transcoder_unavailable" => "the audio could not be prepared for analysis",
         "partial_audio" => "audio evidence was available for only one of the two role-plays",
         "timeout" or "provider_error" or "ai_refused" or "parse_error" => "the audio analysis was not available",

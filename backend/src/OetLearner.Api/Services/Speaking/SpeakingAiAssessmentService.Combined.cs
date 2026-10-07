@@ -237,7 +237,15 @@ public sealed partial class SpeakingAiAssessmentService
 
             if (TryReadString(stored, "source") != "audio")
             {
-                return SpeakingAudioEvidence.Unavailable(TryReadString(stored, "reason") ?? "no_audio");
+                return SpeakingAudioEvidence.Unavailable(TryReadString(stored, "reason") ?? "no_audio") with
+                {
+                    ClipCount = TryReadInt(stored, "clips") ?? 0,
+                    DurationMs = TryReadInt(stored, "durationMs") ?? 0,
+                    AudioMs = TryReadInt(stored, "audioMs") ?? 0,
+                    SpeechMs = TryReadInt(stored, "speechMs") ?? 0,
+                    Turns = TryReadInt(stored, "turns") ?? 0,
+                    TurnsWithClip = TryReadInt(stored, "turnsWithClip") ?? 0,
+                };
             }
 
             var observations = new List<SpeakingAudioObservation>();
@@ -268,6 +276,10 @@ public sealed partial class SpeakingAiAssessmentService
                 Model = TryReadString(stored, "model"),
                 ClipCount = TryReadInt(stored, "clips") ?? 0,
                 DurationMs = TryReadInt(stored, "durationMs") ?? 0,
+                AudioMs = TryReadInt(stored, "audioMs") ?? 0,
+                SpeechMs = TryReadInt(stored, "speechMs") ?? 0,
+                Turns = TryReadInt(stored, "turns") ?? 0,
+                TurnsWithClip = TryReadInt(stored, "turnsWithClip") ?? 0,
             };
         }
         catch (JsonException)
@@ -286,14 +298,27 @@ public sealed partial class SpeakingAiAssessmentService
     internal static SpeakingAudioEvidence? CombineAudioEvidence(SpeakingAudioEvidence? first, SpeakingAudioEvidence? second)
     {
         if (first is null && second is null) return null;
+
+        // The test's totals travel with the verdict, usable or not: how many clips and how much audio there was for how much
+        // candidate speech is what tells a thin recording from a stage that never ran.
+        SpeakingAudioEvidence WithTotals(SpeakingAudioEvidence evidence) => evidence with
+        {
+            ClipCount = (first?.ClipCount ?? 0) + (second?.ClipCount ?? 0),
+            DurationMs = (first?.DurationMs ?? 0) + (second?.DurationMs ?? 0),
+            AudioMs = (first?.AudioMs ?? 0) + (second?.AudioMs ?? 0),
+            SpeechMs = (first?.SpeechMs ?? 0) + (second?.SpeechMs ?? 0),
+            Turns = (first?.Turns ?? 0) + (second?.Turns ?? 0),
+            TurnsWithClip = (first?.TurnsWithClip ?? 0) + (second?.TurnsWithClip ?? 0),
+        };
+
         if (first is not { IsAudio: true } || second is not { IsAudio: true })
         {
             if (first is not { IsAudio: true } && second is not { IsAudio: true })
             {
-                return SpeakingAudioEvidence.Unavailable(first?.Reason ?? second?.Reason ?? "no_audio");
+                return WithTotals(SpeakingAudioEvidence.Unavailable(first?.Reason ?? second?.Reason ?? "no_audio"));
             }
 
-            return SpeakingAudioEvidence.Unavailable("partial_audio");
+            return WithTotals(SpeakingAudioEvidence.Unavailable("partial_audio"));
         }
 
         static string Join(string? one, string? two)
@@ -322,6 +347,10 @@ public sealed partial class SpeakingAiAssessmentService
             Model = first.Model ?? second.Model,
             ClipCount = first.ClipCount + second.ClipCount,
             DurationMs = first.DurationMs + second.DurationMs,
+            AudioMs = first.AudioMs + second.AudioMs,
+            SpeechMs = first.SpeechMs + second.SpeechMs,
+            Turns = first.Turns + second.Turns,
+            TurnsWithClip = first.TurnsWithClip + second.TurnsWithClip,
         };
     }
 }

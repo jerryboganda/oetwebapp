@@ -133,6 +133,8 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
         await h.AddClipAsync("s1", "rec-warm", [8], "audio/webm", warmup: true);
         await h.AddClipAsync("other-session", "rec-x", [7], "audio/webm");
         h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+        // The five turns span 20 s of speech: the stub join must cover enough of it to count as audio.
+        h.Transcoder.Join = h.Transcoder.Join with { DurationMs = 15_000 };
 
         // Spoken order is 2 then 1; rec-x belongs to another session; rec-old / rec-warm are never used.
         var evidence = await h.Service.AssessAsync(Request(Segments(
@@ -144,6 +146,45 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
 
         Assert.True(evidence.IsAudio);
         Assert.Equal(new[] { new byte[] { 2 }, new byte[] { 1 } }, h.Transcoder.Clips.Select(c => c.Bytes));
+    }
+
+    [Fact]
+    public async Task Assess_UnlinkedClipsAfterTheFirstLinkedOne_AreJoinedAfterTheLinkedClips_ButNotTheConnectionCheckBeforeIt()
+    {
+        await using var h = new Harness(_options);
+        await h.AddClipAsync("s1", "rec-hello", [1], "audio/webm");   // the connection check, recorded first and never linked
+        await h.AddClipAsync("s1", "rec-1", [2], "audio/webm");
+        await h.AddClipAsync("s1", "rec-orphan", [3], "audio/webm");  // a later turn whose time slot missed its clip
+        h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+        h.Transcoder.Join = h.Transcoder.Join with { DurationMs = 15_000 };
+
+        var evidence = await h.Service.AssessAsync(Request(Segments(("candidate", "Hello, I am the doctor.", "rec-1"))), default);
+
+        Assert.True(evidence.IsAudio);
+        Assert.Equal(new[] { new byte[] { 2 }, new byte[] { 3 } }, h.Transcoder.Clips.Select(c => c.Bytes));
+    }
+
+    [Fact]
+    public async Task Assess_ClipsCoveringLittleOfTheSpeech_StayTranscriptLimited_WithoutCallingTheModel()
+    {
+        await using var h = new Harness(_options);
+        await h.AddClipAsync("s1", "rec-1", [1], "audio/webm");
+        h.Gateway.Completion = AudioReply(heard: "Hello I am the doctor");
+        h.Transcoder.Join = h.Transcoder.Join with { DurationMs = 5_000 };
+
+        // Five turns of four seconds each (20 s of speech) against 5 s of audio: a quarter of the performance.
+        var evidence = await h.Service.AssessAsync(Request(Segments(
+            ("candidate", "Hello, I am the doctor.", "rec-1"),
+            ("candidate", "How are you feeling?", null),
+            ("candidate", "Tell me more about the pain.", null),
+            ("candidate", "I would like to examine you.", null),
+            ("candidate", "Let me explain the plan.", null))), default);
+
+        Assert.False(evidence.IsAudio);
+        Assert.Equal("audio_insufficient_coverage", evidence.Reason);
+        Assert.Equal(1, evidence.ClipCount);
+        Assert.Equal(20_000, evidence.SpeechMs);
+        Assert.Empty(h.Gateway.Requests);
     }
 
     [Fact]
@@ -561,7 +602,7 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
     {
         Assert.Contains("no audio recording", SpeakingAudioEvidenceService.ReasonText("no_audio"));
         Assert.Equal("audio evidence was not available", SpeakingAudioEvidenceService.ReasonText(null));
-        foreach (var code in new[] { "no_audio", "audio_missing_blob", "audio_too_short", "audio_unusable", "audio_unverified", "audio_transcoder_unavailable", "timeout", "provider_error", "ai_refused", "parse_error", "something_new" })
+        foreach (var code in new[] { "no_audio", "audio_missing_blob", "audio_too_short", "audio_unusable", "audio_unverified", "audio_insufficient_coverage", "audio_transcoder_unavailable", "timeout", "provider_error", "ai_refused", "parse_error", "something_new" })
         {
             Assert.DoesNotContain("_", SpeakingAudioEvidenceService.ReasonText(code));
         }

@@ -384,6 +384,12 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, ct) =>
     {
+        // A refused request leaves no other trace (the endpoint never ran), so it is logged here: this is how an upload the
+        // per-user live-voice limiter turned away shows up when "attempted" is counted against "stored". The endpoint's name, not the
+        // raw path, which can carry identifiers.
+        context.HttpContext.RequestServices.GetService<ILoggerFactory>()?.CreateLogger("RateLimiter").LogWarning(
+            "Request rejected by a rate limiter: {Method} {Endpoint}.",
+            context.HttpContext.Request.Method, context.HttpContext.GetEndpoint()?.DisplayName ?? "(unknown endpoint)");
         context.HttpContext.Response.ContentType = "application/problem+json";
         await context.HttpContext.Response.WriteAsync(
             JsonSupport.Serialize(new { code = "rate_limited", message = "Too many requests. Please try again later.", retryable = true }),

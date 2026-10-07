@@ -323,8 +323,9 @@ public sealed partial class SpeakingGraderCalibrationService(
         var clips = await db.SpeakingRecordings.AsNoTracking()
             .Where(r => r.SpeakingSessionId == sample.SpeakingSessionId && !r.IsArchived && !r.IsWarmup)
             .OrderBy(r => r.CreatedAt)
-            .Select(r => new SpeakingGraderCalibrationAudioClip(r.Id, r.DurationSeconds, r.MimeType))
+            .Select(r => new SpeakingGraderCalibrationAudioClip(r.Id, r.DurationSeconds, r.MimeType, false))
             .ToListAsync(ct);
+        var audio = SpeakingCalibrationAudioCoverage.Describe(segmentsJson, clips);
 
         return new SpeakingGraderCalibrationSampleDetail(
             sample.Id,
@@ -339,10 +340,11 @@ public sealed partial class SpeakingGraderCalibrationService(
                 card.Background,
                 card.Tasks),
             ReadTranscript(segmentsJson),
-            clips,
+            audio.Clips,
             Criteria,
             ReadLabel(sample),
-            sample.ExcludedReason);
+            sample.ExcludedReason,
+            audio.Coverage);
     }
 
     /// <summary>The storage path and mime type of one of the sample's clips, for the audio stream.</summary>

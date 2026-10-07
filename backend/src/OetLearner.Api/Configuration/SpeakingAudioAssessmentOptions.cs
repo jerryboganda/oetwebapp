@@ -27,6 +27,13 @@ public sealed class SpeakingAudioAssessmentOptions
     /// <summary>Silence inserted between two candidate clips, in milliseconds, so the model hears them as separate turns.</summary>
     public int GapMilliseconds { get; set; } = 600;
 
+    /// <summary>
+    /// Smallest share of the candidate's speech time (0..1) the joined clips must cover for the audio to count as Intelligibility
+    /// evidence. Below it the grade stays transcript-limited (<c>audio_insufficient_coverage</c>): ten seconds of a three-minute
+    /// performance is not a judgement of that performance. Not applied when the transcript has no usable speech timing.
+    /// </summary>
+    public double MinimumCoverage { get; set; } = 0.5;
+
     /// <summary>The ffmpeg executable. The API image installs it on the PATH.</summary>
     public string FfmpegPath { get; set; } = "ffmpeg";
 }

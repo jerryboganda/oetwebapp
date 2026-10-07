@@ -255,23 +255,34 @@ public sealed partial class SpeakingGraderCalibrationService
             .Select(r => new { r.Id, r.SpeakingSessionId, r.DurationSeconds, r.MimeType })
             .ToListAsync(ct);
 
+        var segmentsA = transcriptJsons.FirstOrDefault(t => t.Id == sample.TranscriptAId)?.SegmentsJson;
+        var segmentsB = transcriptJsons.FirstOrDefault(t => t.Id == sample.TranscriptBId)?.SegmentsJson;
+        var audioA = SpeakingCalibrationAudioCoverage.Describe(
+            segmentsA,
+            clips.Where(c => c.SpeakingSessionId == sample.SessionAId)
+                .Select(c => new SpeakingGraderCalibrationAudioClip(c.Id, c.DurationSeconds, c.MimeType, false))
+                .ToList());
+        var audioB = SpeakingCalibrationAudioCoverage.Describe(
+            segmentsB,
+            clips.Where(c => c.SpeakingSessionId == sample.SessionBId)
+                .Select(c => new SpeakingGraderCalibrationAudioClip(c.Id, c.DurationSeconds, c.MimeType, false))
+                .ToList());
+
         return new SpeakingGraderCalibrationMockSampleDetail(
             sample.Id,
             StatusCode(sample.Status),
             sample.HasAudio,
             MockCard(cardA),
             MockCard(cardB),
-            ReadTranscript(transcriptJsons.FirstOrDefault(t => t.Id == sample.TranscriptAId)?.SegmentsJson),
-            ReadTranscript(transcriptJsons.FirstOrDefault(t => t.Id == sample.TranscriptBId)?.SegmentsJson),
-            clips.Where(c => c.SpeakingSessionId == sample.SessionAId)
-                .Select(c => new SpeakingGraderCalibrationAudioClip(c.Id, c.DurationSeconds, c.MimeType))
-                .ToList(),
-            clips.Where(c => c.SpeakingSessionId == sample.SessionBId)
-                .Select(c => new SpeakingGraderCalibrationAudioClip(c.Id, c.DurationSeconds, c.MimeType))
-                .ToList(),
+            ReadTranscript(segmentsA),
+            ReadTranscript(segmentsB),
+            audioA.Clips,
+            audioB.Clips,
             Criteria,
             ReadMockLabel(sample),
-            sample.ExcludedReason);
+            sample.ExcludedReason,
+            audioA.Coverage,
+            audioB.Coverage);
     }
 
     /// <summary>The storage path and mime type of one of the mock's clips, for the audio stream. The clip must
