@@ -2584,7 +2584,7 @@ public sealed class AiProviderRequest
 
     /// <summary>Settable: the OpenCode length-retry ladder raises the budget once
     /// when effort=max reasoning exhausts the floor (see RegistryBackedProvider).</summary>
-    public int? MaxTokens { get; init; set; }
+    public int? MaxTokens { get; set; }
 
     /// <summary>Optional override for the API key. When non-null, providers
     /// use this key instead of their configured/default credential. Supplied
