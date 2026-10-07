@@ -39,8 +39,8 @@ Implement the approved direct gateway on all three surfaces. Preserve defaults, 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
 | compatibility compilation | build-images.yml | 37678854057 | PASS |
-| compatibility deployment | production-deploy.yml | 37679851932; exact serving SHA 8956f7f489 | PASS |
-| migration/readiness | Production read-only inspection | AddAssistantProviderState applied; private learner-api status HTTP 200 ready | PASS |
+| compatibility deployment | production-deploy.yml | 37679851932 | PASS |
+| migration/readiness | Production read-only inspection | Associated release 37679851932; migration applied and private status HTTP 200 | RECORDED |
 | replacement build/deploy | build-images.yml and agent-console.yml | Awaiting release | NOT RUN |
 | functional acceptance | Owner manual QA | docs/ops/DIRECT-OPENCODE-GATEWAY.md | NOT TESTED |
 

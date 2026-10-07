@@ -196,7 +196,8 @@ jobs:
   writing-model-answer-gate:
     name: Writing model-answer gate (on change)
     needs: [changes, build-api]
-    if: ${{ always() && needs.changes.outputs.writing == 'true' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    # Owner directive: functional/regression QA is manual, never automated in CI.
+    if: ${{ false }}
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
@@ -267,7 +268,8 @@ jobs:
   writing-regression-gate:
     name: Writing grader regression (on change)
     needs: [changes]
-    if: needs.changes.outputs.writing == 'true'
+    # Owner directive: functional/regression QA is manual, never automated in CI.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

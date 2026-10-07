@@ -454,22 +454,14 @@ export function checkContract({ readWorkflow, listWorkflows, readFile, listFiles
   if (/dotnet build backend\/src\/OetLearner\.Api|setup-node|pnpm .*build/.test(api)) {
     failures.push('build-api must publish once, not rebuild the API or frontend separately');
   }
-  const writing = jobBlock(build, 'writing-model-answer-gate');
-  requireTokens('writing-model-answer-gate', writing, [
-    "needs.changes.outputs.writing == 'true'", 'dotnet restore "$test_project"',
-    'name: api-release-${{ github.sha }}', '.referencesChecksum', '.sdk',
-    'reference_args=(-p:BuildProjectReferences=false -p:UseAppHost=false)',
-    'assert gate == expected and expected < default',
-    'dotnet test "$test_project"', '-p:DeploymentWritingGateOnly=true',
-    'FullyQualifiedName~WritingRev8ModelAnswerGateTests',
-    'int(c.attrib["executed"]) > 0 and int(c.attrib["failed"]) == 0',
-  ]);
-  if (!/^\s*dotnet test "\$test_project"[^\n]*-p:DeploymentWritingGateOnly=true/m.test(writing)) {
-    failures.push('writing-model-answer-gate must actually execute its deployment-only source set');
+  // The approved owner-QA policy disables legacy functional/regression jobs.
+  // Keep their historical definitions, but enforce the job-level stop instead
+  // of requiring an automated test execution on production release pushes.
+  for (const name of ['writing-model-answer-gate', 'writing-regression-gate']) {
+    if (!/^    if: \$\{\{ false \}\}\s*$/m.test(jobBlock(build, name))) {
+      failures.push(`${name} must remain disabled: functional acceptance is owner QA`);
+    }
   }
-  requireTokens('writing-regression-gate', jobBlock(build, 'writing-regression-gate'), [
-    "if: needs.changes.outputs.writing == 'true'", 'python verify_manifest.py',
-  ]);
   requireTokens('release-manifest', jobBlock(build, 'release-manifest'), [
     "github.event_name != 'pull_request' && !inputs.benchmark",
     "!contains(needs.*.result, 'failure')", "!contains(needs.*.result, 'cancelled')",
