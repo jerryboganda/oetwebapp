@@ -70,7 +70,7 @@ internal static class UbagListener
                     _node = node;
                     _ca = ca;
                     _fingerprint = Convert.ToHexString(
-                        System.Security.Cryptography.SHA256.HashData(node.ExportSubjectPublicKeyInfo()))[..16];
+                        System.Security.Cryptography.SHA256.HashData(node.PublicKey.ExportSubjectPublicKeyInfo()))[..16];
                 }
 
                 return true;
@@ -207,7 +207,7 @@ internal static class UbagListener
     /// <summary>The minimal request surface. Registered only when the trust plane is enabled.</summary>
     public static void MapEndpoints(WebApplication app, TrustOptions options, CertificateHolder holder, ILogger logger)
     {
-        app.Use(async (context, next) =>
+        app.Run(async context =>
         {
             var path = context.Request.Path.Value ?? "/";
             var clientPresented = context.Connection.ClientCertificate is not null;

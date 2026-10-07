@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Fleet.Core.Crypto;
 using Fleet.Manager.Configuration;
 using Fleet.Manager.Infrastructure;
 using Fleet.Manager.Persistence;
@@ -132,21 +133,21 @@ public sealed class UbagTrustService
                 critical: true));
         using var leaf = request.Create(ca.Cert, notBefore, notAfter, RandomNumberGenerator.GetBytes(16));
 
-        var certPem = PemEncoding.Write("CERTIFICATE", leaf.ExportCertificate());
+        var certPem = leaf.ExportCertificatePem();
         var keyPem = PemEncoding.Write("PRIVATE KEY", key.ExportPkcs8PrivateKey());
 
         using (var certSecret = SecretBuffer.FromBytes(Encoding.ASCII.GetBytes(certPem)))
         {
             await _credentials.StoreAsync(
                 hostId, CredentialPurposes.UbagNodeCert, certSecret,
-                VaultCipher.FingerprintHint(leaf.ExportSubjectPublicKeyInfo()), LeafLifetime, cancellationToken);
+                VaultCipher.FingerprintHint(leaf.PublicKey.ExportSubjectPublicKeyInfo()), LeafLifetime, cancellationToken);
         }
 
         using (var keySecret = SecretBuffer.FromBytes(Encoding.ASCII.GetBytes(keyPem)))
         {
             await _credentials.StoreAsync(
                 hostId, CredentialPurposes.UbagNodeKey, keySecret,
-                VaultCipher.FingerprintHint(leaf.ExportSubjectPublicKeyInfo()), LeafLifetime, cancellationToken);
+                VaultCipher.FingerprintHint(leaf.PublicKey.ExportSubjectPublicKeyInfo()), LeafLifetime, cancellationToken);
         }
 
         _logger.LogInformation("Issued UBAG node certificate for {NodeId} (expires {NotAfter:O}).", nodeId, notAfter);
@@ -222,7 +223,7 @@ public sealed class UbagTrustService
     private static UbagNodeIdentity IdentityOf(string hostId, X509Certificate2 cert)
     {
         var nodeId = NodeIdFor(hostId);
-        var pin = Convert.ToHexString(SHA256.HashData(cert.ExportSubjectPublicKeyInfo())).ToLowerInvariant();
+        var pin = Convert.ToHexString(SHA256.HashData(cert.PublicKey.ExportSubjectPublicKeyInfo())).ToLowerInvariant();
         return new UbagNodeIdentity(nodeId, UriSanFor(nodeId), pin, cert.NotAfter);
     }
 }

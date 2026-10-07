@@ -105,3 +105,43 @@ internal static class AgentHost
         });
     }
 }
+
+internal sealed class AgentService : IHostedService
+{
+    private readonly AgentOptions _options;
+    private readonly ILoggerFactory _loggers;
+    private readonly IHostApplicationLifetime _lifetime;
+    private AgentRuntime? _runtime;
+
+    public AgentService(AgentOptions options, ILoggerFactory loggers, IHostApplicationLifetime lifetime)
+    {
+        _options = options;
+        _loggers = loggers;
+        _lifetime = lifetime;
+    }
+
+    /// <summary>Process exit code decided while running (3 after a 409 instance_superseded).</summary>
+    public static volatile int ExitCode;
+
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        var version = AgentIdentity.CurrentVersion();
+        var negotiator = new ProtocolNegotiator();
+        var api = new HttpRemoteWorkerApi(HttpRemoteWorkerApi.CreateHttpClient(_options.ApiBase), _options.NodeToken, version, negotiator);
+        var identity = new AgentIdentity(version, _options.ImageDigest);
+        _runtime = new AgentRuntime(_options, api, negotiator, identity, _loggers, new SystemMonotonicClock(), new ProcHostMetrics(),
+            new ProcessChildRunner(), new SystemProcessRunner());
+        _runtime.ExitRequested += code =>
+        {
+            ExitCode = code;
+            _lifetime.StopApplication();
+        };
+        _runtime.Start();
+        return Task.CompletedTask;
+    }
+
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        if (_runtime is not null) await _runtime.StopAsync(cancellationToken).ConfigureAwait(false);
+    }
+}

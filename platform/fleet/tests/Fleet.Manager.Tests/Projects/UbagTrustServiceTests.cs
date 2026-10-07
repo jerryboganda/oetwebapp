@@ -74,7 +74,7 @@ public sealed class UbagTrustServiceTests : IAsyncLifetime
         Assert.True(chain.Build(cert));
         Assert.Equal(
             SubjectPublicKeyInfoOf(bundle.KeyPem),
-            Convert.ToHexString(cert.ExportSubjectPublicKeyInfo()));
+            Convert.ToHexString(cert.PublicKey.ExportSubjectPublicKeyInfo()));
     }
 
     [Fact]
@@ -102,7 +102,7 @@ public sealed class UbagTrustServiceTests : IAsyncLifetime
         Assert.Equal(bundle.UriSan, identity.UriSan);
         using var cert = X509Certificate2.CreateFromPem(bundle.CertPem);
         Assert.Equal(
-            Convert.ToHexString(SHA256.HashData(cert.ExportSubjectPublicKeyInfo())).ToLowerInvariant(),
+            Convert.ToHexString(SHA256.HashData(cert.PublicKey.ExportSubjectPublicKeyInfo())).ToLowerInvariant(),
             identity.SpkiSha256);
         Assert.Equal(64, identity.SpkiSha256.Length);
         Assert.Equal(identity.SpkiSha256, (await service.GetIdentityAsync(hostId, CancellationToken.None))!.SpkiSha256);
