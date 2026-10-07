@@ -164,6 +164,10 @@ public sealed class AiAssistantOrchestrator(
                 var companion = await BuildCompanionPromptAsync(
                     scope.ServiceProvider, userId, userMessage, systemPrompt, context, turnCts.Token);
                 systemPrompt = companion.Prompt;
+                systemPrompt += "\nYour public name is OET Personal Ai Assistant. Do not disclose internal provider or model identifiers. "
+                    + "Help only with OET preparation, English study and the learner's authorized study material and study plan. "
+                    + "For unrelated requests, briefly redirect to OET study. You have no codebase, filesystem, shell or deployment access; "
+                    + "never offer programming help or claim access to those resources.";
                 citations = companion.Citations;
                 evidence = companion.Evidence;
             }

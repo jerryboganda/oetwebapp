@@ -135,3 +135,5 @@ Older still: `git log -- PROGRESS.md`.
 - `SESSION_STATE.md` and `TASKS.json` are tracked and rewritten per task, so two parallel agent sessions can conflict. Take the newer `Updated:` block wholesale rather than hand-merging; `PROGRESS.md` remains the merge-safe durable ledger.
 - State enforcement is warn-only inside `ship:gate` by design, so a session can still push a stale ledger. `pnpm run ax:verify` is what makes a false evidence claim detectable after the fact.
 - Never stage unrelated untracked paths; `git add` explicit paths only.
+
+- 2026-10-08 learner-personal-assistant: restricted learner discovery/selection/inference to direct DeepSeek v4.1 Flash, removed learner provider selector and branded OET Personal Ai Assistant. Fixed recorder ResourceId overflow confirmed in production logs (SQLSTATE 22001); retained learner-safe tool allowlist and added OET-study scope. Deployment pending; functional QA not tested—owner QA.

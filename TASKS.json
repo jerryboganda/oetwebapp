@@ -305,6 +305,17 @@
       "files": [
         "agent-console/src/engines/opencode.ts"
       ]
+    },
+    {
+      "id": "LPA-01",
+      "title": "Learner-only personal assistant and recorder overflow repair",
+      "status": "in_progress",
+      "owner": "learner-personal-assistant",
+      "blockedBy": [],
+      "verify": "Build images and Deploy production serving evidence; functional QA remains owner",
+      "evidence": [
+        "Production DirectAiCallRecorder logs: SQLSTATE 22001 varchar(64) before provider inference"
+      ]
     }
   ]
 }

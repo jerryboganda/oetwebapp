@@ -93,6 +93,9 @@ public static class AiAssistantEndpoints
             if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
 
             var model = string.IsNullOrWhiteSpace(req?.Model) ? null : req.Model.Trim();
+            if (GetUserRole(ctx.User) == ApplicationUserRoles.Learner && model is not null
+                && model != AssistantModelCatalog.LearnerModel)
+                return new ApiErrorResult(400, "ai_assistant_model_role_not_allowed", "Only the OET Personal Ai Assistant is available to learners.");
             if (model is not null && !AssistantModelCatalog.IsThreadSelectable(model))
                 return new ApiErrorResult(400, "ai_assistant_model_unknown", "Unknown assistant model.");
 
@@ -117,6 +120,19 @@ public static class AiAssistantEndpoints
             HttpContext ctx,
             CancellationToken ct = default) =>
         {
+            if (GetUserRole(ctx.User) == ApplicationUserRoles.Learner)
+            {
+                var learnerModels = (await GetOpenCodeModelsAsync(providerRegistry, ct))
+                    .Where(m => m == AssistantModelCatalog.LearnerModel).ToArray();
+                return Results.Ok(new
+                {
+                    groups = learnerModels.Length == 0 ? Array.Empty<object>() : new object[]
+                    {
+                        new { provider = "personal-assistant", label = AssistantModelCatalog.LearnerAssistantLabel, models = learnerModels }
+                    },
+                    models = learnerModels
+                });
+            }
             var ubagModels = AssistantModelCatalog.UbagModels.ToArray();
             var groups = new List<object>
             {
@@ -795,7 +811,7 @@ public static class AiAssistantEndpoints
     private static async Task<string[]> GetOpenCodeModelsAsync(IAiProviderRegistry providerRegistry, CancellationToken ct)
     {
         var row = await providerRegistry.FindByCodeAsync(OpenCodeProviderDefaults.ProviderCode, ct);
-        if (row is null || row.Dialect != AiProviderDialect.OpenAiCompatible || !OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(row.BaseUrl)
+        if (row is null || !row.IsActive || row.Dialect != AiProviderDialect.OpenAiCompatible || !OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(row.BaseUrl)
             || string.IsNullOrWhiteSpace(await providerRegistry.GetPlatformKeyAsync(row.Code, ct))) return [];
         var allowed = row.AllowedModelsCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return AssistantModelCatalog.OpenCodeModels.Where(m => allowed.Contains(m, StringComparer.Ordinal)).ToArray();

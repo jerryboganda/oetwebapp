@@ -1,56 +1,50 @@
 # SESSION STATE
 
-Session: direct-opencode-gateway
-Goal: Direct OpenCode gateway across admin chat, learner chat and owner console; shared encrypted provider; remove native inference
-Mode: verify
-Updated: 2026-10-07T21:12:40.6962987Z
-Branch: work/direct-opencode-evidence
-HEAD: a80ae47acd59ec980de0afc3234f5a9d91304b12
+Session: learner-personal-assistant
+Goal: Learner-only OET Personal Ai Assistant, DeepSeek v4.1 Flash, repair operation ID overflow
+Mode: execute
+Updated: 2026-10-08
+Branch: main
+HEAD: 56c3322cf
 
 ## Objective
 
-Implement the approved direct gateway on all three surfaces. Preserve defaults, history and guarded console tools; remove native OpenCode inference and console credential input.
+Remove learner Claude/UBAG choices and enforce one direct gateway model on every learner turn, including legacy pins. Repair the production recorder failure before inference.
 
 ## Acceptance criteria
 
-- [x] Backend compatibility and additive encrypted-state migration live before replacement.
-- [x] Application and console replacement releases live with serving-image evidence.
-- [x] Production readiness and absence of native inference paths verified.
-- [ ] Functional acceptance: not tested—owner QA (manual matrix in docs/ops/DIRECT-OPENCODE-GATEWAY.md).
+- [x] Learner catalogue/selection and inference restricted in code; learner UI hides provider/model names.
+- [x] Operation resource IDs fit varchar(64); request hash is SHA-256.
+- [x] Learner-safe tool allowlist retained; study-only prompt applies including fallback prompt.
+- [ ] Image compilation and serving release confirmed.
+- [ ] Functional acceptance: not tested—owner QA.
 
 ## Decisions (do not revisit)
 
-- Shared encrypted provider managed only in /admin/ai-providers; no OpenCode inference CLI, SDK, server or container.
-- Keep current defaults; learner DeepSeek v4.1 Flash/max. No provider fallback or automatic replay of interrupted tools.
-- Existing Guard, approvals, snapshots and UID 10002 tool runner remain authoritative.
-- Image builds compile; no automated QA locally or CI; functional acceptance belongs to owner.
+- Learner model deepseek-v4.1-flash; shared encrypted direct gateway, no fallback. Admin/expert provider choices retained.
+- Display OET Personal Ai Assistant; no learner model selector. Authorized study material only; no codebase, shell or deployment tools.
+- Production logs confirm DirectAiCallRecorder insert failed with SQLSTATE 22001, varchar(64), matching overlong concatenated ResourceId.
 
 ## Touched files
 
 | Path | Change |
 | --- | --- |
-| backend/src/OetLearner.Api | Shared gateway, role selection, encrypted state, session controls |
-| agent-console | Native replacement, guarded tools, retention and packaging |
-| app/admin and components/admin/agent-console | Direct gateway labels and shared settings |
-| docs/ops/DIRECT-OPENCODE-GATEWAY.md | Manual acceptance and rollout record |
+| backend/src/OetLearner.Api/Endpoints/AiAssistantEndpoints.cs | Learner catalogue/selection |
+| backend/src/OetLearner.Api/Services/AiAssistant | Routing, bounded operation identity, study-only prompt |
+| components/domain/ai-assistant/AiAssistantPanel.tsx | Learner branding and selector removal |
 
 ## Verification gates
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| compatibility compilation | build-images.yml | 37678854057 | PASS |
-| compatibility deployment | production-deploy.yml | 37679851932 | PASS |
-| migration/readiness | Production read-only inspection | Associated release 37679851932; migration applied and private status HTTP 200 | RECORDED |
-| application compilation | build-images.yml | 37684748782 | PASS |
-| application deployment | production-deploy.yml | 37685674010 | PASS |
-| console compilation/deployment | agent-console.yml | 37686649325 | PASS |
-| runtime inspection | Production read-only inspection | docs/ops/DIRECT-OPENCODE-GATEWAY.md serving evidence | RECORDED |
-| functional acceptance | Owner manual QA | docs/ops/DIRECT-OPENCODE-GATEWAY.md | NOT TESTED |
+| compilation | build-images.yml | Awaiting release | NOT RUN |
+| deployment | production-deploy.yml | Awaiting release | NOT RUN |
+| functional acceptance | Owner manual QA | Learner answer, model restrictions and study boundaries | NOT TESTED |
 
 ## Blockers
 
-- None for implementation/release. Functional owner QA remains unperformed.
+- None for implementation. Owner functional QA remains pending.
 
 ## Next action
 
-1. Owner performs the manual acceptance matrix. Implementation and deployment are complete; functional acceptance is not tested—owner QA.
+1. Commit scoped changes and run the mandatory ship wrapper; record image builds and serving proof.

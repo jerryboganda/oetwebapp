@@ -7,6 +7,8 @@ import { AiAssistantMessages } from './AiAssistantMessages';
 import { AiAssistantInput } from './AiAssistantInput';
 import { useAiAssistantContext } from '@/contexts/ai-assistant-context';
 import { buildSurfaceContext } from '@/lib/ai-assistant/surface-context';
+import { useAuth } from '@/contexts/auth-context';
+import { getAssistantRole } from '@/lib/ai-assistant/permissions';
 
 export interface AiAssistantPanelProps {
   onClose: () => void;
@@ -25,6 +27,9 @@ export interface AiAssistantPanelProps {
  * See docs/ai-learning-companion/.
  */
 export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
+  const { role } = useAuth();
+  const isLearner = getAssistantRole(role) === 'learner';
+  const assistantLabel = isLearner ? 'OET Personal Ai Assistant' : 'AI Assistant';
   const {
     messages,
     threads,
@@ -98,12 +103,12 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
     <div
       className="fixed bottom-24 right-6 z-50 flex h-[600px] max-h-[calc(100dvh-8rem)] w-[400px] max-w-[calc(100vw-3rem)] flex-col rounded-2xl border border-border bg-surface shadow-xl md:w-[450px]"
       role="dialog"
-      aria-label="AI Assistant"
+      aria-label={assistantLabel}
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold">AI Assistant</h2>
+          <h2 className="text-sm font-semibold">{assistantLabel}</h2>
           <span
             data-testid="connection-state"
             data-state={connectionState}
@@ -244,8 +249,8 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
         </div>
       )}
 
-      {/* Model picker — Claude API and UBAG browser as separate groups. */}
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+      {/* Learners have one server-enforced assistant; provider identifiers stay out of the UI. */}
+      {!isLearner && <div className="flex items-center gap-2 border-b border-border px-4 py-2">
         <label htmlFor="assistant-model" className="shrink-0 text-xs font-medium text-muted">
           Model
         </label>
@@ -281,7 +286,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
                 </option>
               ))}
         </select>
-      </div>
+      </div>}
 
       {/* Error */}
       {error && (

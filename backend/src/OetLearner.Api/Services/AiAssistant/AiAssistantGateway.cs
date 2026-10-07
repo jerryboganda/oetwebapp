@@ -65,8 +65,10 @@ public sealed class AiAssistantGateway(
         // UBAG browser ids (duckai_web, claude_web, …) stay on ubag,
         // OpenCode ids stay on opencode.
         var route = await routeResolver.ResolveAsync(featureCode, ct);
-        var requestedModel = modelOverride ?? route?.Model;
-        var requestedProviderCode = AssistantModelCatalog.ProviderCodeForModel(requestedModel)
+        // Learner policy applies to defaults and historical pins as well as new selections.
+        var isLearner = featureCode == AiFeatureCodes.AiAssistantLearner;
+        var requestedModel = isLearner ? AssistantModelCatalog.LearnerModel : modelOverride ?? route?.Model;
+        var requestedProviderCode = isLearner ? OpenCodeProviderDefaults.ProviderCode : AssistantModelCatalog.ProviderCodeForModel(requestedModel)
             ?? route?.ProviderCode;
 
         // OpenCode failures never surface their cause to the learner (owner wording, no fallback
@@ -347,9 +349,12 @@ public sealed class AiAssistantGateway(
                 FeatureCode = featureCode,
                 Module = "assistant",
                 UserId = userId,
-                ResourceId = $"{featureCode}:{userId ?? "anon"}:{startedAt.ToUnixTimeMilliseconds()}",
+                // ResourceId is varchar(64); concatenating a feature, user id and timestamp
+                // overflowed for real learner ids and refused calls before inference.
+                ResourceId = Guid.NewGuid().ToString("N"),
                 ResourceType = "assistant_turn",
-                RequestHash = $"{providerCode}:{model}:{featureCode}",
+                RequestHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes($"{providerCode}:{model}:{featureCode}"))),
                 // Classified per-feature (admin assistant is AdminBatch, not
                 // the learner-shared InteractiveLearning pool) — see
                 // AiBudgetClasses.ClassForFeature. Only a fallback: the DB/

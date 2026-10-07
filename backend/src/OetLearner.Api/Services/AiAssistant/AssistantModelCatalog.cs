@@ -16,6 +16,8 @@ namespace OetLearner.Api.Services.AiAssistant;
 public static class AssistantModelCatalog
 {
     public const string AnthropicProviderCode = "anthropic";
+    public const string LearnerAssistantLabel = "OET Personal Ai Assistant";
+    public const string LearnerModel = "deepseek-v4.1-flash";
     public const string UbagCompositeModel = "chatgpt_web|GPT-5.6 Sol + Medium";
 
     public static readonly string[] ClaudeApiModels =
