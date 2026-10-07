@@ -30,6 +30,26 @@ public static class AiOperationsAdminEndpoints
             .RequireRateLimiting("PerUser");
 
         group.MapGet("/operations", ListOperationsAsync);
+        group.MapGet("/credit-costs", async (OetLearner.Api.Services.Billing.IAiCreditCostService costs, CancellationToken ct)
+            => Results.Ok(new { rows = await costs.GetAllAsync(ct) }));
+        group.MapPut("/credit-costs/{actionCode}", async (
+            string actionCode,
+            AiCreditCostUpsertDto dto,
+            OetLearner.Api.Services.Billing.IAiCreditCostService costs,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var row = await costs.UpsertAsync(actionCode, dto.Credits, dto.Enabled, dto.Description,
+                    http.User.FindFirstValue(ClaimTypes.NameIdentifier), ct);
+                return Results.Ok(row);
+            }
+            catch (ArgumentException ex)
+            {
+                return new ApiErrorResult(400, "credit_cost_invalid", ex.Message);
+            }
+        }).RequireRateLimiting("PerUserWrite");
         group.MapGet("/benchmark-runs", ListBenchmarkRunsAsync);
         group.MapPost("/benchmark-runs/run", RunBenchmarkAsync)
             .RequireRateLimiting("PerUserWrite");
@@ -301,6 +321,8 @@ public static class AiOperationsAdminEndpoints
     }
 
     public sealed record RunRouteBenchmarkRequest(string FeatureCode, string ProviderCode, string Model);
+
+    public sealed record AiCreditCostUpsertDto(int Credits, bool Enabled, string Description);
 
     private static async Task<IResult> ListLedgerReconciliationAsync(
         IAiLedgerReconciliationService recon,

@@ -258,7 +258,8 @@ public sealed class CompanionContinueLastActivityTool(
 /// </summary>
 public sealed class CompanionShowAllowanceTool(
     ICompanionContextResolver contexts,
-    ICompanionDestinationRegistry destinations) : IAiToolExecutor
+    ICompanionDestinationRegistry destinations,
+    OetLearner.Api.Services.Billing.IAiCreditCostService creditCosts) : IAiToolExecutor
 {
     public string Code => "companion_show_allowance";
     public string Description => "Show the learner's remaining credit allowance for their current plan.";
@@ -279,6 +280,10 @@ public sealed class CompanionShowAllowanceTool(
         var topUp = await destinations.ResolveAsync("ai.packages", context, ct);
         var usage = await destinations.ResolveAsync("ai.usage", context, ct);
 
+        // Live per-action prices (SAMI §9.1): the charge table travels WITH the
+        // balance so "what will it cost" is answered from configuration, never
+        // from the model's memory.
+        var costs = await creditCosts.GetAllAsync(ct);
         return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
         {
             tier = context.Tier,
@@ -287,6 +292,13 @@ public sealed class CompanionShowAllowanceTool(
             // False means no new charge can be made at all right now — the
             // companion must say so rather than promise a chargeable action.
             charging_enabled = context.CreditConsumptionEnabled,
+            action_costs = costs.Select(c => new
+            {
+                action = c.ActionCode,
+                credits = c.Credits,
+                metered = c.Enabled,
+                description = c.Description,
+            }),
             top_up_url = topUp.Url,
             usage_url = usage.Url,
         }));

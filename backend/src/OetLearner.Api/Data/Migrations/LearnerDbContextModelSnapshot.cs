@@ -6034,6 +6034,35 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("CompanionAvailabilities");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.AiCreditCost", b =>
+                {
+                    b.Property<string>("ActionCode")
+                        .HasMaxLength(48)
+                        .HasColumnType("character varying(48)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("Credits")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("ActionCode");
+
+                    b.ToTable("AiCreditCosts");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.ErrorDnaEntry", b =>
                 {
                     b.Property<string>("Id")
