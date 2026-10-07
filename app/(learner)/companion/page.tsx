@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { AlertCircle, Coins, Lock, Plus, Sparkles } from 'lucide-react';
+import { AlertCircle, Lock, Plus, Sparkles } from 'lucide-react';
 import { LearnerPageHero } from '@/components/domain';
 import { AiAssistantInput, AiAssistantMessages } from '@/components/domain/ai-assistant';
 import { CompanionMemoryPanel } from '@/components/domain/companion/CompanionMemoryPanel';
@@ -136,14 +136,6 @@ export default function CompanionPage() {
         description={t('companion.page.subtitle')}
         aside={(
           <div className="flex flex-wrap items-center gap-2">
-            {/* Credit chip — the single candidate-facing wallet, never a
-                companion-specific balance. */}
-            <Button asChild variant="outline" size="sm">
-              <Link href={data.topUpUrl ?? '/ai-packages'}>
-                <Coins className="h-3.5 w-3.5" aria-hidden="true" />
-                {t('companion.credits.label')}: {data.aiCreditsRemaining}
-              </Link>
-            </Button>
             {canChat && (
               <Button variant="outline" size="sm" onClick={() => void createNewThread()}>
                 <Plus className="h-3.5 w-3.5" aria-hidden="true" />

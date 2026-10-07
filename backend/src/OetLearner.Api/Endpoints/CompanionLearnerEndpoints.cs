@@ -214,15 +214,19 @@ public static class CompanionLearnerEndpoints
             }
         }
 
-        if (policy.MonthlyTokenCap > 0 && policy.TokensUsedThisMonth >= policy.MonthlyTokenCap)
-        {
-            return new CompanionAccess(false, "monthly_cap_reached", policy.PlanCode, policy.PlanName);
-        }
-
-        if (policy.DailyTokenCap > 0 && policy.TokensUsedToday >= policy.DailyTokenCap)
-        {
-            return new CompanionAccess(false, "daily_cap_reached", policy.PlanCode, policy.PlanName);
-        }
+        // Sami chat is included with an eligible package, not metered (SAMI
+        // handover §1.2 and §9): launch must not depend on a candidate-facing
+        // AI-credit or multi-tier wallet, so the token caps no longer block or
+        // stagger the chat. AiAssistantGateway skips the matching reserve for
+        // these feature codes, so reporting a cap here would show a paywall the
+        // learner is no longer actually stopped by.
+        //
+        // Cost control is unchanged and stays invisible: the per-feature kill
+        // list (checked above), the global emergency kill switch (above),
+        // per-user rate limiting, and full AiUsageRecord telemetry on every
+        // call. `monthly_cap_reached` / `daily_cap_reached` remain defined in
+        // CompanionUserAccess and the client union for other callers, but are
+        // deliberately no longer produced on this path.
 
         return new CompanionAccess(true, "ok", policy.PlanCode, policy.PlanName);
     }

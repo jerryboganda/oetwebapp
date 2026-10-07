@@ -129,7 +129,7 @@ public sealed class AiAssistantGateway(
         yield return new LlmServedModel(model, providerCode);
 
         AiQuotaDecision? quotaDecision = null;
-        if (quotaService is not null)
+        if (quotaService is not null && !IsIncludedCompanionChat(featureCode))
         {
             quotaDecision = await quotaService.TryReserveAsync(userId, featureCode, AiKeySource.Platform, ct);
             if (!quotaDecision.Allowed && isContinuation && IsDailyCapOnlyDenial(quotaDecision))
@@ -665,6 +665,27 @@ public sealed class AiAssistantGateway(
            || string.Equals(featureCode, AiFeatureCodes.PronunciationFeedback, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.ConversationEvaluation, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, SpeakingAiFeatureCodes.SpeakingScoreV2, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The Sami chat surfaces, which are included with an eligible package rather
+    /// than metered (SAMI handover §1.2 and §9: ordinary study planning, course Q&amp;A
+    /// and platform help must not depend on a candidate-facing AI-credit or
+    /// multi-tier wallet).
+    /// </summary>
+    ///
+    /// <para>
+    /// This does NOT remove cost control. The per-feature kill list, the global
+    /// emergency kill switch, per-user rate limiting, request volume and the
+    /// platform subscription ceiling all still apply; and every call still writes
+    /// its <c>AiUsageRecord</c>, so volume, tokens, latency and cost stay fully
+    /// measurable. What changes is only that a learner mid-conversation is not
+    /// stopped by a token wallet — which is what produced the observed
+    /// "Daily AI credits exhausted on plan pro" refusal after four ordinary turns.
+    /// </para>
+    private static bool IsIncludedCompanionChat(string featureCode)
+        => string.Equals(featureCode, AiFeatureCodes.AiAssistantLearner, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(featureCode, AiFeatureCodes.CompanionChat, StringComparison.OrdinalIgnoreCase);
+
     private async Task<ResolvedAssistantProvider?> ResolveProviderAsync(string? providerCode, string? requestedModel, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(providerCode))
