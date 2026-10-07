@@ -58,6 +58,9 @@ services:
       Fleet__Ubag__EndpointTemplate: ${FLEET_UBAG_ENDPOINT_TEMPLATE:-}
       Fleet__Ubag__MaxBrowserWorkloads: ${FLEET_UBAG_MAX_BROWSER_WORKLOADS:-1}
       Fleet__Ubag__GrantTtlMinutes: ${FLEET_UBAG_GRANT_TTL_MINUTES:-30}
+      # Trust plane (decision D3): off unless the owner sets FLEET_UBAG_TRUST_ENABLED=true; the CA pair
+      # comes in through the secrets block below (empty files = the plane refuses to start, loudly).
+      Fleet__Ubag__TrustEnabled: ${FLEET_UBAG_TRUST_ENABLED:-false}
     secrets:
       - fleet_master_key
       - fleet_master_key_prev
@@ -65,6 +68,8 @@ services:
       - fleet_sync_token
       - fleet_metrics_token
       - fleet_ubag_token
+      - fleet_ca_cert
+      - fleet_ca_key
     volumes:
       - fleet_data:/data
     tmpfs:
