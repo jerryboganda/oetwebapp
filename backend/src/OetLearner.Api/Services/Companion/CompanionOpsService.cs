@@ -73,7 +73,7 @@ public sealed class CompanionOpsService(LearnerDbContext db, TimeProvider clock)
             .Select(r =>
             {
                 var sorted = r.Latencies.OrderBy(x => x).ToList();
-                decimal P(int pct) => sorted.Count == 0
+                int P(int pct) => sorted.Count == 0
                     ? 0
                     : sorted[Math.Min(sorted.Count - 1, (int)Math.Ceiling(sorted.Count * pct / 100.0) - 1)];
                 return new CompanionFeatureQualityRow(
