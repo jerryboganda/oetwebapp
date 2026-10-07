@@ -15,7 +15,9 @@ namespace OetLearner.Api.Services.Speaking;
 /// </summary>
 public static class SpeakingGradeReviewer
 {
-    public const string TemplateId = "speaking.grade.review.v1";
+    // v2 (8 Oct 2026): the reviewer may no longer move a score for accent or pronunciation (owner guardrail: a noticeable
+    // first-language accent is not a penalty while the candidate is easily understood), nor lower two criteria for one event.
+    public const string TemplateId = "speaking.grade.review.v2";
     private const int BudgetSeconds = 600;
 
     private const string Instructions = """
@@ -25,10 +27,24 @@ public static class SpeakingGradeReviewer
         then return the SAME JSON object and schema, corrected only where the first grade is wrong: a score the transcript does
         not support, a rationale that misreads it, or an evidence quote that is not in the transcript. Change a score only with
         transcript evidence, and by no more than one band. If the grade is right, return it unchanged. JSON only.
+
+        Guardrails for this review (they bind you as they bound the first assessor):
+          * Do not use a native-speaker standard. A noticeable first-language accent is never a reason to change a score while
+            the candidate is easily understood. Accent is not a Grammar or Appropriateness problem either.
+          * The transcript is automatic speech recognition. An odd or misspelt word may be a recognition error caused by accent
+            or audio quality; do not change a score for it unless the candidate's wording is clearly wrong across several turns
+            or the patient reacts to it.
+          * Never change Intelligibility when an ACOUSTIC EVIDENCE block is present (it is final). When there is none, change it
+            only if the patient visibly asks the candidate to repeat or clarify.
+          * One event counts against one criterion only. A hesitation, repetition, filler, restart or self-correction is Fluency
+            evidence only; never lower Grammar or Intelligibility for it.
         """;
 
-    /// <summary>Returns the completion to parse: Claude's, or Claude's with the reviewer's bounded corrections.</summary>
-    public static async Task<string> ReviewAsync(
+    /// <summary>
+    /// The grade to parse (Claude's, or Claude's with the reviewer's bounded corrections) and what the review did, so a result
+    /// can later be explained: Claude's own scores before the review, the reviewer's, and every change it made.
+    /// </summary>
+    public static async Task<SpeakingReviewResult> ReviewAsync(
         IAiGatewayService gateway,
         AiGatewayRequest primaryRequest,
         AiGatewayResult primary,
@@ -52,13 +68,69 @@ public static class SpeakingGradeReviewer
             }, budget.Token);
 
             var merged = Merge(primary.Completion, review.Completion);
-            return merged ?? primary.Completion;
+            var model = string.IsNullOrWhiteSpace(review.ResolvedModel) ? WritingSubscriptionProviders.CodexModel : review.ResolvedModel.Trim();
+            return new SpeakingReviewResult(
+                merged ?? primary.Completion,
+                BuildTrace(primary.Completion, review.Completion, merged, model));
         }
         catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
         {
             logger.LogWarning("Speaking review skipped ({ErrorType}); keeping the primary grade.", ex.GetType().Name);
-            return primary.Completion;
+            return new SpeakingReviewResult(
+                primary.Completion,
+                new SpeakingReviewTrace("failed", null, ScoresOf(primary.Completion) ?? new Dictionary<string, int>(), null, []));
         }
+    }
+
+    /// <summary>What the review did: <c>ran</c> (it moved at least one criterion), <c>unchanged</c> (it replied and agreed) or
+    /// <c>failed</c> (its reply was unreadable). Pure: unit-testable without a gateway.</summary>
+    internal static SpeakingReviewTrace BuildTrace(string? primaryCompletion, string? reviewCompletion, string? mergedCompletion, string? model)
+    {
+        var primary = ScoresOf(primaryCompletion) ?? new Dictionary<string, int>();
+        var reviewer = ScoresOf(reviewCompletion);
+        var final = ScoresOf(mergedCompletion);
+        var changes = new List<SpeakingReviewChange>();
+        if (final is not null)
+        {
+            foreach (var (criterion, to) in final)
+            {
+                if (primary.TryGetValue(criterion, out var from) && from != to)
+                {
+                    changes.Add(new SpeakingReviewChange(
+                        criterion, from, to, reviewer is not null && reviewer.TryGetValue(criterion, out var raw) ? raw : to));
+                }
+            }
+        }
+
+        var status = reviewer is null ? "failed" : changes.Count > 0 ? "ran" : "unchanged";
+        return new SpeakingReviewTrace(status, model, primary, reviewer, changes);
+    }
+
+    /// <summary>The criterion scores a grade reply carries, by CANONICAL criterion code (the same mapping the grade parser
+    /// applies: <c>grammar</c> is <c>grammarExpression</c>, <c>providingStructure</c> is <c>structure</c>; the canonical spelling
+    /// wins when both are present); null when the reply is unreadable. A score written as "4" or 4.0 still counts.</summary>
+    internal static Dictionary<string, int>? ScoresOf(string? completion)
+    {
+        if (Parse(completion) is not { } root || root["criterionScores"] is not JsonObject scores) return null;
+        var map = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var (name, node) in scores)
+        {
+            var code = SpeakingAiAssessmentService.CanonicalCriterionCode(name);
+            var isAlias = !string.Equals(code, name, StringComparison.Ordinal);
+            if (isAlias && map.ContainsKey(code)) continue;
+            if (LenientScoreOf(node) is { } score) map[code] = score;
+        }
+
+        return map;
+    }
+
+    private static int? LenientScoreOf(JsonNode? node)
+    {
+        var value = node is JsonObject o ? o["score"] : node;
+        if (value is not JsonValue v) return null;
+        if (v.TryGetValue<int>(out var i)) return i;
+        if (v.TryGetValue<double>(out var d)) return (int)Math.Round(d);
+        return v.TryGetValue<string>(out var s) && int.TryParse(s, out var parsed) ? parsed : null;
     }
 
     /// <summary>The primary JSON with each criterion's score moved toward the reviewer's by at most one band; a moved
@@ -112,3 +184,26 @@ public static class SpeakingGradeReviewer
         catch (JsonException) { return null; }
     }
 }
+
+/// <summary>One criterion the reviewer moved: the first assessor's score, the score after the review (at most one band away),
+/// and the score the reviewer itself proposed.</summary>
+public sealed record SpeakingReviewChange(string Criterion, int From, int To, int ReviewerRaw);
+
+/// <summary>
+/// What the secondary review did to one grade. <c>Status</c>: <c>ran</c> | <c>unchanged</c> | <c>failed</c> | <c>skipped</c> (the
+/// first grade was unreadable, so no review was attempted). <c>PrimaryScores</c> are Claude's own scores BEFORE the review;
+/// <c>ReviewerScores</c> what the reviewer proposed (null when it failed). Scores only: no transcript, no learner text.
+/// </summary>
+public sealed record SpeakingReviewTrace(
+    string Status,
+    string? Model,
+    IReadOnlyDictionary<string, int> PrimaryScores,
+    IReadOnlyDictionary<string, int>? ReviewerScores,
+    IReadOnlyList<SpeakingReviewChange> Changes)
+{
+    public static SpeakingReviewTrace Skipped(IReadOnlyDictionary<string, int>? primaryScores = null)
+        => new("skipped", null, primaryScores ?? new Dictionary<string, int>(), null, []);
+}
+
+/// <summary>The completion to parse after the review, and what the review did.</summary>
+public sealed record SpeakingReviewResult(string Completion, SpeakingReviewTrace Trace);

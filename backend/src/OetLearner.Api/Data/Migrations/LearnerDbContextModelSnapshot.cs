@@ -24509,6 +24509,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DiagnosticsJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("Error")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");

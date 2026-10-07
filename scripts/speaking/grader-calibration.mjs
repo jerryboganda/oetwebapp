@@ -11,10 +11,13 @@
  *
  * Usage:
  *   OET_ADMIN_EMAIL=... OET_ADMIN_PASSWORD=... node scripts/speaking/grader-calibration.mjs \\
- *     [--run <id>] [--repeats 2] [--no-audio] [--scope card|mock] [--pilot] [--max-minutes 330] [--poll-seconds 30] [--smoke]
+ *     [--run <id>] [--repeats 2] [--no-audio] [--scope card|mock] [--pilot] [--sample <id>]... [--max-minutes 330] [--poll-seconds 30] [--smoke]
+ *
+ * --sample <id> (repeatable) grades ONLY those performances (a mock-sample id with --scope mock) instead of every marked,
+ * usable one: the one-performance owner diagnostic. The report then carries, per grade, the ten items of that diagnostic.
  *
  * --scope card grades each expert-marked single card with the card grader (default); --scope mock grades each expert-marked
- * Full Mock with the combined grader (speaking.score.v3-combined). --pilot marks the run an OWNER PILOT: an informational
+ * Full Mock with the combined grader (speaking.score.v4-combined). --pilot marks the run an OWNER PILOT: an informational
  * comparison whose report cannot pass by design — the score stays Provisional and the approved coverage/thresholds are
  * what the later validation run (no --pilot) must meet.
  *
@@ -22,8 +25,9 @@
  * that the Admin > Speaking > Grader calibration screen's API is live. It starts no run and writes nothing.
  *
  * Env: OET_API_BASE (default https://api.oetwithdrhesham.co.uk), OET_ADMIN_EMAIL + OET_ADMIN_PASSWORD.
- * Output: stdout, \`grader-calibration-report.json\`, \`grader-calibration-report.md\` (the full per-performance comparison)
- * and a markdown summary in $GITHUB_STEP_SUMMARY when set.
+ * Output: stdout, \`grader-calibration-report.json\`, \`grader-calibration-report.md\` (the full per-performance comparison and,
+ * per grade, the one-performance diagnostic), the same two files named \`grader-calibration-report-<run id>.*\`, and a markdown
+ * summary in $GITHUB_STEP_SUMMARY when set.
  * Exit code: 0 when the run finished or is still in progress (re-run with --run <id>); 1 on an error.
  */
 
@@ -37,8 +41,12 @@ function arg(name, fallback = '') {
   return i >= 0 && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : fallback;
 }
 const flag = (name) => process.argv.includes(`--${name}`);
+const args = (name) =>
+  process.argv.flatMap((value, i) =>
+    value === `--${name}` && process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? [process.argv[i + 1]] : []);
 
 const runIdArg = arg('run');
+const sampleIds = args('sample');
 const repeats = Number.parseInt(arg('repeats', '2'), 10) || 2;
 const useAudio = !flag('no-audio');
 const scope = arg('scope', 'card') === 'mock' ? 'mock' : 'card';
@@ -130,11 +138,11 @@ if (flag('smoke')) {
 
 let runId = runIdArg;
 if (!runId) {
-  const created = await api('POST', '/runs', { repeats, useAudio, scope, pilot });
+  const created = await api('POST', '/runs', { repeats, useAudio, scope, pilot, ...(sampleIds.length ? { sampleIds } : {}) });
   if (created.status === 200) {
     runId = created.json.id;
     console.log(`started run ${runId}: scope=${created.json.scope} pilot=${created.json.pilot} repeats=${created.json.repeats} audio=${created.json.useAudio} ${line(created.json.progress)}`);
-  } else if (created.status === 409) {
+  } else if (created.status === 409 && sampleIds.length === 0) {
     const runs = await api('GET', '/runs');
     const running = (runs.json ?? []).find((r) => r.status === 'running');
     if (!running) throw new Error(`could not start a run (HTTP 409) and none is running: ${JSON.stringify(created.json).slice(0, 200)}`);
@@ -178,7 +186,9 @@ const finalised = await api('POST', `/runs/${encodeURIComponent(runId)}/finalize
 if (finalised.status !== 200) throw new Error(`finalize -> HTTP ${finalised.status} ${JSON.stringify(finalised.json).slice(0, 200)}`);
 const view = await api('GET', `/runs/${encodeURIComponent(runId)}`);
 const report = view.json?.report;
+// One copy named for the run (a second run must not overwrite the first's files) and the stable name the workflow uploads.
 writeFileSync('grader-calibration-report.json', JSON.stringify(view.json, null, 2));
+writeFileSync(`grader-calibration-report-${runId}.json`, JSON.stringify(view.json, null, 2));
 
 if (!report) {
   console.log('the run finished but produced no report (no grade completed)');
@@ -249,8 +259,44 @@ for (const p of report.detail ?? []) {
 }
 md.push('', '## Grade confusion (rows: expert grade A,B,C+,C,D,E; columns: grader grade)', '', '```');
 for (const row of report.grade.confusion) md.push(row.join('\t'));
-md.push('```', '', '## Summary', '', '```', ...out, '```');
+
+// The one-performance diagnostic (owner request 7 Oct 2026): for every grade, the ten things needed to tell WHERE a
+// difference from the expert comes from: the grader's judgement, missing audio, the secondary reviewer or the mapping.
+const mappingVersion = report.mappingVersion ?? 'unknown';
+const cardLabel = (i, n) => (n > 1 ? `card ${String.fromCharCode(65 + i)}` : 'card');
+const audioText = (a) =>
+  !a
+    ? 'not run'
+    : a.source === 'audio'
+      ? `AUDIO (${a.model ?? 'model unknown'}; ${a.clips} clips, ${(a.audioMs / 1000).toFixed(0)} s of audio for ${(a.speechMs / 1000).toFixed(0)} s of speech${a.coverage != null ? ` = ${(a.coverage * 100).toFixed(0)}%` : ''}; confidence ${a.confidence})`
+      : `TRANSCRIPT ONLY (${a.reason ?? 'no reason recorded'}; ${a.clips} clips, ${(a.audioMs / 1000).toFixed(0)} s of audio for ${(a.speechMs / 1000).toFixed(0)} s of speech${a.coverage != null ? ` = ${(a.coverage * 100).toFixed(0)}%` : ''}, ${a.turnsWithClip}/${a.turns} turns with a clip)`;
+md.push('```', '', '## One-performance diagnostic (per grade)', '');
+md.push(`Raw-to-reported mapping used for the score a learner sees: \`${mappingVersion}\` (a provisional heuristic, not an official OET conversion).`, '');
+for (const p of report.detail ?? []) {
+  for (const g of p.grades) {
+    const d = g.diagnostics ?? null;
+    const review = d?.review ?? null;
+    md.push(`### ${p.sampleId}, repeat ${g.repeat}`, '');
+    md.push(`1. Expert vs final AI criteria (${codes.map((c) => c.slice(0, 4)).join('/')}): expert ${codes.map((c) => p.expertScores[c]).join('/')} | AI ${codes.map((c) => g.scores[c]).join('/')}`);
+    md.push(`2. Overall /500: expert ${p.expertOverall} (${p.expertGrade}) | AI as a learner sees it ${g.reportedScaled ?? 'n/a'}${g.reportedGrade ? ` (${g.reportedGrade})` : ''}${g.reportedError != null ? `, error ${g.reportedError > 0 ? '+' : ''}${g.reportedError}` : ''} | AI through a fitted map (leave-one-out) ${g.scaledLeaveOneOut} (${g.grade})`);
+    md.push(`3. AI raw criterion total before mapping: ${g.raw} / 39 (expert ${p.expertRaw})`);
+    md.push(`4. Mapping version: \`${d?.mappingVersion ?? mappingVersion}\``);
+    const cards = d?.audio?.cards ?? [];
+    if (cards.length > 0) {
+      cards.forEach((c, i) => md.push(`${5 + i}. Real audio judgement, ${cardLabel(i, cards.length)}: ${audioText(c)}`));
+    } else {
+      md.push(`5-6. Real audio judgement: ${d ? audioText(d.audio?.combined) : 'not recorded (grade made before diagnostics existed)'}`);
+    }
+    md.push(`7. Combined Intelligibility was: ${g.intelligibilitySource === 'audio' ? 'AUDIO-based' : 'TRANSCRIPT-only'}${d?.audio?.combined ? ` (${audioText(d.audio.combined)})` : ''}`);
+    md.push(`8. GraderVersion: \`${view.json.graderVersion}\` (a grade made by another version shows in the per-version counts above)`);
+    md.push(`9. Primary Claude scores BEFORE the secondary reviewer: ${d?.primaryScores ? codes.map((c) => d.primaryScores[c] ?? '?').join('/') : 'not recorded (grade made before diagnostics existed)'}`);
+    md.push(`10. Secondary reviewer: ${review ? `${review.status}${review.model ? ` (${review.model})` : ''}${review.changes?.length ? '; changes: ' + review.changes.map((c) => `${c.criterion} ${c.from}->${c.to}`).join(', ') : '; no criterion changed'}` : 'not recorded (grade made before diagnostics existed)'}`);
+    md.push('');
+  }
+}
+md.push('## Summary', '', '```', ...out, '```');
 writeFileSync('grader-calibration-report.md', md.join('\n'));
+writeFileSync(`grader-calibration-report-${runId}.md`, md.join('\n'));
 
 if (process.env.GITHUB_STEP_SUMMARY) {
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Speaking grader calibration: ${isPilot ? 'PILOT (cannot pass by design)' : report.verdict.passed ? 'PASS' : 'FAIL'}\n\n\`\`\`\n${out.join('\n')}\n\`\`\`\n`);

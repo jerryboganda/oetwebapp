@@ -97,7 +97,7 @@ grades each exact grader version + model produced (the "Provisional" label is ea
 (no run, no writes): the authenticated proof that the screen's API is live.
 
 **Scope.** A marked performance is one card, so the harness calibrates the card grader. The combined Full Mock judgement uses the
-same grader core, rubric and score map but a different prompt (`speaking.score.v3-combined`), so it stays provisional until
+same grader core, rubric and score map but a different prompt (`speaking.score.v4-combined`), so it stays provisional until
 it is calibrated on its own.
 
 ## Owner pilot (owner request 7 Oct 2026)
@@ -117,9 +117,25 @@ Testers need nothing special: `recording.v3` is the normal current Speaking cons
 intro, so a pilot tester simply completes a normal Full Mock as a regular candidate (both cards' audio is then
 promoted into the calibration set by the owner, with the usual 365-day retention and audit event).
 
+### The one-performance diagnostic (8 Oct 2026)
+
+To find WHERE a difference from the expert comes from — the grader's judgement, missing audio evidence, the secondary
+reviewer or the provisional raw-to-/500 mapping — run a pilot over ONE performance: dispatch the workflow with
+`scope: mock`, `pilot: true`, `audio: true` and `sample: <the mock sample id>` (the script's `--sample <id>`, repeatable; the API's
+`sampleIds`). Each grade stores `DiagnosticsJson` (numbers and codes only) and the report prints, per grade, the ten things the
+owner asked for: (1) the expert's nine marks beside the AI's final nine; (2) the expert's overall /500 beside the AI's, both as a
+learner sees it (v0 map) and through a map fitted on the expert's marks (leave-one-out); (3) the AI raw total before mapping;
+(4) the mapping version; (5, 6) whether each card got real audio judgement and, if not, the reason and how much audio there was
+for how much speech; (7) whether the combined Intelligibility was audio-based or transcript-only; (8) the exact `GraderVersion`;
+(9) **Claude's own scores before the secondary reviewer**; (10) what the reviewer did (status, model, every change, bounded ±1).
+
+Read it in **Admin → Speaking → Grader calibration → Comparison runs** (read-only; it shows AI results, so it is kept apart from
+the blind marking pages), or in `grader-calibration-report-<run id>.md` (the workflow artifact). Grades made before 8 Oct 2026
+carry no diagnostics: items 9 and 10 cannot be recovered for them, only for a fresh run.
+
 ## Full Mock calibration (built 7 Oct 2026)
 
-The combined grader (`speaking.score.v3-combined`) is calibrated on its own sample kind: a **whole two-card test**
+The combined grader (`speaking.score.v4-combined`) is calibrated on its own sample kind: a **whole two-card test**
 marked as ONE performance. Admin → Speaking → Grader calibration has a **Single cards | Full Mocks** switch.
 
 - **Candidates** — completed two-card AI exams whose both cards have a usable latest transcript, recorded under the
@@ -129,7 +145,7 @@ marked as ONE performance. Admin → Speaking → Grader calibration has a **Sin
 - **Mark** — the expert opens the mock, hears Card A and Card B, reads both cards and both cleaned transcripts, and
   gives ONE set of the nine criteria and ONE overall /500 for the whole test — blind, like the card view.
 - **Harness** — `POST /runs` with `scope: "mock"` freezes the labelled mocks and grades each with the combined core
-  (`GradeCombinedForCalibrationAsync`: the same `speaking.score.v3-combined` prompt a learner's Full Mock uses, on the
+  (`GradeCombinedForCalibrationAsync`: the same `speaking.score.v4-combined` prompt a learner's Full Mock uses, on the
   pinned transcripts, audio per card combined by the same rule — nothing persisted). Its report compares the expert's
   one mark with each combined grade; everything else (leave-one-out, grades, pass/fail, repeatability) works the same.
 - A combined result that never came from real two-card comparisons stays "Provisional"; a passing mock-scope
@@ -154,7 +170,7 @@ report. New scores then switch from "Provisional" to "AI practice estimate". Sto
 | PUT | `/samples/{id}/label` | Nine criterion scores + overall (steps of 10) + notes |
 | POST | `/samples/{id}/exclude` `{ reason }` | Mark unusable |
 | GET | `/runs` | Recent runs with progress |
-| POST | `/runs` `{ repeats?, useAudio? }` | Start a run over the marked performances |
-| GET | `/runs/{id}` | Progress + the report so far |
+| POST | `/runs` `{ repeats?, useAudio?, scope?, pilot?, sampleIds? }` | Start a run over the marked performances (`sampleIds` limits it to those) |
+| GET | `/runs/{id}` | Progress + the report so far (per grade: the diagnostics) |
 | POST | `/runs/{id}/next` | Queue the next grade unless a learner's is waiting |
 | POST | `/runs/{id}/finalize` | Freeze the report |

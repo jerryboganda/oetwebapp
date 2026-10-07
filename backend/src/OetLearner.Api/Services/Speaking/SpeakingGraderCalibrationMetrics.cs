@@ -4,9 +4,12 @@ namespace OetLearner.Api.Services.Speaking;
 public sealed record SpeakingCalibrationExpert(
     string SampleId, bool HasAudio, IReadOnlyDictionary<string, int> Scores, int OverallScaled);
 
-/// <summary>One grade by the grader under test. A performance is graded several times to measure repeatability.</summary>
+/// <summary>One grade by the grader under test. A performance is graded several times to measure repeatability.
+/// <c>ReportedScaled</c> is what the platform reported for it (the v0 raw-to-reported map, 10-point steps); <c>Diagnostics</c> why
+/// the grade is what it is (Claude before the review, the review, the audio per card).</summary>
 public sealed record SpeakingCalibrationObservation(
-    string SampleId, int Repeat, IReadOnlyDictionary<string, int> Scores, string IntelligibilitySource);
+    string SampleId, int Repeat, IReadOnlyDictionary<string, int> Scores, string IntelligibilitySource,
+    int? ReportedScaled = null, SpeakingCalibrationGradeDiagnostics? Diagnostics = null);
 
 /// <summary>A share with its 95 % Wilson interval (n is small; an honest interval matters more than the point).</summary>
 public sealed record SpeakingCalibrationRate(int Hits, int N, double Share, double Low, double High);
@@ -58,7 +61,9 @@ public sealed record SpeakingCalibrationVerdict(
     IReadOnlyList<string>? Advisory = null);
 
 /// <summary>One grade of one performance, set beside the expert's mark. <c>ScaledLeaveOneOut</c> is the grader's score through
-/// a map fitted without this performance; <c>ScaledError</c> is that minus the expert's overall.</summary>
+/// a map fitted without this performance; <c>ScaledError</c> is that minus the expert's overall. <c>ReportedScaled</c> and
+/// <c>ReportedGrade</c> are what a learner would have been shown (the v0 map), and <c>ReportedError</c> that minus the expert's
+/// overall; <c>Diagnostics</c> explains the grade (null on a grade made before it existed).</summary>
 public sealed record SpeakingCalibrationGradeDetail(
     int Repeat,
     IReadOnlyDictionary<string, int> Scores,
@@ -66,7 +71,11 @@ public sealed record SpeakingCalibrationGradeDetail(
     int ScaledLeaveOneOut,
     string Grade,
     int ScaledError,
-    string IntelligibilitySource);
+    string IntelligibilitySource,
+    int? ReportedScaled = null,
+    string? ReportedGrade = null,
+    int? ReportedError = null,
+    SpeakingCalibrationGradeDiagnostics? Diagnostics = null);
 
 /// <summary>The per-performance line of the comparison report: the expert's nine marks and overall, and every grade the
 /// grader gave it. Ids only; no learner identity.</summary>
@@ -96,7 +105,9 @@ public sealed record SpeakingCalibrationReport(
     /// <summary>Every marked performance beside its grades (null on a report frozen before this field existed).</summary>
     IReadOnlyList<SpeakingCalibrationPerformance>? Detail = null,
     /// <summary>How many grades each exact grader version + model produced; a label is earned per exact version.</summary>
-    IReadOnlyDictionary<string, int>? GraderVersions = null);
+    IReadOnlyDictionary<string, int>? GraderVersions = null,
+    /// <summary>The raw-to-reported mapping version the learner-facing score was produced with (a provisional heuristic, not an OET formula).</summary>
+    string? MappingVersion = null);
 
 /// <summary>
 /// How closely the AI grader agrees with an OET expert (owner spec 4 Oct 2026). Pure functions over the expert's marks and
@@ -213,7 +224,11 @@ public static class SpeakingGraderCalibrationMetrics
                             x.Scaled,
                             GradeLetters[Ordinal(x.Scaled)],
                             x.Scaled - e.OverallScaled,
-                            x.Observation.IntelligibilitySource))
+                            x.Observation.IntelligibilitySource,
+                            x.Observation.ReportedScaled,
+                            x.Observation.ReportedScaled is { } reported ? GradeLetters[Ordinal(reported)] : null,
+                            x.Observation.ReportedScaled is { } shown ? shown - e.OverallScaled : null,
+                            x.Observation.Diagnostics))
                         .ToList()))
                 .ToList());
 

@@ -268,4 +268,9 @@ public class SpeakingGraderCalibrationGrade
     /// <summary>A reason code for a failed attempt; never learner text.</summary>
     [MaxLength(64)]
     public string? Error { get; set; }
+
+    /// <summary>Why the grade is what it is (numbers and codes only): the mapping version, Claude's own scores before the secondary
+    /// review, what the reviewer changed, and each card's audio verdict. <see cref="Services.Speaking.SpeakingCalibrationGradeDiagnostics"/>
+    /// as JSON; null on a grade made before it existed.</summary>
+    public string? DiagnosticsJson { get; set; }
 }

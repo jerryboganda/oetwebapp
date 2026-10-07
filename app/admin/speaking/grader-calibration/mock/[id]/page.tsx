@@ -6,7 +6,7 @@
  * A Full Mock is ONE performance: the candidate speaks Card A and Card B and receives one combined
  * Speaking result. Dr Hesham hears both cards' audio, reads both cards and both cleaned transcripts,
  * then gives ONE set of the nine OET criteria and ONE overall result /500 for the whole test. That
- * single mark is what the combined grader (speaking.score.v3-combined) is compared against. The AI's
+ * single mark is what the combined grader (speaking.score.v4-combined) is compared against. The AI's
  * score is never on this page, so the number being validated cannot anchor his marks.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';

@@ -269,17 +269,24 @@ export default function SpeakingGraderCalibrationPage() {
       breadcrumbs={BREADCRUMBS}
       eyebrow="Speaking"
       icon={<Scale className="h-5 w-5" />}
-      actions={kind === 'cards'
-        ? (nextToMark ? (
-          <Button asChild variant="primary" size="sm">
-            <Link href={`/admin/speaking/grader-calibration/${encodeURIComponent(nextToMark.id)}`}>Mark the next performance</Link>
+      actions={(
+        <>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/speaking/grader-calibration/runs">Comparison runs (shows AI results)</Link>
           </Button>
-        ) : undefined)
-        : (nextMockToMark ? (
-          <Button asChild variant="primary" size="sm">
-            <Link href={`/admin/speaking/grader-calibration/mock/${encodeURIComponent(nextMockToMark.id)}`}>Mark the next Full Mock</Link>
-          </Button>
-        ) : undefined)}
+          {kind === 'cards'
+            ? (nextToMark ? (
+              <Button asChild variant="primary" size="sm">
+                <Link href={`/admin/speaking/grader-calibration/${encodeURIComponent(nextToMark.id)}`}>Mark the next performance</Link>
+              </Button>
+            ) : null)
+            : (nextMockToMark ? (
+              <Button asChild variant="primary" size="sm">
+                <Link href={`/admin/speaking/grader-calibration/mock/${encodeURIComponent(nextMockToMark.id)}`}>Mark the next Full Mock</Link>
+              </Button>
+            ) : null)}
+        </>
+      )}
       banner={(
         <div className="space-y-3">
           {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}

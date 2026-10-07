@@ -30,7 +30,18 @@ explanation is penalised only through the communication criterion it affects (In
 Appropriateness), never as a separate deduction. Rulebook rules guide how evidence is read; they never
 create a second penalty on top of a criterion score.
 
-## How the grader is told to score (`speaking.score.v3`)
+## How the grader is told to score (`speaking.score.v4`)
+
+> **v4 (8 Oct 2026, owner guardrails).** v3 + four principles (8–11 of "How to score") and two template lines: **no
+> native-speaker standard** (a noticeable first-language accent is never a penalty in itself and never a Grammar or
+> Appropriateness problem; Intelligibility 5 can include one when the speech is easily understood, and falls to 4 or below only
+> when pronunciation/prosody genuinely strains the listener); **the transcript is machine speech recognition** (an odd word is
+> counted against Grammar/Appropriateness only when clearly wrong across several turns or the patient reacts); **one stumble is
+> one Fluency event** (hesitation/repetition/fillers/restarts/self-correction are Fluency only; Fluency 4 allows uneven flow, 3 needs
+> serious strain); **a transcript-only Intelligibility never drops for accent or a mis-recognised word** (only where the patient asks
+> for a repeat); and an interruption is weighed under Relationship building, or Appropriateness only when the wording is the
+> problem, never both. The secondary reviewer (`speaking.grade.review.v2`) is bound by the same guardrails and may not move
+> Intelligibility when audio evidence is present. v3 grades keep their stored `GraderVersion`; v4 starts uncalibrated.
 
 The grounded system prompt (`RulebookPromptBuilder`, Speaking + Score only) carries:
 
@@ -69,9 +80,14 @@ Intelligibility is a property of the *sound* of speech; a transcript cannot carr
 `speaking_audio_assessment` is on, every Speaking grade first runs the **audio stage**
 (`SpeakingAudioEvidenceService`, feature code `speaking.audio_assess`), then hands its findings to the grader:
 
-1. **Clips.** The candidate's own stored clips: a live-voice session's per-turn clips (the segments' `sourceRecordingId`,
-   in the order spoken; archived and warm-up clips never), or a recorder session's recording. The patient's voice is
-   not part of them. Nothing is written to disk: each clip is streamed from `IFileStorage` through `ffmpeg`
+1. **Clips.** The candidate's own stored clips: a live-voice session's clips (one per stretch of speech, captured by the
+   browser while the patient is silent; the segments' `sourceRecordingId` in the order spoken, then any clip recorded
+   after the first linked one that no segment links, oldest first; the connection-check clip before it, archived and
+   warm-up clips never), or a recorder session's recording. The patient's voice is not part of them. **Coverage gate:** when
+   the clips' own audio (the join minus the inserted silences) covers less than `Speaking:AudioAssessment:MinimumCoverage`
+   (default 0.5) of the candidate's speech time in the transcript, the audio is not used (`audio_insufficient_coverage`): a
+   few seconds of a long performance is not a judgement of that performance. Not applied when the transcript has under
+   5 s of timed speech. Nothing is written to disk: each clip is streamed from `IFileStorage` through `ffmpeg`
    (stdin → stdout) to 16 kHz mono, a 600 ms silence is put between clips, the join is cut at 6 minutes and encoded as
    one 48 kbps mp3 (`SpeakingAudioTranscoder`; the API image installs `ffmpeg`).
 2. **The judge.** One call per card to the OpenAI audio-chat model (`gpt-audio-1.5` by default, editable on the
@@ -81,14 +97,16 @@ Intelligibility is a property of the *sound* of speech; a transcript cannot carr
    descriptors with a rationale and observations (clip, second, what), fluency *evidence* (rate, long pauses,
    hesitations, fillers, restarts) and its own confidence. Temperature 0; the credential is the already-funded OpenAI
    key (`LIVEVOICE__OPENAIAPIKEY`), used when the row carries none of its own.
-3. **Verification.** The words it says it heard are compared with the first candidate turn of the transcript
-   (first twelve words; one contained in the other, or at least 40 % shared). A mismatch (silence, wrong audio, a made-up
-   judgement) discards the audio result: `audio_unverified`. A poor recording, a second voice (patient bleed) or a
-   judgement that covers only part of the speech keeps the score but sets the stage's confidence to low.
+3. **Verification.** The words it says it heard are compared with the opening of the first few candidate turns (first twelve
+   words; one contained in the other, or at least 40 % shared; also tried without the connection check the audio can still
+   hold). A mismatch (silence, wrong audio, a made-up judgement) discards the audio result: `audio_unverified`. A poor
+   recording, a second voice (patient bleed) or audio covering under 80 % of the speech keeps the score but sets the stage's
+   confidence to low.
 4. **Feeding the grade.** The grader receives an "ACOUSTIC EVIDENCE" block; **the audio score replaces its own
    Intelligibility**, its Fluency stays its own (the fluency evidence only informs it). The stage's findings are stored
    beside the criterion rationales (`_acoustic`, no migration) and the grade's `GraderVersion` carries
-   `audio-openai.v1:{model}`.
+   `audio-openai.v2:{model}`. `_acoustic` is written whenever the stage ran, usable or not: source, reason, clips, joined
+   and audio milliseconds, candidate speech milliseconds, turns and turns with a clip, coverage.
 
 **No usable audio is not a failure** (owner decision 4 Oct 2026). Every problem — no clip kept, a missing blob, too
 short, unusable, unverified, the transcoder or the provider failing, a refusal, a timeout — becomes
@@ -111,10 +129,19 @@ experts is what [calibration](#calibration) measures (audio-sourced Intelligibil
 ### Grader version
 
 Every score records `GraderVersion` = `{prompt template}|{mapping version}|{audio stage}` (for example
-`speaking.score.v3|speaking-map.v0-heuristic|audio-none`, or `…|audio-openai.v1:gpt-audio-1.5` for a grade whose
+`speaking.score.v4|speaking-map.v0-heuristic|audio-none`, or `…|audio-openai.v2:gpt-audio-1.5` for a grade whose
 Intelligibility was judged from audio). A score is `provisional` until that exact version — together with the grading
 model — has passed calibration; changing the prompt, the mapping, the audio model or the audio stage starts a new,
-uncalibrated version.
+uncalibrated version. (Until 8 Oct 2026 the versions were `speaking.score.v3` and `audio-openai.v1`; `audio-none` means
+both "the stage was off" and "the stage ran but was unavailable", which `_acoustic.reason` tells apart.)
+
+### The secondary review is recorded
+
+After Claude (Max) grades, GPT-6.1 Sol reviews the grade (`speaking.grade.review.v2`, bounded to ±1 band per criterion; any
+failure keeps Claude's grade). What it did is stored beside the rationales under `_review` (numbers and codes only, never
+shown to a candidate): the review `status` (`ran` / `unchanged` / `failed` / `skipped`), the model, **Claude's own nine scores
+before the review**, the reviewer's proposed scores and every change. `GraderVersion` does not carry the reviewer, so a
+reviewed and an unreviewed grade read as the same version; `_review` is how they are told apart.
 
 ## The reported score — one number, everywhere
 
@@ -179,7 +206,7 @@ the whole test, one reported score out of 500, one grade. It is **never** the av
    transcript only (limited evidence)" with low confidence, never half an audio judgement presented as audio.
 4. The result is stored on `SpeakingExamSessions.CombinedAssessmentJson` in the shape of a card's assessment row, so one
    projection reads both; `CombinedScaledSnapshot` / `ReadinessBandSnapshot` hold the reported number and band for History.
-   Its grader version is `speaking.score.v3-combined|…`: a different prompt is a different grader, so the combined judgement
+   Its grader version is `speaking.score.v4-combined|…`: a different prompt is a different grader, so the combined judgement
    stays "provisional" until it has been calibrated on its own.
 
 `GET /v1/speaking/exams/{id}/results` returns `combinedAssessment` (the same projection a card has: nine criteria with

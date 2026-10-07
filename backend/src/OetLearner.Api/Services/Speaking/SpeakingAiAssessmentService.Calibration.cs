@@ -59,7 +59,7 @@ public sealed partial class SpeakingAiAssessmentService
             Context: AiAssessmentContext.Practice,
             Audio: audio), ct);
 
-        return (outcome, audio);
+        return (outcome with { CardAudio = [audio] }, audio);
     }
 
     /// <summary>
@@ -112,9 +112,9 @@ public sealed partial class SpeakingAiAssessmentService
         });
 
         SpeakingAudioEvidence? audio = null;
+        var perCard = new List<SpeakingAudioEvidence?>(2);
         if (useAudio && audioEvidence is not null)
         {
-            var perCard = new List<SpeakingAudioEvidence>(2);
             foreach (var (card, _, _, transcript) in cards)
             {
                 var gradedSegments = SpeakingTranscriptEvidence.StripConnectivityChatter(transcript.SegmentsJson);
@@ -141,6 +141,7 @@ public sealed partial class SpeakingAiAssessmentService
             Context: AiAssessmentContext.Practice,
             Audio: audio), ct);
 
-        return (outcome, audio);
+        // Each card's own audio verdict travels with the outcome: the combined one alone cannot say which card was heard.
+        return (outcome with { CardAudio = perCard }, audio);
     }
 }

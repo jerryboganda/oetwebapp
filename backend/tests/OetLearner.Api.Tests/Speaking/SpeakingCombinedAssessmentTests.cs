@@ -191,7 +191,7 @@ public sealed class SpeakingCombinedAssessmentTests : IAsyncLifetime
         Assert.StartsWith("Role-play 1: ", evidence.Observations[0].Issue);
         Assert.StartsWith("Role-play 2: ", evidence.Observations[1].Issue);
         var stored = await _db.SpeakingExamSessions.AsNoTracking().SingleAsync(e => e.Id == ExamId);
-        Assert.Contains("audio-openai.v1:gpt-audio-1.5", stored.CombinedAssessmentJson);
+        Assert.Contains("audio-openai.v2:gpt-audio-1.5", stored.CombinedAssessmentJson);
     }
 
     [Fact]

@@ -181,7 +181,9 @@ public sealed record SpeakingGraderCalibrationRunCreateRequest(
     int? Repeats,
     bool? UseAudio,
     string? Scope = null,
-    bool? Pilot = null);
+    bool? Pilot = null,
+    /// <summary>Only these performances (labelled and usable ones; ids of the chosen scope). Null or empty = every one.</summary>
+    IReadOnlyList<string>? SampleIds = null);
 
 public sealed record SpeakingGraderCalibrationRunProgress(int Total, int Pending, int Queued, int Done, int Failed);
 

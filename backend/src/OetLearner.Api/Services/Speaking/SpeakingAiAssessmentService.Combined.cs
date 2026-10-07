@@ -197,7 +197,7 @@ public sealed partial class SpeakingAiAssessmentService
     private static string BuildCombinedUserInput(IReadOnlyList<CombinedCardInput> cards, SpeakingAudioEvidence? audio)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(PROMPT_TEMPLATE_V3);
+        sb.AppendLine(PROMPT_TEMPLATE_V4);
         sb.AppendLine();
         sb.AppendLine("---- THIS IS ONE COMPLETE OET SPEAKING TEST: TWO ROLE-PLAYS BY THE SAME CANDIDATE ----");
         sb.AppendLine("Score each of the nine criteria ONCE, for the candidate's performance across BOTH role-plays together, against the band descriptors. Do not score the role-plays separately and do not average: weigh the whole test, so a strong second role-play neither erases nor excuses a weak first one. Evidence quotes may come from either role-play. `strengths`, `priorityWeaknesses` and `drills` may refer to either role-play; say which (for example \"in the first role-play\"). Never mention a separate score for a role-play.");

@@ -863,8 +863,8 @@ public sealed class SpeakingSessionGradingTests : IAsyncLifetime
         var projection = await BuildAssessor(gateway).RunAssessmentAsync(sessionId, default);
 
         var row = await _db.SpeakingAiAssessments.AsNoTracking().SingleAsync(a => a.SpeakingSessionId == sessionId);
-        Assert.Equal("speaking.score.v3", row.PromptTemplateId);
-        Assert.Equal("speaking.score.v3|speaking-map.v0-heuristic|audio-none", row.GraderVersion);
+        Assert.Equal("speaking.score.v4", row.PromptTemplateId);
+        Assert.Equal("speaking.score.v4|speaking-map.v0-heuristic|audio-none", row.GraderVersion);
         // 5+5+5+5 and 3+2+2+2+2 = 31/39: reported 400, Grade B, Exam-ready — one number for all three.
         Assert.Equal(400, row.EstimatedScaledScore);
         Assert.Equal(400, projection.EstimatedScaledScore);

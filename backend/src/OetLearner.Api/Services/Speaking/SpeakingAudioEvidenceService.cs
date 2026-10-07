@@ -129,10 +129,13 @@ public sealed class SpeakingAudioEvidenceService(
     ILogger<SpeakingAudioEvidenceService>? logger = null,
     IRemoteSpeakingJoin? remoteJoin = null) : ISpeakingAudioEvidenceService
 {
-    public const string PromptTemplateId = "speaking.audio_assess.v1";
+    // v2 (8 Oct 2026, owner guardrails): no native-speaker benchmark and no "concentration" test; a noticeable accent that does not
+    // strain the listener is never a reason to score below 5; one stumble is counted once. A different brief is a different
+    // judge, so the stage version below starts uncalibrated again.
+    public const string PromptTemplateId = "speaking.audio_assess.v2";
 
     /// <summary>The stage version stored in the grader version: the model that listened decides it.</summary>
-    public static string StageVersion(string? model) => $"audio-openai.v1:{(string.IsNullOrWhiteSpace(model) ? "default" : model.Trim())}";
+    public static string StageVersion(string? model) => $"audio-openai.v2:{(string.IsNullOrWhiteSpace(model) ? "default" : model.Trim())}";
 
     private const int MinimumDurationMs = 1500;
     private const double MinimumOpeningMatch = 0.4;
@@ -450,8 +453,8 @@ public sealed class SpeakingAudioEvidenceService(
         sb.AppendLine();
         sb.AppendLine("Your job here is narrow. Judge only what you can HEAR; do not guess from the likely content of a consultation.");
         sb.AppendLine("1. Write what you hear in the first 8 to 12 words of the audio as \"heardOpening\" (exactly the words spoken). This shows you listened to this recording.");
-        sb.AppendLine("2. Judge INTELLIGIBILITY on the official 0-6 band descriptors in the system prompt, the way a listener hears it: how much effort the speech costs a native-English listener, from the pronunciation of individual sounds, word stress, sentence stress, intonation, rhythm and the effect of the speaker's first-language accent. First list what you notice as observations (each one a specific word or feature: a sound replaced by another, stress on the wrong syllable, flat or odd intonation, rhythm that is hard to follow, an accent feature that needs extra concentration). Then choose the band from those observations: 6 only when you noticed nothing that costs the listener any effort and the prosody is used effectively; 5 when you noticed a few errors or a noticeable accent but understanding was never strained; 4 when you had to concentrate at times; 3 or lower when it was hard to follow or caused serious strain. Do not give credit just because you managed to work out the words: being understood is not the same as being easy to understand. Judge the SOUND of the speech — not whether the content is right, and not grammar or vocabulary.");
-        sb.AppendLine("3. Report fluency EVIDENCE you can hear (speech rate, long pauses of about two seconds or more, hesitations, fillers, restarts). Do not score fluency.");
+        sb.AppendLine("2. Judge INTELLIGIBILITY on the official 0-6 band descriptors in the system prompt: how easily an ordinary listener understands the speech, from the pronunciation of individual sounds, word stress, sentence stress, intonation and rhythm. Do not compare the speaker with a native speaker, and do not treat a first-language accent as an error in itself: the candidates are international healthcare professionals. First list what you notice as observations (each one a specific word or feature that made understanding harder: a sound replaced by another, stress on the wrong syllable, flat or odd intonation, rhythm that is hard to follow). Then choose the band from those observations: 6 when the speech is easily understood, the prosody is used effectively and any accent has no effect on understanding; 5 when you noticed a few errors or a noticeable accent but the speech was still easily understood with minimal strain; 4 only when errors or accent genuinely strained you at times; 3 or lower only when it was hard to follow or caused serious strain. An accent that does not strain the listener is never a reason to score below 5. Judge the SOUND of the speech only: not whether the content is right, and not grammar, vocabulary or fluency.");
+        sb.AppendLine("3. Report fluency EVIDENCE you can hear (speech rate, long pauses of about two seconds or more, hesitations, fillers, restarts). Count each stumble once: one moment of hesitation, filler and restart is one event, not three. A pause at the join between two clips is not a hesitation. Do not score fluency.");
         sb.AppendLine();
         sb.AppendLine("Return ONLY this JSON object (no markdown, no prose):");
         sb.AppendLine("""

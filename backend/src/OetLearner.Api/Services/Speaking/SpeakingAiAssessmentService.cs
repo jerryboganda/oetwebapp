@@ -45,7 +45,11 @@ public sealed partial class SpeakingAiAssessmentService(
     // v3 (4 Oct 2026): the system prompt now carries the official OET band descriptors and the
     // "rules guide, never deduct" principles; the model is no longer asked for a readiness band
     // (the server derives it, with the score and grade, from the nine criterion scores).
-    internal const string PromptTemplateId = "speaking.score.v3";
+    // v4 (8 Oct 2026, owner guardrails): no native-speaker standard (a noticeable first-language accent is never a penalty in
+    // itself and never a Grammar/Appropriateness problem), the transcript is machine speech recognition, one stumble is one
+    // Fluency event (counted once), and a transcript-only Intelligibility never drops for accent or a mis-recognised word. A
+    // different prompt is a different grader: the version starts uncalibrated again.
+    internal const string PromptTemplateId = "speaking.score.v4";
 
     /// <summary>Version of the audio stage that fed Intelligibility; "audio-none" = transcript only.</summary>
     internal const string AudioStageVersion = "audio-none";
@@ -72,7 +76,7 @@ public sealed partial class SpeakingAiAssessmentService(
     // header so this template focuses on the JSON contract the AI must
     // return for the speaking-grade feature.
     // ---------------------------------------------------------------------
-    private const string PROMPT_TEMPLATE_V3 = """
+    private const string PROMPT_TEMPLATE_V4 = """
 You are an OET Speaking examiner scoring a single role-play session against the official
 OET band descriptors given in the system prompt.
 Return ONLY a strict JSON object with this exact shape (no markdown, no
@@ -132,10 +136,18 @@ Scoring rules:
     grade: the server derives both from your nine criterion scores.
   * Anything said before the role-play begins, or about the connection or
     equipment, is not part of the performance — ignore it.
+  * Do not use a native-speaker standard. The candidate is an international
+    healthcare professional: a noticeable first-language accent is not a
+    penalty in itself, and it is never a Grammar or Appropriateness problem.
+  * The transcript is automatic speech recognition. An odd, misspelt or
+    ungrammatical word may be a recognition error caused by accent or audio
+    quality, not the candidate's wording.
   * Candidate transcript segments marked `"interrupted": true` mean the
     candidate started speaking BEFORE the patient had finished their
     response (they cut the patient off). Weigh repeated or abrupt
-    interruptions under `relationshipBuilding` and `appropriateness` —
+    interruptions under `relationshipBuilding` (use `appropriateness`
+    instead only when the problem is the wording of what was said,
+    never both for the same interruption) —
     judge severity in context (a single empathetic clarifying
     interjection differs from persistently talking over the patient);
     never apply a mechanical per-interruption deduction. When
@@ -474,7 +486,11 @@ Scoring rules:
         string Provider,
         string ModelId,
         string GraderVersion,
-        Dictionary<string, object?> RationalesPayload);
+        Dictionary<string, object?> RationalesPayload,
+        /// <summary>What the secondary review did (Claude's scores before it, the reviewer's, every change); null only for outcomes built by older callers.</summary>
+        SpeakingReviewTrace? Review = null,
+        /// <summary>The audio evidence of each card behind a combined (Full Mock) outcome, set by the calibration harness; null otherwise.</summary>
+        IReadOnlyList<SpeakingAudioEvidence?>? CardAudio = null);
 
     internal async Task<SpeakingGradeOutcome> GradeCoreAsync(SpeakingGradeInput input, CancellationToken ct)
     {
@@ -525,9 +541,20 @@ Scoring rules:
         // ── Parse, clamp, and validate evidence quotes ──
         // GPT-6.1 Sol reviews Claude's grade (bounded +-1 band per criterion; any failure keeps Claude's grade).
         // Only when the primary grade is itself readable, so an unparseable Claude reply still fails loud below.
-        var completion = ParseAssessment(aiResult.Completion) is null
-            ? aiResult.Completion
-            : await SpeakingGradeReviewer.ReviewAsync(aiGateway, gradeRequest, aiResult, logger, ct);
+        string completion;
+        SpeakingReviewTrace review;
+        if (ParseAssessment(aiResult.Completion) is null)
+        {
+            completion = aiResult.Completion;
+            review = SpeakingReviewTrace.Skipped(SpeakingGradeReviewer.ScoresOf(aiResult.Completion));
+        }
+        else
+        {
+            var reviewed = await SpeakingGradeReviewer.ReviewAsync(aiGateway, gradeRequest, aiResult, logger, ct);
+            completion = reviewed.Completion;
+            review = reviewed.Trace;
+        }
+
         var parsed = ParseAssessment(completion);
         if (parsed is null)
         {
@@ -598,6 +625,19 @@ Scoring rules:
         // reserved key (no migration); nothing that looks up a criterion code sees it.
         if (audio is not null) rationalesPayload[AcousticKey] = JsonSerializer.SerializeToElement(AcousticPayload(audio), ReportJson);
 
+        // What the secondary review did (Claude's own scores before it, the reviewer's, every change): scores only, never shown
+        // to a candidate, so a grade can be explained after the fact without database archaeology.
+        rationalesPayload[ReviewKey] = JsonSerializer.SerializeToElement(new
+        {
+            status = review.Status,
+            model = review.Model,
+            primaryScores = review.PrimaryScores,
+            reviewerScores = review.ReviewerScores,
+            changes = review.Changes,
+            // The audio judge's Intelligibility replaced the grader's (and the reviewer's) afterwards.
+            intelligibilityFromAudio = audio is { IsAudio: true },
+        }, ReportJson);
+
         // The coaching report (strengths, priority weaknesses, drills) rides in the same JSON under a
         // reserved key, exactly as stored here; it is scrubbed of internal IDs only when a candidate reads it.
         var report = parsed.Report;
@@ -620,7 +660,8 @@ Scoring rules:
             Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedProvider) ? ProviderName : aiResult.ResolvedProvider.Trim(), 32),
             Truncate(string.IsNullOrWhiteSpace(aiResult.ResolvedModel) ? ModelId : aiResult.ResolvedModel.Trim(), 96),
             GraderVersionFor(input.TemplateId, audio),
-            rationalesPayload);
+            rationalesPayload,
+            review);
     }
 
     /// <summary><c>{template}|{mapping}|{audio stage}</c> for any prompt template (the card grader or its combined variant).</summary>
@@ -784,7 +825,7 @@ Scoring rules:
         SpeakingAudioEvidence? audio = null)
     {
         var sb = new StringBuilder();
-        sb.AppendLine(PROMPT_TEMPLATE_V3);
+        sb.AppendLine(PROMPT_TEMPLATE_V4);
         sb.AppendLine();
         AppendCardSections(sb, card, script, cardType);
         AppendEvidenceNote(sb, IsLiveVoiceTranscript(transcript), plural: false, audio);
@@ -874,7 +915,7 @@ Scoring rules:
         else
         {
             // The audio stage ran but there was nothing usable: judge Intelligibility from the transcript, and say so.
-            sb.AppendLine($"NOTE: No audio evidence could be used for this attempt ({SpeakingAudioEvidenceService.ReasonText(audio.Reason)}). Estimate Intelligibility from the transcript alone, say in its rationale that no audio evidence was available, and keep its score within what a transcript can support. The feedback text must never tell the candidate to listen to or check a recording.");
+            sb.AppendLine($"NOTE: No audio evidence could be used for this attempt ({SpeakingAudioEvidenceService.ReasonText(audio.Reason)}). Estimate Intelligibility from the transcript alone, say in its rationale that no audio evidence was available, and keep its score within what a transcript can support. A transcript cannot show accent or pronunciation: do not lower Intelligibility for accent or for words that merely look mis-recognised; lower it only where the patient asks the candidate to repeat or clarify what they said. The feedback text must never tell the candidate to listen to or check a recording.");
             sb.AppendLine();
         }
     }
@@ -958,6 +999,9 @@ Scoring rules:
     /// <summary>Reserved key (same pattern as <see cref="ReportKey"/>) holding what the audio judge heard, or why
     /// there was no audio evidence. Nothing that looks up a criterion code sees it.</summary>
     private const string AcousticKey = "_acoustic";
+
+    /// <summary>Reserved key (same pattern) holding what the secondary review did to the grade. Never shown to a candidate.</summary>
+    private const string ReviewKey = "_review";
 
     /// <summary>The acoustic evidence as the grader sees it. Authoritative for Intelligibility; the fluency
     /// observations inform, but never replace, the grader's own Fluency judgement.</summary>
@@ -1233,7 +1277,7 @@ Scoring rules:
     /// <see cref="PROMPT_TEMPLATE_V2"/> (<c>grammar</c> / <c>providingStructure</c> vs
     /// <c>grammarExpression</c> / <c>structure</c>), so a model may follow either; both spellings
     /// map to the canonical code.</summary>
-    private static string CanonicalCriterionCode(string name)
+    internal static string CanonicalCriterionCode(string name)
     {
         if (string.Equals(name, "grammar", StringComparison.OrdinalIgnoreCase)) return "grammarExpression";
         if (string.Equals(name, "providingStructure", StringComparison.OrdinalIgnoreCase)) return "structure";

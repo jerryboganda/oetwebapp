@@ -25,6 +25,14 @@ public sealed partial class SpeakingGraderCalibrationService
     public async Task<SpeakingGraderCalibrationRunView> CreateRunAsync(
         string adminId, string adminName, SpeakingGraderCalibrationRunCreateRequest request, CancellationToken ct)
     {
+        // The approved validation run must cover every marked performance (its coverage and thresholds are measured over the set),
+        // so only an informational pilot may be limited to chosen performances.
+        if (request.SampleIds is { Count: > 0 } && request.Pilot != true)
+        {
+            throw ApiException.Validation("speaking_calibration_sample_filter_requires_pilot",
+                "Only a pilot run can be limited to chosen performances; a validation run grades every marked one.");
+        }
+
         if (await db.SpeakingGraderCalibrationRuns.AnyAsync(r => r.Status == SpeakingGraderCalibrationRunStatus.Running, ct))
         {
             throw ApiException.Conflict("speaking_calibration_run_active",
@@ -64,6 +72,13 @@ public sealed partial class SpeakingGraderCalibrationService
             sampleIds = labelled.Where(s => !unusable.Contains(s.Id)).Select(s => s.Id).ToList();
         }
 
+        // A run may be limited to named performances (an owner pilot of ONE Full Mock grades only that one, not every marked set).
+        if (request.SampleIds is { Count: > 0 } only)
+        {
+            var wanted = only.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id.Trim()).ToHashSet(StringComparer.Ordinal);
+            sampleIds = sampleIds.Where(wanted.Contains).ToList();
+        }
+
         if (sampleIds.Count == 0)
         {
             throw ApiException.Conflict("speaking_calibration_nothing_to_grade",
@@ -101,7 +116,7 @@ public sealed partial class SpeakingGraderCalibrationService
         }
 
         db.AuditEvents.Add(AuditFor(adminId, adminName, "SpeakingGraderCalibrationRunStarted", run.Id,
-            new { performances = sampleIds.Count, run.Repeats, run.UseAudio, run.Scope, run.Pilot }));
+            new { performances = sampleIds.Count, run.Repeats, run.UseAudio, run.Scope, run.Pilot, limited = request.SampleIds is { Count: > 0 } }));
         await db.SaveChangesAsync(ct);
         return await ToViewAsync(run, withReport: false, ct);
     }
@@ -277,6 +292,7 @@ public sealed partial class SpeakingGraderCalibrationService
             grade.Provider = outcome.Provider;
             grade.ModelId = outcome.ModelId;
             grade.GraderVersion = outcome.GraderVersion;
+            grade.DiagnosticsJson = SpeakingCalibrationDiagnosticsJson.Build(outcome, audio);
             grade.Status = SpeakingGraderCalibrationGradeStatus.Done;
             grade.CompletedAt = clock.GetUtcNow();
             grade.Error = null;
@@ -343,6 +359,8 @@ public sealed partial class SpeakingGraderCalibrationService
         if (run.Status == SpeakingGraderCalibrationRunStatus.Complete && !string.IsNullOrWhiteSpace(run.ReportJson))
         {
             report = JsonSerializer.Deserialize<SpeakingCalibrationReport>(run.ReportJson, ReportJson);
+            // A list of runs carries the summary only; the grade-by-grade detail (and its diagnostics) is for the one run opened.
+            if (!withReport && report is not null) report = report with { Detail = null };
         }
         else if (withReport)
         {
@@ -363,16 +381,20 @@ public sealed partial class SpeakingGraderCalibrationService
             run.Pilot);
     }
 
+    // Only the status of each grade is read: a grade row also carries its diagnostics, which progress never needs.
     private async Task<SpeakingGraderCalibrationRunProgress> ProgressAsync(string runId, CancellationToken ct)
-        => Progress(await db.SpeakingGraderCalibrationGrades.AsNoTracking().Where(g => g.RunId == runId).ToListAsync(ct));
+        => Progress(await db.SpeakingGraderCalibrationGrades.AsNoTracking().Where(g => g.RunId == runId).Select(g => g.Status).ToListAsync(ct));
 
     private static SpeakingGraderCalibrationRunProgress Progress(IReadOnlyCollection<SpeakingGraderCalibrationGrade> grades)
+        => Progress(grades.Select(g => g.Status).ToList());
+
+    private static SpeakingGraderCalibrationRunProgress Progress(IReadOnlyCollection<SpeakingGraderCalibrationGradeStatus> statuses)
         => new(
-            grades.Count,
-            grades.Count(g => g.Status == SpeakingGraderCalibrationGradeStatus.Pending),
-            grades.Count(g => g.Status == SpeakingGraderCalibrationGradeStatus.Queued),
-            grades.Count(g => g.Status == SpeakingGraderCalibrationGradeStatus.Done),
-            grades.Count(g => g.Status == SpeakingGraderCalibrationGradeStatus.Failed));
+            statuses.Count,
+            statuses.Count(s => s == SpeakingGraderCalibrationGradeStatus.Pending),
+            statuses.Count(s => s == SpeakingGraderCalibrationGradeStatus.Queued),
+            statuses.Count(s => s == SpeakingGraderCalibrationGradeStatus.Done),
+            statuses.Count(s => s == SpeakingGraderCalibrationGradeStatus.Failed));
 
     /// <summary>The report over the performances this run graded (a performance marked after the run began does not count).
     /// A mock-scope run compares the expert's ONE mark of each whole two-card test with the combined grader's grades.</summary>
@@ -408,7 +430,9 @@ public sealed partial class SpeakingGraderCalibrationService
 
         var observations = grades
             .Where(g => g.Status == SpeakingGraderCalibrationGradeStatus.Done && g.ScoresJson != null)
-            .Select(g => new SpeakingCalibrationObservation(g.SampleId, g.Repeat, ParseScores(g.ScoresJson), g.IntelligibilitySource ?? "transcript_only"))
+            .Select(g => new SpeakingCalibrationObservation(
+                g.SampleId, g.Repeat, ParseScores(g.ScoresJson), g.IntelligibilitySource ?? "transcript_only",
+                g.ReportedScaled, SpeakingCalibrationDiagnosticsJson.Parse(g.DiagnosticsJson)))
             .ToList();
         var report = SpeakingGraderCalibrationMetrics.Compute(experts, observations, run.UseAudio, pilot: run.Pilot);
         // The "Provisional" label is earned per exact grader version + model, so say how many grades each produced.
@@ -416,7 +440,7 @@ public sealed partial class SpeakingGraderCalibrationService
             .Where(g => g.Status == SpeakingGraderCalibrationGradeStatus.Done && !string.IsNullOrWhiteSpace(g.GraderVersion))
             .GroupBy(g => $"{g.GraderVersion} · {g.Provider}/{g.ModelId}", StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
-        return report with { GraderVersions = versions };
+        return report with { GraderVersions = versions, MappingVersion = OetScoring.SpeakingMappingVersion };
     }
 
     private static Dictionary<string, int> ParseScores(string? json)

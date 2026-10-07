@@ -35,6 +35,10 @@ on:
         required: false
         default: false
         type: boolean
+      sample:
+        description: 'Grade ONLY this performance id (a mock-sample id for scope=mock). Blank = every marked, usable performance of the scope'
+        required: false
+        default: ''
       smoke:
         description: 'Only check that the calibration API is live for an admin (counts only; starts no run)'
         required: false
@@ -72,10 +76,12 @@ jobs:
           AUDIO: ${{ inputs.audio }}
           SCOPE: ${{ inputs.scope }}
           PILOT: ${{ inputs.pilot }}
+          SAMPLE: ${{ inputs.sample }}
           MAX_MINUTES: ${{ inputs.max_minutes }}
           SMOKE: ${{ inputs.smoke }}
         run: |
           ARGS="--repeats ${REPEATS:-2} --max-minutes ${MAX_MINUTES:-330}"
+          if [ -n "$SAMPLE" ]; then ARGS="$ARGS --sample $SAMPLE"; fi
           if [ "$SMOKE" = "true" ]; then ARGS="$ARGS --smoke"; fi
           if [ -n "$RUN_ID" ]; then ARGS="$ARGS --run $RUN_ID"; fi
           if [ "$AUDIO" = "false" ]; then ARGS="$ARGS --no-audio"; fi
@@ -91,5 +97,7 @@ jobs:
           path: |
             grader-calibration-report.json
             grader-calibration-report.md
+            grader-calibration-report-*.json
+            grader-calibration-report-*.md
           if-no-files-found: ignore
           retention-days: 90

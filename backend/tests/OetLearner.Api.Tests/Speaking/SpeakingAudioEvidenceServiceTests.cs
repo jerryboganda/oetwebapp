@@ -67,7 +67,7 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
         var call = Assert.Single(h.Gateway.Requests);
         Assert.Equal(AiProviderRegistry.SpeakingAudioProviderCode, call.Provider);
         Assert.Equal(AiFeatureCodes.SpeakingAudioAssess, call.FeatureCode);
-        Assert.Equal("speaking.audio_assess.v1", call.PromptTemplateId);
+        Assert.Equal("speaking.audio_assess.v2", call.PromptTemplateId);
         Assert.Equal(0, call.Temperature);
         var audio = Assert.Single(call.AudioAttachments!);
         Assert.Equal("audio/mpeg", audio.MimeType);
@@ -592,9 +592,9 @@ public sealed class SpeakingAudioEvidenceServiceTests : IAsyncLifetime
     [Fact]
     public void StageVersion_NamesTheModelThatListened()
     {
-        Assert.Equal("audio-openai.v1:gpt-audio-1.5", SpeakingAudioEvidenceService.StageVersion(" gpt-audio-1.5 "));
-        Assert.Equal("audio-openai.v1:default", SpeakingAudioEvidenceService.StageVersion(null));
-        Assert.Equal("audio-openai.v1:default", SpeakingAudioEvidenceService.StageVersion("  "));
+        Assert.Equal("audio-openai.v2:gpt-audio-1.5", SpeakingAudioEvidenceService.StageVersion(" gpt-audio-1.5 "));
+        Assert.Equal("audio-openai.v2:default", SpeakingAudioEvidenceService.StageVersion(null));
+        Assert.Equal("audio-openai.v2:default", SpeakingAudioEvidenceService.StageVersion("  "));
     }
 
     [Fact]

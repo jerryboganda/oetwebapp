@@ -2,8 +2,9 @@
  * Speaking grader calibration — typed admin client (owner spec 4 Oct 2026).
  *
  * Backed by `SpeakingGraderCalibrationEndpoints.cs` under `/v1/admin/speaking/grader-calibration`.
- * This is the expert side: Dr Hesham marks a performance BLIND — no endpoint here ever returns an AI
- * score, grade or rationale, so the number being validated cannot anchor the expert's marks.
+ * This is the expert side: Dr Hesham marks a performance BLIND — no marking endpoint here ever returns an AI
+ * score, grade or rationale, so the number being validated cannot anchor the expert's marks. The ONLY exception
+ * is the read-only run reports at the bottom of this file (the AI-vs-expert comparison), used by their own pages.
  */
 import { apiClient } from '@/lib/api';
 
@@ -255,4 +256,108 @@ export function adminExcludeGraderCalibrationMockSample(
   reason: string,
 ): Promise<GraderCalibrationMockSampleRow> {
   return apiClient.post<GraderCalibrationMockSampleRow>(`${BASE}/mock-samples/${encodeURIComponent(id)}/exclude`, { reason });
+}
+
+// ── Runs: the AI-vs-expert comparison (read-only; numbers and codes only) ──
+// Runs are started and driven by `scripts/speaking/grader-calibration.mjs` (or its workflow); this is where the owner reads them.
+
+export interface GraderCalibrationReviewChange {
+  criterion: string;
+  from: number;
+  to: number;
+  reviewerRaw: number;
+}
+
+/** What the secondary reviewer did to one grade. `status`: ran | unchanged | failed | skipped. */
+export interface GraderCalibrationReviewTrace {
+  status: string;
+  model: string | null;
+  /** Claude's own scores BEFORE the review. */
+  primaryScores: Record<string, number>;
+  reviewerScores: Record<string, number> | null;
+  changes: GraderCalibrationReviewChange[];
+}
+
+export interface GraderCalibrationAudioCard {
+  /** `audio` (judged from the sound) or `transcript_only`. */
+  source: string;
+  reason: string | null;
+  model: string | null;
+  clips: number;
+  durationMs: number;
+  audioMs: number;
+  speechMs: number;
+  turns: number;
+  turnsWithClip: number;
+  coverage: number | null;
+  confidence: string;
+  audioQuality: string;
+  patientVoiceBleed: boolean;
+  intelligibilityScore: number | null;
+}
+
+export interface GraderCalibrationGradeDiagnostics {
+  mappingVersion: string | null;
+  primaryScores: Record<string, number> | null;
+  review: GraderCalibrationReviewTrace | null;
+  audio: { combined: GraderCalibrationAudioCard | null; cards: Array<GraderCalibrationAudioCard | null> } | null;
+}
+
+export interface GraderCalibrationGradeDetail {
+  repeat: number;
+  scores: Record<string, number>;
+  raw: number;
+  /** The grader's score through a map fitted without this performance. */
+  scaledLeaveOneOut: number;
+  grade: string;
+  scaledError: number;
+  intelligibilitySource: string;
+  /** What a learner would have been shown (the v0 raw-to-reported map). */
+  reportedScaled?: number | null;
+  reportedGrade?: string | null;
+  reportedError?: number | null;
+  diagnostics?: GraderCalibrationGradeDiagnostics | null;
+}
+
+export interface GraderCalibrationPerformance {
+  sampleId: string;
+  hasAudio: boolean;
+  expertScores: Record<string, number>;
+  expertRaw: number;
+  expertOverall: number;
+  expertGrade: string;
+  grades: GraderCalibrationGradeDetail[];
+}
+
+export interface GraderCalibrationReport {
+  performances: number;
+  observations: number;
+  repeats: number;
+  verdict: { passed: boolean; failures: string[]; mode?: string; advisory?: string[] | null };
+  detail?: GraderCalibrationPerformance[] | null;
+  graderVersions?: Record<string, number> | null;
+  mappingVersion?: string | null;
+}
+
+export interface GraderCalibrationRunView {
+  id: string;
+  /** running | complete | cancelled */
+  status: string;
+  graderVersion: string;
+  repeats: number;
+  useAudio: boolean;
+  createdAt: string;
+  finalizedAt: string | null;
+  progress: { total: number; pending: number; queued: number; done: number; failed: number };
+  report: GraderCalibrationReport | null;
+  scope?: string;
+  pilot?: boolean;
+}
+
+export function adminListGraderCalibrationRuns(): Promise<GraderCalibrationRunView[]> {
+  return apiClient.get<GraderCalibrationRunView[]>(`${BASE}/runs`);
+}
+
+export function adminGetGraderCalibrationRun(id: string): Promise<GraderCalibrationRunView> {
+  return apiClient.get<GraderCalibrationRunView>(`${BASE}/runs/${encodeURIComponent(id)}`);
 }
