@@ -17,6 +17,7 @@ public partial class LearnerDbContext
     public DbSet<CompanionJourney> CompanionJourneys => Set<CompanionJourney>();
     public DbSet<CompanionAvailability> CompanionAvailabilities => Set<CompanionAvailability>();
     public DbSet<AiCreditCost> AiCreditCosts => Set<AiCreditCost>();
+    public DbSet<CompanionHandoff> CompanionHandoffs => Set<CompanionHandoff>();
 
     partial void OnModelCreatingCompanion(ModelBuilder modelBuilder)
     {
@@ -114,6 +115,13 @@ public partial class LearnerDbContext
         modelBuilder.Entity<AiCreditCost>(e =>
         {
             e.HasKey(x => x.ActionCode);
+        });
+
+        modelBuilder.Entity<CompanionHandoff>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => new { x.UserId, x.CreatedAt });
+            e.HasIndex(x => new { x.Status, x.CreatedAt });
         });
     }
 }

@@ -119,6 +119,24 @@ public static class CompanionAccessAdminEndpoints
             return Results.Ok(new { planCode, enabled = request.Enabled, updatedByAdminId = adminId });
         });
 
+        // ── Tutor/support handoff queue (F-123) ────────────────────────────
+        group.MapGet("/handoffs", async (
+            OetLearner.Api.Services.Companion.ICompanionHandoffService handoffs,
+            CancellationToken ct,
+            string? route = null, int take = 50)
+            => Results.Ok(new { rows = await handoffs.ListOpenAsync(route, Math.Clamp(take, 1, 200), ct) }));
+
+        group.MapPost("/handoffs/{id}/status", async (
+            string id,
+            CompanionHandoffStatusRequest request,
+            OetLearner.Api.Services.Companion.ICompanionHandoffService handoffs,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var updated = await handoffs.SetStatusAsync(id, request.Status, http.User.FindFirstValue(System.Security.Claims.ClaimTypes.NameIdentifier), ct);
+            return updated is null ? Results.NotFound() : Results.Ok(updated);
+        }).RequireRateLimiting("PerUserWrite");
+
         // ── Reset to manifest truth (delete override) ─────────────────────
         group.MapDelete("/{planCode}", async (
             string planCode,
@@ -159,3 +177,6 @@ public sealed record CompanionPlanAccessItem(
     bool? OverrideEnabled,
     string? UpdatedByAdminId,
     DateTimeOffset? UpdatedAt);
+
+public sealed record CompanionHandoffStatusRequest(string Status);
+

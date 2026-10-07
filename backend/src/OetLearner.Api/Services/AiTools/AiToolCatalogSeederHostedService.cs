@@ -76,6 +76,8 @@ public sealed class AiToolCatalogSeederHostedService(
         "companion_start_journey",
         "companion_next_best_action",
         "companion_train_mistakes",
+        "companion_request_handoff",
+        "companion_upgrade",
         "companion_why_score_change",
     ];
 

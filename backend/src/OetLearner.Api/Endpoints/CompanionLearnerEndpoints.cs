@@ -57,6 +57,25 @@ public static class CompanionLearnerEndpoints
         group.MapGet("/session", GetSessionAsync);
         group.MapGet("/memory", GetMemoryAsync);
         group.MapGet("/memory/errors", GetMemoryErrorsAsync);
+        group.MapGet("/handoffs", async (HttpContext http,
+            OetLearner.Api.Services.Companion.ICompanionHandoffService handoffs,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+            var rows = await handoffs.ListForUserAsync(userId, 20, ct);
+            return Results.Ok(new
+            {
+                handoffs = rows.Select(h => new
+                {
+                    id = h.Id,
+                    route = h.Route,
+                    status = h.Status,
+                    issue = h.Issue,
+                    createdAt = h.CreatedAt,
+                }),
+            });
+        });
         group.MapDelete("/memory/entries/{entryId}", DeleteMemoryEntryAsync);
         group.MapDelete("/memory/notes/{noteId}", DeleteNoteAsync);
         group.MapDelete("/memory/bookmarks/{bookmarkId}", DeleteBookmarkAsync);

@@ -301,6 +301,98 @@ public sealed class CompanionStartJourneyTool(
     }
 }
 
+public sealed class CompanionRequestHandoffTool(
+    ICompanionContextResolver contexts,
+    OetLearner.Api.Services.Companion.ICompanionHandoffService handoffs,
+    ICompanionDestinationRegistry destinations) : IAiToolExecutor
+{
+    public string Code => "companion_request_handoff";
+    public string Description => "Prepare a tutor or support handoff from this chat: the learner's issue, their recorded scores and evidenced errors, and the thread reference. Creates the handoff and returns the summary plus where it went.";
+    public AiToolCategory Category => AiToolCategory.Write;
+    public string JsonSchemaArgs => """
+    {
+      "type":"object",
+      "properties":{
+        "route":{"type":"string","enum":["tutor","support"],"maxLength":16},
+        "issue":{"type":"string","minLength":3,"maxLength":1024}
+      },
+      "required":["route","issue"],
+      "additionalProperties":false
+    }
+    """;
+
+    public async Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(ctx.UserId)) return CompanionToolGuards.NoUser();
+        var context = await contexts.ResolveAsync(ctx.UserId!, new CompanionContextEnvelope(), ct);
+        if (!context.ActionsEnabled) return CompanionToolGuards.ActionsOff();
+
+        var route = args.TryGetProperty("route", out var routeEl) && routeEl.ValueKind == JsonValueKind.String
+            ? routeEl.GetString()! : "tutor";
+        var issue = args.TryGetProperty("issue", out var issueEl) && issueEl.ValueKind == JsonValueKind.String
+            ? issueEl.GetString()! : string.Empty;
+        if (issue.Trim().Length < 3)
+            return new AiToolExecutionResult(AiToolOutcome.ArgsInvalid, null, "issue_required", "state the learner's issue in their words");
+
+        var threadId = string.IsNullOrEmpty(ctx.ThreadId) ? "no-thread" : ctx.ThreadId!;
+        var handoff = await handoffs.CreateAsync(ctx.UserId!, threadId, route, issue, ct);
+        var destinationId = route == "support" ? "support" : "escalations";
+        var destination = await destinations.ResolveAsync(destinationId, context, ct);
+
+        return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
+        {
+            handoff_id = handoff.Id,
+            route = handoff.Route,
+            status = handoff.Status,
+            summary = handoff.Summary,
+            track_url = destination.Url,
+            instruction = "Show the learner the summary (it is built from their real scores and errors), tell them which route it went to, and point them to the tracking page.",
+        }));
+    }
+}
+
+public sealed class CompanionUpgradeTool(
+    ICompanionContextResolver contexts,
+    ICompanionDestinationRegistry destinations) : IAiToolExecutor
+{
+    public string Code => "companion_upgrade";
+    public string Description => "Open the contextual upgrade for exactly what the learner is blocked on, and confirm that the current chat resumes after purchase. Shows tier options with live prices.";
+    public AiToolCategory Category => AiToolCategory.Read;
+    public string JsonSchemaArgs => """
+    {
+      "type":"object",
+      "properties":{
+        "need":{"type":"string","maxLength":200}
+      },
+      "additionalProperties":false
+    }
+    """;
+
+    public async Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(ctx.UserId)) return CompanionToolGuards.NoUser();
+        var context = await contexts.ResolveAsync(ctx.UserId!, new CompanionContextEnvelope(), ct);
+        var need = args.TryGetProperty("need", out var needEl) && needEl.ValueKind == JsonValueKind.String
+            ? needEl.GetString()! : "more AI features";
+        var packages = await destinations.ResolveAsync("ai.packages", context, ct);
+
+        return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
+        {
+            blocked_need = need,
+            current_tier = context.Tier,
+            upgrade_url = packages.Url,
+            resume = new
+            {
+                thread_id = ctx.ThreadId,
+                // Threads live server-side: after purchase the entitlement check
+                // passes and this same thread continues untouched (F-112).
+                instruction = "After the purchase completes, this exact chat continues from where it stopped — nothing needs re-explaining.",
+            },
+            instruction = "Show the upgrade that matches the blocked need (not the whole price page), say clearly that the chat continues where it left off after purchase, and never promise a feature the learner's tier would not unlock.",
+        }));
+    }
+}
+
 public sealed class CompanionNextBestActionTool(
     ICompanionContextResolver contexts,
     INextBestActionService nextBest) : IAiToolExecutor
