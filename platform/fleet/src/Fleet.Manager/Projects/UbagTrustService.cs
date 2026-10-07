@@ -43,8 +43,9 @@ public sealed class UbagTrustService
     public static readonly TimeSpan LeafRenewBefore = TimeSpan.FromDays(30);
 
     private const string CaPemBegin = "-----BEGIN CERTIFICATE-----";
-    private const string KeyPemBegin = "-----BEGIN PRIVATE KEY-----";
-    private const string EcKeyPemBegin = "-----BEGIN EC PRIVATE KEY-----";
+    // PEM MARKERS for shape validation, not key material — the annotation below is the scanner's own opt-out.
+    private const string KeyPemBegin = "-----BEGIN PRIVATE KEY-----"; // secret-scan:allow
+    private const string EcKeyPemBegin = "-----BEGIN EC PRIVATE KEY-----"; // secret-scan:allow
 
     private readonly CredentialStore _credentials;
     private readonly IOptions<FleetOptions> _options;
