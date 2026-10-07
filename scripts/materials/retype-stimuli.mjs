@@ -195,7 +195,8 @@ function buildVectorPdf(pdfPath, outPath, report, assetId) {
     const words = ocrPageTsv(png);
     const dims = pngSize(png);
     if (!dims.w || !dims.h) throw new Error(`no png dimensions for ${png}`);
-    pyInputs.push({ png, pageW: dims.w, pageH: dims.h, words });
+    const lines = groupLines(words);
+    pyInputs.push({ png, pageW: dims.w, pageH: dims.h, words: lines });
     report.wordCount += words.length;
     report.lowConfidence.push(...words.filter((wd) => wd.confidence < MIN_CONFIDENCE).map((wd) => ({ page: p, ...wd })));
     // Keep the SOURCE render for the human review pair (original vs rebuilt).
@@ -210,6 +211,84 @@ function buildVectorPdf(pdfPath, outPath, report, assetId) {
   droppedWords.length = 0;
   // cleanup page pngs (big)
   for (const f of fs.readdirSync(RETYPE_DIR)) if (f.startsWith('page-')) fs.unlinkSync(path.join(RETYPE_DIR, f));
+}
+
+/** Group OCR words into visual LINES (top within tolerance), drop ghost
+ * duplicates (show-through produces a second, lower-confidence copy of the
+ * same line), and emit one line record per row. Drawing one string per line
+ * kills the word-by-word overlap chaos on photo scans. */
+function groupLines(words) {
+  const sorted = [...words].sort((a, b) => a.top - b.top || a.left - b.left);
+  const lines = [];
+  for (const w of sorted) {
+    const h = w.height || 1;
+    const line = lines.find((l) => {
+      const lh = l.height || 1;
+      const overlap = Math.min(l.top + lh, w.top + h) - Math.max(l.top, w.top);
+      return overlap > 0.45 * Math.min(lh, h);
+    });
+    if (line) {
+      line.words.push(w);
+      line.top = Math.min(line.top, w.top);
+      line.height = Math.max(line.height, w.top + h) - line.top;
+    } else {
+      lines.push({ top: w.top, height: h, words: [w] });
+    }
+  }
+  const out = [];
+  for (const line of lines) {
+    const ws = [...line.words].sort((a, b) => a.left - b.left);
+    // Ghost dedupe: same text (or >70% char overlap) starting within 0.6 of a
+    // box width -> keep the higher-confidence one.
+    const kept = [];
+    for (const w of ws) {
+      const ghost = kept.find((k) => {
+        const overlapStart = Math.abs(k.left - w.left) < 0.6 * Math.max(k.width, w.width);
+        const sameish = k.text.toLowerCase().includes(w.text.toLowerCase()) || w.text.toLowerCase().includes(k.text.toLowerCase());
+        return overlapStart && sameish && w.confidence <= k.confidence;
+      });
+      if (ghost) continue;
+      const weaker = kept.findIndex((k) => {
+        const overlapStart = Math.abs(k.left - w.left) < 0.6 * Math.max(k.width, w.width);
+        const sameish = k.text.toLowerCase().includes(w.text.toLowerCase()) || w.text.toLowerCase().includes(k.text.toLowerCase());
+        return overlapStart && sameish && k.confidence <= w.confidence;
+      });
+      if (weaker >= 0) kept.splice(weaker, 1);
+      kept.push(w);
+    }
+    if (!kept.length) continue;
+    // Split the line into SEGMENTS at large gaps (label/value tables), so each
+    // segment is drawn at its own true x: no cumulative drift across the page.
+    const segments = [];
+    let seg = [kept[0]];
+    for (let i = 1; i < kept.length; i++) {
+      const gap = kept[i].left - (kept[i - 1].left + kept[i - 1].width);
+      const em = Math.max(kept[i].height, kept[i - 1].height);
+      if (gap > 2.2 * em) {
+        segments.push(seg);
+        seg = [kept[i]];
+      } else {
+        seg.push(kept[i]);
+      }
+    }
+    segments.push(seg);
+    for (const s of segments) {
+      let text = s[0].text;
+      for (let i = 1; i < s.length; i++) {
+        const gap = s[i].left - (s[i - 1].left + s[i - 1].width);
+        const em = Math.max(s[i].height, s[i - 1].height);
+        text += ' '.repeat(Math.max(1, Math.min(4, Math.round(gap / (0.55 * em))))) + s[i].text;
+      }
+      out.push({
+        left: Math.min(...s.map((k) => k.left)),
+        top: line.top,
+        width: Math.max(...s.map((k) => k.left + k.width)) - Math.min(...s.map((k) => k.left)),
+        height: line.height,
+        text,
+      });
+    }
+  }
+  return out;
 }
 
 const PY_BUILDER = String.raw`
