@@ -2384,9 +2384,7 @@ public sealed record AiGatewayRequest
     public string Model { get; init; } = "";
     public double Temperature { get; init; } = 0.2;
 
-    /// <summary>Settable: the OpenCode length-retry ladder raises the budget once
-    /// when effort=max reasoning exhausts the floor (see RegistryBackedProvider).</summary>
-    public int? MaxTokens { get; init; set; }
+    public int? MaxTokens { get; init; }
     public IReadOnlyList<AiProviderAudioAttachment>? AudioAttachments { get; init; }
 
     /// <summary>
