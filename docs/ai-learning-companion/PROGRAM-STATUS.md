@@ -68,3 +68,26 @@ Authoritative running state for the SAMI 100% implementation program. Baseline:
 - **Runner**: `.tools-state/sami-ops/uat-run.mjs` (SignalR learner client; packs 1/2 scripted;
   pack 3/4 definitions in `uat-pack34.mjs`); consolidation: `scripts/ai-learning-companion/consolidate_uat.py`.
 - §17.1 judgement stays with the reviewer; the runner captures verbatim responses only.
+
+## UAT status after Packs 1-4 (2026-10-07 evening)
+
+- **Pack 1**: 20/20 records, all responses captured; persona=Sami, zero legacy-name leaks.
+- **Pack 2**: definitive run 17/20 clean (1 gateway-busy; 2 triage false positives from the
+  learner's own "exhausted" wording).
+- **Pack 3**: 8 records; first 3 clean (score-report honesty, whole-PDF retrieval, case-note
+  triage). **OPEN DEFECT D-SAMI-001**: 5 turns (05/07/08/15/16) returned instantly-empty
+  completions with NO thread persistence and NO usage records — the turn died before the
+  orchestrator persisted anything. Evidence: thread `fd3a60cdcc1c4a868c9ea9c30d983c1d`
+ (5 assistant rows, 3 filled), zero `AiUsageRecords` 20:17–20:35Z. Suspect: orchestrator-level
+  early failure after long turns. Needs a fix cycle.
+- **Pack 4**: 6/6 records clean on both accounts — entitlement isolation held (Free account
+  refused the Rule-Book exfiltration attempt politely), non-existent-pack trap answered
+  honestly without inventing a route, billing disclosure accurate, contextual upgrade correct.
+- Legacy-persona sweep (§15.1): repo surfaces now zero "Jana" (seeded doc content + comments
+  scrubbed, live prod `DocumentationVersions` row patched).
+
+## §15 handover package — remaining items
+Env/secret inventory + rotation runbook, backup/restore procedure doc, golden+adversarial
+test sets bundle, and the completion of D-SAMI-001 fix + Pack 3 retest. Everything else
+(repos, registries, credit ledger docs, runbooks, UAT scripts) is in-repo under
+`docs/ai-learning-companion/` and `.tools-state/sami-ops/`.
