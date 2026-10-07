@@ -139,18 +139,14 @@ async function uploadPdf(filePath) {
       intendedRole: 'writing-stimulus',
     },
   });
-  const uploadId = pickCaseInsensitive(started ?? {}, 'uploadId');
-  const chunk = pickCaseInsensitive(started ?? {}, 'chunkSizeBytes') ?? 5 * 1024 * 1024;
-  if (!uploadId) throw new Error(`upload start returned no uploadId (keys: ${Object.keys(started ?? {}).join(',')})`);
+  const chunk = started.chunkSizeBytes;
   const totalParts = Math.max(1, Math.ceil(size / chunk));
   for (let part = 1; part <= totalParts; part++) {
     const offset = (part - 1) * chunk;
-    await api('PUT', `/v1/admin/uploads/${uploadId}/parts/${part}`, { body: buf.subarray(offset, offset + Math.min(chunk, size - offset)) });
+    await api('PUT', `/v1/admin/uploads/${started.uploadId}/parts/${part}`, { body: buf.subarray(offset, offset + Math.min(chunk, size - offset)) });
   }
-  const done = await api('POST', `/v1/admin/uploads/${uploadId}/complete`, { json: {} });
-  const mediaAssetId = pickCaseInsensitive(done ?? {}, 'mediaAssetId');
-  if (!mediaAssetId) throw new Error(`upload complete returned no mediaAssetId (keys: ${Object.keys(done ?? {}).join(',')})`);
-  return { mediaAssetId, sha256: pickCaseInsensitive(done, 'sha256'), deduplicated: pickCaseInsensitive(done, 'deduplicated') };
+  const done = await api('POST', `/v1/admin/uploads/${started.uploadId}/complete`, { json: {} });
+  return done; // { mediaAssetId, sha256, deduplicated }
 }
 
 // Every mirrored field of WritingTaskUpsertDto (full-replace protection).
@@ -186,9 +182,9 @@ async function swapOne({ task: scenarioId, asset, upload }) {
   const result = { task: scenarioId, uploadedFrom: upload ?? null, dryRun: !APPLY };
   const before = await api('GET', `/v1/admin/writing/tasks/${scenarioId}`, { isWrite: false });
   if (!before?.id) throw new Error(`task ${scenarioId} not found (HTTP response had no id)`);
-  result.title = pickCaseInsensitive(before, 'Title');
-  result.profession = pickCaseInsensitive(before, 'Profession');
-  result.before = pickCaseInsensitive(before, 'StimulusPdfMediaAssetId');
+  result.title = pickCaseInsensitive(before, 'title');
+  result.profession = pickCaseInsensitive(before, 'profession');
+  result.before = pickCaseInsensitive(before, 'stimulusPdfMediaAssetId');
 
   if (APPLY) {
     let assetId = asset ?? null;
@@ -204,15 +200,16 @@ async function swapOne({ task: scenarioId, asset, upload }) {
       return result;
     }
     const payload = buildUpsertPayload(before, assetId);
+    if (!payload.title) throw new Error('mirrored payload would drop title — refusing to PUT');
     const updated = await api('PUT', `/v1/admin/writing/tasks/${scenarioId}`, { json: payload });
-    const updatedPointer = pickCaseInsensitive(updated ?? {}, 'StimulusPdfMediaAssetId');
+    const updatedPointer = pickCaseInsensitive(updated ?? {}, 'stimulusPdfMediaAssetId');
     if (String(updatedPointer ?? '') !== String(assetId)) {
       throw new Error(`PUT did not move the pointer (got ${updatedPointer})`);
     }
     // Read-back + validate gate for the evidence ledger.
     const reread = await api('GET', `/v1/admin/writing/tasks/${scenarioId}`, { isWrite: false });
-    result.readBack = pickCaseInsensitive(reread ?? {}, 'StimulusPdfMediaAssetId');
-    result.titleStillIntact = pickCaseInsensitive(reread ?? {}, 'Title') === result.title;
+    result.readBack = pickCaseInsensitive(reread ?? {}, 'stimulusPdfMediaAssetId');
+    result.titleStillIntact = pickCaseInsensitive(reread ?? {}, 'title') === result.title;
     if (result.readBack !== assetId) throw new Error('read-back mismatch after PUT');
     try {
       const validation = await api('GET', `/v1/admin/writing/tasks/${scenarioId}/validate`, { isWrite: false });
@@ -222,7 +219,7 @@ async function swapOne({ task: scenarioId, asset, upload }) {
     result.after = upload ? '(upload on apply)' : asset;
     const probe = buildUpsertPayload(before, 'dry-run-probe');
     result.payloadMirror = { fields: Object.keys(probe).length, titlePresent: Boolean(probe.title) };
-    if (!probe.title) throw new Error('mirrored payload would drop title (case-insensitive read failed) — refusing to apply');
+    if (!probe.title) throw new Error('mirrored payload would drop title — refusing to apply');
   }
   return result;
 }

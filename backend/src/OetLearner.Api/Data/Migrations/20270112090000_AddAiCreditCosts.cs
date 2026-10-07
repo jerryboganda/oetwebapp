@@ -10,17 +10,15 @@ namespace OetLearner.Api.Data.Migrations
     /// <inheritdoc />
     /// <remarks>
     /// SAMI Wave 3 (hand-authored): per-action AI Credit costs (SAMI §9.1) as
-    /// admin-editable configuration. Seeds the handover baseline: Writing
-    /// assessment 2, Speaking role card 2, full two-card Speaking exam 4,
-    /// Reading analysis 1, Listening analysis 1, Listening Part A 1; the deep
-    /// PDF and live-voice conversions ship disabled until validated.
+    /// admin-editable configuration. The handover baseline rows (Writing 2,
+    /// Speaking card 2, full Speaking exam 4, Reading 1, Listening 1, Part A 1;
+    /// deep-PDF and live-voice disabled until validated) are seeded idempotently
+    /// at startup by <c>AiCreditCostService.SeedDefaultsAsync</c>.
     /// </remarks>
     [DbContext(typeof(LearnerDbContext))]
     [Migration("20270112090000_AddAiCreditCosts")]
     public partial class AddAiCreditCosts : Migration
     {
-        private static readonly DateTimeOffset SeededAt = new(2027, 1, 12, 9, 0, 0, TimeSpan.Zero);
-
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -40,20 +38,9 @@ namespace OetLearner.Api.Data.Migrations
                     table.PrimaryKey("PK_AiCreditCosts", x => x.ActionCode);
                 });
 
-            migrationBuilder.InsertData(
-                table: "AiCreditCosts",
-                columns: new[] { "ActionCode", "Credits", "Enabled", "Description", "UpdatedAt" },
-                values: new object?[,]
-                {
-                    { "writing.assessment", 2, true, "One Writing case note / letter assessment", SeededAt },
-                    { "speaking.role_card", 2, true, "One Speaking role card assessment", SeededAt },
-                    { "speaking.exam_full", 4, true, "Full two-card Speaking exam assessment", SeededAt },
-                    { "reading.analysis", 1, true, "Full Reading exam analysis", SeededAt },
-                    { "listening.analysis", 1, true, "Full Listening exam analysis", SeededAt },
-                    { "listening.part_a", 1, true, "Listening Part A analysis", SeededAt },
-                    { "pdf.deep_analysis", 0, false, "Large PDF deep analysis (configurable; charge shown before start)", SeededAt },
-                    { "voice.live", 0, false, "Live voice role play / extended audio (configurable conversion)", SeededAt },
-                });
+            // Baseline rows (SAMI §9.1) are seeded by AiCreditCostService.SeedDefaultsAsync
+            // at startup (idempotent) — hand migrations here carry pure DDL, matching the
+            // remote-workers convention, so `migrations script` needs no model-backed data op.
         }
 
         /// <inheritdoc />
