@@ -29,6 +29,15 @@ Never paste an IP address of a helper, an SSH key, a token, a TOTP code or a pas
 15. [Residual risks (accepted)](#15-residual-risks-accepted)
 16. [Owner checklist before the first enrollment](#16-owner-checklist-before-the-first-enrollment)
 
+> **Operator CLI (owner directive 2026-10-07):** every enrollment/lifecycle/job action in this
+> runbook also has a command form: `ops/fleet/fleet <verb>` from the repo (ssh + `docker exec` into
+> the manager), e.g. `add`, `status`, `nodes`, `inspect`, `drain`, `enable`, `disable`, `remove`,
+> `test` (canary), `upgrade --digest`, `rotate-token`, `policy show|set`, `jobs`, `job`,
+> `requeue`, `force-local`, `cancel`, `rebalance`, `operations`. Read-only verbs need no step-up;
+> privileged verbs need the same fresh single-use TOTP as the dashboard routes. The agent-facing
+> workflow built on it is [`docs/VPS_FLEET.md`](../VPS_FLEET.md); this runbook still governs
+> wherever they disagree.
+
 ---
 
 ## 1. Purpose and scope

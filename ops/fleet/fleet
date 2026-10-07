@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# fleet — the operator CLI for the OET helper-VPS fleet (docs/VPS_FLEET.md, docs/ops/FLEET.md).
+#
+# Thin wrapper: it SSHes to the primary and runs the SAME command inside the fleet manager
+# container, so the security surface never changes (the manager stays loopback-only; this is
+# the SSH path the runbook already trusts). Any verb you can run in the container works here:
+#
+#   ops/fleet/fleet status
+#   ops/fleet/fleet nodes
+#   ops/fleet/fleet inspect <node-ref>
+#   ops/fleet/fleet add <node-ref> --host <ip> --port 22 --user root \
+#       --confirm-fingerprint <12 hex from the provider console> --ssh-key <path>
+#   ops/fleet/fleet drain|enable|disable|remove|rotate-token <node-ref>
+#   ops/fleet/fleet test <node-ref>                 (known-answer canary; no TOTP needed)
+#   ops/fleet/fleet upgrade --digest sha256:<64 hex>
+#   ops/fleet/fleet policy show [node-ref] | policy set <node-ref> --kinds a,b,c
+#   ops/fleet/fleet jobs [--state Failed] [--kind K] [--node R] | job <id>
+#   ops/fleet/fleet requeue|force-local|cancel <job-id>
+#   ops/fleet/fleet rebalance
+#   ops/fleet/fleet tunnel                          (open the SSH tunnel for the dashboard UI)
+#
+# Privileged verbs ask for a fresh single-use authenticator code (TOTP), exactly like the
+# dashboard. Two ways to supply it:
+#   1. export FLEET_TOTP_SECRET_FILE=/secure/path/outside/the/repo   (base32 secret, 0600)
+#      → this wrapper derives a fresh code itself (never reusing a 30 s step) and pipes it.
+#   2. nothing set → the CLI prompts, or reads the code from the first stdin line.
+# For `add`, stdin AFTER the code line is the one-time owner SSH credential (PEM), or use
+# --ssh-key <path> so nothing touches stdin.
+#
+# Configuration: FLEET_SSH (SSH alias/host of the primary, default "vps"),
+# FLEET_CONTAINER (default "oet-fleet-manager"), FLEET_MANAGER_PORT (default 8480),
+# FLEET_TOTP_STATE_FILE (default beside the secret file).
+
+set -euo pipefail
+
+SSH_TARGET="${FLEET_SSH:-vps}"
+CONTAINER="${FLEET_CONTAINER:-oet-fleet-manager}"
+MANAGER_PORT="${FLEET_MANAGER_PORT:-8480}"
+
+usage() {
+    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+verb="${1:-}"
+[ $# -gt 0 ] && shift
+case "$verb" in
+    ""|help|--help|-h) usage 0 ;;
+    tunnel)
+        echo "Tunnel open on http://127.0.0.1:${MANAGER_PORT} — Ctrl-C closes it."
+        exec ssh -N -L "127.0.0.1:${MANAGER_PORT}:127.0.0.1:${MANAGER_PORT}" "$SSH_TARGET"
+        ;;
+esac
+
+# Privileged verbs need a TOTP; derive one automatically only from a secret file outside the repo.
+PRIVILEGED=" add drain enable disable remove rotate-token upgrade policy requeue force-local cancel "
+totp_line=""
+case "$PRIVILEGED" in
+    *" $verb "*)
+        if [ -n "${FLEET_TOTP_SECRET_FILE:-}" ] && [ -f "$FLEET_TOTP_SECRET_FILE" ]; then
+            state="${FLEET_TOTP_STATE_FILE:-$(dirname "$FLEET_TOTP_SECRET_FILE")/.fleet-totp-step}"
+            code="$(python3 - "$FLEET_TOTP_SECRET_FILE" "$state" <<'PY'
+import sys, time, hmac, hashlib, struct, base64, os
+secret_path, state_path = sys.argv[1], sys.argv[2]
+text = open(secret_path).read().strip()
+secret = base64.b32decode(text + "=" * ((8 - len(text) % 8) % 8))
+last = -1
+if os.path.exists(state_path):
+    try:
+        last = int(open(state_path).read().strip())
+    except ValueError:
+        pass
+step = int(time.time()) // 30
+while step <= last:
+    time.sleep(1)
+    step = int(time.time()) // 30
+digest = hmac.new(secret, struct.pack(">Q", step), hashlib.sha1).digest()
+offset = digest[-1] & 0xF
+print("%06d" % ((struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF) % 1000000))
+with open(state_path, "w") as handle:
+    handle.write(str(step))
+PY
+)"
+            totp_line="$code"
+        fi
+        ;;
+esac
+
+# Pass the remote argv safely: quote every token once, on the far side of ssh.
+remote_args=""
+for arg in "$verb" "$@"; do
+    remote_args+=" $(printf '%q' "$arg")"
+done
+
+if [ -n "$totp_line" ]; then
+    # TOTP on the first line; the rest of OUR stdin (e.g. a pasted key) follows untouched.
+    printf '%s\n' "$totp_line" | ssh "$SSH_TARGET" "docker exec -i $CONTAINER dotnet Fleet.Manager.dll$remote_args"
+else
+    exec ssh "$SSH_TARGET" "docker exec -i $CONTAINER dotnet Fleet.Manager.dll$remote_args"
+fi

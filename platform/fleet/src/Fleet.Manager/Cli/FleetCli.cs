@@ -32,6 +32,15 @@ public static class FleetCli
             return null;
         }
 
+        // The operator's node/job surface (status, nodes, inspect, add, drain, enable, disable,
+        // remove, test, upgrade, rotate-token, policy, jobs, job, requeue, force-local, cancel,
+        // rebalance, operations, op). Runbook: docs/VPS_FLEET.md.
+        var nodeExit = await FleetNodeCli.TryRunAsync(args);
+        if (nodeExit is int)
+        {
+            return nodeExit;
+        }
+
         switch (args[0])
         {
             case "healthcheck":
@@ -41,14 +50,14 @@ public static class FleetCli
             case "sync-stdin":
                 return await SyncStdinAsync();
             case "vault-rewrap":
-                return await WithServicesAsync(async (services, cancellationToken) =>
+                return await RunWithServicesAsync(async (services, cancellationToken) =>
                 {
                     var count = await services.GetRequiredService<Vault.CredentialStore>().RewrapAllAsync(cancellationToken);
                     Console.WriteLine("Re-wrapped " + count + " vault record(s) under the current master key. You may now remove fleet_master_key_prev.");
                     return 0;
                 });
             case "verify-chain":
-                return await WithServicesAsync(async (services, cancellationToken) =>
+                return await RunWithServicesAsync(async (services, cancellationToken) =>
                 {
                     var audit = await services.GetRequiredService<IAuditService>().VerifyAsync(cancellationToken);
                     var operations = await services.GetRequiredService<OperationStore>().VerifyChainAsync(cancellationToken);
@@ -58,14 +67,20 @@ public static class FleetCli
                 });
             case "help":
             case "--help":
-                Console.WriteLine("Usage: Fleet.Manager <owner-init [--reset] | healthcheck | sync-stdin | vault-rewrap | verify-chain>");
+                Console.WriteLine(
+                    "Usage: Fleet.Manager <owner-init [--reset] | healthcheck | sync-stdin | vault-rewrap | verify-chain>\n"
+                    + "       Fleet.Manager <status | nodes | inspect | operations | op | add | drain | enable | disable\n"
+                    + "                      | remove | rotate-token | test | upgrade | policy | jobs | job\n"
+                    + "                      | requeue | force-local | cancel | rebalance> [...]\n"
+                    + "Node/job verbs: runbook docs/VPS_FLEET.md; privileged ones need a fresh TOTP (--totp or first stdin line).");
                 return 0;
             default:
                 return null;
         }
     }
 
-    private static async Task<int> WithServicesAsync(Func<IServiceProvider, CancellationToken, Task<int>> action)
+    /// <summary>Shared runner for the node/job verbs: builds the service provider, prints one clean error line, maps exceptions to exit codes.</summary>
+    internal static async Task<int> RunWithServicesAsync(Func<IServiceProvider, CancellationToken, Task<int>> action)
     {
         var builder = Host.CreateApplicationBuilder();
 
@@ -88,18 +103,43 @@ public static class FleetCli
             await host.Services.GetRequiredService<SchemaManager>().InitializeAsync(cancellation.Token);
             return await action(host.Services, cancellation.Token);
         }
-        catch (Exception ex) when (ex is Fleet.Core.Crypto.VaultConfigurationException or InvalidOperationException or FleetValidationException)
+        catch (Exception ex) when (ex is
+            Fleet.Core.Crypto.VaultConfigurationException
+            or InvalidOperationException
+            or FleetValidationException
+            or FleetNodeCli.FleetCliUsage
+            or FleetOperationException
+            or FleetNotFoundException
+            or Api.FleetApiException)
         {
-            Console.Error.WriteLine(ex.Message);
-            return 2;
+            switch (ex)
+            {
+                case FleetValidationException validation:
+                    foreach (var issue in validation.Issues)
+                    {
+                        Console.Error.WriteLine("invalid " + issue.Field + ": " + issue.Message);
+                    }
+
+                    return 2;
+                case Api.FleetApiException api:
+                    Console.Error.WriteLine("OET API " + api.Code + ": " + api.Message);
+                    return 1;
+                default:
+                    Console.Error.WriteLine(ex.Message);
+                    return ex is FleetNodeCli.FleetCliUsage ? 2 : 1;
+            }
         }
     }
+
+    /// <summary>Polling sleep for the watch verbs; honours Ctrl-C immediately.</summary>
+    internal static Task DelayAsync(TimeSpan delay, CancellationToken cancellationToken) =>
+        Task.Delay(delay, cancellationToken);
 
     private static async Task<int> OwnerInitAsync(string[] flags)
     {
         var replace = flags.Contains("--reset", StringComparer.Ordinal);
         var password = (await Console.In.ReadLineAsync())?.TrimEnd('\r', '\n');
-        return await WithServicesAsync(async (services, cancellationToken) =>
+        return await RunWithServicesAsync(async (services, cancellationToken) =>
         {
             var owner = services.GetRequiredService<OwnerAccountService>();
             if (!replace && await owner.HasOwnerAsync(cancellationToken))

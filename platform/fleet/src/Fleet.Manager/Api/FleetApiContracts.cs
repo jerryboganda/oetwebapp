@@ -162,4 +162,13 @@ public interface IFleetApi
     Task<ApiStatus> GetStatusAsync(CancellationToken cancellationToken);
 
     Task<JsonElement> GetStatsAsync(CancellationToken cancellationToken);
+
+    /// <summary>Service-plane job list (<c>GET /jobs?state&amp;kind&amp;nodeId&amp;limit</c>) as raw JSON; readers tolerate shape drift.</summary>
+    Task<JsonElement> GetJobsAsync(string? state, string? kind, string? nodeId, int limit, CancellationToken cancellationToken);
+
+    /// <summary>One job (<c>GET /jobs/{id}</c>) as raw JSON; null when the API answers job_not_found.</summary>
+    Task<JsonElement?> GetJobAsync(string jobId, CancellationToken cancellationToken);
+
+    /// <summary>Requeue, force-local or cancel a job (the API's three admin job actions).</summary>
+    Task PostJobActionAsync(string action, string jobId, CancellationToken cancellationToken);
 }

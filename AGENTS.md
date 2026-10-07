@@ -488,6 +488,9 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
   load `docs/ops/OWNER-AGENT-CONSOLE.md` + `agent-console/CONTRACT.md` before touching `agent-console/**`.
 - `docs/ops/FLEET.md` — Owner Fleet runbook (SSH-tunnel access, enrollment, credential custody and rotation,
   host-key verification, removal, rollback skew, failure states, capacity, what is and is not automatic);
-  `docs/adr/0005-fleet-manager-and-remote-workers.md` — the decision record. Load both before touching
-  `platform/fleet/**`, `.github/workflows/fleet.yml`, remote-worker (`/v1/internal/remote-worker`,
+  `docs/adr/0005-fleet-manager-and-remote-workers.md` — the decision record;
+  `docs/VPS_FLEET.md` — the operator/coding-agent workflow over the `ops/fleet/fleet` CLI
+  (owner directive 2026-10-07: add/status/drain/remove/test/upgrade/policy/jobs/rebalance verbs in the
+  manager container; privileged verbs still need the single-use TOTP step-up). Load all three before touching
+  `platform/fleet/**`, `ops/fleet/**`, `.github/workflows/fleet.yml`, remote-worker (`/v1/internal/remote-worker`,
   `/v1/internal/fleet`) code, or the fleet rules of `scripts/deploy/verify-pipeline-contract.mjs`.
