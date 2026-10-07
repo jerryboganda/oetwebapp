@@ -2,7 +2,7 @@
 
 Session: learner-personal-assistant
 Goal: Learner-only OET Personal Ai Assistant, DeepSeek v4.1 Flash, repair operation ID overflow
-Mode: execute
+Mode: verify
 Updated: 2026-10-08
 Branch: main
 HEAD: 56c3322cf
@@ -16,7 +16,7 @@ Remove learner Claude/UBAG choices and enforce one direct gateway model on every
 - [x] Learner catalogue/selection and inference restricted in code; learner UI hides provider/model names.
 - [x] Operation resource IDs fit varchar(64); request hash is SHA-256.
 - [x] Learner-safe tool allowlist retained; study-only prompt applies including fallback prompt.
-- [ ] Image compilation and serving release confirmed.
+- [x] Image compilation and serving release confirmed.
 - [ ] Functional acceptance: not tested—owner QA.
 
 ## Decisions (do not revisit)
@@ -37,8 +37,8 @@ Remove learner Claude/UBAG choices and enforce one direct gateway model on every
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| compilation | build-images.yml | Awaiting release | NOT RUN |
-| deployment | production-deploy.yml | Awaiting release | NOT RUN |
+| compilation | build-images.yml | 37692008180 | PASS |
+| deployment | production-deploy.yml | 37692695925 | PASS |
 | functional acceptance | Owner manual QA | Learner answer, model restrictions and study boundaries | NOT TESTED |
 
 ## Blockers
@@ -47,4 +47,5 @@ Remove learner Claude/UBAG choices and enforce one direct gateway model on every
 
 ## Next action
 
-1. Commit scoped changes and run the mandatory ship wrapper; record image builds and serving proof.
+1. Owner manual QA: learner reply, restricted providers, authorized study material and off-topic refusal; no automated functional acceptance claimed.
+

@@ -309,12 +309,14 @@
     {
       "id": "LPA-01",
       "title": "Learner-only personal assistant and recorder overflow repair",
-      "status": "in_progress",
+      "status": "done",
       "owner": "learner-personal-assistant",
       "blockedBy": [],
       "verify": "Build images and Deploy production serving evidence; functional QA remains owner",
       "evidence": [
-        "Production DirectAiCallRecorder logs: SQLSTATE 22001 varchar(64) before provider inference"
+        "Production DirectAiCallRecorder logs: SQLSTATE 22001 varchar(64) before provider inference",
+        "Build images 37692008180 success",
+        "Deploy production 37692695925 success; live f7ae11a35 blue; web/api serving-image proof; owner functional QA not tested"
       ]
     }
   ]

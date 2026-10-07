@@ -105,3 +105,15 @@ absent after rollout. No daemon/network configuration was changed.
 
 No inference/tool/UI acceptance was run. The manual matrix above is still
 **not tested—owner QA**. Historical provider errors have no established root cause.
+
+## Learner policy override, 2026-10-08
+
+Owner directive supersedes the learner picker/default policy above: learners can only use `deepseek-v4.1-flash` through the direct gateway. Claude and UBAG remain available to admins, but are rejected for learner selection. Every learner inference ignores historical provider/model pins and uses the approved model. The learner panel is branded **OET Personal Ai Assistant**, with no model/provider selector or visible provider identifiers.
+
+Production logs identified the reported unavailable response before inference: DirectAiCallRecorder operation insertion failed with SQLSTATE 22001 (varchar(64)). The concatenated feature/user/timestamp resource ID overflowed for long user IDs. Resource IDs are now GUIDs; request hashes are SHA-256. Accounting and provider refusal controls are retained.
+
+The learner-safe tool allowlist continues to filter discovery and execution. No filesystem, codebase, shell or deployment tools are available. The learner prompt explicitly limits assistance to OET/English study and authorized study material/plans, including prompt fallback.
+
+Release `f7ae11a35d5cfebf18f46313ae8c21cd025f9166`: Build images `37692008180`, Deploy production `37692695925`, both success. Serving headers and router/image proof match the release in blue. Web digest `sha256:291c3574f5e61d932513cec11a511169faa7d7d643620f457fa7983f45a56c14`; API digest `sha256:2fba8b1d0b75bdf840fdbd4dbcccb5b051fe65f50ca9f606e527c5a2abad3d4a`.
+
+Owner manual QA: a learner receives an OET study reply; old Claude/UBAG/GLM pins use the approved assistant; explicit unsupported model updates fail; provider/model names are hidden; authorized materials work; codebase/tool and off-topic requests are refused. Functional acceptance **not tested—owner QA**.

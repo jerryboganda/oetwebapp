@@ -6,6 +6,10 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-07 22:02 | CI triage | CI triage | 37693524985 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | f7ae11a35 |
+| 2026-10-07 21:54 | CI triage | CI triage | 37692695920 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | f7ae11a35 |
+| 2026-10-07 21:54 | Deploy production | Deploy production | 37692695925 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | f7ae11a35 |
+| 2026-10-07 21:48 | Build images | Build images | 37692008180 | Deployment contract guards=success Typecheck + lint=success Detect what changed=success Syntax gate (seconds)=success Retag unchanged db-backup=success Retag unchanged agent-gateway=success build-web=success build-api=success build-agent-gateway=skipped build-backup=skipped Publish verified release provenance=success | SUCCESS | f7ae11a35 |
 | 2026-10-07 21:18 | CI triage | CI triage | 37688505127 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 054940824 |
 | 2026-10-07 21:13 | CI triage | CI triage | 37687807734 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 054940824 |
 | 2026-10-07 21:13 | Deploy production | Deploy production | 37687807816 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 054940824 |
