@@ -216,6 +216,6 @@ public sealed class UbagListenerTests : IAsyncLifetime
     private static string ExportKeyPem(X509Certificate2 certificate)
     {
         using var key = certificate.GetECDsaPrivateKey() ?? throw new InvalidOperationException("no ECDSA key");
-        return PemEncoding.Write("PRIVATE KEY", key.ExportPkcs8PrivateKey());
+        return PemEncoding.WriteString("PRIVATE KEY", key.ExportPkcs8PrivateKey());
     }
 }

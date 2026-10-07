@@ -134,7 +134,7 @@ public sealed class UbagTrustService
         using var leaf = request.Create(ca.Cert, notBefore, notAfter, RandomNumberGenerator.GetBytes(16));
 
         var certPem = leaf.ExportCertificatePem();
-        var keyPem = PemEncoding.Write("PRIVATE KEY", key.ExportPkcs8PrivateKey());
+        var keyPem = PemEncoding.WriteString("PRIVATE KEY", key.ExportPkcs8PrivateKey());
 
         using (var certSecret = SecretBuffer.FromBytes(Encoding.ASCII.GetBytes(certPem)))
         {

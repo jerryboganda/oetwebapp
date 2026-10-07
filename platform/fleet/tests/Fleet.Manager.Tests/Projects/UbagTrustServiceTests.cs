@@ -141,6 +141,6 @@ public sealed class UbagTrustServiceTests : IAsyncLifetime
         request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
         using var ca = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddYears(5));
         File.WriteAllText(Path.Combine(directory, "fleet_ca_cert"), ca.ExportCertificatePem());
-        File.WriteAllText(Path.Combine(directory, "fleet_ca_key"), PemEncoding.Write("PRIVATE KEY", key.ExportPkcs8PrivateKey()));
+        File.WriteAllText(Path.Combine(directory, "fleet_ca_key"), PemEncoding.WriteString("PRIVATE KEY", key.ExportPkcs8PrivateKey()));
     }
 }
