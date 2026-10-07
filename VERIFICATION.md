@@ -6,6 +6,16 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-07 21:18 | CI triage | CI triage | 37688505127 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 054940824 |
+| 2026-10-07 21:13 | CI triage | CI triage | 37687807734 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 054940824 |
+| 2026-10-07 21:13 | Deploy production | Deploy production | 37687807816 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 054940824 |
+| 2026-10-07 21:07 | Speaking Module CI | Speaking Module CI | 37687165514 | migrations-check=failure secrets-scan=success | FAILURE | 054940824 |
+| 2026-10-07 21:07 | Build images | Build images | 37687165739 | Detect what changed=success Syntax gate (seconds)=success Deployment contract guards=success Writing grader regression (on change)=skipped build-api=success Retag unchanged db-backup=success Retag unchanged agent-gateway=success Retag unchanged web=success build-web=skipped build-agent-gateway=skipped build-backup=skipped Publish verified release provenance=success Writing model-answer gate (on ch | SUCCESS | 054940824 |
+| 2026-10-07 21:03 | Owner Agent Console (build + deploy) | Owner Agent Console (build + deploy) | 37686649325 | Static rollout guards=success Build & push agent-console=success Build & push agent-console-egress=success Build & push agent-console-dockerproxy=success Roll out on the VPS (pull-only)=success | SUCCESS | a80ae47ac |
+| 2026-10-07 21:02 | CI triage | CI triage | 37686497492 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 4669e7d5c |
+| 2026-10-07 20:55 | CI triage | CI triage | 37685674096 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 4669e7d5c |
+| 2026-10-07 20:55 | Deploy production | Deploy production | 37685674010 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 4669e7d5c |
+| 2026-10-07 20:47 | Build images | Build images | 37684748782 | Syntax gate (seconds)=success Detect what changed=success Deployment contract guards=success Writing grader regression (on change)=skipped build-web=success build-agent-gateway=success build-backup=success build-api=success Retag unchanged ${{ matrix.image }}=skipped Writing model-answer gate (on change)=skipped Publish verified release provenance=success | SUCCESS | 4669e7d5c |
 | 2026-10-07 20:17 | CI triage | CI triage | 37680942000 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 8956f7f48 |
 | 2026-10-07 20:10 | CI triage | CI triage | 37680002723 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 8956f7f48 |
 | 2026-10-07 20:09 | CI triage | CI triage | 37679852033 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 8956f7f48 |

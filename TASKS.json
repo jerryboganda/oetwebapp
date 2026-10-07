@@ -293,14 +293,14 @@
     {
       "id": "OCG-02",
       "title": "Replace native console inference with guarded direct gateway loop and shared settings",
-      "status": "in_progress",
+      "status": "done",
       "owner": "direct-opencode",
       "blockedBy": [
         "OCG-01"
       ],
       "verify": "Console image build and production inspection; not tested - owner QA",
       "evidence": [
-        "Native inference/runtime/dependencies removed in replacement; guarded loop and shared settings ready for image compilation and rollout. Functional acceptance not tested - owner QA."
+        "Application Build images 37684748782 / Deploy production 37685674010 serve 4669e7d5c; console build/deploy 37686649325 serves a80ae47ac, healthy, direct-gateway readiness. Native binary/SDK/protocol/server paths absent; historical volumes retained. Functional acceptance not tested—owner QA."
       ],
       "files": [
         "agent-console/src/engines/opencode.ts"

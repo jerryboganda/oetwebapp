@@ -15,8 +15,8 @@ Last updated: 2026-10-07
 
 - Compatibility release 8956f7f489 live: Build images 37678854057; Deploy production 37679851932; exact serving web/API SHA and images verified.
 - AddAssistantProviderState migration applied. Private readiness returns HTTP 200 with shared DeepSeek v4.1 Flash/max; use API router service alias learner-api (container alias oet-api fails host filtering).
-- Console native inference/runtime/SDK and credential controls replaced with guarded direct transport, root-only encrypted reasoning state and bounded legacy continuation. Replacement compilation/deployment pending.
-- All functional acceptance remains **not tested—owner QA**; scenario matrix: docs/ops/DIRECT-OPENCODE-GATEWAY.md. No automated QA added or run.
+- Console native inference/runtime/SDK and credential controls replaced with guarded direct transport, root-only encrypted reasoning state and bounded legacy continuation. Replacement application live at 4669e7d5c (build 37684748782, deploy 37685674010); console live at a80ae47ac (37686649325).
+- All functional acceptance remains **not tested—owner QA**; scenario matrix: docs/ops/DIRECT-OPENCODE-GATEWAY.md. Final build skips both legacy regression jobs; no functional QA run.
 ## Active checkpoint - Writing-AI urgent production patch (2026-10-07) — CLOSED, all acceptance checks live-proven
 
 - P0 RESOLVED: the codex sidecar's ChatGPT workspace was out of credits (every gpt-6.1-sol call 502'd; the owner's 2 letters had burned retries into failed/grading_delayed with grades intact). Owner topped up; the 2 letters requeued via DB → both graded → released instantly (allowlisted exemption) — visible on their accounts now.
@@ -135,4 +135,3 @@ Older still: `git log -- PROGRESS.md`.
 - `SESSION_STATE.md` and `TASKS.json` are tracked and rewritten per task, so two parallel agent sessions can conflict. Take the newer `Updated:` block wholesale rather than hand-merging; `PROGRESS.md` remains the merge-safe durable ledger.
 - State enforcement is warn-only inside `ship:gate` by design, so a session can still push a stale ledger. `pnpm run ax:verify` is what makes a false evidence claim detectable after the fact.
 - Never stage unrelated untracked paths; `git add` explicit paths only.
-

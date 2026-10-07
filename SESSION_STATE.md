@@ -2,10 +2,10 @@
 
 Session: direct-opencode-gateway
 Goal: Direct OpenCode gateway across admin chat, learner chat and owner console; shared encrypted provider; remove native inference
-Mode: execute
-Updated: 2026-10-08T01:32:00+05:00
-Branch: work/direct-opencode-gateway
-HEAD: 8956f7f489aee1aa2c4b78b9f3b9bc9b9bc784f5
+Mode: verify
+Updated: 2026-10-07T21:12:40.6962987Z
+Branch: work/direct-opencode-evidence
+HEAD: a80ae47acd59ec980de0afc3234f5a9d91304b12
 
 ## Objective
 
@@ -14,8 +14,8 @@ Implement the approved direct gateway on all three surfaces. Preserve defaults, 
 ## Acceptance criteria
 
 - [x] Backend compatibility and additive encrypted-state migration live before replacement.
-- [ ] Application and console replacement releases live with serving-image evidence.
-- [ ] Production readiness and absence of native inference paths verified.
+- [x] Application and console replacement releases live with serving-image evidence.
+- [x] Production readiness and absence of native inference paths verified.
 - [ ] Functional acceptance: not tested—owner QA (manual matrix in docs/ops/DIRECT-OPENCODE-GATEWAY.md).
 
 ## Decisions (do not revisit)
@@ -41,7 +41,10 @@ Implement the approved direct gateway on all three surfaces. Preserve defaults, 
 | compatibility compilation | build-images.yml | 37678854057 | PASS |
 | compatibility deployment | production-deploy.yml | 37679851932 | PASS |
 | migration/readiness | Production read-only inspection | Associated release 37679851932; migration applied and private status HTTP 200 | RECORDED |
-| replacement build/deploy | build-images.yml and agent-console.yml | Awaiting release | NOT RUN |
+| application compilation | build-images.yml | 37684748782 | PASS |
+| application deployment | production-deploy.yml | 37685674010 | PASS |
+| console compilation/deployment | agent-console.yml | 37686649325 | PASS |
+| runtime inspection | Production read-only inspection | docs/ops/DIRECT-OPENCODE-GATEWAY.md serving evidence | RECORDED |
 | functional acceptance | Owner manual QA | docs/ops/DIRECT-OPENCODE-GATEWAY.md | NOT TESTED |
 
 ## Blockers
@@ -50,4 +53,4 @@ Implement the approved direct gateway on all three surfaces. Preserve defaults, 
 
 ## Next action
 
-1. Ship replacement via existing workflows, verify serving images and native runtime removal, then record deployment evidence. Owner performs manual acceptance.
+1. Owner performs the manual acceptance matrix. Implementation and deployment are complete; functional acceptance is not tested—owner QA.

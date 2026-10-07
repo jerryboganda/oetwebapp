@@ -74,3 +74,34 @@ Owner manual acceptance remains required for:
 
 Health/readiness checks and successful builds are deployment evidence; functional
 acceptance stays **not tested—owner QA** until the owner confirms these scenarios.
+
+## Serving evidence, 2026-10-08
+
+| Release | Evidence |
+| --- | --- |
+| Backend compatibility | `8956f7f489aee1aa2c4b78b9f3b9bc9b9bc784f5`; Build images `37678854057`; Deploy production `37679851932`; migration applied before replacement |
+| Application replacement | `4669e7d5cd7a71f63cbe16dc38cd0a58d8b789fe`; Build images `37684748782`; Deploy production `37685674010`; healthy green slot, matching release headers and serving-image proof |
+| Console replacement | `a80ae47acd59ec980de0afc3234f5a9d91304b12`; Owner Agent Console workflow `37686649325`, success; healthy container and running adapter readiness inspected |
+| Current application descendant | `054940824debed241bf5bb8d5798b01b95ed4f1e`; Build images `37687165739`; Deploy production `37687807816`; healthy blue slot with gateway changes retained and exact serving proof |
+
+Serving digests:
+
+- Web: `sha256:f64548aac8a85654be87e09b0bbfc9fd42a319c3a1644b1fe23b6fd750316af1`.
+- Current API: `sha256:988957e5d0eef52a12656d99080c626c09d035f4220d942a7fa12d8c8f07f179` (initial replacement: `sha256:3daa3c8222f712b150d92254b2545da0b9a26319ffadf7e37245a2f83b74a897`).
+- Console: `sha256:f2aab41ca8a3cb78bef171af59d04775d518ac22d6874116a4e3cdb3cf42fa8f`.
+
+Read-only production inspection confirmed shared readiness, the encrypted-state
+migration, learner `opencode/deepseek-v4.1-flash` and admin
+`anthropic/claude-sonnet-5` defaults. The running console reports
+`version=direct-gateway`, configured effort `max`, and no native executable,
+OpenCode package/SDK/protocol path, server-spawn path or OpenCode process name.
+All three historical console volumes remain mounted.
+
+The application build's NuGet setup race was removed by sequential restore/tool
+installation. Legacy automated regression jobs were disabled; the final build
+skipped both. Console pulls repeatedly reset over IPv6; the existing workflow's
+temporary IPv4 blob-host retry succeeded, and its `/etc/hosts` marker was confirmed
+absent after rollout. No daemon/network configuration was changed.
+
+No inference/tool/UI acceptance was run. The manual matrix above is still
+**not tested—owner QA**. Historical provider errors have no established root cause.
