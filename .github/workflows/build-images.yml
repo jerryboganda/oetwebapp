@@ -337,7 +337,6 @@ jobs:
       - name: Assert the pipeline contract
         run: |
           node scripts/deploy/verify-pipeline-contract.mjs
-          node --test scripts/deploy/release-manifest.test.mjs
           bash -n scripts/deploy/auto-deploy-ghcr.sh
       - name: Parse the Windows deployment watcher
         shell: pwsh

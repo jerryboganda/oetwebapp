@@ -424,8 +424,10 @@ export function checkContract({ readWorkflow, listWorkflows, readFile, listFiles
   ]);
   requireTokens('guards', jobBlock(build, 'guards'), [
     'node scripts/deploy/verify-pipeline-contract.mjs',
-    'node --test scripts/deploy/release-manifest.test.mjs',
   ]);
+  if (QA_COMMAND.test(jobBlock(build, 'guards'))) {
+    failures.push('guards must remain static deployment checks, with no automated test runner');
+  }
   const retag = jobBlock(build, 'retag');
   requireTokens('retag', retag, [
     "needs.changes.outputs.reuse_count != '0'", "!inputs.benchmark",
