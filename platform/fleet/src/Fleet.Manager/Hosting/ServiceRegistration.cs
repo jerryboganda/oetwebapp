@@ -181,22 +181,6 @@ public static class ServiceRegistration
                 cookie.AccessDeniedPath = "/Login";
                 cookie.Events = new CookieAuthenticationEvents
                 {
-                    // The tunnel middleware rewrites the request scheme to HTTPS so SecurePolicy=Always cookies and
-                    // antiforgery work over the plain-HTTP loopback publish. The default cookie redirects build an
-                    // ABSOLUTE Location from that scheme, which would bounce a signed-out owner to https://127.0.0.1
-                    // and fail outside TLS. Keep them RELATIVE: they work identically on every access path.
-                    OnRedirectToLogin = context =>
-                    {
-                        context.Response.StatusCode = StatusCodes.Status302Found;
-                        context.Response.Headers.Location = "/Login?ReturnUrl=" + Uri.EscapeDataString(context.Request.Path + context.Request.QueryString);
-                        return Task.CompletedTask;
-                    },
-                    OnRedirectToAccessDenied = context =>
-                    {
-                        context.Response.StatusCode = StatusCodes.Status302Found;
-                        context.Response.Headers.Location = "/Login?ReturnUrl=" + Uri.EscapeDataString(context.Request.Path + context.Request.QueryString);
-                        return Task.CompletedTask;
-                    },
                     OnValidatePrincipal = async context =>
                     {
                         // Sliding renewal resets IssuedUtc, so the ABSOLUTE lifetime is carried in a claim set at sign-in.
