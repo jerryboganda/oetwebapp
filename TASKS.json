@@ -348,12 +348,13 @@
     {
       "id": "ALT-02",
       "title": "Admin task automatic continuation past short-turn cap",
-      "status": "in_progress",
+      "status": "blocked",
       "owner": "admin-task-auto-continuation",
       "blockedBy": [],
       "verify": "Image build and serving health; owner manual QA",
       "evidence": [
-        "Exact ten-step message traced to configured ReAct iteration exhaustion branch"
+        "Exact ten-step message traced to configured ReAct iteration exhaustion branch",
+        "65742ee15 committed. Mandatory ship rejected live shared lock pid28032; preceding deploy37699935412 success but watcher still running. Not deployed/compiled yet; owner functional QA not tested."
       ]
     }
   ]

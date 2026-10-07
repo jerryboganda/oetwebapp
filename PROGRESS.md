@@ -149,3 +149,5 @@ Older still: `git log -- PROGRESS.md`.
 - admin-chat-long-tasks live: c47c016a9945061af309ab6875068a7b490ced90; build 37697195438 and deploy 37697783219 success. Blue serving-image proof and web/API HTTP200 verified. Functional acceptance not tested-owner QA. Separate Speaking CI 37697195500 reports model drift; this release changes no model/migration.
 
 - 2026-10-08 admin-task-auto-continuation: exact ten-step cutoff traced to runtime iteration exhaustion. Admin turns now continue within a separate 30-minute/1000-round budget, followed by a tool-free results summary. Bounded context with original task/progress preserves stored tool history. Compilation/deployment pending; functional QA not tested-owner QA.
+
+- admin-task-auto-continuation checkpoint: fix committed 65742ee15, preserved by current HEAD709e7ddc0. Shipping blocked by verified live shared owner pid28032; preceding deployment37699935412 is green but its watcher retains lock. No bypass used. New fix compilation/deployment pending.
