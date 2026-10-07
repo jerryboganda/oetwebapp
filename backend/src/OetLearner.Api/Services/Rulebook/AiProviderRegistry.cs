@@ -300,6 +300,20 @@ public sealed class RegistryBackedProvider(
             if (!string.IsNullOrWhiteSpace(request.ToolChoice)) payload["tool_choice"] = request.ToolChoice;
         }
 
+        // SAMI UAT finding (2026-10-07): max-effort turns exceed the ~100s non-streamed
+        // HttpClient timeout and the gateway's ~120s edge read cap. Streaming keeps the
+        // connection alive through reasoning of any length. Falls back to the non-streamed
+        // path when the gateway declines the stream or streams nothing usable.
+        if (openCode && OetLearner.Api.Services.Ai.OpenCodeStreamingCall.IsStreamingEnabled())
+        {
+            var streamed = await OetLearner.Api.Services.Ai.OpenCodeStreamingCall.CompleteStreamingAsync(
+                client, payload, request, ct);
+            if (streamed is not null)
+            {
+                return streamed;
+            }
+        }
+
         using var response = await client.PostAsync(
             "chat/completions",
             new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
