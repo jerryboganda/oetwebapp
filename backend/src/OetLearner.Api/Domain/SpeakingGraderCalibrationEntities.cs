@@ -87,6 +87,8 @@ public class SpeakingGraderCalibrationSample
 // calibrated against ONE expert mark of the whole test, not two card marks. Same rules as a card sample:
 // ids only, blind by construction, promotion keeps both cards' audio for a year and writes an audit event.
 
+[Index(nameof(SpeakingExamId), IsUnique = true)]
+[Index(nameof(Status))]
 public class SpeakingGraderCalibrationMockSample
 {
     [Key]
