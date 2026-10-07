@@ -81,6 +81,76 @@ public class SpeakingGraderCalibrationSample
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+// ── The Full Mock sample (owner request 7 Oct 2026): one whole two-card test as one performance ──
+//
+// The combined grader (speaking.score.v3-combined) makes ONE judgement over both role-plays, so it is
+// calibrated against ONE expert mark of the whole test, not two card marks. Same rules as a card sample:
+// ids only, blind by construction, promotion keeps both cards' audio for a year and writes an audit event.
+
+[Index(nameof(SpeakingExamId), IsUnique = true)]
+[Index(nameof(Status))]
+public class SpeakingGraderCalibrationMockSample
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    /// <summary>The finished two-card AI exam this sample came from. One sample per exam.</summary>
+    [MaxLength(64)]
+    public string SpeakingExamId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SessionAId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SessionBId { get; set; } = default!;
+
+    /// <summary>The transcripts the grader would read, pinned at promotion.</summary>
+    [MaxLength(64)]
+    public string TranscriptAId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string TranscriptBId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string CardAId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string CardBId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string ProfessionId { get; set; } = default!;
+
+    /// <summary>True when BOTH cards have at least one stored, non-warm-up audio clip. Measured at promotion.</summary>
+    public bool HasAudio { get; set; }
+
+    public SpeakingGraderCalibrationSampleStatus Status { get; set; } = SpeakingGraderCalibrationSampleStatus.Pending;
+
+    /// <summary>The expert's ONE set of nine criterion scores for the whole test (same codes as a card sample).</summary>
+    public string? ExpertScoresJson { get; set; }
+
+    /// <summary>The expert's own overall result for the whole test, 0–500 in steps of 10.</summary>
+    public int? ExpertOverallScaled { get; set; }
+
+    [MaxLength(2000)]
+    public string ExpertNotes { get; set; } = string.Empty;
+
+    [MaxLength(500)]
+    public string ExcludedReason { get; set; } = string.Empty;
+
+    [MaxLength(64)]
+    public string PromotedById { get; set; } = default!;
+
+    public DateTimeOffset PromotedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? LabelledById { get; set; }
+
+    public DateTimeOffset? LabelledAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 // ── The harness: grading the labelled performances with the grader under test ──
 //
 // A run grades every labelled performance `Repeats` times with the CURRENT grader (the same grader core a learner's grade
@@ -122,6 +192,16 @@ public class SpeakingGraderCalibrationRun
 
     /// <summary>Run the audio stage on every grade, whatever the admin flag says (the flag guards learner grades).</summary>
     public bool UseAudio { get; set; }
+
+    /// <summary>What the run grades: <c>card</c> = each expert-marked single card with the card grader;
+    /// <c>mock</c> = each expert-marked Full Mock with the combined grader (speaking.score.v3-combined).</summary>
+    [MaxLength(8)]
+    public string Scope { get; set; } = "card";
+
+    /// <summary>An OWNER PILOT run (owner request 7 Oct 2026): the comparison is informational and its verdict can
+    /// never pass, so a tiny set can be compared before the full validation set is collected. Only a pilot=false
+    /// run over the full approved coverage can earn a grader version the loss of the "Provisional" label.</summary>
+    public bool Pilot { get; set; }
 
     public SpeakingGraderCalibrationRunStatus Status { get; set; } = SpeakingGraderCalibrationRunStatus.Running;
 

@@ -48,7 +48,14 @@ public sealed record SpeakingCalibrationCoverageStats(
     int Labelled, IReadOnlyDictionary<string, int> PerGrade, int NearPassLine, double AudioShare,
     int BelowPassLine = 0, int AtOrAbovePassLine = 0);
 
-public sealed record SpeakingCalibrationVerdict(bool Passed, IReadOnlyList<string> Failures);
+public sealed record SpeakingCalibrationVerdict(
+    bool Passed,
+    IReadOnlyList<string> Failures,
+    /// <summary><c>pilot</c> | <c>validation</c>. A pilot verdict can never pass: it is an informational
+    /// comparison on a small real sample, not the approved validation.</summary>
+    string Mode = "validation",
+    /// <summary>Pilot mode only: where the grader stood against the bar the full validation will apply.</summary>
+    IReadOnlyList<string>? Advisory = null);
 
 /// <summary>One grade of one performance, set beside the expert's mark. <c>ScaledLeaveOneOut</c> is the grader's score through
 /// a map fitted without this performance; <c>ScaledError</c> is that minus the expert's overall.</summary>
@@ -130,7 +137,8 @@ public static class SpeakingGraderCalibrationMetrics
     public static SpeakingCalibrationReport Compute(
         IReadOnlyList<SpeakingCalibrationExpert> experts,
         IReadOnlyList<SpeakingCalibrationObservation> observations,
-        bool requireAudio)
+        bool requireAudio,
+        bool pilot = false)
     {
         var expertById = experts.ToDictionary(e => e.SampleId, StringComparer.Ordinal);
         var graded = observations.Where(o => expertById.ContainsKey(o.SampleId)).ToList();
@@ -209,7 +217,7 @@ public static class SpeakingGraderCalibrationMetrics
                         .ToList()))
                 .ToList());
 
-        return report with { Verdict = Evaluate(report, experts.Count, gradedIds.Count, requireAudio) };
+        return report with { Verdict = Evaluate(report, experts.Count, gradedIds.Count, requireAudio, pilot) };
     }
 
     // ── Coverage ─────────────────────────────────────────────────────────
@@ -377,26 +385,39 @@ public static class SpeakingGraderCalibrationMetrics
     // ── The verdict ──────────────────────────────────────────────────────
 
     private static SpeakingCalibrationVerdict Evaluate(
-        SpeakingCalibrationReport report, int experts, int gradedPerformances, bool requireAudio)
+        SpeakingCalibrationReport report, int experts, int gradedPerformances, bool requireAudio, bool pilot)
     {
         var failures = new List<string>();
-
-        if (experts < SpeakingGraderCalibrationService.RequiredLabelled)
-            failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredLabelled} expert-marked performances (has {experts})");
-        foreach (var (grade, count) in report.Coverage.PerGrade)
+        // In an owner pilot a threshold miss is not a failure — the verdict can never pass anyway; the point is
+        // to show the owner where the grader stands against the bar the approved validation will apply. The
+        // coverage gates (30 performances, grade distribution, pass-line straddle) are not even evaluated.
+        var advisory = pilot ? new List<string>() : null;
+        void Issue(string message)
         {
-            if (count < SpeakingGraderCalibrationService.RequiredPerGrade)
-                failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredPerGrade} performances the expert marked grade {grade} (has {count})");
+            if (advisory is null) failures.Add(message); else advisory.Add(message);
         }
 
-        if (report.Coverage.NearPassLine < SpeakingGraderCalibrationService.RequiredNearPassLine)
-            failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredNearPassLine} performances the expert marked 320-380 (has {report.Coverage.NearPassLine})");
-        if (report.Coverage.BelowPassLine < SpeakingGraderCalibrationService.RequiredEachSideOfPassLine)
-            failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredEachSideOfPassLine} performances the expert marked 320-340, just below the pass line (has {report.Coverage.BelowPassLine})");
-        if (report.Coverage.AtOrAbovePassLine < SpeakingGraderCalibrationService.RequiredEachSideOfPassLine)
-            failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredEachSideOfPassLine} performances the expert marked 350-380, at or just above the pass line (has {report.Coverage.AtOrAbovePassLine})");
-        if (report.Coverage.AudioShare < SpeakingGraderCalibrationService.RequiredAudioShare)
-            failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredAudioShare:P0} of the performances to have audio (has {report.Coverage.AudioShare:P0})");
+        if (!pilot)
+        {
+            if (experts < SpeakingGraderCalibrationService.RequiredLabelled)
+                failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredLabelled} expert-marked performances (has {experts})");
+            foreach (var (grade, count) in report.Coverage.PerGrade)
+            {
+                if (count < SpeakingGraderCalibrationService.RequiredPerGrade)
+                    failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredPerGrade} performances the expert marked grade {grade} (has {count})");
+            }
+
+            if (report.Coverage.NearPassLine < SpeakingGraderCalibrationService.RequiredNearPassLine)
+                failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredNearPassLine} performances the expert marked 320-380 (has {report.Coverage.NearPassLine})");
+            if (report.Coverage.BelowPassLine < SpeakingGraderCalibrationService.RequiredEachSideOfPassLine)
+                failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredEachSideOfPassLine} performances the expert marked 320-340, just below the pass line (has {report.Coverage.BelowPassLine})");
+            if (report.Coverage.AtOrAbovePassLine < SpeakingGraderCalibrationService.RequiredEachSideOfPassLine)
+                failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredEachSideOfPassLine} performances the expert marked 350-380, at or just above the pass line (has {report.Coverage.AtOrAbovePassLine})");
+            if (report.Coverage.AudioShare < SpeakingGraderCalibrationService.RequiredAudioShare)
+                failures.Add($"needs at least {SpeakingGraderCalibrationService.RequiredAudioShare:P0} of the performances to have audio (has {report.Coverage.AudioShare:P0})");
+        }
+
+        // The harness's own completeness holds in both modes: a pilot must still have graded what it set out to grade.
         if (gradedPerformances < experts)
             failures.Add($"only {gradedPerformances} of {experts} marked performances have been graded");
         if (report.Repeats < Thresholds.MinimumRepeats)
@@ -406,59 +427,66 @@ public static class SpeakingGraderCalibrationMetrics
         {
             var linguistic = SpeakingGraderCalibrationService.Criteria.First(c => c.Code == stats.Code).Family == "linguistic";
             var name = stats.Code;
-            if (stats.N == 0) { failures.Add($"{name}: no grades"); continue; }
+            if (stats.N == 0) { Issue($"{name}: no grades"); continue; }
             if (linguistic)
             {
-                if (stats.Mae > Thresholds.LinguisticMae) failures.Add($"{name}: mean error {stats.Mae} is above {Thresholds.LinguisticMae}");
-                if (Math.Abs(stats.Bias) > Thresholds.LinguisticBias) failures.Add($"{name}: bias {stats.Bias} is outside ±{Thresholds.LinguisticBias}");
-                if (stats.Adjacent.Share < Thresholds.LinguisticAdjacent) failures.Add($"{name}: within one band only {stats.Adjacent.Share:P0} (needs {Thresholds.LinguisticAdjacent:P0})");
+                if (stats.Mae > Thresholds.LinguisticMae) Issue($"{name}: mean error {stats.Mae} is above {Thresholds.LinguisticMae}");
+                if (Math.Abs(stats.Bias) > Thresholds.LinguisticBias) Issue($"{name}: bias {stats.Bias} is outside ±{Thresholds.LinguisticBias}");
+                if (stats.Adjacent.Share < Thresholds.LinguisticAdjacent) Issue($"{name}: within one band only {stats.Adjacent.Share:P0} (needs {Thresholds.LinguisticAdjacent:P0})");
             }
             else
             {
-                if (stats.Mae > Thresholds.ClinicalMae) failures.Add($"{name}: mean error {stats.Mae} is above {Thresholds.ClinicalMae}");
-                if (Math.Abs(stats.Bias) > Thresholds.ClinicalBias) failures.Add($"{name}: bias {stats.Bias} is outside ±{Thresholds.ClinicalBias}");
-                if (stats.Exact.Share < Thresholds.ClinicalExact) failures.Add($"{name}: exact agreement only {stats.Exact.Share:P0} (needs {Thresholds.ClinicalExact:P0})");
+                if (stats.Mae > Thresholds.ClinicalMae) Issue($"{name}: mean error {stats.Mae} is above {Thresholds.ClinicalMae}");
+                if (Math.Abs(stats.Bias) > Thresholds.ClinicalBias) Issue($"{name}: bias {stats.Bias} is outside ±{Thresholds.ClinicalBias}");
+                if (stats.Exact.Share < Thresholds.ClinicalExact) Issue($"{name}: exact agreement only {stats.Exact.Share:P0} (needs {Thresholds.ClinicalExact:P0})");
             }
         }
 
         if (report.IntelligibilityFromAudio is { } audio)
         {
             if (audio.Mae > Thresholds.AudioIntelligibilityMae)
-                failures.Add($"Intelligibility judged from audio: mean error {audio.Mae} is above {Thresholds.AudioIntelligibilityMae}");
+                Issue($"Intelligibility judged from audio: mean error {audio.Mae} is above {Thresholds.AudioIntelligibilityMae}");
         }
         else if (requireAudio)
         {
-            failures.Add("the run asked for the audio judge but no grade was judged from audio");
+            Issue("the run asked for the audio judge but no grade was judged from audio");
         }
 
         var scaled = report.Mapping.LeaveOneOut;
         if (scaled.N > 0)
         {
-            if (scaled.Mae > Thresholds.ScaledMae) failures.Add($"score: mean error {scaled.Mae} is above {Thresholds.ScaledMae} points");
-            if (Math.Abs(scaled.Bias) > Thresholds.ScaledBias) failures.Add($"score: bias {scaled.Bias} is outside ±{Thresholds.ScaledBias} points");
-            if (scaled.Within40.Share < Thresholds.ScaledWithin40) failures.Add($"score: within 40 points only {scaled.Within40.Share:P0} (needs {Thresholds.ScaledWithin40:P0})");
-            if (report.Grade.Exact.Share < Thresholds.GradeExact) failures.Add($"grade: exact agreement only {report.Grade.Exact.Share:P0} (needs {Thresholds.GradeExact:P0})");
-            if (report.Grade.Adjacent.Share < Thresholds.GradeAdjacent) failures.Add($"grade: within one grade only {report.Grade.Adjacent.Share:P0} (needs {Thresholds.GradeAdjacent:P0})");
-            if (report.PassFail.Agreement.Share < Thresholds.PassAgreement) failures.Add($"pass/fail agreement only {report.PassFail.Agreement.Share:P0} (needs {Thresholds.PassAgreement:P0})");
-            if (report.PassFail.FalsePass.Share > Thresholds.FalsePass) failures.Add($"false passes {report.PassFail.FalsePass.Share:P0} are above {Thresholds.FalsePass:P0}");
+            if (scaled.Mae > Thresholds.ScaledMae) Issue($"score: mean error {scaled.Mae} is above {Thresholds.ScaledMae} points");
+            if (Math.Abs(scaled.Bias) > Thresholds.ScaledBias) Issue($"score: bias {scaled.Bias} is outside ±{Thresholds.ScaledBias} points");
+            if (scaled.Within40.Share < Thresholds.ScaledWithin40) Issue($"score: within 40 points only {scaled.Within40.Share:P0} (needs {Thresholds.ScaledWithin40:P0})");
+            if (report.Grade.Exact.Share < Thresholds.GradeExact) Issue($"grade: exact agreement only {report.Grade.Exact.Share:P0} (needs {Thresholds.GradeExact:P0})");
+            if (report.Grade.Adjacent.Share < Thresholds.GradeAdjacent) Issue($"grade: within one grade only {report.Grade.Adjacent.Share:P0} (needs {Thresholds.GradeAdjacent:P0})");
+            if (report.PassFail.Agreement.Share < Thresholds.PassAgreement) Issue($"pass/fail agreement only {report.PassFail.Agreement.Share:P0} (needs {Thresholds.PassAgreement:P0})");
+            if (report.PassFail.FalsePass.Share > Thresholds.FalsePass) Issue($"false passes {report.PassFail.FalsePass.Share:P0} are above {Thresholds.FalsePass:P0}");
         }
         else
         {
-            failures.Add("score: nothing to compare");
+            Issue("score: nothing to compare");
         }
 
         if (report.Repeatability is { } repeat)
         {
-            if (repeat.CriterionRepeat.Share < Thresholds.CriterionRepeat) failures.Add($"repeatability: criterion scores repeat only {repeat.CriterionRepeat.Share:P0} (needs {Thresholds.CriterionRepeat:P0})");
-            if (repeat.ScaledWithin20.Share < Thresholds.ScaledWithin20) failures.Add($"repeatability: score within 20 points only {repeat.ScaledWithin20.Share:P0} (needs {Thresholds.ScaledWithin20:P0})");
-            if (repeat.PassStable.Share < Thresholds.PassStable) failures.Add($"repeatability: pass/fail flips {1 - repeat.PassStable.Share:P0} of the time (allowed {1 - Thresholds.PassStable:P0})");
+            if (repeat.CriterionRepeat.Share < Thresholds.CriterionRepeat) Issue($"repeatability: criterion scores repeat only {repeat.CriterionRepeat.Share:P0} (needs {Thresholds.CriterionRepeat:P0})");
+            if (repeat.ScaledWithin20.Share < Thresholds.ScaledWithin20) Issue($"repeatability: score within 20 points only {repeat.ScaledWithin20.Share:P0} (needs {Thresholds.ScaledWithin20:P0})");
+            if (repeat.PassStable.Share < Thresholds.PassStable) Issue($"repeatability: pass/fail flips {1 - repeat.PassStable.Share:P0} of the time (allowed {1 - Thresholds.PassStable:P0})");
         }
         else
         {
-            failures.Add("repeatability: no performance has been graded twice yet");
+            Issue("repeatability: no performance has been graded twice yet");
         }
 
-        return new SpeakingCalibrationVerdict(failures.Count == 0, failures);
+        advisory?.Add(
+            "OWNER PILOT: an informational comparison on a small real sample — not statistical validation. The Speaking score stays 'Provisional'; the notes above are where the grader stood against the thresholds the approved full validation will apply (owner, 5 Oct 2026, unchanged).");
+
+        return new SpeakingCalibrationVerdict(
+            !pilot && failures.Count == 0,
+            failures,
+            pilot ? "pilot" : "validation",
+            advisory);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

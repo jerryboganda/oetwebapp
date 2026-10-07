@@ -151,3 +151,85 @@ export function adminLabelGraderCalibrationSample(
 export function adminExcludeGraderCalibrationSample(id: string, reason: string): Promise<GraderCalibrationSampleRow> {
   return apiClient.post<GraderCalibrationSampleRow>(`${BASE}/samples/${encodeURIComponent(id)}/exclude`, { reason });
 }
+
+// ── Full Mock samples: one whole two-card test, ONE expert mark (owner request 7 Oct 2026) ──
+
+export interface GraderCalibrationMockCandidate {
+  examId: string;
+  professionId: string;
+  cardATitle: string;
+  cardBTitle: string;
+  finishedAt: string;
+  hasAudio: boolean;
+}
+
+export interface GraderCalibrationMockSampleRow {
+  id: string;
+  examId: string;
+  professionId: string;
+  cardATitle: string;
+  cardBTitle: string;
+  hasAudio: boolean;
+  status: GraderCalibrationStatus;
+  expertOverallScaled: number | null;
+  expertGrade: string | null;
+  promotedAt: string;
+  labelledAt: string | null;
+  usable?: boolean;
+}
+
+export interface GraderCalibrationMockOverview {
+  coverage: GraderCalibrationCoverage;
+  samples: GraderCalibrationMockSampleRow[];
+}
+
+export interface GraderCalibrationMockSampleDetail {
+  id: string;
+  status: GraderCalibrationStatus;
+  hasAudio: boolean;
+  cardA: GraderCalibrationCard;
+  cardB: GraderCalibrationCard;
+  transcriptA: GraderCalibrationTranscriptLine[];
+  transcriptB: GraderCalibrationTranscriptLine[];
+  clipsA: GraderCalibrationAudioClip[];
+  clipsB: GraderCalibrationAudioClip[];
+  criteria: GraderCalibrationCriterion[];
+  label: GraderCalibrationLabel | null;
+  excludedReason: string;
+}
+
+export function adminGetGraderCalibrationMocks(): Promise<GraderCalibrationMockOverview> {
+  return apiClient.get<GraderCalibrationMockOverview>(`${BASE}/mocks`);
+}
+
+export function adminListGraderCalibrationMockCandidates(take = 50): Promise<GraderCalibrationMockCandidate[]> {
+  return apiClient.get<GraderCalibrationMockCandidate[]>(`${BASE}/mock-candidates?take=${take}`);
+}
+
+/** Promote a completed two-card AI exam as ONE Full Mock sample. Keeps both cards' audio for a year and writes an audit event. */
+export function adminPromoteGraderCalibrationMock(examId: string): Promise<GraderCalibrationMockSampleRow> {
+  return apiClient.post<GraderCalibrationMockSampleRow>(`${BASE}/mock-samples`, { examId });
+}
+
+export function adminGetGraderCalibrationMockSample(id: string): Promise<GraderCalibrationMockSampleDetail> {
+  return apiClient.get<GraderCalibrationMockSampleDetail>(`${BASE}/mock-samples/${encodeURIComponent(id)}`);
+}
+
+/** Authorised path of one of the mock's clips (Card A or Card B), for `fetchAuthorizedObjectUrl`. */
+export function graderCalibrationMockAudioPath(sampleId: string, recordingId: string): string {
+  return `${BASE}/mock-samples/${encodeURIComponent(sampleId)}/audio/${encodeURIComponent(recordingId)}`;
+}
+
+export function adminLabelGraderCalibrationMockSample(
+  id: string,
+  body: GraderCalibrationLabelBody,
+): Promise<GraderCalibrationMockSampleRow> {
+  return apiClient.put<GraderCalibrationMockSampleRow>(`${BASE}/mock-samples/${encodeURIComponent(id)}/label`, body);
+}
+
+export function adminExcludeGraderCalibrationMockSample(
+  id: string,
+  reason: string,
+): Promise<GraderCalibrationMockSampleRow> {
+  return apiClient.post<GraderCalibrationMockSampleRow>(`${BASE}/mock-samples/${encodeURIComponent(id)}/exclude`, { reason });
+}

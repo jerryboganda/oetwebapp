@@ -29,6 +29,11 @@ public sealed partial class SpeakingGraderCalibrationService(
     /// <summary>How long a promoted performance's audio is kept (the privacy call recorded in the plan).</summary>
     public static readonly TimeSpan CalibrationAudioRetention = TimeSpan.FromDays(365);
 
+    /// <summary>Run scopes: <see cref="ScopeCard"/> grades each marked single card with the card grader;
+    /// <see cref="ScopeMock"/> grades each marked Full Mock with the combined grader (speaking.score.v3-combined).</summary>
+    public const string ScopeCard = "card";
+    public const string ScopeMock = "mock";
+
     // Coverage a calibration report needs before it means anything. Approved by the owner 2026-10-05:
     // keep them strict and never relax them to make the grader pass (pinned by SpeakingGraderCalibrationMetricsTests).
     public const int RequiredLabelled = 30;
@@ -640,3 +645,4 @@ public sealed partial class SpeakingGraderCalibrationService(
     private static int ReadMs(JsonElement segment, string property)
         => segment.TryGetProperty(property, out var value) && value.TryGetDouble(out var ms) ? (int)Math.Max(0, ms) : 0;
 }
+

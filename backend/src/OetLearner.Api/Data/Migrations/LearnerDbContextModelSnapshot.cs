@@ -24506,6 +24506,102 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("SpeakingGraderCalibrationGrades");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.SpeakingGraderCalibrationMockSample", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CardAId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CardBId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ExcludedReason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ExpertNotes")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int?>("ExpertOverallScaled")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ExpertScoresJson")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("HasAudio")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LabelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LabelledById")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProfessionId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset>("PromotedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PromotedById")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SessionAId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SessionBId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SpeakingExamId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("TranscriptAId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("TranscriptBId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SpeakingExamId")
+                        .IsUnique();
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("SpeakingGraderCalibrationMockSamples");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.SpeakingGraderCalibrationRun", b =>
                 {
                     b.Property<string>("Id")
@@ -24528,11 +24624,19 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(160)
                         .HasColumnType("character varying(160)");
 
+                    b.Property<bool>("Pilot")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ReportJson")
                         .HasColumnType("text");
 
                     b.Property<int>("Repeats")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Scope")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");

@@ -31,19 +31,45 @@ public sealed partial class SpeakingGraderCalibrationService
                 "A calibration run is already in progress. Finish it (or cancel it) before starting another.");
         }
 
-        var labelled = await db.SpeakingGraderCalibrationSamples.AsNoTracking()
-            .Where(s => s.Status == SpeakingGraderCalibrationSampleStatus.Labelled
-                && s.ExpertScoresJson != null
-                && s.ExpertOverallScaled != null)
-            .OrderBy(s => s.Id)
-            .ToListAsync(ct);
-        // A performance whose audio expired, whose learner withdrew consent or whose transcript was erased is not graded.
-        var unusable = await UnusableSampleIdsAsync(labelled, ct);
-        var sampleIds = labelled.Where(s => !unusable.Contains(s.Id)).Select(s => s.Id).ToList();
+        // Scope decides which marked set the run grades: single cards with the card grader, or whole Full Mocks
+        // with the combined grader (speaking.score.v3-combined). A pilot never needs the approved coverage; it
+        // grades whatever is marked so the owner can see the comparison on a small real sample.
+        var scope = string.Equals(request.Scope?.Trim(), ScopeMock, StringComparison.OrdinalIgnoreCase)
+            ? ScopeMock
+            : ScopeCard;
+
+        List<string> sampleIds;
+        if (scope == ScopeMock)
+        {
+            var mocks = await db.SpeakingGraderCalibrationMockSamples.AsNoTracking()
+                .Where(s => s.Status == SpeakingGraderCalibrationSampleStatus.Labelled
+                    && s.ExpertScoresJson != null
+                    && s.ExpertOverallScaled != null)
+                .OrderBy(s => s.Id)
+                .ToListAsync(ct);
+            // A mock whose audio expired, whose learner withdrew consent or whose transcript was erased is not graded.
+            var unusableMocks = await UnusableMockSampleIdsAsync(mocks, ct);
+            sampleIds = mocks.Where(s => !unusableMocks.Contains(s.Id)).Select(s => s.Id).ToList();
+        }
+        else
+        {
+            var labelled = await db.SpeakingGraderCalibrationSamples.AsNoTracking()
+                .Where(s => s.Status == SpeakingGraderCalibrationSampleStatus.Labelled
+                    && s.ExpertScoresJson != null
+                    && s.ExpertOverallScaled != null)
+                .OrderBy(s => s.Id)
+                .ToListAsync(ct);
+            // A performance whose audio expired, whose learner withdrew consent or whose transcript was erased is not graded.
+            var unusable = await UnusableSampleIdsAsync(labelled, ct);
+            sampleIds = labelled.Where(s => !unusable.Contains(s.Id)).Select(s => s.Id).ToList();
+        }
+
         if (sampleIds.Count == 0)
         {
             throw ApiException.Conflict("speaking_calibration_nothing_to_grade",
-                "Mark at least one performance before starting a calibration run.");
+                scope == ScopeMock
+                    ? "Mark at least one Full Mock before starting a mock calibration run."
+                    : "Mark at least one performance before starting a calibration run.");
         }
 
         var now = clock.GetUtcNow();
@@ -53,6 +79,8 @@ public sealed partial class SpeakingGraderCalibrationService
             Repeats = Math.Clamp(request.Repeats ?? SpeakingGraderCalibrationMetrics.Thresholds.MinimumRepeats,
                 SpeakingGraderCalibrationMetrics.Thresholds.MinimumRepeats, MaxRepeats),
             UseAudio = request.UseAudio ?? true,
+            Scope = scope,
+            Pilot = request.Pilot ?? false,
             Status = SpeakingGraderCalibrationRunStatus.Running,
             CreatedById = adminId,
             CreatedAt = now,
@@ -73,7 +101,7 @@ public sealed partial class SpeakingGraderCalibrationService
         }
 
         db.AuditEvents.Add(AuditFor(adminId, adminName, "SpeakingGraderCalibrationRunStarted", run.Id,
-            new { performances = sampleIds.Count, run.Repeats, run.UseAudio }));
+            new { performances = sampleIds.Count, run.Repeats, run.UseAudio, run.Scope, run.Pilot }));
         await db.SaveChangesAsync(ct);
         return await ToViewAsync(run, withReport: false, ct);
     }
@@ -194,18 +222,43 @@ public sealed partial class SpeakingGraderCalibrationService
         }
 
         var run = await db.SpeakingGraderCalibrationRuns.AsNoTracking().FirstOrDefaultAsync(r => r.Id == grade.RunId, ct);
-        var sample = await db.SpeakingGraderCalibrationSamples.AsNoTracking().FirstOrDefaultAsync(s => s.Id == grade.SampleId, ct);
+        var sample = run?.Scope == ScopeMock
+            ? null
+            : await db.SpeakingGraderCalibrationSamples.AsNoTracking().FirstOrDefaultAsync(s => s.Id == grade.SampleId, ct);
+        var mock = run?.Scope == ScopeMock
+            ? await db.SpeakingGraderCalibrationMockSamples.AsNoTracking().FirstOrDefaultAsync(s => s.Id == grade.SampleId, ct)
+            : null;
         try
         {
             if (assessor is null) throw new InvalidOperationException("The assessor is not available to the calibration harness.");
-            if (run is null || sample is null) throw ApiException.NotFound("speaking_calibration_grade_orphaned", "The run or the performance no longer exists.");
-            if ((await UnusableSampleIdsAsync([sample], ct)).Count > 0)
+            if (run is null || (sample is null && mock is null))
+                throw ApiException.NotFound("speaking_calibration_grade_orphaned", "The run or the performance no longer exists.");
+
+            (SpeakingAiAssessmentService.SpeakingGradeOutcome Outcome, SpeakingAudioEvidence? Audio) result;
+            if (mock is not null)
             {
-                throw ApiException.Conflict("speaking_calibration_sample_unavailable",
-                    "The performance's audio, transcript or consent is no longer available, so it cannot be graded.");
+                if ((await UnusableMockSampleIdsAsync([mock], ct)).Count > 0)
+                {
+                    throw ApiException.Conflict("speaking_calibration_sample_unavailable",
+                        "The Full Mock's audio, transcript or consent is no longer available, so it cannot be graded.");
+                }
+
+                result = await assessor.GradeCombinedForCalibrationAsync(
+                    mock.SpeakingExamId, mock.SessionAId, mock.SessionBId,
+                    mock.TranscriptAId, mock.TranscriptBId, run.UseAudio, ct);
+            }
+            else
+            {
+                if ((await UnusableSampleIdsAsync([sample!], ct)).Count > 0)
+                {
+                    throw ApiException.Conflict("speaking_calibration_sample_unavailable",
+                        "The performance's audio, transcript or consent is no longer available, so it cannot be graded.");
+                }
+
+                result = await assessor.GradeForCalibrationAsync(sample!.SpeakingSessionId, sample.TranscriptId, run.UseAudio, ct);
             }
 
-            var (outcome, audio) = await assessor.GradeForCalibrationAsync(sample.SpeakingSessionId, sample.TranscriptId, run.UseAudio, ct);
+            var (outcome, audio) = result;
             grade.ScoresJson = JsonSerializer.Serialize(new Dictionary<string, int>
             {
                 ["intelligibility"] = outcome.Scores.Intelligibility,
@@ -305,7 +358,9 @@ public sealed partial class SpeakingGraderCalibrationService
             run.CreatedAt,
             run.FinalizedAt,
             await ProgressAsync(run.Id, ct),
-            report);
+            report,
+            string.IsNullOrWhiteSpace(run.Scope) ? ScopeCard : run.Scope,
+            run.Pilot);
     }
 
     private async Task<SpeakingGraderCalibrationRunProgress> ProgressAsync(string runId, CancellationToken ct)
@@ -319,26 +374,43 @@ public sealed partial class SpeakingGraderCalibrationService
             grades.Count(g => g.Status == SpeakingGraderCalibrationGradeStatus.Done),
             grades.Count(g => g.Status == SpeakingGraderCalibrationGradeStatus.Failed));
 
-    /// <summary>The report over the performances this run graded (a performance marked after the run began does not count).</summary>
+    /// <summary>The report over the performances this run graded (a performance marked after the run began does not count).
+    /// A mock-scope run compares the expert's ONE mark of each whole two-card test with the combined grader's grades.</summary>
     private async Task<SpeakingCalibrationReport> BuildReportAsync(SpeakingGraderCalibrationRun run, CancellationToken ct)
     {
         var grades = await db.SpeakingGraderCalibrationGrades.AsNoTracking().Where(g => g.RunId == run.Id).ToListAsync(ct);
         var inRun = grades.Select(g => g.SampleId).Distinct(StringComparer.Ordinal).ToList();
-        var samples = await db.SpeakingGraderCalibrationSamples.AsNoTracking()
-            .Where(s => inRun.Contains(s.Id)
-                && s.Status == SpeakingGraderCalibrationSampleStatus.Labelled
-                && s.ExpertScoresJson != null
-                && s.ExpertOverallScaled != null)
-            .ToListAsync(ct);
+        var isMock = string.Equals(run.Scope, ScopeMock, StringComparison.Ordinal);
 
-        var experts = samples
-            .Select(s => new SpeakingCalibrationExpert(s.Id, s.HasAudio, ParseScores(s.ExpertScoresJson), s.ExpertOverallScaled!.Value))
-            .ToList();
+        var experts = new List<SpeakingCalibrationExpert>();
+        if (isMock)
+        {
+            var mocks = await db.SpeakingGraderCalibrationMockSamples.AsNoTracking()
+                .Where(s => inRun.Contains(s.Id)
+                    && s.Status == SpeakingGraderCalibrationSampleStatus.Labelled
+                    && s.ExpertScoresJson != null
+                    && s.ExpertOverallScaled != null)
+                .ToListAsync(ct);
+            experts.AddRange(mocks
+                .Select(s => new SpeakingCalibrationExpert(s.Id, s.HasAudio, ParseScores(s.ExpertScoresJson), s.ExpertOverallScaled!.Value)));
+        }
+        else
+        {
+            var samples = await db.SpeakingGraderCalibrationSamples.AsNoTracking()
+                .Where(s => inRun.Contains(s.Id)
+                    && s.Status == SpeakingGraderCalibrationSampleStatus.Labelled
+                    && s.ExpertScoresJson != null
+                    && s.ExpertOverallScaled != null)
+                .ToListAsync(ct);
+            experts.AddRange(samples
+                .Select(s => new SpeakingCalibrationExpert(s.Id, s.HasAudio, ParseScores(s.ExpertScoresJson), s.ExpertOverallScaled!.Value)));
+        }
+
         var observations = grades
             .Where(g => g.Status == SpeakingGraderCalibrationGradeStatus.Done && g.ScoresJson != null)
             .Select(g => new SpeakingCalibrationObservation(g.SampleId, g.Repeat, ParseScores(g.ScoresJson), g.IntelligibilitySource ?? "transcript_only"))
             .ToList();
-        var report = SpeakingGraderCalibrationMetrics.Compute(experts, observations, run.UseAudio);
+        var report = SpeakingGraderCalibrationMetrics.Compute(experts, observations, run.UseAudio, pilot: run.Pilot);
         // The "Provisional" label is earned per exact grader version + model, so say how many grades each produced.
         var versions = grades
             .Where(g => g.Status == SpeakingGraderCalibrationGradeStatus.Done && !string.IsNullOrWhiteSpace(g.GraderVersion))

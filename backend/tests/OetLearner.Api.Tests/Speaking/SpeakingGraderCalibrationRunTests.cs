@@ -197,12 +197,15 @@ public sealed class SpeakingGraderCalibrationRunTests : IAsyncLifetime
         Assert.Equal(2, scores["informationGiving"]);
 
         // The same grade a learner gets, for no learner: no plan gate, no grant, nothing written for the learner.
-        var call = Assert.Single(gateway.Requests);
+        // The primary grade is followed by its bounded secondary review (best effort; it cannot fail the grade).
+        Assert.Equal(2, gateway.Requests.Count);
+        var call = gateway.Requests[0];
         Assert.Equal(AiFeatureCodes.SpeakingGrade, call.FeatureCode);
         Assert.Null(call.UserId);
         Assert.False(call.FreeSampleGrant);
         Assert.Equal(SpeakingAiAssessmentService.PromptTemplateId, call.PromptTemplateId);
         Assert.Contains("the pinned transcript sentence", call.UserInput);
+        Assert.Equal(AiFeatureCodes.SpeakingGradeReview, gateway.Requests[1].FeatureCode);
         Assert.Equal(0, await _db.SpeakingAiAssessments.CountAsync());
         Assert.Equal(0, await _db.AiCreditReservations.CountAsync());
         Assert.Equal(AiOperationState.Completed, (await _db.AiOperations.AsNoTracking().SingleAsync(o => o.Id == grade.OperationId)).State);
@@ -224,7 +227,9 @@ public sealed class SpeakingGraderCalibrationRunTests : IAsyncLifetime
 
         await service.ExecuteGradeAsync(next.GradeId!, default);
 
-        var request = Assert.Single(gateway.Requests);
+        // The primary grade reads the pinned transcript (the secondary review of it sees the same text appended).
+        Assert.Equal(2, gateway.Requests.Count);
+        var request = gateway.Requests[0];
         Assert.Contains("the pinned transcript sentence", request.UserInput);
         Assert.DoesNotContain("A later, different transcript.", request.UserInput);
     }
@@ -326,6 +331,133 @@ public sealed class SpeakingGraderCalibrationRunTests : IAsyncLifetime
 
         Assert.Equal(4, view.Progress.Total);
         Assert.False(await _db.SpeakingGraderCalibrationGrades.AnyAsync(g => g.SampleId == "late"));
+    }
+
+    // ── Full Mock scope + owner pilot (owner request 7 Oct 2026) ─────────────────────────
+
+    [Fact]
+    public async Task AMockScopePilotRun_GradesWholeTestsWithTheCombinedGrader_AndItsReportCannotPass()
+    {
+        AddMarkedMock();
+        await _db.SaveChangesAsync();
+        var gateway = new ReplyGateway();
+        var service = Service(gateway);
+        var run = await service.CreateRunAsync(AdminId, "Admin", new SpeakingGraderCalibrationRunCreateRequest(2, false, "mock", Pilot: true), default);
+        Assert.True(run.Pilot);
+        Assert.Equal("mock", run.Scope);
+        Assert.Equal(2, run.Progress.Total); // one whole test, graded twice
+
+        var guard = 0;
+        while (guard++ < 10)
+        {
+            var next = await service.NextAsync(run.Id, AdminId, default);
+            if (next.State is "done" or "complete") break;
+            if (next.GradeId is not null) await service.ExecuteGradeAsync(next.GradeId, default);
+        }
+
+        // Both grades went through the combined prompt: one judgement over both cards, never two card grades.
+        // (Each primary grade is followed by its bounded secondary review — the review of a review-free prompt.)
+        var primaries = gateway.Requests.Where(r => r.FeatureCode == AiFeatureCodes.SpeakingGrade).ToList();
+        Assert.Equal(2, primaries.Count);
+        Assert.All(gateway.Requests.Where(r => r.FeatureCode != AiFeatureCodes.SpeakingGrade),
+            r => Assert.Equal(AiFeatureCodes.SpeakingGradeReview, r.FeatureCode));
+        Assert.All(primaries, request =>
+        {
+            Assert.Equal(SpeakingAiAssessmentService.CombinedPromptTemplateId, request.PromptTemplateId);
+            Assert.Contains("ONE COMPLETE OET SPEAKING TEST", request.UserInput);
+            Assert.Contains("the Card A sentence", request.UserInput);
+            Assert.Contains("the Card B sentence", request.UserInput);
+            Assert.Null(request.UserId);
+        });
+        Assert.Equal(0, await _db.SpeakingAiAssessments.CountAsync());
+
+        await service.FinalizeAsync(run.Id, AdminId, "Admin", default);
+        var report = (await service.GetRunAsync(run.Id, default)).Report!;
+        Assert.Equal(1, report.Performances);
+        Assert.Equal(2, report.Observations);
+        Assert.Equal(2, report.Repeats);
+        // A pilot is an informational comparison: no coverage failure is raised, every observation is advisory, and the
+        // verdict can never pass — the Speaking score stays Provisional.
+        Assert.Equal("pilot", report.Verdict.Mode);
+        Assert.False(report.Verdict.Passed);
+        Assert.Empty(report.Verdict.Failures);
+        Assert.Contains(report.Verdict.Advisory ?? [], a => a.Contains("OWNER PILOT"));
+    }
+
+    [Fact]
+    public async Task AMockScopeRun_WithNothingMarked_SaysWhy()
+    {
+        var failure = await Assert.ThrowsAsync<ApiException>(() =>
+            Service(new ReplyGateway()).CreateRunAsync(AdminId, "Admin", new SpeakingGraderCalibrationRunCreateRequest(null, null, "mock"), default));
+
+        Assert.Equal("speaking_calibration_nothing_to_grade", failure.ErrorCode);
+        Assert.Contains("Full Mock", failure.Message);
+    }
+
+    private void AddMarkedMock()
+    {
+        _db.SpeakingExamSessions.Add(new SpeakingExamSession
+        {
+            Id = "exam-1",
+            UserId = "learner-1",
+            ProfessionId = "medicine",
+            Mode = SpeakingExamMode.Ai,
+            State = SpeakingExamState.Completed,
+            CardAId = "rpc-cal",
+            CardBId = "rpc-cal",
+            SessionAId = "sps_mock_a",
+            SessionBId = "sps_mock_b",
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        });
+        _db.SpeakingSessions.Add(new SpeakingSession
+        {
+            Id = "sps_mock_a",
+            UserId = "learner-1",
+            RolePlayCardId = "rpc-cal",
+            Mode = SpeakingSessionMode.AiExam,
+            State = SpeakingSessionState.Finished,
+            EndedAt = Now,
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        });
+        _db.SpeakingTranscripts.Add(Transcript("tx_mock_a", "sps_mock_a", "the Card A sentence", isLatest: true));
+        _db.SpeakingSessions.Add(new SpeakingSession
+        {
+            Id = "sps_mock_b",
+            UserId = "learner-1",
+            RolePlayCardId = "rpc-cal",
+            Mode = SpeakingSessionMode.AiExam,
+            State = SpeakingSessionState.Finished,
+            EndedAt = Now,
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        });
+        _db.SpeakingTranscripts.Add(Transcript("tx_mock_b", "sps_mock_b", "the Card B sentence", isLatest: true));
+        _db.SpeakingGraderCalibrationMockSamples.Add(new SpeakingGraderCalibrationMockSample
+        {
+            Id = "spgcm_mock",
+            SpeakingExamId = "exam-1",
+            SessionAId = "sps_mock_a",
+            SessionBId = "sps_mock_b",
+            TranscriptAId = "tx_mock_a",
+            TranscriptBId = "tx_mock_b",
+            CardAId = "rpc-cal",
+            CardBId = "rpc-cal",
+            ProfessionId = "medicine",
+            HasAudio = false,
+            Status = SpeakingGraderCalibrationSampleStatus.Labelled,
+            ExpertScoresJson = JsonSerializer.Serialize(new Dictionary<string, int>
+            {
+                ["intelligibility"] = 5, ["fluency"] = 5, ["appropriateness"] = 5, ["grammarExpression"] = 5,
+                ["relationshipBuilding"] = 3, ["patientPerspective"] = 2, ["structure"] = 2, ["informationGathering"] = 2, ["informationGiving"] = 2,
+            }),
+            ExpertOverallScaled = 400,
+            PromotedById = AdminId,
+            PromotedAt = Now,
+            LabelledAt = Now,
+            UpdatedAt = Now,
+        });
     }
 
     // ── The workers' hand-off and the guards ───────────────────────────────────────────────
