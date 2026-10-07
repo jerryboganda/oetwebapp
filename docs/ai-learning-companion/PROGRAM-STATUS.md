@@ -49,3 +49,22 @@ Authoritative running state for the SAMI 100% implementation program. Baseline:
 - Shared GitHub rate limit + ship visibility lease are contended by concurrent agent
   sessions — never force-release; retry.
 - Never use shell heredocs to patch source (corrupts `\n`/`\b` — two incidents this session).
+
+## UAT execution log (Wave 5, live, 2026-10-07)
+
+- **Packs executed so far**: Pack 1 (20/20 records, 0 nulls, no legacy-persona leak, persona = Sami)
+  and Pack 2 (multiple runs; latest records in `uat/results/`). Pack 1 evidence: `uat-execution-…02-27-21.json`.
+- **Live defects found by UAT and FIXED + deployed**:
+  1. OpenCode lane saturation (4 in-flight, 5s wait) under slow max-effort turns → lane tunable
+     (`AiOpenAiCompatible__OpenCodeMaxInFlight`, default 8) and wait 5s → 90s (queue, don't fail).
+  2. `finish_reason=length` at effort=max: deepseek reasoning exhausted the 6,144-token output
+     floor → floor raised to 16,384 with a bounded length-retry ladder to 32,768.
+  3. Root cause of remaining slow-turn failures: the ~100s non-streamed HttpClient timeout and
+     ~120s edge read cap → **OpenCode calls now stream** (`OpenCodeStreamingCall`, SSE parse of
+     content/tool-call deltas, falls back to non-streamed when declined; kill switch
+     `AiOpenAiCompatible__OpenCodeStreaming=false`).
+- **Known characteristic (not a defect)**: max-effort turns cost 6k–30k+ output tokens each and
+  take 1–4 minutes. UAT accounts carry raised quota overrides (D-007) for the execution window.
+- **Runner**: `.tools-state/sami-ops/uat-run.mjs` (SignalR learner client; packs 1/2 scripted;
+  pack 3/4 definitions in `uat-pack34.mjs`); consolidation: `scripts/ai-learning-companion/consolidate_uat.py`.
+- §17.1 judgement stays with the reviewer; the runner captures verbatim responses only.
