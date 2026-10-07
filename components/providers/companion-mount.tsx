@@ -18,7 +18,8 @@ import { AiAssistantWidget } from '@/components/domain/ai-assistant';
  *   and its own permission check (`canAccessAiAssistant`) plus the
  *   role-derived server feature code keep learners out.
  *
- * Experts and unauthenticated visitors render nothing here (the widget's own
+ * Experts use their read-only staff chatbot, mounted like admins.
+ * Unauthenticated visitors render nothing here (the widget's own
  * role check is authoritative; this mount only avoids the wasted flag fetch
  * for non-learners).
  */
@@ -26,13 +27,13 @@ const COMPANION_FLAG = 'ai_learning_companion';
 
 export function CompanionMount() {
   const { isAuthenticated, role } = useAuth();
-  const isAdmin = isAuthenticated && role === 'admin';
+  const isStaff = isAuthenticated && (role === 'admin' || role === 'expert');
   const isLearner = isAuthenticated && role === 'learner';
   const flags = useFeatureFlagMap([COMPANION_FLAG], isLearner);
 
   // Admin chatbot: bottom-right, always available to staff — never gated on
   // the learner companion flag.
-  if (isAdmin) return <AiAssistantWidget role={role} />;
+  if (isStaff) return <AiAssistantWidget role={role} />;
 
   if (!isLearner) return null;
   if (!flags[COMPANION_FLAG]) return null;

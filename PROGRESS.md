@@ -139,3 +139,5 @@ Older still: `git log -- PROGRESS.md`.
 - 2026-10-08 learner-personal-assistant: restricted learner discovery/selection/inference to direct DeepSeek v4.1 Flash, removed learner provider selector and branded OET Personal Ai Assistant. Fixed recorder ResourceId overflow confirmed in production logs (SQLSTATE 22001); retained learner-safe tool allowlist and added OET-study scope. Deployment pending; functional QA not tested—owner QA.
 
 - learner-personal-assistant deployed: f7ae11a35d5cfebf18f46313ae8c21cd025f9166; build 37692008180 and deploy 37692695925 successful. Exact blue serving image/headers verified; web/API health green. Functional acceptance not tested—owner QA.
+
+- 2026-10-08 staff-chatbot-access: all admin accounts already have the chatbot; enabled expert launcher and direct gateway catalogue/selection/inference for all experts. Role-specific tools retained. Owner-console privilege expansion awaiting clarification. Deployment pending; functional QA not tested—owner QA.

@@ -102,8 +102,8 @@ public static class AiAssistantEndpoints
             if (AssistantModelCatalog.IsOpenCodeModel(model))
             {
                 // Role first, so a non-learner learns nothing about whether the provider is switched on.
-                if (GetUserRole(ctx.User) is not (ApplicationUserRoles.Learner or ApplicationUserRoles.Admin))
-                    return new ApiErrorResult(400, "ai_assistant_model_role_not_allowed", "This model is only available to learners and admins.");
+                if (GetUserRole(ctx.User) is not (ApplicationUserRoles.Learner or ApplicationUserRoles.Admin or ApplicationUserRoles.Expert))
+                    return new ApiErrorResult(400, "ai_assistant_model_role_not_allowed", "This model is only available to learners and staff.");
                 if (!(await GetOpenCodeModelsAsync(providerRegistry, ct)).Contains(model!))
                     return new ApiErrorResult(400, "ai_assistant_model_unavailable", "This model is not available right now.");
             }
@@ -142,7 +142,7 @@ public static class AiAssistantEndpoints
             var models = AssistantModelCatalog.ClaudeApiModels.Concat(ubagModels);
 
             var openCodeModels = await GetOpenCodeModelsAsync(providerRegistry, ct);
-            if ((GetUserRole(ctx.User) is ApplicationUserRoles.Learner or ApplicationUserRoles.Admin)
+            if ((GetUserRole(ctx.User) is ApplicationUserRoles.Learner or ApplicationUserRoles.Admin or ApplicationUserRoles.Expert)
                 && openCodeModels.Length > 0)
             {
                 groups.Add(new { provider = OpenCodeProviderDefaults.ProviderCode, label = "Direct OpenCode gateway", models = openCodeModels });

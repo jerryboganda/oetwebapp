@@ -74,7 +74,8 @@ public sealed class AiAssistantGateway(
         // OpenCode failures never surface their cause to the learner (owner wording, no fallback
         // provider); the specific class goes to the usage record only.
         var isOpenCode = IsOpenCodeCode(requestedProviderCode);
-        if (isOpenCode && featureCode != AiFeatureCodes.AiAssistantLearner && featureCode != AiFeatureCodes.AiAssistantAdmin)
+        if (isOpenCode && featureCode != AiFeatureCodes.AiAssistantLearner && featureCode != AiFeatureCodes.AiAssistantAdmin
+            && featureCode != AiFeatureCodes.AiAssistantExpert)
         {
             await RecordFailureAsync(
                 featureCode,
@@ -83,13 +84,13 @@ public sealed class AiAssistantGateway(
                 requestedModel,
                 AiCallOutcome.GatewayRefused,
                 "opencode_role_not_allowed",
-                "OpenCode models are only available in the learner and admin assistants.",
+                "OpenCode models are only available in the learner and staff assistants.",
                 requestSystemPrompt: null,
                 requestUserPrompt: messages.LastOrDefault(m => m.Role == "user")?.Content,
                 startedAt,
                 stopwatch,
                 CancellationToken.None);
-            yield return new LlmTextChunk("This model is only available in the learner and admin assistants.");
+            yield return new LlmTextChunk("This model is only available in the learner and staff assistants.");
             yield break;
         }
 

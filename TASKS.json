@@ -318,6 +318,17 @@
         "Build images 37692008180 success",
         "Deploy production 37692695925 success; live f7ae11a35 blue; web/api serving-image proof; owner functional QA not tested"
       ]
+    },
+    {
+      "id": "SCA-01",
+      "title": "Enable chatbot and direct gateway for all admins and experts",
+      "status": "in_progress",
+      "owner": "staff-chatbot-access",
+      "blockedBy": [],
+      "verify": "Image builds, Deploy production and serving proof; functional acceptance owner QA",
+      "evidence": [
+        "Admin mount already role-wide; missing expert mount and expert OpenCode role restrictions found"
+      ]
     }
   ]
 }
