@@ -13,19 +13,12 @@ internal static class Doc12QaValidation
         Sections:
         [
             new DocumentationSectionBlock(
-                "Scale of the automated backend test suite",
-                "The backend test project, `backend/tests/OetLearner.Api.Tests`, contains 569 test files as of this " +
-                "writing, executed via `dotnet test`. The suite is large enough that CI does not run it as one job: " +
-                "the `qa-smoke.yml` workflow shards it into six parallel `dotnet test` processes, each running a " +
-                "disjoint, deterministically-partitioned subset of test classes, because the assembly disables test " +
-                "parallelisation within a single process (`[CollectionBehavior(DisableTestParallelization = " +
-                "true)]`) and one shard alone was measured taking roughly 38 minutes on `main` (EV-QA-001). Each " +
-                "shard runs against a real `pgvector/pgvector:pg17` Postgres service container rather than a plain " +
-                "Postgres image, with the workflow's own comment recording the specific, previously-hit failure this " +
-                "prevents: `LearnerDbContext` declares a `vector(1536)` column for `CompanionChunk.Embedding`, and " +
-                "Npgsql's vector plugin silently drops that type mapping if the `vector` extension is not installed, " +
-                "so every Postgres-backed test failed with a type-mapping error regardless of what it actually " +
-                "exercised until this was fixed (EV-QA-002)."),
+                "Automated test code (historical; deleted 8 Oct 2026)",
+                "The backend test project contained 569 test files until 8 Oct 2026, when all test code was deleted " +
+                "by owner directive. CI now runs only the language checks (typecheck and lint) and compiles the " +
+                "images; the owner tests the live product by hand and reports bugs. The earlier sharded `qa-smoke.yml` " +
+                "run is gone with the tests; the last commit that still contained them is tagged " +
+                "`last-commit-with-tests`."),
             new DocumentationSectionBlock(
                 "Regression fixtures tied to specific, dated owner rulings",
                 "A significant share of the Writing test surface is not generic unit testing but named regression " +

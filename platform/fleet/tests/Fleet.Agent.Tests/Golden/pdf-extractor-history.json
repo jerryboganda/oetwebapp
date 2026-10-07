@@ -1,9 +1,0 @@
-{
-  "comment": "One entry per PdfTextEngine.LayoutRevision: the SHA-256 (LF-normalised) of backend/src/OetLearner.Api/Services/Content/PdfPigPdfTextExtractor.cs at that revision. Changing the extractor's behaviour requires BOTH a LayoutRevision bump and a new entry here. Revision 1 was first recorded as 6e290e380a13ab92b587c5d425359e25616282e6ac46bbcf404fc6df589f4858; the PDF hardening layer then added ONE diagnostics-only call to ExtractAsync (PdfExtractionFacts.RecordEmbedded, which never touches the returned text), so the output is unchanged, the revision stays 1 and only the recorded hash moved. This mirrors KnownExtractorHashes in backend/tests/OetLearner.Api.Tests/RemoteJobs/RemoteEngineMigrationAndWiringTests.cs; keep the two in step. Inert manual reference: no workflow reads it.",
-  "history": [
-    {
-      "layoutRevision": 1,
-      "sha256": "2f2abe20df25cd9570db9e40227f821a158ace4c4b7b5fc237af2343c582ee2f"
-    }
-  ]
-}

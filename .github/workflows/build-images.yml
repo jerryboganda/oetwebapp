@@ -2,8 +2,8 @@ name: Build images
 run-name: ${{ inputs.benchmark && format('Benchmark build {0}', github.sha) || format('Build images {0}', github.sha) }}
 
 # Build half of the former "Build & Deploy (web + API)": classifies the push,
-# runs the seconds-long syntax gate (plus the Writing gates only when Writing
-# files changed), builds the web (Next.js/Turbopack), API (.NET), backup-sidecar
+# runs the seconds-long syntax gate and the language checks (typecheck + lint),
+# builds the web (Next.js/Turbopack), API (.NET), backup-sidecar
 # and agent-gateway images OFF-BOX on GitHub's 16 GB runners, pushes them to
 # GHCR, and generates the idempotent production migration SQL as an artifact.
 # NO production secrets, NO SSH - the rollout lives in production-deploy.yml.
@@ -186,104 +186,29 @@ jobs:
         env:
           SHIP_GATE_CI: "1"
         run: |
-          node scripts/ship/pre-push-gate.mjs --self-test
           node scripts/ship/pre-push-gate.mjs --ci
 
-  # The Writing model-answer recovery regression only runs when this push
-  # touches Writing grader code, rules or the regression manifest. It used to
-  # run inside syntax-gate, costing every deploy a full .NET build+test before
-  # any image build could start.
-  writing-model-answer-gate:
-    name: Writing model-answer gate (on change)
-    needs: [changes, build-api]
-    # Owner directive: functional/regression QA is manual, never automated in CI.
-    if: ${{ false }}
+  # Language checks: the only checks CI runs (owner directive 2026-10-08: the test
+  # code was deleted; the owner QAs live and reports bugs). They run in parallel
+  # with the image builds, so they add no wall time, and release-manifest needs
+  # them, so a failure stops the rollout exactly like a failed build.
+  language-checks:
+    name: Typecheck + lint
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - uses: actions/cache@v4
-        if: ${{ !inputs.benchmark }}
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('backend/**/*.csproj', 'global.json') }}
-          restore-keys: nuget-${{ runner.os }}-
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 10.0.x
-      - uses: actions/download-artifact@v4
-        if: needs.build-api.result == 'success'
-        with:
-          name: api-release-${{ github.sha }}
-          path: output/api-release
-      - name: Writing model-answer recovery regression gate
-        run: |
-          set -euo pipefail
-          test_project=backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
-          dotnet restore "$test_project" --nologo
-          mkdir -p output
-          dotnet msbuild "$test_project" -nologo -getItem:Compile > output/writing-default-compile.json
-          dotnet msbuild "$test_project" -nologo -getItem:Compile -p:DeploymentWritingGateOnly=true > output/writing-gate-compile.json
-          python -c 'import json; read=lambda p: {i["Identity"].replace("\\", "/") for i in json.load(open(p))["Items"]["Compile"]}; default=read("output/writing-default-compile.json"); gate=read("output/writing-gate-compile.json"); expected={"AssemblyInfo.cs", "Writing/WritingRev8ModelAnswerGateTests.cs", "Writing/WritingModelAnswerBatchTests.cs"}; assert gate == expected and expected < default; print("WRITING_COMPILE_SCOPE", len(gate), "DEFAULT_COMPILE_SCOPE", len(default))'
-          reference_args=()
-          if [ -f output/api-release/api-references.tar.gz ]; then
-            metadata=output/api-release/api.json
-            test "$(jq -r '.sha' "$metadata")" = "$GITHUB_SHA"
-            test "$(jq -r '.runId' "$metadata")" = "$GITHUB_RUN_ID"
-            if [ "$(jq -r '.sdk' "$metadata")" = "$(dotnet --version)" ]; then
-              expected="$(jq -r '.referencesChecksum' "$metadata")"
-              actual="$(sha256sum output/api-release/api-references.tar.gz | cut -d' ' -f1)"
-              test "$expected" = "$actual"
-              tar -xzf output/api-release/api-references.tar.gz
-              # This second project reference is not part of the API publish.
-              dotnet build backend/scripts/StripeProductSeeder/StripeProductSeeder.csproj \
-                -c Release --no-restore --nologo -p:RunAnalyzers=false
-              reference_args=(-p:BuildProjectReferences=false -p:UseAppHost=false)
-              echo "WRITING_API_REFERENCE_REUSE sha=$GITHUB_SHA sdk=$(dotnet --version)"
-            else
-              echo "::notice::SDK mismatch: explicitly compiling the API for Writing tests."
-            fi
-          else
-            echo "::notice::No same-build API references: explicitly compiling the API for Writing tests."
-          fi
-          dotnet test "$test_project" -c Release --no-restore --nologo -p:RunAnalyzers=false -p:DeploymentWritingGateOnly=true \
-            "${reference_args[@]}" --filter 'FullyQualifiedName~WritingRev8ModelAnswerGateTests' \
-            --logger 'console;verbosity=normal' --logger 'trx;LogFileName=writing-gate.trx' \
-            --results-directory output/writing-tests
-          python -c 'import xml.etree.ElementTree as E; r=E.parse("output/writing-tests/writing-gate.trx"); c=r.find(".//{*}Counters"); assert c is not None and int(c.attrib["executed"]) > 0 and int(c.attrib["failed"]) == 0; print("WRITING_TESTS_EXECUTED", c.attrib["executed"])'
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: writing-gate-${{ github.sha }}
-          path: output/writing-tests
-          if-no-files-found: warn
-
-  # Writing grader prompt/model gate (recorded-artifact). When the push touches the
-  # Writing prompt, house-style rules, rulebooks or the AI route, this verifies the
-  # committed regression manifest matches the CURRENT prompt and records a passing run
-  # (the live grading uses the owner's Claude Max subscription, which runners cannot
-  # reach). No writing change -> the gate passes immediately and deploy is unaffected.
-  writing-regression-gate:
-    name: Writing grader regression (on change)
-    needs: [changes]
-    # Owner directive: functional/regression QA is manual, never automated in CI.
-    if: ${{ false }}
-    runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          fetch-depth: 1
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Checker self-test + verify manifest matches current prompt
-        working-directory: tests/writing-regression
-        run: |
-          python selftest_checker.py
-          python verify_manifest.py
+          node-version: 22
+      - name: Enable pnpm (version pinned by packageManager)
+        run: corepack enable
+      - name: Install dependencies from the lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Typecheck (tsc --noEmit)
+        run: pnpm exec tsc --noEmit
+      - name: Lint (eslint)
+        run: pnpm run lint
 
   # Registry-only copies preserve a proven ancestor's immutable digest.
   retag:
@@ -346,12 +271,9 @@ jobs:
           [void][System.Management.Automation.Language.Parser]::ParseFile("$pwd/scripts/ship/watch-deploy.ps1", [ref]$tokens, [ref]$errors)
           if ($errors.Count) { $errors | Format-List; exit 1 }
 
-  # NOTE: the build jobs deliberately do NOT `needs:` the Writing gates. A job
-  # that needs a SKIPPED job is itself skipped -  chaining them made every
-  # non-Writing push skip build-web/build-api/build-backup/build-agent-gateway
-  # (and therefore the whole deploy). The Writing gates still fail the run on
-  # their own, which blocks the rollout via deploy-production's
-  # `conclusion == success` check.
+  # NOTE: the build jobs deliberately do NOT `needs:` the language checks. They run
+  # in parallel, and release-manifest needs them, so a failure blocks the rollout
+  # through the release-manifest gate.
   build-web:
     needs: [syntax-gate, guards, changes]
     if: needs.changes.outputs.web == 'true'
@@ -583,7 +505,7 @@ jobs:
 
   release-manifest:
     name: Publish verified release provenance
-    needs: [changes, syntax-gate, guards, retag, build-web, build-api, build-backup, build-agent-gateway, writing-model-answer-gate, writing-regression-gate]
+    needs: [changes, syntax-gate, guards, retag, build-web, build-api, build-backup, build-agent-gateway, language-checks]
     if: ${{ always() && github.event_name != 'pull_request' && !inputs.benchmark && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') && needs.changes.result == 'success' }}
     runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 5

@@ -88,15 +88,16 @@ The owner tests the live product by hand and reports bugs; the agent fixes them 
 - **Bug loop:** the owner reports a bug -> read the report and the code, find the root cause, fix it, `pnpm run ship`.
   Writing a new regression test is optional and is never required to ship.
 - **Enforced mechanically**, like the pipeline rules: `scripts/deploy/verify-pipeline-contract.mjs` (rule 3, run by the
-  `guards` job of `build-images.yml` and by `pnpm run ship:gate`) fails on any workflow other than `build-images.yml` that
+  `guards` job of `build-images.yml` and by `pnpm run ship:gate`) fails on any workflow that
   invokes a test/QA runner (vitest, jest, pytest, Playwright, `dotnet test`, `cargo test`, `node --test`, `npm|pnpm test`,
   k6 ...) and on any return of `qa-smoke.yml`. Deleting the checker is not a bypass: the `guards` job fails.
-- **What stays, and why it is not QA:** the deployment-only Writing content gates and the release-manifest self-test inside
-  `build-images.yml` (the owner's Writing model-answer protection; remove them only on the owner's explicit say-so), the
-  static guards (`syntax-gate`, pipeline contract, compute-offload), secret scanning, the EF pending-model-changes check, the
-  ledger tooling check, and the manual product-measurement tools (Speaking grader calibration harness, audio probe, Jev
-  calibrate, Listening content verification). Test source files (`backend/tests/**`, `**/*.test.*`, `tests/**`,
-  `scripts/qa/**`) remain in git as inert manual tools: no CI runs them and agents never run them locally.
+- **Test code was deleted (owner directive 2026-10-08).** No test project, `*.test.*` / `*.spec.*` file, `__tests__/`
+  folder, or Vitest, Playwright, pytest or xUnit config remains. The last commit that had them is tagged
+  `last-commit-with-tests`. Do not re-add any of it. **What stays:** the language checks (the `language-checks` job:
+  typecheck and lint), the static guards (`syntax-gate`, the pipeline contract with its Max route source scan,
+  compute-offload), secret scanning, the EF pending-model-changes check, the ledger tooling, and the manual
+  product-measurement tools in `scripts/qa/` and `tools/` (Speaking calibration, audio probe, Jev calibrate, Listening
+  verification, the PDF bench).
 - **Standing product rules still bind** (Max never off, the $0 Writing rule, Writing house style, scoring and rulebook
   invariants, the Speaking Provisional label ...). With no CI test enforcing them, agents follow them by reading the rules.
 
@@ -328,12 +329,13 @@ from 30 Sep to 7 Oct and the paid API served every grade.
   (probes are display only); an open circuit for the Max provider (`AiCircuitBreakerStore.IsAlwaysOn` exempts it);
   deactivating or deleting the `writing-claude-sub` provider row (admin endpoints refuse it, the seeder re-activates it
   at boot); a sidecar that persistently refuses work.
-- Enforced by tests that fail the build: the selector matrix (`WritingMaxAlwaysOnTests`), the source-scan guard, the
-  circuit-store exemption tests (`AiCircuitBreakerTests`), the admin endpoint refusals, and the live QA harness
-  (`writing-prod-qa.yml`: first hop of every graded letter is `writing-claude-sub`, marker stays null).
+- Enforced by the static source scans in `pipeline:check` (`maxRouteFailures` in
+  `scripts/deploy/verify-pipeline-contract.mjs`, ported 2026-10-08): the retired marker is never written, the Writing
+  selector never routes on utilisation, and the Speaking pin cannot be blank. The runtime selector, circuit-exemption and
+  admin-refusal tests were deleted with the test code and are no longer enforced by CI.
 - Speaking uses the same Max route via `Speaking:Grading:PinnedProviderCode`, now **enforced in code**:
   `SpeakingGradingOptions` defaults the pin to `writing-claude-sub` and an empty/whitespace value resolves to it too,
-  so no configuration can switch the Max-first attempt off (guarded by `SpeakingMaxAlwaysOnTests`). **Never change
+  so no configuration can switch the Max-first attempt off (guarded by the `pipeline:check` source scan). **Never change
   that pin to another provider.**
 - Not covered on purpose (the ONLY exceptions, both owner-approved, both visible in code review): (1) the global
   emergency kill switch / per-feature kill list stop ALL AI and stay an owner-only emergency lever; (2) the QA-only

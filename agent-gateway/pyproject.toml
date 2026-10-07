@@ -32,7 +32,3 @@ where = ["src"]
 [tool.setuptools.package-data]
 oet_agent_gateway = ["skills/**/*"]
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-addopts = "-q"

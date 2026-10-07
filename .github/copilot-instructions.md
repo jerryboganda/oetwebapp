@@ -57,8 +57,8 @@ After every `main` push: ship with `pnpm run ship` (lock → rebase → `ship:ga
 ## Execution Locality
 
 Compute runs only on GitHub Actions (see `AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE
-ENVIRONMENT"). The only local pre-push check is `pnpm run ship:gate`. There is no CI test, lint or
-typecheck run (owner directive 2026-10-06): compilation happens in `Build images`, everything else is the
+ENVIRONMENT"). The only local pre-push check is `pnpm run ship:gate`. CI runs only typecheck and lint (`language-checks` in `build-images.yml`). No tests exist (test code deleted
+2026-10-08, owner directive 2026-10-06): compilation happens in `Build images`, everything else is the
 owner's manual QA. Never build, test or debug on the production VPS. See `.github/instructions/validation.instructions.md`.
 
 ## Prompt Defense

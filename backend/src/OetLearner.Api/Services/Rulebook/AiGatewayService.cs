@@ -1657,8 +1657,8 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             }
             else
             {
-                // NOTE: these numbered lines are read verbatim by tests/writing-regression/prompt_builder.py (the
-                // Writing regression gate hashes them). Do not reword them; Score replies use the descriptor block above.
+                // NOTE: these numbered lines were read verbatim by the Writing regression gate (removed 2026-10-08;
+                // tag last-commit-with-tests). Score replies use the descriptor block above.
                 sb.AppendLine("**Linguistic Criteria (4, each scored 0–6):**");
                 sb.AppendLine("1. `intelligibility` — Intelligibility (pronunciation, stress, intonation, rhythm; L1 accent effect on clarity)");
                 sb.AppendLine("2. `fluency` — Fluency (speed, hesitation, self-correction, sustained utterances)");
@@ -1803,7 +1803,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 
     /// <summary>
     /// One numbered Speaking principle. Deliberately not written as <c>sb.AppendLine("N. ...")</c>: the Writing regression gate
-    /// (<c>tests/writing-regression/prompt_builder.py</c>) lifts the Writing guardrails N. out of this file by scanning for the
+    /// (removed 2026-10-08, see tag <c>last-commit-with-tests</c>) lifted the Writing guardrails N. out of this file by scanning for the
     /// first such line, so a Speaking line with the same number placed before them would silently change every Writing prompt hash.
     /// </summary>
     private static void AppendPrinciple(StringBuilder sb, int number, string text) => sb.AppendLine($"{number}. {text}");

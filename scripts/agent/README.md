@@ -20,13 +20,11 @@ pnpm run ax:next        # print the first pending task whose dependencies are do
 pnpm run ax:init        # create SESSION_STATE.md from the template (refuses to overwrite)
 pnpm run ax:record      # GitHub Actions -> VERIFICATION.md + the local evidence journal
 pnpm run ax:verify      # re-check every recorded run id AND every run id cited by a gate row against the GitHub API
-pnpm run ax:self-test   # fixture assertions for the checker itself
 ```
 
 Direct invocation works too: `node ./scripts/agent/state.mjs <command>`.
-The hook adapter has its own self-test: `node ./scripts/agent/hook.mjs --self-test`.
-Both self-tests run in GitHub Actions (`.github/workflows/ax-check.yml`, Linux and Windows) — that run is
-the evidence that the tooling works, not a local run.
+The self-tests (`--self-test`) and their workflow `ax-check.yml` were deleted on 2026-10-08 with the test code.
+`ax:check` remains the local verdict.
 `check` accepts `--warn` (never exits non-zero — used by `ship:gate`) and `--json`.
 
 ## What each file is
@@ -70,7 +68,7 @@ denies a command instead of advising against it.
 
 ### What the compute guard denies
 
-The rules are `LOCAL_COMPUTE_RULES` in `hook.mjs` and they are self-tested in `ax-check.yml`, so a new
+The rules are `LOCAL_COMPUTE_RULES` in `hook.mjs` and they were self-tested in `ax-check.yml` (deleted 2026-10-08), so a new
 bypass becomes a failing test instead of a paragraph nobody reads. A rule only matches at a **command
 position** — the start of the command or just after a shell separator — so
 `git commit -m "drop pnpm test from the docs"` is allowed while `git pull && pnpm run build` is not.
@@ -189,7 +187,7 @@ launcher is silent anywhere there is no ledger.
 Supported diagnostics: `--dry-run` (static gate/report), `--no-push` (rebase/gate,
 no visibility or release), `--status`. Recovery `--sha <sha>` performs a verified
 watch under the same gate/lease/evidence/cleanup rules. `--release-lease` releases
-only this process's lease. `--self-test` runs on Actions in `ax-check.yml`.
+only this process's lease. `--self-test` ran on Actions in `ax-check.yml` (deleted 2026-10-08).
 `--no-watch`, `--no-record`, `--no-visibility`, `--force-release` and alternate
 production-workflow overrides are rejected. Native visibility/queue read failures
 block the action; an unreadable queue is never an empty queue.

@@ -411,7 +411,7 @@ export function inspectSource(relPath, source) {
     // instead. AiOperationLeaseTests.cs carries plain """ DDL payloads whose
     // SQL single-quote defaults the scanner mistakes for C# char literals —
     // dotnet build is authoritative there too.
-    if (ext !== '.ts' && ext !== '.tsx' && !/LearnerService(\.[A-Za-z]+)?\.cs$/.test(relPath) && !relPath.endsWith('AiOperationLeaseTests.cs')) {
+    if (ext !== '.ts' && ext !== '.tsx' && !/LearnerService(\.[A-Za-z]+)?\.cs$/.test(relPath)) {
       const fault = findBalanceFault(source, ext);
       if (fault) findings.push(`${relPath}: ${fault}`);
     }
@@ -465,143 +465,10 @@ export async function runGate({ ci = false, files = null, readFile = null } = {}
   };
 }
 
-export function selfTest() {
-  const cases = [
-    {
-      name: 'payment-return leftover',
-      path: 'app/(learner)/billing/payment-return/page.tsx',
-      source: [
-        'useEffect(() => {',
-        '    void poll();',
-        '    return () => {',
-        ', user?.userId',
-        '  }, [x]);',
-        '',
-      ].join('\n'),
-      wantFail: true,
-    },
-    {
-      name: 'extra class brace',
-      path: 'backend/tests/OetLearner.Api.Tests/Billing/AiPackageCreditServiceTests.cs',
-      source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n    }\n}\n',
-      wantFail: true,
-    },
-    {
-      name: 'c# raw interpolated string braces stay legal',
-      path: 'backend/src/OetLearner.Api/Services/AuthService.cs',
-      source: [
-        'private static string BuildQrCodeDataUrl(string secretKey, string otpAuthUri)',
-        '{',
-        '    var svg = $$"""',
-        '        <svg xmlns="http://www.w3.org/2000/svg" width="420" height="180">',
-        '          <text x="16" y="28">Secret: {{WebUtility.HtmlEncode(secretKey)}}</text>',
-        '        </svg>',
-        '        """;',
-        '    return $"data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}";',
-        '}',
-      ].join('\n'),
-      wantFail: false,
-    },
-    {
-      name: 'normal xUnit method boundary is legal',
-      path: 'backend/tests/OetLearner.Api.Tests/Billing/AiPackageCreditServiceTests.cs',
-      source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n\n    [Fact]\n    public async Task B() {\n        Assert.True(true);\n    }\n}\n',
-      wantFail: false,
-    },
-    {
-      name: 'c# interpolated raw string with SQL braces stays legal',
-      path: 'backend/tests/OetLearner.Api.Tests/Services/AiOperationLeaseTests.cs',
-      source: [
-        '    private static async Task InsertAsync(',
-        '        PostgreSqlTestDatabase database,',
-        '        string id,',
-        '        int state,',
-        '        string? leaseOwner,',
-        '        DateTimeOffset? leaseExpiresAt)',
-        '    {',
-        '        var owner = leaseOwner is null ? "NULL" : $"{leaseOwner}";',
-        '        await database.ExecuteAsync($"""',
-        '            INSERT INTO "AiOperations" ("Id", "State")',
-        '            VALUES (\u0027{id}\u0027, {state});',
-        '            """);',
-        '    }',
-      ].join('\n'),
-      wantFail: false,
-    },
-    {
-      name: 'column-0 orphan brace before Fact fails',
-      path: 'backend/tests/OetLearner.Api.Tests/Billing/AiPackageCreditServiceTests.cs',
-      source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n}\n\n[Fact]\npublic async Task B() {\n    Assert.True(true);\n}\n',
-      wantFail: true,
-    },
-    {
-      name: 'clean tsx',
-      path: 'app/ok.tsx',
-      source: 'export function Ok() {\n  return <div />;\n}\n',
-      wantFail: false,
-    },
-    {
-      name: 'tsx with JSX text apostrophes stays legal (balance check is JSX-blind)',
-      path: 'app/ok.tsx',
-      source: "export function Ok() {\n  return <p>The learner's credits don't expire</p>;\n}\n",
-      wantFail: false,
-    },
-    {
-      name: 'tsx leftover splice still fails via pattern',
-      path: 'app/ok.tsx',
-      source: 'useEffect(() => {\n    void poll();\n    return () => {\n, deps\n  }, [x]);\n',
-      wantFail: true,
-    },
-    {
-      name: 'conflict marker',
-      path: 'lib/x.ts',
-      source: 'const a = 1;\n<<<<<<< HEAD\nconst b = 2;\n=======\nconst b = 3;\n>>>>>>> main\n',
-      wantFail: true,
-    },
-    {
-      name: 'CLAUDE.md that hides AGENTS.md fails',
-      path: 'CLAUDE.md',
-      source: '# Rules\nSee AGENTS.md for details.\n',
-      wantFail: true,
-    },
-    {
-      name: 'CLAUDE.md that imports AGENTS.md is legal',
-      path: 'CLAUDE.md',
-      source: '@AGENTS.md\n\n## Claude Code\nUse plan mode for risky changes.\n',
-      wantFail: false,
-    },
-    {
-      name: 'markdown leftover example is not code',
-      path: 'docs/dev/lessons-learned.md',
-      source: 'had `return () => {, user?.userId` (Turbopack).\n',
-      wantFail: false,
-    },
-  ];
-
-  const failures = [];
-  for (const item of cases) {
-    const found = inspectSource(item.path, item.source);
-    const failed = found.length > 0;
-    if (failed !== item.wantFail) {
-      failures.push(`${item.name}: expected fail=${item.wantFail} got ${JSON.stringify(found)}`);
-    }
-  }
-
-  // Regression tripwire: the ledger advisory added to main() must stay guarded
-  // out of CI. build-images.yml runs `--self-test` then `--ci` on a bare checkout
-  // where the ledger may be absent or stale, and neither may be able to fail
-  // the gate.
-  const ownSource = readFileSync(fileURLToPath(import.meta.url), 'utf8');
-  if (!ownSource.includes('if (!ci && !process.env.CI && !process.env.GITHUB_ACTIONS)')) {
-    failures.push('the ledger advisory is no longer guarded out of CI');
-  }
-  return { ok: failures.length === 0, failures };
-}
-
 // Local-only advisory: surface a stale or dishonest state ledger without ever
 // changing this gate's verdict. The hard failure lives in `pnpm run ax:check`.
-// Not reachable in CI (guard at the call site, tripwire in selfTest) so
-// `build-images.yml`'s `--self-test` and `--ci` steps behave exactly as before.
+// Not reachable in CI (guarded at the call site), so `build-images.yml`'s
+// `--ci` step behaves exactly as before.
 async function reportLedgerAdvisory() {
   try {
     const { readLedger, checkState } = await import('../agent/state.mjs');
@@ -646,17 +513,6 @@ export async function reportPipelineContract(repoRoot = root) {
 }
 
 async function main(argv) {
-  if (argv.includes('--self-test')) {
-    const result = selfTest();
-    if (!result.ok) {
-      console.error('ship-gate self-test FAILED');
-      for (const line of result.failures) console.error(`  ${line}`);
-      process.exit(1);
-    }
-    console.log('ship-gate self-test OK');
-    process.exit(0);
-  }
-
   const ci = argv.includes('--ci');
   const result = await runGate({ ci });
   console.log(`ship-gate files=${result.files.length} typescript=${result.usedTypescript ? 'yes' : 'no'}`);

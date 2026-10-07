@@ -11,11 +11,10 @@
  *      empty — a stale GitHub registration shadows a same-named file);
  *   2. no workflow that runs Playwright may have a push / pull_request /
  *      schedule trigger (the "no automated e2e" hard rule);
- *   3. NO AUTOMATED QA IN CI (owner directive 2026-10-06, permanent): no workflow may run a
- *      test / QA runner (vitest, dotnet test, Playwright, pytest, cargo test, node --test, k6 ...)
- *      except build-images.yml, which carries the deployment-only Writing content gates and the
- *      release-manifest self-test; qa-smoke.yml must stay deleted. The owner QAs manually and
- *      reports bugs; the agent fixes them on demand;
+ *   3. NO AUTOMATED QA IN CI (owner directive 2026-10-06, permanent; test code deleted 2026-10-08):
+ *      no workflow may run a test / QA runner (vitest, dotnet test, Playwright, pytest, cargo test,
+ *      node --test, k6 ...); qa-smoke.yml must stay deleted. CI runs only the language checks
+ *      (typecheck + lint). The owner QAs manually and reports bugs; the agent fixes them on demand;
  *   4. build-images.yml stays path-filtered to build inputs (a push touching
  *      none of them must start no build and no rollout);
  *   5. production-deploy.yml keeps its identity, its serialized concurrency
@@ -37,7 +36,7 @@
  * Compute policy: static file reads only.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('../..', import.meta.url)));
@@ -106,8 +105,8 @@ const SCAN_MAX_BYTES = 2_000_000;
 export const QA_COMMAND =
   /(\bvitest\b|\bjest\b|\bpytest\b|playwright|dotnet\s+test\b|cargo\s+(?:test|clippy)\b|\b(?:npm|pnpm|yarn)\s+(?:run\s+|exec\s+)?test\b|node\s+--test\b|\bk6\s+run\b|xunit)/i;
 
-/** The only workflow that may run a test: the deployment-only Writing gates and the release-manifest self-test. */
-export const QA_ALLOWED_WORKFLOWS = new Set(['build-images.yml']);
+/** No workflow may run a test: the test code was deleted 2026-10-08 (owner directive 2026-10-06). */
+export const QA_ALLOWED_WORKFLOWS = new Set();
 
 /** Comment-free source: a rule must be judged on what the file DOES. */
 export function activeLines(source) {
@@ -401,11 +400,8 @@ export function checkContract({ readWorkflow, listWorkflows, readFile, listFiles
     ]);
   }
   requireNeeds(build, 'retag', ['syntax-gate', 'guards', 'changes']);
-  requireNeeds(build, 'writing-model-answer-gate', ['changes', 'build-api']);
-  requireNeeds(build, 'writing-regression-gate', ['changes']);
   requireNeeds(build, 'release-manifest', ['changes', 'syntax-gate', 'guards', 'retag',
-    'build-web', 'build-api', 'build-backup', 'build-agent-gateway',
-    'writing-model-answer-gate', 'writing-regression-gate']);
+    'build-web', 'build-api', 'build-backup', 'build-agent-gateway', 'language-checks']);
   requireNeeds(deploy, 'apply-migrations', ['resolve']);
   requireNeeds(deploy, 'deploy', ['resolve', 'apply-migrations']);
   if (/qa-smoke|qa-gate|QA Smoke/.test(build + deploy)) {
@@ -456,13 +452,12 @@ export function checkContract({ readWorkflow, listWorkflows, readFile, listFiles
   if (/dotnet build backend\/src\/OetLearner\.Api|setup-node|pnpm .*build/.test(api)) {
     failures.push('build-api must publish once, not rebuild the API or frontend separately');
   }
-  // The approved owner-QA policy disables legacy functional/regression jobs.
-  // Keep their historical definitions, but enforce the job-level stop instead
-  // of requiring an automated test execution on production release pushes.
-  for (const name of ['writing-model-answer-gate', 'writing-regression-gate']) {
-    if (!/^    if: \$\{\{ false \}\}\s*$/m.test(jobBlock(build, name))) {
-      failures.push(`${name} must remain disabled: functional acceptance is owner QA`);
-    }
+  // CI runs only the language checks (owner directive 2026-10-08); the Writing test gates are gone.
+  requireTokens('language-checks', jobBlock(build, 'language-checks'), [
+    'pnpm exec tsc --noEmit', 'pnpm run lint',
+  ]);
+  if (/writing-model-answer-gate|writing-regression-gate/.test(build)) {
+    failures.push('the removed Writing test gates must not return to build-images.yml');
   }
   requireTokens('release-manifest', jobBlock(build, 'release-manifest'), [
     "github.event_name != 'pull_request' && !inputs.benchmark",
@@ -566,13 +561,87 @@ export function listTextFiles(rootDir, relativeDir) {
 }
 
 /** Scan a checkout. Shared by the CLI and the pre-push gate. */
+/**
+ * Claude Max route, as static source scans (owner directive 2026-10-02, HARD ENFORCED). Ported on
+ * 2026-10-08 from the deleted xUnit source scans (WritingMaxAlwaysOnTests, SpeakingMaxAlwaysOnTests),
+ * so the rule still fails the gate without a test runner. The runtime selector and circuit tests
+ * were deleted with the rest of the test code and are no longer enforced by CI.
+ */
+export function maxRouteFailures(repoRoot = root) {
+  const failures = [];
+  const apiRoot = join(repoRoot, 'backend', 'src', 'OetLearner.Api');
+  const markerWrite = /WritingAiClaudeQuotaExceededUntil\s*=(?!=)\s*([^;,}\r\n]*)/g;
+  const removedApis = /RecordClaudeQuotaSignal|RecordClaudeCooldown|GetClaudeReadiness/;
+  for (const file of listCsFiles(apiRoot)) {
+    const relativePath = relative(apiRoot, file).split(sep).join('/');
+    const source = readFileSync(file, 'utf8');
+    const migration = relativePath.startsWith('Data/Migrations/');
+    for (const write of source.matchAll(markerWrite)) {
+      const value = write[1].trim();
+      if (migration) continue;
+      // The admin endpoint may only CLEAR the retired marker, never set it.
+      if (relativePath === 'Endpoints/AiUsageAdminEndpoints.cs' && value === 'null') continue;
+      failures.push(`${relativePath}: writes WritingAiClaudeQuotaExceededUntil = ${value} (the retired Max marker)`);
+    }
+    const removed = source.match(removedApis);
+    if (removed) failures.push(`${relativePath}: ${removed[0]} (a removed Max routing API)`);
+  }
+
+  const selector = join(apiRoot, 'Services', 'Writing', 'WritingSubscriptionSelector.cs');
+  const selectorText = existsSync(selector) ? readFileSync(selector, 'utf8') : '';
+  const selectorAt = selectorText.indexOf('public sealed class WritingSubscriptionSelector');
+  if (selectorAt < 0) {
+    failures.push('WritingSubscriptionSelector.cs: the selector class is missing');
+  } else {
+    // Utilisation can only come from the quota snapshot, so "Snapshot" covers the weekly estimate.
+    const selectorClass = selectorText.slice(selectorAt);
+    for (const forbidden of ['Codex', 'ProviderMode', 'QuotaExceeded', 'Snapshot', 'FailoverPct', 'WarnPct',
+      'Readiness', 'ClaudeApi', 'RuntimeSettings', 'IRuntimeSettingsProvider']) {
+      if (selectorClass.includes(forbidden)) failures.push(`WritingSubscriptionSelector routes on ${forbidden} (Max is never skipped)`);
+    }
+  }
+
+  // The Speaking pin: blank means Max, never "off".
+  const options = readFileSync(join(apiRoot, 'Configuration', 'SpeakingGradingOptions.cs'), 'utf8');
+  if (!/_pinnedProviderCode\s*=\s*WritingSubscriptionProviders\.Claude\s*;/.test(options)) {
+    failures.push('SpeakingGradingOptions.cs: the pin backing field must start on writing-claude-sub');
+  }
+  if (!/IsNullOrWhiteSpace\(value\)\s*\?\s*WritingSubscriptionProviders\.Claude/.test(options)) {
+    failures.push('SpeakingGradingOptions.cs: a blank pin must map to writing-claude-sub');
+  }
+  if (/PinnedProviderCode\s*\{\s*get;\s*set;\s*\}/.test(options)) {
+    failures.push('SpeakingGradingOptions.cs: an auto-property would let a blank pin turn Max off');
+  }
+  if (/_pinnedProviderCode\s*=\s*(string\.Empty|"")/.test(options)) {
+    failures.push('SpeakingGradingOptions.cs: an empty initialiser would let a blank pin turn Max off');
+  }
+  const appsettings = readFileSync(join(apiRoot, 'appsettings.json'), 'utf8');
+  if (!/"PinnedProviderCode"\s*:\s*"writing-claude-sub"/.test(appsettings)) {
+    failures.push('appsettings.json: PinnedProviderCode must be writing-claude-sub');
+  }
+  return failures;
+}
+
+function listCsFiles(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (entry.name === 'bin' || entry.name === 'obj') continue;
+      out.push(...listCsFiles(join(dir, entry.name)));
+    } else if (entry.name.endsWith('.cs')) {
+      out.push(join(dir, entry.name));
+    }
+  }
+  return out;
+}
+
 export function scanRepo(rootDir = root) {
   const workflows = join(rootDir, '.github', 'workflows');
-  const readFile = (relative) => {
-    const path = join(rootDir, relative);
+  const readFile = (relativeFile) => {
+    const path = join(rootDir, relativeFile);
     return existsSync(path) ? readFileSync(path, 'utf8') : '';
   };
-  return checkContract({
+  return [...checkContract({
     listWorkflows: () =>
       readdirSync(workflows)
         .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'))
@@ -580,7 +649,7 @@ export function scanRepo(rootDir = root) {
     readWorkflow: (file) => readFile(join('.github', 'workflows', file)),
     readFile,
     listFiles: (relativeDir) => listTextFiles(rootDir, relativeDir),
-  });
+  }), ...maxRouteFailures(rootDir)];
 }
 
 export function main() {

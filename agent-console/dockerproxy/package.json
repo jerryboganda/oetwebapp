@@ -10,7 +10,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run",
     "start": "node dist/main.js"
   },
   "devDependencies": {
