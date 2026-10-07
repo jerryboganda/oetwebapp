@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-07T01:30:00Z",
+  "updated": "2026-10-08T00:00:00Z",
   "statuses": [
     "pending",
     "in_progress",
@@ -275,6 +275,34 @@
       "verify": "owner manual QA; /admin/writing-ai reviewer tile and writing.review.* audit events",
       "evidence": [],
       "files": []
+    },
+    {
+      "id": "OCG-01",
+      "title": "Shared direct OpenCode transport, admin selection and encrypted provider state",
+      "status": "in_progress",
+      "owner": "direct-opencode",
+      "blockedBy": [],
+      "verify": "Build images and production deployment; not tested - owner QA",
+      "evidence": [
+        "User-approved plan; backend compatibility must be live before console replacement"
+      ],
+      "files": [
+        "backend/src/OetLearner.Api/Endpoints/OwnerOpenCodeGatewayEndpoints.cs"
+      ]
+    },
+    {
+      "id": "OCG-02",
+      "title": "Replace native console inference with guarded direct gateway loop and shared settings",
+      "status": "pending",
+      "owner": "direct-opencode",
+      "blockedBy": [
+        "OCG-01"
+      ],
+      "verify": "Console image build and production inspection; not tested - owner QA",
+      "evidence": [],
+      "files": [
+        "agent-console/src/engines/opencode.ts"
+      ]
     }
   ]
 }

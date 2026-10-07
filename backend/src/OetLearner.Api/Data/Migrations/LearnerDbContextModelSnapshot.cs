@@ -699,6 +699,9 @@ namespace OetLearner.Api.Data.Migrations
 
             modelBuilder.Entity("OetLearner.Api.Domain.AiAssistantMessage", b =>
                 {
+                    b.Property<string>("EncryptedProviderState")
+                        .HasColumnType("text");
+
                     b.Property<string>("Id")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");

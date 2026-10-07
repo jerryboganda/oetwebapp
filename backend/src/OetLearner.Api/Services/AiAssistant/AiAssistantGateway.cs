@@ -72,7 +72,7 @@ public sealed class AiAssistantGateway(
         // OpenCode failures never surface their cause to the learner (owner wording, no fallback
         // provider); the specific class goes to the usage record only.
         var isOpenCode = IsOpenCodeCode(requestedProviderCode);
-        if (isOpenCode && !string.Equals(featureCode, AiFeatureCodes.AiAssistantLearner, StringComparison.OrdinalIgnoreCase))
+        if (isOpenCode && featureCode != AiFeatureCodes.AiAssistantLearner && featureCode != AiFeatureCodes.AiAssistantAdmin)
         {
             await RecordFailureAsync(
                 featureCode,
@@ -80,14 +80,14 @@ public sealed class AiAssistantGateway(
                 requestedProviderCode,
                 requestedModel,
                 AiCallOutcome.GatewayRefused,
-                "opencode_learner_only",
-                "OpenCode models are only available in the learner assistant.",
+                "opencode_role_not_allowed",
+                "OpenCode models are only available in the learner and admin assistants.",
                 requestSystemPrompt: null,
                 requestUserPrompt: messages.LastOrDefault(m => m.Role == "user")?.Content,
                 startedAt,
                 stopwatch,
                 CancellationToken.None);
-            yield return new LlmTextChunk("This model is only available in the learner assistant. Please pick a Claude model instead.");
+            yield return new LlmTextChunk("This model is only available in the learner and admin assistants.");
             yield break;
         }
 
@@ -112,7 +112,8 @@ public sealed class AiAssistantGateway(
                 stopwatch,
                 CancellationToken.None);
             yield return new LlmTextChunk(isOpenCode
-                ? OpenCodeProviderDefaults.LearnerBusyMessage
+                ? featureCode == AiFeatureCodes.AiAssistantLearner ? OpenCodeProviderDefaults.LearnerBusyMessage
+                    : "Direct OpenCode gateway is unavailable. Check the active provider, allowed model and credential in /admin/ai-providers."
                 : "No AI provider is configured. Please contact an administrator.");
             yield break;
         }
@@ -230,6 +231,7 @@ public sealed class AiAssistantGateway(
                     Role = m.Role,
                     Content = m.Content,
                     ToolCallId = m.ToolCallId,
+                    ProviderState = m.ProviderState,
                     ImageAttachments = m.ImageAttachments,
                 };
                 if (m.ToolCallsJson != null)
@@ -239,6 +241,7 @@ public sealed class AiAssistantGateway(
                         Role = m.Role,
                         Content = m.Content,
                         ToolCallId = m.ToolCallId,
+                        ProviderState = m.ProviderState,
                         ImageAttachments = m.ImageAttachments,
                         ToolCalls = ParseToolCalls(m.ToolCallsJson),
                     };
@@ -432,7 +435,8 @@ public sealed class AiAssistantGateway(
                 CancellationToken.None,
                 policyTrace: quotaDecision?.PolicyTrace);
             errorMessage = isOpenCode
-                ? OpenCodeProviderDefaults.LearnerBusyMessage
+                ? featureCode == AiFeatureCodes.AiAssistantLearner ? OpenCodeProviderDefaults.LearnerBusyMessage
+                    : $"Direct OpenCode gateway failed ({errorCode}). Check provider readiness in /admin/ai-providers and retry explicitly."
                 : "I encountered an error communicating with the AI service. Please try again.";
         }
 
@@ -441,6 +445,9 @@ public sealed class AiAssistantGateway(
             yield return new LlmTextChunk(errorMessage);
             yield break;
         }
+
+        if (completion!.ProviderState is { } opaqueState)
+            yield return new LlmProviderStateChunk(opaqueState);
 
         var costEstimate = completion!.Usage is not null
             ? await ComputeCostEstimateAsync(providerCode, completion.Usage, CancellationToken.None)

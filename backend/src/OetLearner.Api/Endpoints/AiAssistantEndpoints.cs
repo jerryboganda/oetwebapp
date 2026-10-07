@@ -99,9 +99,9 @@ public static class AiAssistantEndpoints
             if (AssistantModelCatalog.IsOpenCodeModel(model))
             {
                 // Role first, so a non-learner learns nothing about whether the provider is switched on.
-                if (GetUserRole(ctx.User) != ApplicationUserRoles.Learner)
-                    return new ApiErrorResult(400, "ai_assistant_model_learner_only", "This model is only available to learners.");
-                if (!await IsOpenCodeActiveAsync(providerRegistry, ct))
+                if (GetUserRole(ctx.User) is not (ApplicationUserRoles.Learner or ApplicationUserRoles.Admin))
+                    return new ApiErrorResult(400, "ai_assistant_model_role_not_allowed", "This model is only available to learners and admins.");
+                if (!(await GetOpenCodeModelsAsync(providerRegistry, ct)).Contains(model!))
                     return new ApiErrorResult(400, "ai_assistant_model_unavailable", "This model is not available right now.");
             }
 
@@ -125,11 +125,12 @@ public static class AiAssistantEndpoints
             };
             var models = AssistantModelCatalog.ClaudeApiModels.Concat(ubagModels);
 
-            if (GetUserRole(ctx.User) == ApplicationUserRoles.Learner
-                && await IsOpenCodeActiveAsync(providerRegistry, ct))
+            var openCodeModels = await GetOpenCodeModelsAsync(providerRegistry, ct);
+            if ((GetUserRole(ctx.User) is ApplicationUserRoles.Learner or ApplicationUserRoles.Admin)
+                && openCodeModels.Length > 0)
             {
-                groups.Add(new { provider = OpenCodeProviderDefaults.ProviderCode, label = "OpenCode", models = AssistantModelCatalog.OpenCodeModels });
-                models = models.Concat(AssistantModelCatalog.OpenCodeModels);
+                groups.Add(new { provider = OpenCodeProviderDefaults.ProviderCode, label = "Direct OpenCode gateway", models = openCodeModels });
+                models = models.Concat(openCodeModels);
             }
 
             return Results.Ok(new { groups, models = models.ToArray() });
@@ -791,8 +792,14 @@ public static class AiAssistantEndpoints
     }
 
     /// <summary>True while the OpenCode provider row exists and an admin has it active.</summary>
-    private static async Task<bool> IsOpenCodeActiveAsync(IAiProviderRegistry providerRegistry, CancellationToken ct)
-        => await providerRegistry.FindByCodeAsync(OpenCodeProviderDefaults.ProviderCode, ct) is { IsActive: true };
+    private static async Task<string[]> GetOpenCodeModelsAsync(IAiProviderRegistry providerRegistry, CancellationToken ct)
+    {
+        var row = await providerRegistry.FindByCodeAsync(OpenCodeProviderDefaults.ProviderCode, ct);
+        if (row is null || !OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(row.BaseUrl)
+            || string.IsNullOrWhiteSpace(await providerRegistry.GetPlatformKeyAsync(row.Code, ct))) return [];
+        var allowed = row.AllowedModelsCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return AssistantModelCatalog.OpenCodeModels.Where(m => allowed.Contains(m, StringComparer.Ordinal)).ToArray();
+    }
 
     private static string AssistantFeatureCodeForRole(string role) => role switch
     {

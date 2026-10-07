@@ -3184,6 +3184,7 @@ app.MapAiMeEndpoints();
 OetLearner.Api.Endpoints.AiAssistantEndpoints.MapAiAssistantEndpoints(app);
 // Owner Agent Console relay (/v1/owner-agent/*) — owner-only, unlock-gated, kill-switched.
 app.MapOwnerAgentEndpoints();
+app.MapOwnerOpenCodeGatewayEndpoints();
 app.MapContentPapersAdminEndpoints();
 app.MapExpertAdminEndpoints();
 app.MapContentStalenessEndpoints();

@@ -102,7 +102,8 @@ public sealed class RegistryBackedProvider(
     IHttpClientFactory httpClientFactory,
     IAiProviderRegistry registry,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions> options,
-    OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate? platformGate = null) : IAiModelProvider
+    OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate? platformGate = null,
+    IDataProtectionProvider? stateProtection = null) : IAiModelProvider
 {
     public string Name => "registry";
 
@@ -146,7 +147,6 @@ public sealed class RegistryBackedProvider(
     // content. The model supports up to 64k output; floor raised to 16,384 so the
     // answer survives the thinking budget.
     private const int OpenCodeMinMaxTokens = 16384;
-    private const int OpenCodeLengthRetryCeiling = 32768;
 
     private static bool IsUbagFacadeRequest(string baseUrl, AiProviderRequest request)
         => string.Equals(request.ProviderCode, "ubag", StringComparison.OrdinalIgnoreCase)
@@ -161,7 +161,17 @@ public sealed class RegistryBackedProvider(
         // for other vendors' models and must not leak onto the gateway.
         var reasoningEffort = openCode ? rowReasoningEffort : rowReasoningEffort ?? options.Value.ReasoningEffort;
         Task<AiProviderCompletion> Invoke() => CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
-        if (openCode) return await RunOnOpenCodeLaneAsync(Invoke, ct);
+        if (openCode)
+        {
+            var completed = await RunOnOpenCodeLaneAsync(Invoke, ct);
+            if (stateProtection is null) throw new InvalidOperationException("Gateway state protection is unavailable.");
+            return new AiProviderCompletion
+            {
+                Text = completed.Text, Usage = completed.Usage, ToolCalls = completed.ToolCalls,
+                ServedModel = completed.ServedModel, FinishReason = completed.FinishReason,
+                ProviderState = OpenCodeProviderState.Protect(stateProtection, request.SessionKey, completed.ReasoningContent ?? ""),
+            };
+        }
         // The keyless subscription sidecar (writing-codex-sub) serialises every request on its own
         // CLI lane: a permit here would only be held while the call queues behind other grades and
         // would starve every other platform-key call in this process. The lane is its limiter.
@@ -213,6 +223,9 @@ public sealed class RegistryBackedProvider(
         }
         if (first is not null)
         {
+            if (first.Code == "opencode" && (!OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(first.BaseUrl)
+                || !first.AllowedModelsCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(request.Model)))
+                throw new InvalidOperationException("The selected OpenCode gateway or model is unavailable. Check /admin/ai-providers.");
             // Per-provider ReasoningEffort overrides env default when set.
             if (!string.IsNullOrWhiteSpace(first.ReasoningEffort))
                 reasoningEffort = first.ReasoningEffort!.Trim().ToLowerInvariant();
@@ -269,7 +282,7 @@ public sealed class RegistryBackedProvider(
         var payload = new Dictionary<string, object?>
         {
             ["model"] = model,
-            ["messages"] = AiProviderPayloadBuilder.BuildOpenAiMessages(request),
+            ["messages"] = AiProviderPayloadBuilder.BuildOpenAiMessages(request, stateProtection),
             ["temperature"] = request.Temperature,
             [AiProviderPayloadBuilder.MaxTokensParameter(model)] = maxTokens,
             ["stream"] = false,
@@ -302,8 +315,7 @@ public sealed class RegistryBackedProvider(
 
         // SAMI UAT finding (2026-10-07): max-effort turns exceed the ~100s non-streamed
         // HttpClient timeout and the gateway's ~120s edge read cap. Streaming keeps the
-        // connection alive through reasoning of any length. Falls back to the non-streamed
-        // path when the gateway declines the stream or streams nothing usable.
+        // connection alive. An accepted stream is never automatically replayed.
         if (openCode && OetLearner.Api.Services.Ai.OpenCodeStreamingCall.IsStreamingEnabled())
         {
             var streamed = await OetLearner.Api.Services.Ai.OpenCodeStreamingCall.CompleteStreamingAsync(
@@ -351,36 +363,8 @@ public sealed class RegistryBackedProvider(
         // Tool calls are read BEFORE the empty-text check: a normal tool-calling reply has
         // content:null, and only "no text AND no tool calls" is an empty completion.
         var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
-        if (string.IsNullOrWhiteSpace(text) && toolCalls is null
-            && openCode
-            && choice.TryGetProperty("finish_reason", out var lengthEl) && lengthEl.ValueKind == JsonValueKind.String
-            && lengthEl.GetString() == "length"
-            && maxTokens < OpenCodeLengthRetryCeiling
-            && !ct.IsCancellationRequested)
-        {
-            // Effort=max reasoning can out-spend the output floor on heavy turns. One
-            // bounded retry at double budget (capped) answers instead of erroring.
-            request = new AiProviderRequest
-            {
-                ProviderCode = request.ProviderCode,
-                Model = request.Model,
-                SystemPrompt = request.SystemPrompt,
-                UserPrompt = request.UserPrompt,
-                Temperature = request.Temperature,
-                MaxTokens = Math.Min(maxTokens * 2, OpenCodeLengthRetryCeiling),
-                ApiKeyOverride = request.ApiKeyOverride,
-                BaseUrlOverride = request.BaseUrlOverride,
-                Messages = request.Messages,
-                Tools = request.Tools,
-                ToolChoice = request.ToolChoice,
-                ResponseFormatJson = request.ResponseFormatJson,
-                AudioAttachments = request.AudioAttachments,
-                ImageAttachments = request.ImageAttachments,
-                DocumentAttachment = request.DocumentAttachment,
-                SessionKey = request.SessionKey,
-            };
-            return await CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
-        }
+        if (openCode && choice.TryGetProperty("finish_reason", out var finishLimit) && finishLimit.GetString() == "length")
+            throw new InvalidOperationException("OpenCode reached its output limit. No automatic replay was attempted.");
         if (string.IsNullOrWhiteSpace(text) && toolCalls is null)
         {
             var emptyFinish = choice.TryGetProperty("finish_reason", out var emptyFinishEl) && emptyFinishEl.ValueKind == JsonValueKind.String
@@ -407,7 +391,12 @@ public sealed class RegistryBackedProvider(
             : null;
 
         var finishReason = choice.TryGetProperty("finish_reason", out var finish) ? finish.GetString() : null;
-        return new AiProviderCompletion { Text = text, Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason, ServedModel = servedModel };
+        return new AiProviderCompletion
+        {
+            Text = text, Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason, ServedModel = servedModel,
+            ReasoningContent = openCode && message.TryGetProperty("reasoning_content", out var reasoning)
+                && reasoning.ValueKind == JsonValueKind.String ? reasoning.GetString() : null,
+        };
     }
 
     /// <summary>Pulls the facade's machine-readable error detail out of a
@@ -1093,3 +1082,4 @@ public sealed class CloudflareWorkersAiProvider(
         return (baseUrl, apiKey);
     }
 }
+

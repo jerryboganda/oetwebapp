@@ -2668,6 +2668,9 @@ public sealed class AiProviderRequest
     /// leaves the process, so callers pass the raw id and never hash it themselves. Null for
     /// every other provider and call.</summary>
     public string? SessionKey { get; init; }
+
+    // Optional transport callback; never serialized into a provider payload.
+    public Func<string, CancellationToken, Task>? OnTextDelta { get; init; }
 }
 
 public sealed class AiProviderAudioAttachment
@@ -2696,6 +2699,8 @@ public sealed class AiProviderDocumentAttachment
 public sealed class AiProviderCompletion
 {
     public string Text { get; init; } = "";
+    public string? ProviderState { get; init; }
+    public string? ReasoningContent { get; init; }
     public AiUsage? Usage { get; init; }
 
     /// <summary>Multi-account pool: the <c>AiProviderAccount.Id</c> that
@@ -2738,6 +2743,7 @@ public sealed class AiChatMessage
     /// <summary>Set on <c>"tool"</c> messages — matches an
     /// <see cref="AiToolCall.Id"/> from the previous assistant turn.</summary>
     public string? ToolCallId { get; init; }
+    public string? ProviderState { get; init; }
     /// <summary>Inline images attached to a user/system message. Emitted as
     /// OpenAI <c>image_url/data:</c> parts by the payload builder; ignored by
     /// providers that only read <see cref="Content"/>.</summary>

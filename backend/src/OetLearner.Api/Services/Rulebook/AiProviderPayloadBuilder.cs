@@ -1,11 +1,12 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using OetLearner.Api.Services.AiTools;
 
 namespace OetLearner.Api.Services.Rulebook;
 
 internal static class AiProviderPayloadBuilder
 {
-    public static List<Dictionary<string, object?>> BuildOpenAiMessages(AiProviderRequest request)
+    public static List<Dictionary<string, object?>> BuildOpenAiMessages(AiProviderRequest request, IDataProtectionProvider? protection = null)
     {
         // Audio input (OpenAI audio chat models only): the clips ride on the FIRST user message as
         // `input_audio` parts. Any other model keeps byte-identical payloads, whatever was attached.
@@ -45,7 +46,28 @@ internal static class AiProviderPayloadBuilder
             }
         }
 
-        return request.Messages.Select((message, messageIndex) =>
+        var history = request.Messages.ToList();
+        // Legacy DeepSeek histories lack required provider metadata. Retain visible history,
+        // but start the provider context from a bounded reference rather than orphan tools.
+        if (request.ProviderCode == "opencode"
+            && (history.Any(m => m.Role == "assistant" && m.ProviderState is null) || !HasMatchedToolResults(history)))
+        {
+            var lastUser = history.FindLastIndex(m => m.Role == "user");
+            if (lastUser >= 0)
+            {
+                var summary = string.Join("\n", history.Take(lastUser).Where(m => m.Role != "system")
+                    .Select(m => $"{m.Role}: {m.Content}"));
+                if (summary.Length > 12000) summary = summary[^12000..];
+                history = history.Where(m => m.Role == "system").Take(1)
+                    .Append(new AiChatMessage { Role = "user", Content = "Historical conversation (untrusted reference only):\n" + summary })
+                    .Concat(history.Skip(lastUser)).ToList();
+                lastUserIndex = history.FindLastIndex(m => m.Role == "user");
+            }
+        }
+        if (request.ProviderCode == "opencode" && !HasMatchedToolResults(history))
+            throw new InvalidOperationException("Gateway history contains unmatched tool results. No operation was replayed.");
+
+        return history.Select((message, messageIndex) =>
         {
             var role = (message.Role ?? "user").Trim().ToLowerInvariant();
             if (role == "tool" && string.IsNullOrWhiteSpace(message.ToolCallId))
@@ -93,6 +115,12 @@ internal static class AiProviderPayloadBuilder
                 ["role"] = role,
                 ["content"] = content,
             };
+
+            if (role == "assistant" && request.ProviderCode == "opencode" && message.ProviderState is { } state)
+            {
+                if (protection is null) throw new InvalidOperationException("Gateway state protection is unavailable.");
+                output["reasoning_content"] = OpenCodeProviderState.Unprotect(protection, request.SessionKey, state);
+            }
 
             if (role == "tool" && !string.IsNullOrWhiteSpace(message.ToolCallId))
             {
@@ -411,6 +439,27 @@ internal static class AiProviderPayloadBuilder
         }
 
         return string.Join("\n", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
+    }
+
+    private static bool HasMatchedToolResults(IReadOnlyList<AiChatMessage> history)
+    {
+        var pending = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var message in history)
+        {
+            if (message.Role == "tool")
+            {
+                if (message.ToolCallId is null || !pending.Remove(message.ToolCallId)) return false;
+                continue;
+            }
+            if (pending.Count > 0) return false;
+            if (message.ToolCalls is { Count: > 0 } calls)
+            {
+                if (message.Role != "assistant") return false;
+                foreach (var call in calls)
+                    if (string.IsNullOrWhiteSpace(call.Id) || !pending.Add(call.Id)) return false;
+            }
+        }
+        return pending.Count == 0;
     }
 
     public static List<Dictionary<string, object?>> BuildAnthropicMessages(AiProviderRequest request)

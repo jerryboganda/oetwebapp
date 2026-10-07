@@ -69,4 +69,10 @@ public static class OpenCodeProviderDefaults
     /// <summary>True when <paramref name="baseUrl"/> is an absolute URL on an OpenCode host.</summary>
     public static bool IsOpenCodeBaseUrl(string? baseUrl)
         => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) && IsOpenCodeHost(uri.Host);
+
+    public static bool IsDirectGatewayBaseUrl(string? value)
+        => Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == "https"
+           && uri.Host == "opencode.ai" && uri.IsDefaultPort && uri.UserInfo.Length == 0
+           && uri.Query.Length == 0 && uri.Fragment.Length == 0
+           && uri.AbsolutePath.TrimEnd('/') is "/zen/go/v1" or "/zen/v1";
 }

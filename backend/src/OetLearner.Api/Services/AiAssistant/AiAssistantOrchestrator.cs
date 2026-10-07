@@ -210,6 +210,7 @@ public sealed class AiAssistantOrchestrator(
                 var responseText = new StringBuilder();
                 string? servedModel = null;
                 string? servedProviderCode = null;
+                string? providerState = null;
 
                 await foreach (var chunk in gateway.StreamCompleteWithToolsAsync(
                     featureCode, userId, messages, tools, thread.ModelOverride, turnCts.Token,
@@ -218,6 +219,9 @@ public sealed class AiAssistantOrchestrator(
                 {
                     switch (chunk)
                     {
+                        case LlmProviderStateChunk state:
+                            providerState = state.State;
+                            break;
                         case LlmTextChunk text:
                             responseText.Append(text.Text);
                             fullResponse.Append(text.Text);
@@ -244,6 +248,7 @@ public sealed class AiAssistantOrchestrator(
                         ThreadId = threadId,
                         Role = "assistant",
                         Content = responseText.ToString(),
+                        EncryptedProviderState = providerState,
                         Model = string.IsNullOrWhiteSpace(servedModel) ? thread.ModelOverride : servedModel,
                         // Bound to the final answer only: the intermediate
                         // tool-call messages are not what the learner reads.
@@ -266,6 +271,7 @@ public sealed class AiAssistantOrchestrator(
                     Role = "assistant",
                     Content = responseText.Length > 0 ? responseText.ToString() : null,
                     ToolCallsJson = JsonSerializer.Serialize(toolCalls),
+                    EncryptedProviderState = providerState,
                     CreatedAt = DateTimeOffset.UtcNow,
                 };
                 db.AiAssistantMessages.Add(toolCallMsg);
@@ -572,11 +578,12 @@ public sealed class AiAssistantOrchestrator(
                     messages.Add(new LlmMessage("assistant", msg.Content ?? "")
                     {
                         ToolCallsJson = msg.ToolCallsJson,
+                        ProviderState = msg.EncryptedProviderState,
                     });
                 }
                 else
                 {
-                    messages.Add(new LlmMessage(msg.Role, msg.Content ?? ""));
+                    messages.Add(new LlmMessage(msg.Role, msg.Content ?? "") { ProviderState = msg.EncryptedProviderState });
                 }
             }
         }
@@ -590,6 +597,7 @@ public sealed class AiAssistantOrchestrator(
 /// <summary>Chunk types yielded by the streaming gateway.</summary>
 public abstract record LlmStreamChunk;
 public sealed record LlmTextChunk(string Text) : LlmStreamChunk;
+internal sealed record LlmProviderStateChunk(string State) : LlmStreamChunk;
 public sealed record LlmToolCallChunk(string Id, string Name, string Arguments) : LlmStreamChunk;
 /// <summary>Model actually served for this turn (provider echo preferred,
 /// routed request model otherwise), plus the provider row code.</summary>
@@ -604,6 +612,7 @@ public sealed class LlmMessage(string role, string content)
     public string? ToolCallId { get; init; }
     public string? Name { get; init; }
     public string? ToolCallsJson { get; init; }
+    public string? ProviderState { get; init; }
     /// <summary>Inline images attached to this turn. Carried onto the
     /// provider <c>AiChatMessage</c> so vision-capable providers (UBAG
     /// ubag_attachments) actually see the upload.</summary>

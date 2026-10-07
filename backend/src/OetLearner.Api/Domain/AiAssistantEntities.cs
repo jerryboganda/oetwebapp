@@ -59,6 +59,9 @@ public class AiAssistantMessage
     /// <summary>JSON-serialized tool calls (OpenAI format). Null for non-tool messages.</summary>
     public string? ToolCallsJson { get; set; }
 
+    // Conversation-bound ciphertext; omitted from all public DTOs.
+    public string? EncryptedProviderState { get; set; }
+
     /// <summary>If this is a tool result message, the tool_call_id it responds to.</summary>
     [MaxLength(128)]
     public string? ToolCallId { get; set; }

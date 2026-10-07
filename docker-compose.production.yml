@@ -442,6 +442,7 @@ services:
     networks:
       - internal
       - npm_proxy
+      - oet_agent_ctl
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health/ready >/dev/null || exit 1"]
       interval: 30s
