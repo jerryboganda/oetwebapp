@@ -103,6 +103,12 @@ secrets:
   # (the /dev/null default) means "not configured" (the endpoint answers 404).
   fleet_ubag_token:
     file: ${FLEET_UBAG_TOKEN_FILE:-/dev/null}
+  # Optional: the trust-plane CA pair (UBAG decision D3). EMPTY files (the /dev/null
+  # default) mean the plane cannot start and no node identity is issued or published.
+  fleet_ca_cert:
+    file: ${FLEET_CA_CERT_FILE:-/dev/null}
+  fleet_ca_key:
+    file: ${FLEET_CA_KEY_FILE:-/dev/null}
 
 # External + exact name so compose can never create an empty parallel volume or remove one on `down`.
 # Created (if absent) by the fleet deploy, exactly like the agent console volumes.
