@@ -242,6 +242,22 @@ public sealed class AiAssistantOrchestrator(
                 // If no tool calls, we're done — this is the final response
                 if (toolCalls.Count == 0)
                 {
+                    // D-SAMI-001 (SAMI UAT, 2026-10-07): the stream can end with zero
+                    // events (provider-level failure that produced neither text nor an
+                    // error chunk). Persisting that as a silent empty answer looks to
+                    // the learner like the assistant ignoring them. Surface it as a
+                    // retryable provider failure instead.
+                    if (responseText.Length == 0)
+                    {
+                        logger.LogError(
+                            "Assistant turn produced an empty completion for {UserId} thread {ThreadId} (model {Model}); treating as a provider failure.",
+                            userId, threadId, thread.ModelOverride);
+                        yield return new AssistantTurnError(
+                            "PROVIDER_EMPTY_COMPLETION",
+                            "The AI provider returned an empty response for that turn. Please try again in a moment.");
+                        yield break;
+                    }
+
                     var assistantMsg = new AiAssistantMessage
                     {
                         Id = Guid.NewGuid().ToString("N"),
