@@ -35,7 +35,7 @@ The owner reported the exact exhaustion response generated when the configured i
 
 Admin tasks stop normally when the model returns a final answer. A separate runaway budget of thirty minutes (checked between tool rounds) or 1,000 rounds requests a tool-free summary of actual results and unfinished work. A provider that ignores this restriction is refused further tool execution. Cancellation, approvals, quota/provider failures and genuine blockers can still stop a task. This budget replaces the short-turn iteration setting for admins only; other roles retain their existing limits.
 
-Follow-up release evidence: pending. Manual acceptance must include a task needing more than ten tool rounds, a short task, cancellation, sufficient progress context after compaction, and an honest budget-exhaustion summary.
+Follow-up release: `0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8` blue, includes fix `65742ee15`. Build images `37703188463` and Deploy production `37703776299` succeeded. Exact serving images and web/API ready/live HTTP 200 verified on October 8. Web image `sha256:866c1cad9abbd53f5061c5424fe54ec2b772511422598b5895f47418b8061192`; API image `sha256:e3717acb4f3da49cb0779cc747a7f5286e39c21ec5905489d752b506c30b065c`. Manual acceptance must include a task needing more than ten tool rounds, a short task, cancellation, sufficient progress context after compaction, and an honest budget-exhaustion summary.
 
 Functional acceptance: **not tested—owner QA**. No automated functional QA was run.
 

@@ -6,6 +6,7 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-07 23:27 | Build images | Build images | 37702404831 | Syntax gate (seconds)=success Typecheck + lint=success Detect what changed=success Deployment contract guards=success build-backup=success build-agent-gateway=success build-web=success build-api=success Retag unchanged ${{ matrix.image }}=skipped Publish verified release provenance=success | SUCCESS | fc9bd8268 |
 | 2026-10-07 22:48 | CI triage | CI triage | 37698537080 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | c47c016a9 |
 | 2026-10-07 22:41 | CI triage | CI triage | 37697783277 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | c47c016a9 |
 | 2026-10-07 22:41 | Deploy production | Deploy production | 37697783219 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | c47c016a9 |

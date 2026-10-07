@@ -151,3 +151,5 @@ Older still: `git log -- PROGRESS.md`.
 - 2026-10-08 admin-task-auto-continuation: exact ten-step cutoff traced to runtime iteration exhaustion. Admin turns now continue within a separate 30-minute/1000-round budget, followed by a tool-free results summary. Bounded context with original task/progress preserves stored tool history. Compilation/deployment pending; functional QA not tested-owner QA.
 
 - admin-task-auto-continuation checkpoint: fix committed 65742ee15, preserved by current HEAD709e7ddc0. Shipping blocked by verified live shared owner pid28032; preceding deployment37699935412 is green but its watcher retains lock. No bypass used. New fix compilation/deployment pending.
+
+- admin-task-auto-continuation LIVE: 0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8 blue contains the fix65742ee15 and all release changesfc9bd8268. Build37703188463 / Deploy37703776299 success; exact serving-image proof and web/API HTTP200 verified. Functional QA not tested-owner QA. Watcher now rechecks delayed proof, follows cancelled-run replacements and waits for active candidates before reporting old failures.

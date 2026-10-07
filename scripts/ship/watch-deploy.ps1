@@ -107,6 +107,7 @@ while (-not $runId) {
         if ($recentRaw -and $recentRaw -ne '[]') {
             $recent = @($recentRaw | ConvertFrom-Json) | Where-Object { $_.workflowName -eq $Workflow }
             $failedCandidate = $null
+            $activeCandidate = $false
             foreach ($candidate in $recent) {
                 $id = [string]$candidate.databaseId
                 if ($stoodDown.Contains($id)) { continue }
@@ -117,10 +118,15 @@ while (-not $runId) {
                 }
                 if (-not $ancestry[$candidateSha]) { continue }
                 if ($candidate.status -ne 'completed') {
+                    $activeCandidate = $true
                     Write-Output "SHIP-WATCH_STATUS run=$id status=$($candidate.status)"
                     continue
                 }
                 if ($candidate.conclusion -ne 'success') {
+                    # Concurrency can cancel a pending run while its replacement
+                    # is queued. Follow that replacement rather than treating a
+                    # run that never promoted as a compilation/deployment failure.
+                    if ($candidate.conclusion -in @('cancelled', 'skipped')) { continue }
                     if (-not $failedCandidate -and ($candidateSha -eq $Sha -or $stoodDown.Count -gt 0)) {
                         $failedCandidate = $candidate
                     }
@@ -159,7 +165,7 @@ while (-not $runId) {
                 if ($candidateSha -ne $Sha) { Write-Output "SHIP-WATCH_SUPERSEDED_BY $candidateSha run $runId" }
                 break
             }
-            if (-not $runId -and $failedCandidate) {
+            if (-not $runId -and $failedCandidate -and -not $activeCandidate) {
                 $runId = [string]$failedCandidate.databaseId
                 $runUrl = [string]$failedCandidate.url
             }
