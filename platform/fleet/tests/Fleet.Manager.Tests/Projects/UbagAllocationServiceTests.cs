@@ -37,6 +37,7 @@ public sealed class UbagAllocationServiceTests : IAsyncLifetime
             _host.Get<HostStore>(),
             _host.Get<Fleet.Manager.Operations.PolicyService>(),
             _host.Get<FleetState>(),
+            _host.Get<Fleet.Manager.Projects.UbagTrustService>(),
             new OptionsWrapper<FleetOptions>(new FleetOptions { Ubag = options }),
             World.Time);
         return await service.BuildAsync(CancellationToken.None);

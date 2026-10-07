@@ -21,6 +21,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fleet.Agent\Fleet.Agent.csproj" />
+    <!-- Mirror the agent's framework reference: types in the tested assembly carry ASP.NET signatures
+       (the trust-plane listener), and loading them in the test host needs the shared framework. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <!-- Append-only history of PdfPigPdfTextExtractor.cs hashes per LayoutRevision (protocol RW-102). -->
