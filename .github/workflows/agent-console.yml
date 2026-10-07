@@ -272,18 +272,39 @@ jobs:
 
           # --- pull (images come from GHCR; nothing is compiled here) ---
           compose() { docker compose --env-file "$CONSOLE_ENV" -f "$COMPOSE_FILE" "$@"; }
+          registry_ipv4_override=false
+          restore_registry_dns() {
+            if [ "$registry_ipv4_override" = true ]; then
+              sed -i '/# oet-agent-console-ghcr-ipv4$/d' /etc/hosts
+              registry_ipv4_override=false
+            fi
+          }
+          prefer_registry_ipv4() {
+            # This VPS's IPv6 blob transfers repeatedly reset. Keep the same
+            # TLS hostname/registry and prefer its current DNS IPv4 address
+            # only during the pull; never change daemon/network configuration.
+            grep -Eq '(^|[[:space:]])pkg-containers\.githubusercontent\.com([[:space:]]|$)' /etc/hosts && return 0
+            local address
+            address="$(getent ahostsv4 pkg-containers.githubusercontent.com | awk '$2 == "STREAM" && !found { print $1; found=1 }')" || return 0
+            printf '%s' "$address" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' || return 0
+            registry_ipv4_override=true
+            printf '%s pkg-containers.githubusercontent.com # oet-agent-console-ghcr-ipv4\n' "$address" >> /etc/hosts
+            log "retrying registry blob pulls over IPv4; temporary override removed after pull"
+          }
+          trap 'restore_registry_dns; docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
           if [ -n "$GHCR_TOKEN" ]; then
             printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "${GHCR_USER:-github-actions}" --password-stdin >/dev/null
-            trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
           fi
           pulled=false
           delay=5
           for attempt in 1 2 3 4 5; do
             if compose pull --quiet; then pulled=true; break; fi
+            if [ "$attempt" = 1 ]; then prefer_registry_ipv4; fi
             log "pull attempt $attempt failed; retrying in ${delay}s"
             sleep "$delay"
             delay=$(( delay < 30 ? delay * 2 : 30 ))
           done
+          restore_registry_dns
           [ "$pulled" = true ] || fail "could not pull the console images from GHCR"
 
           # --- recreate only when idle (or apply=true) ---
