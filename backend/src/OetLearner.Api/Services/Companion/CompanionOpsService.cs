@@ -88,7 +88,7 @@ public sealed class CompanionOpsService(LearnerDbContext db, TimeProvider clock)
                         .Select(e => new CompanionErrorCount(e.Code, e.Count)).ToList());
             })
             .OrderByDescending(r => r.Failures)
-            .ThenByDescending(r => r.Total)
+            .ThenByDescending(r => r.TotalCalls)
             .Take(Math.Clamp(take, 1, 50))
             .ToList();
     }
