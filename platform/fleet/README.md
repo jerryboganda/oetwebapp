@@ -192,7 +192,9 @@ Turning it on after a rollout (owner settings live in `.env.production`, which
 the sync job copies into the generated fleet.env only when well formed):
 `FLEET_UBAG_ENABLED=true`, `FLEET_UBAG_HOSTS=<hostId,...>`, optionally
 `FLEET_UBAG_ENDPOINT_TEMPLATE` / `FLEET_UBAG_MAX_BROWSER_WORKLOADS` /
-`FLEET_UBAG_GRANT_TTL_MINUTES`, and the `fleet_ubag_token` secret file in
+`FLEET_UBAG_GRANT_TTL_MINUTES`, `FLEET_IMAGE_AUTOAPPROVEDIGESTS=true` when a
+helper rollout should not wait on manual digest approval, and the
+`fleet_ubag_token` secret file in
 `$FLEET_SECRETS_DIR` (`FLEET_UBAG_TOKEN_FILE` names it). Per-host endpoint
 overrides (`Fleet__Ubag__EndpointOverrides__<hostId>`) are not part of the
 sync allowlist; add them to the generated fleet.env only if you accept that a

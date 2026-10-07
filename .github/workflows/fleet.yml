@@ -372,6 +372,7 @@ jobs:
             optional_secret fleet_master_key_prev FLEET_MASTER_KEY_PREV_FILE
             pass_through FLEET_API_BASE_URL '^https://[A-Za-z0-9.-]{1,253}(:[0-9]{1,5})?$'
             pass_through FLEET_IMAGE_MODE '^(scoped-token|public)$'
+            pass_through FLEET_IMAGE_AUTOAPPROVEDIGESTS '^(true|false)$'
             pass_through FLEET_DOCKER_SOURCE '^(distro|vendor)$'
             pass_through FLEET_MANAGER_PORT '^[0-9]{2,5}$'
             # UBAG project knobs (off until the owner sets them): the endpoint serves
