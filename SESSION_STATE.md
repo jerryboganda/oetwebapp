@@ -2,10 +2,10 @@
 
 Session: admin-chat-long-tasks
 Goal: Repair failed admin sends and multi-tool long tasks, retain short-task behavior and safe interruption
-Mode: execute
+Mode: verify
 Updated: 2026-10-08
 Branch: main
-HEAD: 6ce8f33f9
+HEAD: c47c016a9
 
 ## Objective
 
@@ -17,7 +17,7 @@ Production admin hub requests returned 429 during polling and negotiation. Fix t
 - [x] Token refresh preserves connection; account/role changes invalidate it; events filtered by conversation.
 - [x] One running turn per conversation; tool intent and each result saved immediately; no automatic resend.
 - [x] Interrupted tool history normalized; orphan/duplicate results omitted; tool context and provider stream reads bounded.
-- [ ] Image build and production serving proof recorded.
+- [x] Image build and production serving proof recorded.
 - [ ] Short/long tool tasks, cancel, token refresh and interruption functional acceptance: not tested—owner QA.
 
 ## Decisions (do not revisit)
@@ -40,8 +40,8 @@ Production admin hub requests returned 429 during polling and negotiation. Fix t
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| compilation | build-images.yml | Awaiting release | NOT RUN |
-| deployment | production-deploy.yml | Awaiting release | NOT RUN |
+| compilation | build-images.yml | 37697195438 | SUCCESS |
+| deployment | production-deploy.yml | 37697783219 | SUCCESS |
 | functional acceptance | Owner manual QA | Short/long/cancel/reconnect/history scenarios | NOT TESTED |
 
 ## Blockers
@@ -50,4 +50,4 @@ Production admin hub requests returned 429 during polling and negotiation. Fix t
 
 ## Next action
 
-1. Ship scoped changes through existing wrapper; repair compilation if necessary and verify exact serving release.
+1. Owner manual QA using docs/ops/ADMIN-CHAT-LONG-TASKS.md. Separate Speaking CI reported model drift; this release changes no model or migration.

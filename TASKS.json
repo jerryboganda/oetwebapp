@@ -335,12 +335,14 @@
     {
       "id": "ALT-01",
       "title": "Repair admin multi-tool and short task transport and continuation",
-      "status": "in_progress",
+      "status": "done",
       "owner": "admin-chat-long-tasks",
       "blockedBy": [],
       "verify": "Image compilation and live serving proof; owner manual functional acceptance",
       "evidence": [
-        "Production admin assistant poll/negotiate HTTP429; HubConnect 30/min applied to every transport request"
+        "Production admin assistant poll/negotiate HTTP429; HubConnect 30/min applied to every transport request",
+        "Build images 37697195438 success; Deploy production 37697783219 success; c47c016a9945061af309ab6875068a7b490ced90 blue, exact web/API serving images and HTTP200 health. Functional acceptance not tested-owner QA.",
+        "Speaking Module CI 37697195500 reported pending model changes; this scoped release changes no model/migration."
       ]
     }
   ]

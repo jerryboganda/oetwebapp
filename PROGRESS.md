@@ -145,3 +145,5 @@ Older still: `git log -- PROGRESS.md`.
 - staff-chatbot-access live: 3b17f4f7bf7241f99e290a40c0867d1a20034224; build 37694493229 and deploy 37695201719 successful. Green serving images and release headers verified. All admin/expert dashboard chatbot roles allowed; separate owner console privileges unchanged pending clarification. Functional acceptance not tested—owner QA.
 
 - 2026-10-08 admin-chat-long-tasks: production admin hub poll/negotiate HTTP429 traced to shared 30/min HubConnect. Separate assistant transport bucket, stable token-refresh connection, scoped events, single-turn guard, durable tool progress and interrupted-history normalization implemented. Compilation/deployment pending; functional QA not tested—owner QA.
+
+- admin-chat-long-tasks live: c47c016a9945061af309ab6875068a7b490ced90; build 37697195438 and deploy 37697783219 success. Blue serving-image proof and web/API HTTP200 verified. Functional acceptance not tested-owner QA. Separate Speaking CI 37697195500 reports model drift; this release changes no model/migration.
