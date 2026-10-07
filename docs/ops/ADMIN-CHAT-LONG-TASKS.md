@@ -29,6 +29,14 @@ Role permissions, learner study-only access, provider routing, reasoning metadat
 
 ## Manual acceptance
 
+### Follow-up: ten-step task cutoff
+
+The owner reported the exact exhaustion response generated when the configured iteration count is reached. Admin turns now continue within the same request rather than requiring a second user message at ten rounds. They retain the original goal, shortened progress excerpts and recent complete tool groups in bounded model context; full database history is preserved. Completed tools are not automatically replayed.
+
+Admin tasks stop normally when the model returns a final answer. A separate runaway budget of thirty minutes (checked between tool rounds) or 1,000 rounds requests a tool-free summary of actual results and unfinished work. A provider that ignores this restriction is refused further tool execution. Cancellation, approvals, quota/provider failures and genuine blockers can still stop a task. This budget replaces the short-turn iteration setting for admins only; other roles retain their existing limits.
+
+Follow-up release evidence: pending. Manual acceptance must include a task needing more than ten tool rounds, a short task, cancellation, sufficient progress context after compaction, and an honest budget-exhaustion summary.
+
 Functional acceptance: **not tested—owner QA**. No automated functional QA was run.
 
 | Scenario | Expected result |

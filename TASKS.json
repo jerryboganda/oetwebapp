@@ -344,6 +344,17 @@
         "Build images 37697195438 success; Deploy production 37697783219 success; c47c016a9945061af309ab6875068a7b490ced90 blue, exact web/API serving images and HTTP200 health. Functional acceptance not tested-owner QA.",
         "Speaking Module CI 37697195500 reported pending model changes; this scoped release changes no model/migration."
       ]
+    },
+    {
+      "id": "ALT-02",
+      "title": "Admin task automatic continuation past short-turn cap",
+      "status": "in_progress",
+      "owner": "admin-task-auto-continuation",
+      "blockedBy": [],
+      "verify": "Image build and serving health; owner manual QA",
+      "evidence": [
+        "Exact ten-step message traced to configured ReAct iteration exhaustion branch"
+      ]
     }
   ]
 }

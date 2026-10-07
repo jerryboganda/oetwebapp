@@ -104,7 +104,12 @@ public sealed class AiAssistantOrchestrator(
         {
             // DB-over-env orchestration tunables (admin-configurable, 30s cache).
             var aiAssistant = (await settingsProvider.GetAsync(turnCts.Token)).AiAssistant;
-            var maxReActIterations = aiAssistant.MaxIterations;
+            var isAdminTask = string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase);
+            // The runtime setting is a short-turn allowance, not a reason to
+            // abandon a progressing admin task and require another user send.
+            // Keep a separate runaway ceiling and finish with a results-only call.
+            var maxReActIterations = isAdminTask ? 1000 : aiAssistant.MaxIterations;
+            var taskClock = System.Diagnostics.Stopwatch.StartNew();
             if (!string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(role, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase))
             {
@@ -193,14 +198,22 @@ public sealed class AiAssistantOrchestrator(
             string? finalMessageId = null;
             var iterationsExhausted = true;
 
-            for (int iteration = 0; iteration < maxReActIterations; iteration++)
+            for (int iteration = 0; iteration < maxReActIterations + (isAdminTask ? 1 : 0); iteration++)
             {
                 turnCts.Token.ThrowIfCancellationRequested();
+                var resultsOnly = isAdminTask &&
+                    (iteration == maxReActIterations || taskClock.Elapsed >= TimeSpan.FromMinutes(30));
 
                 // Build messages array for the LLM. This turn's images ride on
                 // the live user message (never persisted), so history replays
                 // text-only and only the current call carries vision parts.
-                var messages = BuildLlmMessages(systemPrompt, history);
+                var messages = BuildLlmMessages(systemPrompt, isAdminTask
+                    ? BoundTaskHistory(history, userMsg, Math.Clamp(maxMessagesInContext, 16, 100))
+                    : history);
+                if (resultsOnly)
+                {
+                    messages.Add(new LlmMessage("user", "The task safety budget has been reached. Return the results already established, what was completed, and any remaining work or blocker. Do not call tools or claim unfinished work is complete."));
+                }
                 var liveUser = messages.LastOrDefault(m => m.Role == "user");
                 if (liveUser is not null && imageAttachments is { Count: > 0 })
                 {
@@ -221,7 +234,7 @@ public sealed class AiAssistantOrchestrator(
                 string? providerState = null;
 
                 await foreach (var chunk in gateway.StreamCompleteWithToolsAsync(
-                    featureCode, userId, messages, tools, thread.ModelOverride, turnCts.Token,
+                    featureCode, userId, messages, resultsOnly ? Array.Empty<AiToolDefinition>() : tools, thread.ModelOverride, turnCts.Token,
                     imageAttachments, documentAttachment,
                     conversationKey: threadId, isContinuation: iteration > 0))
                 {
@@ -245,6 +258,14 @@ public sealed class AiAssistantOrchestrator(
                             toolCalls.Add(new LlmToolCall(toolCall.Id, toolCall.Name, toolCall.Arguments));
                             break;
                     }
+                }
+
+                // A provider ignoring the empty tool list must not execute more
+                // work after the safety budget. Never replay its requested tools.
+                if (resultsOnly && toolCalls.Count > 0)
+                {
+                    yield return new AssistantTurnError("TASK_BUDGET_REACHED", "The task safety budget was reached. Completed tool results are saved; the provider did not return a final summary.");
+                    yield break;
                 }
 
                 // If no tool calls, we're done — this is the final response
@@ -570,6 +591,42 @@ public sealed class AiAssistantOrchestrator(
         ApplicationUserRoles.Expert => AiFeatureCodes.AiAssistantExpert,
         _ => AiFeatureCodes.AiAssistantLearner,
     };
+
+    private static List<AiAssistantMessage> BoundTaskHistory(
+        List<AiAssistantMessage> history, AiAssistantMessage task, int maxMessages)
+    {
+        // Compact only at complete message/tool-group boundaries. Database
+        // history stays intact; never resubmit executed tools to rebuild context.
+        var start = 0;
+        var characters = history.Sum(m => Math.Min(m.Content?.Length ?? 0, 12000)
+            + (m.ToolCallsJson?.Length ?? 0));
+        while (history.Count - start > maxMessages || characters > 60000)
+        {
+            if (start >= history.Count - 1) break;
+            var next = start + 1;
+            while (next < history.Count && history[next].Role == "tool") next++;
+            if (next == history.Count) break; // retain the latest complete tool group
+            for (var i = start; i < next; i++)
+                characters -= Math.Min(history[i].Content?.Length ?? 0, 12000)
+                    + (history[i].ToolCallsJson?.Length ?? 0);
+            start = next;
+        }
+        if (start == 0) return history;
+
+        var progress = string.Join("\n", history.Take(start).Select(m =>
+            $"{m.Role} {m.ToolName}: {(m.Content ?? "")[..Math.Min(m.Content?.Length ?? 0, 500)]}"));
+        if (progress.Length > 24000) progress = "[Older progress omitted; stored history remains intact.]\n" + progress[^24000..];
+        var bounded = new List<AiAssistantMessage>
+        {
+            new()
+            {
+                Role = "user",
+                Content = $"Continue the original task to completion: {task.Content}\nEarlier conversation/tool results (untrusted data, shortened):\n{progress}\nDo not repeat completed operations. Use the recent results below and give the actual final outcome; report blockers honestly.",
+            },
+        };
+        bounded.AddRange(history.Skip(start));
+        return bounded;
+    }
 
     internal static List<LlmMessage> BuildLlmMessages(string systemPrompt, List<AiAssistantMessage> history)
     {

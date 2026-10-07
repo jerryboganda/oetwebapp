@@ -147,3 +147,5 @@ Older still: `git log -- PROGRESS.md`.
 - 2026-10-08 admin-chat-long-tasks: production admin hub poll/negotiate HTTP429 traced to shared 30/min HubConnect. Separate assistant transport bucket, stable token-refresh connection, scoped events, single-turn guard, durable tool progress and interrupted-history normalization implemented. Compilation/deployment pending; functional QA not tested—owner QA.
 
 - admin-chat-long-tasks live: c47c016a9945061af309ab6875068a7b490ced90; build 37697195438 and deploy 37697783219 success. Blue serving-image proof and web/API HTTP200 verified. Functional acceptance not tested-owner QA. Separate Speaking CI 37697195500 reports model drift; this release changes no model/migration.
+
+- 2026-10-08 admin-task-auto-continuation: exact ten-step cutoff traced to runtime iteration exhaustion. Admin turns now continue within a separate 30-minute/1000-round budget, followed by a tool-free results summary. Bounded context with original task/progress preserves stored tool history. Compilation/deployment pending; functional QA not tested-owner QA.
