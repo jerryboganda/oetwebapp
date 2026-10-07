@@ -1,0 +1,68 @@
+{
+  "note": "Human-verified verbatim transcription of the photo-scan source (Medicine - Mr Trevor Evans), including the source's own spelling/grammar ('give' for 'given', inconsistent capitalisation). x/y in A4 pt, top-left origin.",
+  "pages": [
+    {
+      "lines": [
+        { "t": "Assume that today's date is 7 January 2023. You are a hospital nephrologist", "x": 108, "y": 64, "s": 11 },
+        { "t": "and you have been supervising a patient on the dialysis unit for the three", "x": 108, "y": 82, "s": 11 },
+        { "t": "months", "x": 108, "y": 100, "s": 11 },
+        { "t": "NAME: Mr Trevor Evans .", "x": 118, "y": 126, "s": 11 },
+        { "t": "D.O.B: 26/NOV /1945", "x": 118, "y": 148, "s": 11 },
+        { "t": "Retired Bank clerk.", "x": 195, "y": 172, "s": 11 },
+        { "t": "Married, Main carer of wife (has COPD).", "x": 195, "y": 194, "s": 11 },
+        { "t": "No children", "x": 195, "y": 216, "s": 11 },
+        { "t": "Interests gaming , vintage motorbikes.", "x": 170, "y": 238, "s": 11 },
+        { "t": "Family history: father died 65 y.o ( liver cancer).", "x": 118, "y": 260, "s": 11 },
+        { "t": "Mother dies 52 y.o (stroke)", "x": 218, "y": 282, "s": 11 },
+        { "t": "Medical history : Feb 2017    fracture L ankle and scapula .", "x": 118, "y": 304, "s": 11 },
+        { "t": "May 2018 type 2 Diabetes mellitus diag", "x": 218, "y": 326, "s": 11 },
+        { "t": "Medications: Metformin 500 mg /day (diabetes)", "x": 118, "y": 348, "s": 11 },
+        { "t": "Hospital treatment record:", "x": 108, "y": 374, "s": 12, "b": true },
+        { "t": "10  Sep 2022: presented at hospital emergency department with shortness of", "x": 108, "y": 400, "s": 11 },
+        { "t": "breath, chest pain, sweating . fever (39.2)", "x": 88, "y": 418, "s": 11 },
+        { "t": "Pneumonia diag:   amoxicillin 500 mg 1x/8hrs", "x": 205, "y": 440, "s": 11 },
+        { "t": "Pt transferred to ward.", "x": 205, "y": 462, "s": 11 },
+        { "t": "11 sep 22:  onset of slurred speech, mottled skin, hypotension, anuria,", "x": 118, "y": 486, "s": 11 },
+        { "t": "headaches, nausea.", "x": 88, "y": 504, "s": 11 },
+        { "t": "Septic shock diag: IV fluids ,broad spectrum antibiotic.", "x": 195, "y": 528, "s": 11 },
+        { "t": "Acute kidney injury diag: haemodialysis  4 hrs 3x/wk. to", "x": 180, "y": 550, "s": 11 },
+        { "t": "commence 12sep", "x": 108, "y": 568, "s": 11 },
+        { "t": "Metformin ceased - replaced with insulin , medication", "x": 180, "y": 592, "s": 11 },
+        { "t": "management by                  multidisciplinary hospital team", "x": 108, "y": 610, "s": 11 },
+        { "t": "15 Oct 2022:  pt stable -pneumonia and sepsis resolved .", "x": 108, "y": 634, "s": 11 },
+        { "t": "Pt ready to transfer to sub -acute rehabilitation facility.", "x": 205, "y": 656, "s": 11 }
+      ]
+    },
+    {
+      "lines": [
+        { "t": "No improvement in renal function.", "x": 230, "y": 62, "s": 11 },
+        { "t": "02Nov 2022: PT stable and ready for discharge", "x": 140, "y": 86, "s": 11 },
+        { "t": "Dialysis to continue (4hrs3x/wk- dialysis unit ).", "x": 218, "y": 110, "s": 11 },
+        { "t": "Carer visit arranged  2x/wk) support pt and wife at home.", "x": 218, "y": 132, "s": 11 },
+        { "t": "Hospital kidney dialysis unit treatment record (extracts):", "x": 148, "y": 158, "s": 12, "b": true },
+        { "t": "21Dec 2022 discussion - dialysis nurse and pt.", "x": 148, "y": 184, "s": 11 },
+        { "t": "Pt concerns:", "x": 252, "y": 208, "s": 11 },
+        { "t": "Worry re indefinite continuation dialysis ..low mood .", "x": 205, "y": 232, "s": 11 },
+        { "t": "Fatigue and loss of energy", "x": 205, "y": 254, "s": 11 },
+        { "t": "Sense of worthlessness.", "x": 205, "y": 276, "s": 11 },
+        { "t": "22 Dec 2022:   Nephrology team meeting:", "x": 148, "y": 300, "s": 11 },
+        { "t": "Concern reported by dialysis nurse re Pts symptoms - consistent", "x": 180, "y": 324, "s": 11 },
+        { "t": "with depression", "x": 135, "y": 342, "s": 11 },
+        { "t": "Mirtazapine  antidepressant ) prescribed -5mg /day.", "x": 192, "y": 368, "s": 11 },
+        { "t": "Review with nephrologist 07 Jan.", "x": 192, "y": 390, "s": 11 },
+        { "t": "07 Jan 2023: Nephrologist review.", "x": 148, "y": 414, "s": 11 },
+        { "t": "Pt reports increased symptoms of depression (insufficiency", "x": 252, "y": 438, "s": 11 },
+        { "t": "of mirtazapine),  guilt , reduced ability to care for wife .", "x": 140, "y": 456, "s": 11 },
+        { "t": "Doctor at patients medical practice to assess mental health ,", "x": 216, "y": 482, "s": 11 },
+        { "t": "onward referral for counseling. pt agreed to make appointment as soon as", "x": 135, "y": 502, "s": 11 },
+        { "t": "possible and consent obtained for letter to doctor", "x": 135, "y": 520, "s": 11 },
+        { "t": "Plan: write to patients doctor.", "x": 135, "y": 544, "s": 11 },
+        { "t": "Writing task:", "x": 148, "y": 572, "s": 12, "b": true },
+        { "t": "Using the information give in the case notes , write a letter to Dr Imre , the", "x": 140, "y": 598, "s": 11 },
+        { "t": "patient's doctor , outlining your concerns and the reasons for them ,and", "x": 140, "y": 616, "s": 11 },
+        { "t": "requesting further assessment . Address the letter to Dr Jason Imre . Newton", "x": 140, "y": 634, "s": 11 },
+        { "t": "Medical Practice Newton.", "x": 140, "y": 652, "s": 11 }
+      ]
+    }
+  ]
+}
