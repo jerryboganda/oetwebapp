@@ -132,11 +132,17 @@ async function downloadStimulus(profession, mediaAssetId, destFile) {
 
 /** A word is GARBAGE when it is mostly non-word symbols at low confidence —
  * the OCR's reading of logos, form boxes and candidate-number circles. Those
- * are never shipped: they are dropped and counted in the report for review. */
+ * are never shipped: they are dropped and counted in the report for review.
+ * Short punctuation tokens (dashes, "&") are REAL content and stay. */
 function isGarbageWord(word) {
   const text = word.text ?? '';
   const alphanumeric = (text.match(/[0-9A-Za-z]/g) ?? []).length;
-  if (alphanumeric === 0) return true;
+  if (alphanumeric === 0) {
+    // Punctuation-only: keep single glyphs (– - & /) at decent confidence;
+    // drop symbol runs and junk.
+    if (text.length <= 2 && word.confidence >= 40 && word.width < 90) return false;
+    return true;
+  }
   if (alphanumeric / text.length < 0.5 && word.confidence < 90) return true;
   if (text.length >= 8 && /[^(](?:[()]|[@#§€£]){4,}/.test(text) && word.confidence < 80) return true;
   return false;
@@ -257,7 +263,7 @@ function groupLines(words) {
       // Photo skew tilts columns: require real vertical overlap AND similar
       // heights, or a tall heading swallows every nearby small line.
       if (overlap <= 0.45 * Math.min(lh, h)) return false;
-      return Math.abs(lh - h) <= 0.6 * Math.max(lh, h);
+      return Math.abs(lh - h) <= 0.75 * Math.max(lh, h);
     });
     if (line) {
       line.words.push(w);
