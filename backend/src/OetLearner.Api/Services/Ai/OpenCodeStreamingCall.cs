@@ -38,7 +38,7 @@ public static class OpenCodeStreamingCall
 
         var contentBuffer = new StringBuilder();
         JsonElement? finishElement = null;
-        var usage = new AiUsage();
+        int usagePrompt = 0, usageCompletion = 0;
         string? servedModel = null;
         Dictionary<string, ToolCallAccumulator>? toolAccumulator = null;
 
@@ -65,8 +65,8 @@ public static class OpenCodeStreamingCall
             }
             if (chunk.TryGetProperty("usage", out var usageEl) && usageEl.ValueKind == JsonValueKind.Object)
             {
-                usage.PromptTokens = usageEl.TryGetProperty("prompt_tokens", out var pt) && pt.ValueKind == JsonValueKind.Number ? pt.GetInt32() : usage.PromptTokens;
-                usage.CompletionTokens = usageEl.TryGetProperty("completion_tokens", out var ctk) && ctk.ValueKind == JsonValueKind.Number ? ctk.GetInt32() : usage.CompletionTokens;
+                usagePrompt = usageEl.TryGetProperty("prompt_tokens", out var pt) && pt.ValueKind == JsonValueKind.Number ? pt.GetInt32() : usagePrompt;
+                usageCompletion = usageEl.TryGetProperty("completion_tokens", out var ctk) && ctk.ValueKind == JsonValueKind.Number ? ctk.GetInt32() : usageCompletion;
             }
             if (!chunk.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0) continue;
             var choice = choices[0];
@@ -138,7 +138,7 @@ public static class OpenCodeStreamingCall
         return new AiProviderCompletion
         {
             Text = contentBuffer.ToString(),
-            Usage = usage.PromptTokens > 0 || usage.CompletionTokens > 0 ? usage : null,
+            Usage = usagePrompt > 0 || usageCompletion > 0 ? new AiUsage { PromptTokens = usagePrompt, CompletionTokens = usageCompletion } : null,
             ToolCalls = toolCalls,
             FinishReason = finish.TryGetProperty("finish_reason", out var fr) && fr.ValueKind == JsonValueKind.String ? fr.GetString() : null,
             ServedModel = servedModel,
