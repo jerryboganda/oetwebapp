@@ -71,14 +71,24 @@ async function ensureFresh() {
 }
 async function api(method, urlPath, { json, raw } = {}) {
   await ensureFresh();
-  const res = await fetch(`${API_BASE}${urlPath}`, {
-    method,
-    headers: { ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
-    body: json !== undefined ? JSON.stringify(json) : raw,
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${method} ${urlPath} -> HTTP ${res.status}: ${text.slice(0, 200)}`);
-  return text;
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`${API_BASE}${urlPath}`, {
+      method,
+      headers: { ...(json !== undefined ? { 'Content-Type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      body: json !== undefined ? JSON.stringify(json) : raw,
+    });
+    const text = await res.text();
+    if (res.status === 401 && attempt === 1) {
+      // A concurrent workflow's admin sign-in revoked this session (one live
+      // admin session per account): sign in again and replay the call once.
+      accessToken = '';
+      tokenExpiresAt = 0;
+      await signIn();
+      continue;
+    }
+    if (!res.ok) throw new Error(`${method} ${urlPath} -> HTTP ${res.status}: ${text.slice(0, 200)}`);
+    return text;
+  }
 }
 const apiJson = async (method, urlPath, json) => JSON.parse(await api(method, urlPath, { json }));
 

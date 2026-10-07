@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: writing-samples-retype
+  group: writing-qa-admin-singleton
   cancel-in-progress: false
 
 jobs:

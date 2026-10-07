@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: writing-release-qa
+  group: writing-qa-admin-singleton
   cancel-in-progress: false
 
 jobs:
