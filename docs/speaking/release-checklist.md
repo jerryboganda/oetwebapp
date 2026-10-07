@@ -4,12 +4,12 @@ Every gate below must be green before flipping `Features__SpeakingV2 = true` for
 
 ## A. Tests
 
-- [ ] `dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~Speaking"` — green
-- [ ] `npm test` — green
+- [ ] Backend tests: deleted 2026-10-08 (commit `f1b855bcc`); no `dotnet test` gate remains
+- [ ] Frontend tests: deleted 2026-10-08; no `npm test` gate remains
 - [ ] `npm run lint` — green
 - [ ] `npx tsc --noEmit` — green
-- [ ] Playwright nightly (`speaking-e2e.yml`) — last 3 runs green
-- [ ] Axe nightly (`speaking-a11y.yml`) — no serious/critical violations open
+- [ ] Playwright E2E: deleted 2026-10-08 with all test code; `speaking-e2e.yml` no longer exists
+- [ ] Axe a11y: deleted 2026-10-08 with all test code; `speaking-a11y.yml` no longer exists
 
 ## B. Performance
 

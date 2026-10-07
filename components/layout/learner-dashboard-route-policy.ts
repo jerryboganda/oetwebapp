@@ -2,8 +2,9 @@
  * Learner paths that exist only to namespace a dynamic child (e.g.
  * `/speaking/roleplay` is just the parent folder of `/speaking/roleplay/[id]`).
  * They have no `page.tsx`, so a breadcrumb that links them is a guaranteed 404.
- * Kept honest by `__tests__/learner-breadcrumb-routability.test.ts`, which walks
- * `app/` and fails if this list drifts from the filesystem.
+ * The check that kept this list honest against `app/`,
+ * `__tests__/learner-breadcrumb-routability.test.ts`, was deleted 2026-10-08, so
+ * nothing checks it now.
  */
 export const NON_ROUTABLE_LEARNER_PATHS = [
   '/listening/drills',
@@ -107,8 +108,8 @@ export function isImmersiveLearnerRoute(pathname: string | null | undefined) {
 /**
  * Timed or live attempt routes not covered by the immersive list, as URL
  * patterns. Together with the immersive routes above they are the one list of
- * exam/live routes: nothing on them animates (DESIGN.md §5). Kept honest by
- * `__tests__/learner-breadcrumb-routability.test.ts`, which walks `app/`.
+ * exam/live routes: nothing on them animates (DESIGN.md §5). The check that kept this honest,
+ * `__tests__/learner-breadcrumb-routability.test.ts`, was deleted 2026-10-08.
  */
 export const EXAM_LIVE_ROUTE_PATTERNS = [
   '/reading/paper/[paperId]',
@@ -138,7 +139,8 @@ export function isExamOrLiveRoute(pathname: string | null | undefined) {
  * - `workspace`: TopNav, Sidebar, BottomNav and breadcrumbs.
  * - `focus`: distraction-free header only, titled from the page's own copy.
  * - `none`: the page renders its own shell, or none at all.
- * Kept in step with the pages by `__tests__/learner-shell-policy-parity.test.ts`.
+ * The check that kept this in step with the pages,
+ * `__tests__/learner-shell-policy-parity.test.ts`, was deleted 2026-10-08.
  */
 export type LearnerChromeMode = 'workspace' | 'focus' | 'none';
 

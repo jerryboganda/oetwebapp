@@ -340,9 +340,9 @@ This matrix records which features are intended to work on each platform surface
 
 Before shipping, validate:
 
-- Build and unit tests: `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`, `dotnet test backend/OetLearner.sln`.
+- Typecheck, lint and build: `npx tsc --noEmit`, `npm run lint`, `npm run build`. Unit tests (`npm test`, `dotnet test backend/OetLearner.sln`) were deleted 2026-10-08 with the rest of the test code (tag `last-commit-with-tests`).
 - Mission-critical invariants in Section 1, including PM-001 reconciliation status if Reading review changes.
-- Per-portal smoke E2E: `npm run test:e2e:smoke` and the role-specific projects in `playwright.config.ts`.
+- Per-portal smoke E2E: deleted 2026-10-08 with the rest of the test code (`npm run test:e2e:smoke` and `playwright.config.ts` no longer exist).
 - Platform parity: validate the rows in Section 10 that the release touches.
 - Security-sensitive surfaces: scanner mode in target environment, AI gateway grounding refusal still active, refund/dispute permission enforcement, push consent revocation, sponsor-role page protection.
 - Notification delivery: send a test through `/v1/admin/notifications` and confirm it reaches the in-app feed and an account-scoped push.

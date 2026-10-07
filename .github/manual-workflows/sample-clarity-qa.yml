@@ -3,8 +3,9 @@ name: sample-clarity-qa
 # Writing sample clarity acceptance on an emulated phone (owner patch 7 Oct 2026,
 # check #5): the replaced Nursing Free Sample (Adam White) opened through the real
 # learner path on an iPhone-14 viewport, screenshotted at 100% and zoomed.
-# Manual only; PARKED like writing-release-qa.yml (pipeline contract: CI never runs
-# automated QA). Move into .github/workflows/, dispatch, move back.
+# Manual only; PARKED (pipeline contract: CI never runs automated QA). The sibling
+# writing-release-qa.yml was deleted 2026-10-08. Move into .github/workflows/,
+# dispatch, move back.
 
 on:
   workflow_dispatch:

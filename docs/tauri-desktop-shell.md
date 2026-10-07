@@ -41,8 +41,7 @@ oet-desktop (Rust core)
 
 `inject/desktop-bridge.js` (registered as `initialization_script`) implements
 `window.desktopBridge` with the exact `types/desktop.d.ts` shape, so the frontend
-consumers work unchanged. Verified by
-`src-tauri/__tests__/desktop-bridge-conformance.test.ts`.
+consumers work unchanged. Its conformance test, `src-tauri/__tests__/desktop-bridge-conformance.test.ts`, was deleted 2026-10-08 with the rest of the test code (tag `last-commit-with-tests`).
 
 - Window-state changes are delivered as DOM `CustomEvent`s (no event-plugin
   capability needed by the remote page).

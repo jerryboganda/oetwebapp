@@ -326,9 +326,9 @@ for a change under `Data/Migrations/**` or `LearnerDbContext.cs`, the pending-mo
 (`migrations-check`) - which is why the four remote entities are written into `LearnerDbContextModelSnapshot` by hand and must
 stay identical to `LearnerDbContext.RemoteJobs.cs` (ADR 0001).
 
-`backend/tests/OetLearner.Api.Tests/RemoteJobs/*` (xUnit; the `[PostgreSqlFact]` classes need
-`OET_TEST_POSTGRES_CONNECTION`) are **inert manual tools** kept in git for the owner: no workflow runs them, agents do not run
-them, and nothing in this repository may claim they passed. Conformance ids are in the test names or `[Trait("RW", "...")]`.
+`backend/tests/OetLearner.Api.Tests/RemoteJobs/*` (xUnit) were deleted on 2026-10-08 with all test code (commit `f1b855bcc`; still in git history at tag `last-commit-with-tests`). The `[PostgreSqlFact]` classes needed
+`OET_TEST_POSTGRES_CONNECTION`. No workflow or agent runs them any more, and
+nothing in this repository may claim they passed. Conformance ids were in the test names or `[Trait("RW", "...")]`.
 The media kinds' sources are `RemoteMediaKindValidatorTests` (pure), `RemoteMediaPostgresTests` (producers, completion,
 serve/delete, sweeper, R5) and `RemoteMediaWiringTests` (migration, DI, source guards), plus
 `LiveClasses/LiveClassRecordingChunkTranscriptionTests`, the remote-join cases of `Speaking/SpeakingAudioEvidenceServiceTests`

@@ -21,5 +21,5 @@ Anthropic prompt cache on multi-turn role-plays: **≥ 80%** hit rate (turns 2..
 
 ## Fail criteria
 
-These budgets are what the owner compares a manual k6 run against (`docs/ops/LOAD-TESTING.md`; no CI runs it). Two
+These budgets are what the owner compares a manual k6 run against (`docs/ops/LOAD-TESTING.md`); the k6 harness was deleted on 2026-10-08 with all test code. Two
 consecutive owner runs over budget on the same metric → release freeze + incident.

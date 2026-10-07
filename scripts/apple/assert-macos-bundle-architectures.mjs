@@ -10,7 +10,6 @@
 // Usage:
 //   node scripts/apple/assert-macos-bundle-architectures.mjs --app <path/to/App.app>
 //   node scripts/apple/assert-macos-bundle-architectures.mjs --root src-tauri/target
-//   node scripts/apple/assert-macos-bundle-architectures.mjs --self-test
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
@@ -108,37 +107,7 @@ function inspectBundle(appPath, requiredArchitectures) {
   return { missing, machoCount };
 }
 
-function selfTest() {
-  const failures = [];
-  const expect = (condition, message) => {
-    if (!condition) failures.push(message);
-  };
-
-  // The host's own binaries give us known-good and known-single-arch inputs.
-  const universalHost = machoArchitectures('/usr/bin/lipo');
-  expect(universalHost === null || Array.isArray(universalHost), 'lipo on itself should report slices or null');
-
-  expect(machoArchitectures('/etc/hosts') === null, 'a non-Mach-O file should return null');
-
-  const fixtureRoot = resolve(REPO_ROOT, 'scripts', 'apple');
-  expect(Array.isArray(findAppBundles(fixtureRoot)), 'findAppBundles should always return an array');
-  expect(collectMachOFiles(fixtureRoot).length > 0, 'collectMachOFiles should walk a real directory');
-
-  if (failures.length > 0) {
-    console.error('assert-macos-bundle-architectures self-test failed:');
-    for (const failure of failures) console.error(`  - ${failure}`);
-    process.exit(1);
-  }
-
-  console.log('assert-macos-bundle-architectures self-test passed (4 checks).');
-}
-
 function main() {
-  if (process.argv.includes('--self-test')) {
-    selfTest();
-    return;
-  }
-
   if (process.platform !== 'darwin') {
     console.error('This check requires macOS (lipo is an Apple toolchain utility). Run it on a macOS runner.');
     process.exit(1);

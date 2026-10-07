@@ -268,8 +268,7 @@ Deferred means tracked with an owner and a gate. It never means removed from the
 ```bash
 pnpm run ship:gate
 pnpm exec tsc --noEmit
-pnpm exec vitest run components/domain/ai-assistant hooks/__tests__/use-ai-assistant.test.ts
-dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~Companion|FullyQualifiedName~EndpointRegistrationTests|FullyQualifiedName~AiFeatureEligibility"
+# vitest and dotnet test removed 2026-10-08: the test code was deleted (tag last-commit-with-tests); CI runs typecheck and lint only
 python scripts/ai-learning-companion/validate_traceability.py
 ```
 

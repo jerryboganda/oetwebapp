@@ -43,7 +43,7 @@ Parallel agents/workflows once left 45 worktrees and ~285 branches behind. Never
 - Frontend: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, motion v12.
 - Backend: ASP.NET Core Minimal API, EF Core, PostgreSQL, SignalR.
 - Desktop/mobile: Tauri 2 and Capacitor.
-- Key folders: `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `backend/`, `tests/`, `docs/`, `rulebooks/`.
+- Key folders: `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `backend/`, `docs/`, `rulebooks/`.
 
 ## 🚢 Ship-It Workflow — COMPULSORY (owner directive 2026-07-05, tightened 2026-08-24)
 
@@ -474,7 +474,7 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
 - `.github/instructions/backend.instructions.md` — ASP.NET Core / EF Core / services / DTOs.
 - `.github/instructions/security-ai.instructions.md` — canonical security, AI grounding, scoring,
   rulebooks, secrets, prompt defense.
-- `.github/instructions/testing.instructions.md` — Vitest/RTL/Playwright/xUnit conventions.
+- `.github/instructions/testing.instructions.md` — historical Vitest/RTL/Playwright/xUnit conventions; test code was deleted 2026-10-08 (see "NO AUTOMATED QA ANYWHERE"), so they no longer apply.
 - `.github/instructions/validation.instructions.md` — CI validation ladder (which workflow runs which check).
 - `.github/instructions/deployment.instructions.md` — Docker/CI/CD/storage/VPS/desktop/mobile.
 - `.github/instructions/admin-hallmark.instructions.md` — admin operational UI discipline.

@@ -102,8 +102,8 @@ provider credentials:
 
 ## Test evidence
 
-The contract above is locked down by xUnit tests in
-`backend/tests/OetLearner.Api.Tests/`:
+The contract above was locked down by xUnit tests in
+`backend/tests/OetLearner.Api.Tests/` (deleted 2026-10-08 with all test code; still in git history at tag `last-commit-with-tests`):
 
 - `AiProviderConnectionTesterTests`
   - `ProviderProbe_RedactsLiveApiKeyEchoedInErrorBody` — provider

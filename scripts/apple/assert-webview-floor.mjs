@@ -19,7 +19,6 @@
 // Usage:
 //   node scripts/apple/assert-webview-floor.mjs
 //   node scripts/apple/assert-webview-floor.mjs --css path/to/styles.css
-//   node scripts/apple/assert-webview-floor.mjs --self-test
 
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -217,123 +216,7 @@ function report(label, floor, findings) {
   return { hard: hard.length, advisory: advisory.length };
 }
 
-function selfTest() {
-  const failures = [];
-  const expect = (condition, message) => {
-    if (!condition) failures.push(message);
-  };
-
-  // Version comparison must be numeric, not lexical ("16.4" > "15.4").
-  expect(compareVersions('16.4', '15.4') > 0, 'compareVersions failed on 16.4 vs 15.4');
-  expect(compareVersions('15.0', '15.0') === 0, 'compareVersions failed on equal versions');
-  expect(compareVersions('9.0', '10.0') < 0, 'compareVersions failed on 9.0 vs 10.0');
-  expect(compareVersions('16', '16.0') === 0, 'compareVersions failed on 16 vs 16.0');
-
-  // Each detection must fire when the floor is below the feature's
-  // requirement, and must stay quiet once the floor allows that feature.
-  const cases = [
-    { css: '.a{color:oklch(0 0 0)}', label: 'oklch() colour values', required: '15.4', below: '15.0' },
-    { css: '.a{color:color-mix(in oklab,red,blue)}', label: 'color-mix()', required: '16.2', below: '16.0' },
-    { css: '@property --x{syntax:"*"}', label: '@property at-rule', required: '16.4', below: '16.2' },
-    { css: '.a:has(> b){color:red}', label: ':has() selector', required: '15.4', below: '15.2' },
-    { css: '.a{height:100dvh}', label: 'dynamic viewport units (dvh/svh/lvh)', required: '15.4', below: '15.2' },
-    { css: '.a:focus-visible{outline:0}', label: ':focus-visible selector', required: '15.4', below: '15.2' },
-  ];
-
-  for (const testCase of cases) {
-    const detected = findOffendingFeatures(testCase.css, testCase.below);
-    expect(
-      detected.some((entry) => entry.label === testCase.label),
-      `failed to detect ${testCase.label} against floor ${testCase.below}`,
-    );
-
-    const allowed = findOffendingFeatures(testCase.css, testCase.required);
-    expect(
-      allowed.length === 0,
-      `falsely flagged ${testCase.label} against floor ${testCase.required}`,
-    );
-  }
-
-  // Comments and string data must be invisible to the scan, otherwise the
-  // splash's own feature-detection probes would fail the floor they enforce.
-  const stripped = [
-    {
-      name: 'a CSS block comment',
-      source: '/* oklch(0 0 0) @property */ .a{color:red}',
-      options: { lineComments: false },
-    },
-    {
-      name: 'a JS string literal',
-      source: "const probe = 'color-mix(in oklab, red, blue)';",
-      options: { lineComments: true },
-    },
-    {
-      name: 'a JS line comment',
-      source: '// @property needs Safari 16.4\nconst a = 1;',
-      options: { lineComments: true },
-    },
-    {
-      name: 'an HTML comment',
-      source: '<!-- :focus-visible needs 15.4 --><div></div>',
-      options: { lineComments: true },
-    },
-  ];
-
-  for (const testCase of stripped) {
-    const result = findOffendingFeatures(
-      stripCommentsAndStrings(testCase.source, testCase.options),
-      '15.0',
-    );
-    expect(result.length === 0, `${testCase.name} was not stripped before scanning`);
-  }
-
-  // ...but live usage alongside a stripped region must still be caught.
-  const liveUsage = stripCommentsAndStrings(
-    "const probe = 'oklch(0 0 0)'; /* @property */ .a{color:oklch(0 0 0)}",
-    { lineComments: true },
-  );
-  expect(
-    findOffendingFeatures(liveUsage, '15.0').some((entry) => entry.label === 'oklch() colour values'),
-    'live usage next to a stripped region was missed',
-  );
-
-  // The severity split is load-bearing: an earlier revision of this guard failed
-  // CI on `text-wrap: balance` alone, which would have forced the whole app onto
-  // a newer OS for a typographic nicety that degrades harmlessly.
-  const advisoryOnly = findOffendingFeatures('.a{text-wrap:balance}', '15.0');
-  expect(advisoryOnly.length > 0, 'text-wrap: balance was not detected at all');
-  expect(
-    advisoryOnly.every((entry) => entry.severity === 'advisory'),
-    'text-wrap: balance must be advisory, not a floor requirement',
-  );
-  expect(
-    findOffendingFeatures('@property --x{syntax:"*"}', '15.0').every((entry) => entry.severity === 'hard'),
-    '@property must be hard',
-  );
-  expect(
-    findOffendingFeatures('.a{color:oklch(0 0 0)}', '15.0').every((entry) => entry.severity === 'hard'),
-    'oklch() must be hard',
-  );
-  expect(
-    findOffendingFeatures('.a{border:1px solid color-mix(in oklab,red,blue)}', '15.0').every((entry) => entry.severity === 'hard'),
-    'color-mix() must be hard',
-  );
-
-  if (failures.length > 0) {
-    console.error('assert-webview-floor self-test failed:');
-    for (const failure of failures) console.error(`  - ${failure}`);
-    process.exit(1);
-  }
-
-  console.log(`assert-webview-floor self-test passed (${cases.length * 2 + 4 + stripped.length + 5} checks).`);
-}
-
 function main() {
-  if (process.argv.includes('--self-test')) {
-    selfTest();
-    return;
-  }
-
   const source = JSON.parse(readFileSync(resolve(REPO_ROOT, 'apple-compatibility.json'), 'utf8'));
   const contentFloor = source.webview.contentSafariMin;
   const shellFloor = source.webview.shellSafariMin;

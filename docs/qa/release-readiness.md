@@ -50,7 +50,7 @@
 
 ### 2. GitHub-Hosted `QA Smoke` Observation
 - Workflow under observation:
-  - `.github/workflows/qa-smoke.yml`
+  - `.github/workflows/qa-smoke.yml` (removed from the repo; no QA Smoke run exists to observe)
 - Observation steps:
   1. push a branch or open a pull request containing the current workflow
   2. confirm the `QA Smoke` job runs on GitHub
@@ -65,7 +65,7 @@
      - local stack readiness check
      - Playwright smoke suite
      - artifact upload
-  4. verify `playwright-smoke-artifacts` uploaded successfully
+  4. Not applicable: the `playwright-smoke-artifacts` upload came from the removed QA Smoke workflow
   5. capture the GitHub Actions run URL
 - Required evidence:
   - run URL

@@ -133,8 +133,8 @@ rule_files:
 
 ## 3. Load-test metrics
 
-The k6 harness (`tests/load/fleet-1000.k6.js`) is a manual tool the owner runs from a self-provisioned load
-generator (no CI runs it) and does not push to Prometheus. Each leg writes an `oet-load-summary/1` JSON through
+The k6 harness (`tests/load/fleet-1000.k6.js`) was deleted on 2026-10-08 with all test code. It was a manual tool the owner ran from a self-provisioned load
+generator (no CI ran it) and did not push to Prometheus. Each leg wrote an `oet-load-summary/1` JSON through
 `handleSummary`, and `tests/load/report/k6-load-report.mjs` merges the legs into the markdown report (see
 `docs/ops/LOAD-TESTING.md`). To watch a long run live, k6's experimental Prometheus remote-write output can be
 enabled on a leg (`-o experimental-prometheus-rw`, with the target Prometheus started with its remote-write

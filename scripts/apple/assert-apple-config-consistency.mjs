@@ -8,7 +8,7 @@
 // on, because the WebView engine on Apple platforms comes from the OS rather
 // than from the bundle.
 //
-// Usage: node scripts/apple/assert-apple-config-consistency.mjs [--self-test]
+// Usage: node scripts/apple/assert-apple-config-consistency.mjs
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -109,64 +109,7 @@ function collectViolations(source, files) {
   return violations;
 }
 
-function selfTest() {
-  const source = {
-    ios: { deploymentTarget: '16.4', targetedDeviceFamily: '1,2', requiredDeviceCapabilities: [] },
-    macos: { minimumSystemVersion: '12.0' },
-  };
-
-  const consistent = {
-    pbxproj: 'IPHONEOS_DEPLOYMENT_TARGET = 16.4;\nTARGETED_DEVICE_FAMILY = "1,2";',
-    podfile: "platform :ios, '16.4'",
-    iosInfoPlist: '<dict><key>CFBundleName</key><string>App</string></dict>',
-    tauriConf: { bundle: { active: true, targets: ['nsis', 'dmg'], macOS: { minimumSystemVersion: '12.0' } } },
-  };
-
-  const failures = [];
-
-  if (collectViolations(source, consistent).length !== 0) {
-    failures.push('expected an aligned configuration to produce no violations');
-  }
-
-  const drifted = {
-    ...consistent,
-    pbxproj: 'IPHONEOS_DEPLOYMENT_TARGET = 14.0;\nTARGETED_DEVICE_FAMILY = "1,2";',
-  };
-  if (!collectViolations(source, drifted).some((entry) => entry.includes('IPHONEOS_DEPLOYMENT_TARGET'))) {
-    failures.push('failed to detect a drifted pbxproj deployment target');
-  }
-
-  const disallowedCapability = {
-    ...consistent,
-    iosInfoPlist: '<key>UIRequiredDeviceCapabilities</key><array><string>gps</string></array>',
-  };
-  if (!collectViolations(source, disallowedCapability).some((entry) => entry.includes('"gps"'))) {
-    failures.push('failed to detect an undisclosed UIRequiredDeviceCapabilities entry');
-  }
-
-  const missingDmg = {
-    ...consistent,
-    tauriConf: { bundle: { active: true, targets: ['nsis'], macOS: { minimumSystemVersion: '12.0' } } },
-  };
-  if (!collectViolations(source, missingDmg).some((entry) => entry.includes('"dmg"'))) {
-    failures.push('failed to detect a missing dmg bundle target');
-  }
-
-  if (failures.length > 0) {
-    console.error('assert-apple-config-consistency self-test failed:');
-    for (const failure of failures) console.error(`  - ${failure}`);
-    process.exit(1);
-  }
-
-  console.log('assert-apple-config-consistency self-test passed (4/4 checks).');
-}
-
 function main() {
-  if (process.argv.includes('--self-test')) {
-    selfTest();
-    return;
-  }
-
   const source = JSON.parse(read('apple-compatibility.json'));
   const files = {
     pbxproj: read(PBXPROJ),

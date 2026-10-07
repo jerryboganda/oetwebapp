@@ -125,7 +125,7 @@ R09.1, R12.2, R12.4, R12.8, R12.9, R12.10, R12.11, R13.6, R14.8 and the R04.1 de
 titles that contradicted their own bodies were rewritten (R01.5, R03.4, R03.6, R06.13, R07.9,
 R08.7, R08.14, R09.1, R10.8, R10.12, R10.13, R11.8, R12.2, R12.8, R14.4, R14.9, R14.13, R15.2,
 R16.3, R16.6). No R-rule id, severity, checkId, forbiddenPatterns or appliesTo changed.
-`lib/rulebook/__tests__/writing-rulebook-baseline.test.ts` locks that every Writing book carries
+`lib/rulebook/__tests__/writing-rulebook-baseline.test.ts` (deleted 2026-10-08 with the rest of the test code) used to lock that every Writing book carries
 OWN-W-001..038 with identical text.
 
 **BUILTIN checkId ↔ OWN-W mapping** (from the catalogue `check_ids`; findings are reported as

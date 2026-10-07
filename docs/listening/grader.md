@@ -55,9 +55,7 @@ that as "no reason recorded").
 
 ## Test fixtures
 
-The canonical regression set lives at
-[`backend/tests/OetLearner.Api.Tests/Listening/ListeningGraderMissReasonTests.cs`](../../backend/tests/OetLearner.Api.Tests/Listening/ListeningGraderMissReasonTests.cs).
-Run via `dotnet test backend/OetLearner.sln --filter ListeningGrader`.
+The canonical regression set, `backend/tests/OetLearner.Api.Tests/Listening/ListeningGraderMissReasonTests.cs`, was deleted 2026-10-08 with the rest of the test code (last copy at tag `last-commit-with-tests`). No test command runs it now.
 
 ## Cross-references
 

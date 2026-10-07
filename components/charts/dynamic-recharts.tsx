@@ -7,9 +7,8 @@
  * out of the parent page bundle and loads it as a separate chunk after first
  * paint. SSR is disabled because recharts depends on browser APIs.
  *
- * In tests, recharts is aliased to `tests/mocks/recharts.tsx` via the Vitest
- * (Vite) `resolve.alias` config; the dynamic wrapper still resolves to that
- * mock through the alias.
+ * The test code that aliased recharts to `tests/mocks/recharts.tsx` (Vitest
+ * `resolve.alias`) was deleted 2026-10-08.
  */
 
 import dynamic from 'next/dynamic';

@@ -17,15 +17,14 @@ For the granular rulebook → file:line → test mapping see
    Listening MUST route through `OetLearner.Api.Services.OetScoring.OetRawToScaled`
    (TS mirror: `lib/scoring.ts`). Anchor: **30/42 ≡ 350/500**. Inline
    math like `* 350` / `/ 42` / `* 8.33` is **forbidden** anywhere in
-   `backend/src/OetLearner.Api/Services/Listening/**` and is enforced by
-   the source-scanning audit test
-   [`ListeningScoringPathAuditTest`](../backend/tests/OetLearner.Api.Tests/Listening/ListeningScoringPathAuditTest.cs).
+   `backend/src/OetLearner.Api/Services/Listening/**` and was enforced by
+   the source-scanning audit test `ListeningScoringPathAuditTest` (deleted 2026-10-08 with the rest of the test code).
 2. **Server-authoritative FSM.** Canonical section navigation is held in
   `ListeningAttempt.NavigationStateJson`. The client carries a mirror in
-  [`lib/listening/transitions.ts`](../lib/listening/transitions.ts) that is
+  [`lib/listening/transitions.ts`](../lib/listening/transitions.ts) that was
   parity-tested against the C# table
   [`ListeningFsmTransitions.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningFsmTransitions.cs)
-  by [`tests/unit/listening/transitions.parity.test.ts`](../tests/unit/listening/transitions.parity.test.ts).
+  by `tests/unit/listening/transitions.parity.test.ts`, deleted 2026-10-08 with the rest of the test code.
   The active player now uses this V2 FSM for strict start, strict resume
   hydration, strict preview/audio/review forward advances, and audio-resume
   enforcement. Answer autosave and final submit use the V2 facade endpoints
@@ -43,15 +42,13 @@ For the granular rulebook → file:line → test mapping see
    Implementation:
    [`ListeningGradingService.cs`](../backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs).
 5. **No answer-key leak in pre-submit DTOs.** Every learner-facing
-   Listening DTO is source-scanned by
-   [`ListeningLearnerLeakAuditTest`](../backend/tests/OetLearner.Api.Tests/Listening/ListeningLearnerLeakAuditTest.cs)
+   Listening DTO was source-scanned by `ListeningLearnerLeakAuditTest` (deleted 2026-10-08 with the rest of the test code)
    for forbidden fields (`IsCorrect`, `CorrectAnswer*`, `AcceptedSynonyms*`,
    `Explanation*`, `WhyWrong*`, `TranscriptEvidence*`,
    `DistractorCategory`).
 6. **OWASP A01 on teacher classes.** Every read/write path in
    [`TeacherClassService.cs`](../backend/src/OetLearner.Api/Services/Listening/TeacherClassService.cs)
-   filters by `OwnerUserId == currentUserId`. Pinned by
-   [`TeacherClassServiceTests`](../backend/tests/OetLearner.Api.Tests/Listening/TeacherClassServiceTests.cs).
+   filters by `OwnerUserId == currentUserId`. Its pinning test, `TeacherClassServiceTests`, was deleted 2026-10-08 with the rest of the test code.
 
 ---
 
@@ -241,13 +238,13 @@ Run before merging any Listening change:
 # Frontend
 npx tsc --noEmit          # MUST be 0 errors
 npm run lint              # MUST be 0 errors/warnings
-npm test                  # MUST be green
+# npm test removed 2026-10-08 with the rest of the test code (CI runs typecheck and lint only)
 
 # Backend
 cd backend
 dotnet build OetLearner.sln                           # MUST be 0 errors
-dotnet test OetLearner.sln --filter "FullyQualifiedName~Listening"
-dotnet test OetLearner.sln                            # full backend regression
+# dotnet test removed 2026-10-08 with the rest of the test code
+# full backend regression removed 2026-10-08 with the rest of the test code
 ```
 
 ---

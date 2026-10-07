@@ -20,7 +20,7 @@
 
 ## Failure investigation
 
-1. **Backend job fails on tests** → download `speaking-test-results` artifact, open the `.trx` file in Visual Studio or `dotnet test --logger "console;verbosity=detailed"` locally.
+1. **Backend job fails** → there are no backend tests to fail (test code was deleted 2026-10-08, commit `f1b855bcc`); open the failing step's log in the Actions run.
 2. **Migrations-check fails** → run `dotnet ef migrations add <Name>` locally and commit.
 3. **E2E nightly red** → check `speaking-e2e-report` HTML artifact for failing trace + screenshot.
 4. **A11y nightly red** → axe HTML report lists exact selector + WCAG rule. Triage as P1 if serious/critical, P2 otherwise.
@@ -28,6 +28,6 @@
 
 ## Adding a new spec to a workflow
 
-- Playwright spec → drop at `tests/e2e/speaking-<name>.spec.ts`; picked up automatically by the glob.
-- Axe spec → drop at `tests/a11y/<surface>.a11y.spec.ts`.
-- k6 script → drop at `tests/load/speaking-<scenario>.k6.js` (a manual tool: no workflow picks it up).
+- Playwright spec: not applicable. `tests/e2e/` was deleted 2026-10-08 with all test code (commit `f1b855bcc`).
+- Axe spec: not applicable. `tests/a11y/` was deleted 2026-10-08 with all test code.
+- k6 script: not applicable. `tests/load/` was deleted 2026-10-08 with all test code.

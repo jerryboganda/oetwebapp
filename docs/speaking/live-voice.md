@@ -587,9 +587,9 @@ and is started when a place frees. Source: `SpeakingLiveAdmissionService`, table
 
 **Verification status: not tested - owner QA** (owner directive 2026-10-06: no automated QA runs anywhere). The only automated
 check on this layer is compilation inside `Build images` (`dotnet publish`, `next build`) plus the EF pending-model-changes
-check on the hand-authored snapshot entries; nothing here was built, benchmarked or run locally. The test sources that describe
+check on the hand-authored snapshot entries; nothing here was built, benchmarked or run locally. The test sources that described
 the intended behaviour (`SpeakingLiveAdmission*Tests.cs`, `AdminOpsSnapshotServiceTests.cs`, `SpeakingAdmissionWait.test.tsx`,
-`speaking-admission.test.ts`, the exam and role-play page tests) stay in git as inert manual tools: no CI lane runs them and none
+`speaking-admission.test.ts`, the exam and role-play page tests) were deleted on 2026-10-08 with all test code (commit `f1b855bcc`; still in git history at tag `last-commit-with-tests`), and none
 has been run for this change. The first real proof is the owner's own testing of the wait queue on production, and the admin
 kill switch below is the lever if it misbehaves.
 
@@ -835,8 +835,8 @@ Card No. 7"); it never labels an exam card, and an unknown slot prints no letter
 
 ## Production E2E
 
-Workflow **Speaking live voice E2E (production)** (`.github/workflows/speaking-live-voice-prod-e2e.yml`), harness
-`scripts/qa/speaking-live-voice-browser-e2e.mjs` with in-page probes in `scripts/qa/live-voice-browser-probes.mjs`, the
+Workflow **Speaking live voice E2E (production)** (`.github/workflows/speaking-live-voice-prod-e2e.yml`, no longer in the repo), harness
+`scripts/qa/speaking-live-voice-browser-e2e.mjs` (no longer in the repo) with in-page probes in `scripts/qa/live-voice-browser-probes.mjs`, the
 served-provider attribution and the pure verdict helpers in `scripts/qa/live-voice-served-provider.mjs` and the pure
 saved-transcript judgement in `scripts/qa/live-voice-transcript-quality.mjs` (the workflow copies all four files into one
 folder, the harness as `e2e.mjs`). Real Chromium, fake microphone playing a scripted candidate once (6 s lead-in, no loop), the
@@ -905,8 +905,8 @@ Dispatch from a branch, never by merging: `gh workflow run speaking-live-voice-p
 Every push to `main` redeploys production (new slot, the in-memory provider breaker is reset, in-flight grading is requeued), so
 a harness-only change is never merged to run it. Dispatch one run at a time and wait for each to finish (GitHub keeps one
 pending run per concurrency group). The first workflow step fails the run while `production-deploy.yml` has a run in progress or queued.
-The artifact (QA transcripts, the patient's audio, screenshots) is kept for 3 days. `scripts/qa/live-voice-workflow.test.ts`
-fails CI when a module the script imports is not copied, an environment variable the script reads is not wired, an input
+The artifact (QA transcripts, the patient's audio, screenshots) is kept for 3 days. `scripts/qa/live-voice-workflow.test.ts` (deleted 2026-10-08 with all test code)
+used to fail CI when a module the script imports is not copied, an environment variable the script reads is not wired, an input
 description would break YAML (a colon-space in a plain scalar once made a push run fail with 0 jobs) or a script option has no
 file.
 

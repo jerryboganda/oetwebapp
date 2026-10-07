@@ -133,11 +133,11 @@ writes are landing during reads (normal under load, harmless: the fill is simply
 
 ## Manual test sources (not run by CI)
 
-Not tested - owner QA (owner directive 2026-10-06: no automated QA anywhere). These files stay in
-git as inert manual tools; no CI lane runs them and none has been run for this change. They describe
+Not tested - owner QA (owner directive 2026-10-06: no automated QA anywhere). These files were deleted on 2026-10-08 with all test code;
+they remain in git history at tag `last-commit-with-tests`, and none has been run for this change. They described
 the intended behaviour:
 
-`backend/tests/OetLearner.Api.Tests/Caching/` (hit / miss / expiry / clamp / invalidation / kill switch /
+`backend/tests/OetLearner.Api.Tests/Caching/` (deleted 2026-10-08; hit / miss / expiry / clamp / invalidation / kill switch /
 sweep; every row of the invalidation table; resolver, freeze DTO and write-gate consumers including
 the "another process only shows within the TTL" and "never past the subscription expiry" cases) and
 three JWT cases in `Auth/AuthQueryPerformanceTests.cs` (second request makes zero commands, an

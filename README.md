@@ -122,23 +122,13 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ## Verification
 
+Test code was deleted on 2026-10-08 (tag `last-commit-with-tests`), so there is no test suite to run. The local check is `pnpm run ship:gate`; CI runs typecheck and lint only.
+
 ```bash
 pnpm exec tsc --noEmit
 pnpm run lint
-pnpm test
 pnpm run build
 pnpm run backend:build
-pnpm run backend:test
-```
-
-E2E coverage:
-
-```bash
-pnpm run test:e2e:install
-pnpm run test:e2e:auth
-pnpm run test:e2e
-pnpm run test:e2e:smoke
-pnpm run test:e2e:report
 ```
 
 ## Local API Truth

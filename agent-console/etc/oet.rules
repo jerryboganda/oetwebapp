@@ -7,9 +7,10 @@
 # enforcement; this file is a seatbelt for the few commands a console session must never run.
 #
 # Kept in sync with the "Bash(...)" deny rules in etc/managed-settings.json (Claude Code's
-# equivalent backstop); tests/engines/policy-files.test.ts fails when they drift.
+# equivalent backstop). The drift check, tests/engines/policy-files.test.ts, was deleted
+# 2026-10-08, so nothing checks that the two lists stay in sync now.
 # Validate with: codex execpolicy check --pretty --rules etc/oet.rules -- <command>
-# Keep every `pattern = [...]` on one line with double-quoted strings (the test parses it).
+# Keep every `pattern = [...]` on one line with double-quoted strings (the policy test that parsed it was deleted 2026-10-08).
 
 # ── Git: no force/mirror/delete pushes, no --all, no pushes to main (merges go through Ship) ──
 

@@ -209,6 +209,12 @@ jobs:
         run: pnpm exec tsc --noEmit
       - name: Lint (eslint)
         run: pnpm run lint
+      # Parse-only check (node --check executes nothing): a broken edit to a release
+      # or deploy script must fail here, before it can reach production.
+      - name: Parse every script (node --check)
+        run: |
+          set -euo pipefail
+          find scripts tools -type f \( -name '*.mjs' -o -name '*.cjs' \) -print0 | xargs -0 -n1 node --check
 
   # Registry-only copies preserve a proven ancestor's immutable digest.
   retag:

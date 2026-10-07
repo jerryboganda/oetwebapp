@@ -24,7 +24,8 @@
  * verdict.json + summary.md). Needs GITHUB_TOKEN (actions: read, contents: read).
  *
  * stdout: one JSON line {errorClass, confidence, touchesChange, logTailBytes,
- * reason}, then a markdown summary. Test: node --test scripts/ci/jev-ci-triage.test.mjs
+ * reason}, then a markdown summary. Its test file, scripts/ci/jev-ci-triage.test.mjs,
+ * was deleted 2026-10-08.
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs';

@@ -12,8 +12,8 @@ platform/fleet/
   src/Fleet.Core/                   pure domain: state machines, validation, policy, placement, audit chain, vault + auth crypto, SSH rules
   src/Fleet.Manager/                ASP.NET Core 10: services, SQLite (EF Core), Ansible/SSH provisioner, owner auth, JSON API, SSE, /metrics
   src/Fleet.Agent/                  the helper agent (OET-RWP/1): a stateless fenced-job executor that runs on a helper as a prebuilt image
-  tests/Fleet.Manager.Tests/        inert xUnit sources for the owner's manual use; no workflow runs them (see "Tests")
-  tests/Fleet.Agent.Tests/          inert xUnit sources for the agent (protocol conformance, executors, the corpus tool); same rule
+  tests/Fleet.Manager.Tests/        deleted 2026-10-08 (xUnit sources kept only at git tag last-commit-with-tests)
+  tests/Fleet.Agent.Tests/          deleted 2026-10-08 (xUnit sources kept only at git tag last-commit-with-tests)
   ansible/                          playbooks (S1-S7), the helper-side gate and ctl, ansible.cfg, a data-only inventory template
   scripts/verify-fleet-workflow.sh  the static contract of .github/workflows/fleet.yml (read-only; run by its guards job)
   Dockerfile, docker-compose.fleet.yml   the manager image and its compose project (the agent image: src/Fleet.Agent/Dockerfile)
@@ -280,9 +280,9 @@ manual tools too, not a gate.
 
 ## Tests
 
-**Not tested, owner QA.** `tests/Fleet.Manager.Tests` is a set of inert manual tools (owner directive 2026-10-06, "NO AUTOMATED
-QA ANYWHERE"): no workflow, job or hook runs it, no agent runs it, and nothing here has ever been run, so no result of
-any kind is claimed for this code. The sources stay in git so the owner can run them by hand if wanted; they are
+**Not tested, owner QA.** `tests/Fleet.Manager.Tests` was deleted 2026-10-08 (owner directive 2026-10-06, "NO AUTOMATED
+QA ANYWHERE"). No workflow, job or hook runs anything here, and nothing here has ever been run, so no result of
+any kind is claimed for this code. The sources remain only in git history (tag `last-commit-with-tests`) and are
 never wired to CI and `pipeline:check` rejects any workflow that would. The only automated check the fleet code gets is
 that it compiles inside the build-only fleet workflow (see "Pipeline" at the top). The same holds for `tests/Fleet.Agent.Tests`.
 Any "CI runs them" in an older commit message of this folder is void.

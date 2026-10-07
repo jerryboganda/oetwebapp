@@ -101,8 +101,8 @@ it so `git clean` doesn't remove it.)*
 ---
 
 ## Verification strategy
-- **Per commit:** `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test` (affected).
-- **Per wave:** full `pnpm test`, `pnpm build`, targeted **Playwright e2e + a11y** (API is up), live browser spot-check at the viewport matrix.
+- **Per commit:** `pnpm lint`, `pnpm exec tsc --noEmit` (CI runs only these two checks; `pnpm test` was deleted 2026-10-08 with the rest of the test code).
+- **Per wave:** `pnpm build` and a live browser spot-check at the viewport matrix (the Playwright e2e and a11y suites were deleted 2026-10-08 with the rest of the test code).
 - **Billing (FE-017/018):** live cart→checkout e2e against the running API; re-confirm DTOs first.
 - **Perf (FE-022/023/024/038):** compare `pnpm build` route JS before/after; bundle-analyzer optional.
 

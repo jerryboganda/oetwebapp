@@ -47,9 +47,9 @@ the VPS (`docker-compose.production.yml`, project `oetwebsite`). The VPS never b
 | Files / media | `IFileStorage` / `S3CompatibleFileStorage` only; content uploads via `ContentPaper → ContentPaperAsset → MediaAsset`. |
 | Background work | `Services/BackgroundJobProcessor*.cs` (queued jobs) and `BackgroundService` workers registered with `AddHostedService` in `Program.cs`. |
 | Real-time | SignalR hubs in `Hubs/` (plus Notification/MockLiveRoom hubs under `Services/`). No backplane: hubs rely on the single active slot. |
-| Frontend tests | Co-located `*.test.ts(x)` / `__tests__/` (vitest), Playwright in `tests/e2e/`. |
-| Backend tests | `backend/tests/OetLearner.Api.Tests`, folders mirror the domain (`Writing/`, `Billing/`, …); shared doubles in `Infrastructure/`. See `.github/instructions/testing.instructions.md`. |
-| CI | `.github/workflows/`: `qa-smoke.yml` (push/PR: backend shards, frontend unit, placement-entry — no e2e, owner rule), `build-images.yml` + `production-deploy.yml` (production), path-filtered gates for speaking, mobile, tauri, rulebooks. Playwright specs are manual/`workflow_dispatch` tools. |
+| Frontend tests | Deleted 2026-10-08 (commit `f1b855bcc`, tag `last-commit-with-tests`): the co-located vitest suites and the Playwright suite in `tests/e2e/`. |
+| Backend tests | Deleted 2026-10-08 (commit `f1b855bcc`, tag `last-commit-with-tests`): the `backend/tests/OetLearner.Api.Tests` xUnit suite. |
+| CI | `.github/workflows/`: `build-images.yml` + `production-deploy.yml` (production), path-filtered gates for speaking, mobile, tauri, rulebooks. CI runs typecheck and lint only; test code was deleted 2026-10-08 (commit `f1b855bcc`). |
 | Scripts | `scripts/` indexed in [`scripts/README.md`](../scripts/README.md); deploy-critical ones in `scripts/deploy/` and `scripts/ship/`. |
 | Native shells | `capacitor.config.ts` + `android/` + `ios/` (remote URL shell), `src-tauri/` (remote-only desktop, IPC allow-list in `capabilities/`). |
 | Sidecars | `agent-console/` (owner-only ops console, own workflow and compose file), `agent-gateway/` (dormant OpenAI-compatible gateway; routes off by default). |

@@ -206,8 +206,8 @@ classifies; the coding agent still reads the logs and fixes the cause.
   files, then makes ONE batched Jev call (pinned `jev-1.13.0`): a Choice
   `error_class` over `compile | test_failure | lint | infra_flake | deploy_health |
   policy_gate | secret_scan | unrelated_preexisting | unknown` plus a Noul "the
-  failing file or test is one of the changed paths". Unit tests (fake fetch, fake
-  judge, no network): `node --test scripts/ci/jev-ci-triage.test.mjs`.
+  failing file or test is one of the changed paths". Its unit tests (fake fetch, fake
+  judge, no network) were deleted 2026-10-08 with the rest of the test code.
 - **Labels only:** the repo is public-when-working, so logs and summaries are
   world-readable. The script prints the class, confidence, byte and line counts
   and failed job names, never log text and never the key.

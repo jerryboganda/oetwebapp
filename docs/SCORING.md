@@ -128,9 +128,7 @@ OetScoring.OetGradeLetterFromScaled(349);               // "C+"
 OetScoring.FormatListeningReadingDisplay(30);           // "30/42 • 350/500 • Grade B"
 ```
 
-Both implementations are **behaviourally identical**. The TypeScript module is
-tested by `lib/scoring.test.ts` (72 assertions). The .NET module is tested by
-`backend/tests/OetLearner.Api.Tests/Assessment/OetScoringTests.cs` (98 assertions).
+Both implementations are **behaviourally identical**. The test suites that pinned this, `lib/scoring.test.ts` (72 assertions) and `backend/tests/OetLearner.Api.Tests/Assessment/OetScoringTests.cs` (98 assertions), were deleted 2026-10-08 with the rest of the test code (tag `last-commit-with-tests`).
 
 ---
 
@@ -223,7 +221,7 @@ cross-checking the 30/42 ≡ 350/500 mapping:
 1. Update `Project Real Content/Scoring System.txt` first.
 2. Update this file (`docs/SCORING.md`) to match.
 3. Update `lib/scoring.ts` and `backend/src/OetLearner.Api/Services/OetScoring.cs` together.
-4. Update both test files and make sure all tests pass.
+4. The test files were deleted 2026-10-08 with the rest of the test code, so no test run checks the change (tag `last-commit-with-tests`).
 5. Note the change in `AGENTS.md` under the "Common Gotchas" section.
 
 No other location should need to change — every consumer routes through the

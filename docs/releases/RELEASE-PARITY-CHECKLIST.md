@@ -65,10 +65,7 @@ device/browser and width used.
       the relaunch served the new bundle (deploy SHA stamp / changed UI visible),
       not the previous session's cache.
 - [ ] **Automated regression coverage present** for each fixed defect
-      (`components/layout/__tests__/feature-flag-nav.test.tsx`,
-      `lib/__tests__/mobile-runtime.test.ts`,
-      `lib/__tests__/keyboard-nav-css.test.ts`, or the equivalent suite for the
-      area changed) and green in CI for this commit.
+      (none exists now: the test code, including `components/layout/__tests__/feature-flag-nav.test.tsx`, `lib/__tests__/mobile-runtime.test.ts` and `lib/__tests__/keyboard-nav-css.test.ts`, was deleted 2026-10-08, tag `last-commit-with-tests`). CI runs typecheck and lint only, so the owner checks each fix by hand.
 
 ## 3. Release gate rule
 

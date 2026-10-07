@@ -7,7 +7,7 @@ geometry/overlap checks, and the QA-2 evidence table is published. Built for the
 
 | File | Role |
 | --- | --- |
-| `.github/workflows/writing-prod-qa.yml` | The only way to run it (manual dispatch) |
+| `.github/workflows/writing-prod-qa.yml` | Removed from the repo; nothing dispatches this harness any more |
 | `scripts/qa/writing-prod-qa/contract.mjs` | **Every** host, API path, route, provider id, flag key, selector and test id |
 | `scripts/qa/writing-prod-qa/scripts.json` | The 36 handoff scripts, verbatim (plan Appendix A) |
 | `scripts/qa/writing-prod-qa/lib.mjs` | Pure verdicts: scripts, inputs, discovery plan, credits, timer, provider evidence, preflight/guard, lane, table |
@@ -24,13 +24,7 @@ geometry/overlap checks, and the QA-2 evidence table is published. Built for the
 branch with `--ref <branch>`.
 
 ```bash
-gh workflow run writing-prod-qa.yml --ref main -f suite=discover                     # read-only plan (default)
-gh workflow run writing-prod-qa.yml --ref main -f suite=acceptance                   # P0-3 S1-S8, reading resume, L1+L2 fault
-gh workflow run writing-prod-qa.yml --ref main -f suite=ui -f browsers=chromium,webkit
-gh workflow run writing-prod-qa.yml --ref main -f suite=matrix -f concurrency=3
-gh workflow run writing-prod-qa.yml --ref main -f suite=all
-gh workflow run writing-prod-qa.yml --ref main -f suite=letters -f cleanup=always   # 6 realistic mixed major/minor letters (not part of all)
-gh workflow run writing-prod-qa.yml --ref main -f suite=matrix -f professions=nursing -f categories=urgent   # one cell
+# Removed 2026-10-08: writing-prod-qa.yml no longer exists in the repo, so this harness cannot be dispatched.
 ```
 
 ## Inputs

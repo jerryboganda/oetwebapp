@@ -61,7 +61,7 @@ The .NET runtime ships the deterministic detectors (single runtime since R-a ret
 
 > Retired (R-a): the TS writing engine (`writing-rules.ts`: `lintWritingLetter` + `writingCoverageSummary`) and the TS prompt builder (`ai-prompt.ts`: `buildAiGroundedPrompt`) had no production callers — writing lint and prompt grounding run server-side. The .NET engine below is the sole runtime; parity fixtures are frozen reviewed truth.
 
-Tests: `lib/rulebook/*.test.ts` — **152 assertions**, all green.
+Tests: `lib/rulebook/*.test.ts` (152 assertions) were deleted 2026-10-08 with the rest of the test code (tag `last-commit-with-tests`).
 
 ### .NET — `OetLearner.Api.Services.Rulebook`
 
@@ -72,7 +72,7 @@ Tests: `lib/rulebook/*.test.ts` — **152 assertions**, all green.
 | `SpeakingRuleEngine.cs` | Mirror of `speaking-rules.ts`. |
 | `AiGatewayService.cs` | **The only path to any AI model.** Holds `RulebookPromptBuilder`, the grounded-prompt contract, provider registry, and the refusal logic that blocks ungrounded prompts. |
 
-Tests: `backend/tests/OetLearner.Api.Tests/Rulebook/` (RulebookLoaderTests, WritingRuleEngineTests, SpeakingRuleEngineTests, AiGatewayAndPromptTests, …).
+Tests: the `backend/tests/OetLearner.Api.Tests/Rulebook/` suite (RulebookLoaderTests, WritingRuleEngineTests, SpeakingRuleEngineTests, AiGatewayAndPromptTests, …) was deleted 2026-10-08 with the rest of the test code.
 
 ---
 
@@ -228,7 +228,7 @@ All inputs / outputs are JSON and version-stamped.
 1. Author `rulebooks/<kind>/<new-profession>/rulebook.v1.json` using the schema.
 2. Register it in `lib/rulebook/loader.ts` (one `import` + one map entry).
 3. The .NET loader picks it up automatically via embedded resources on next build.
-4. Add xUnit + Vitest coverage for any new detectors introduced for the profession.
+4. No test suite runs for new detectors: the xUnit and Vitest suites were deleted 2026-10-08 with the rest of the test code (tag `last-commit-with-tests`).
 
 ---
 

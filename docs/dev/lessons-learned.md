@@ -43,7 +43,7 @@ Add new entries at the top; keep each entry to: **Mistake → Lesson → Action*
 ## Environment quick facts (this host)
 
 - Compute runs on GitHub Actions only (`AGENTS.md` § "GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT"). The only local checks are `pnpm run ship:gate` and `pnpm run ax:check`.
-- tsc / lint / vitest / `next build` / `dotnet test`: push the branch or `gh workflow run qa-smoke.yml --ref <branch>`. Never on this host, in local Docker, or on the VPS.
-- Gateway (pytest) and Rust lanes: dispatch their own workflows (`ai-control-plane-tests.yml`, `tauri-ci.yml`) rather than running them here.
+- Typecheck and lint: push the branch and let GitHub Actions run them (CI runs only these two checks). Test code was deleted 2026-10-08 (tag `last-commit-with-tests`), so there is no vitest or `dotnet test` to run. Never on this host, in local Docker, or on the VPS.
+- Gateway (pytest) and Rust lanes: their workflows (`ai-control-plane-tests.yml`, `tauri-ci.yml`) no longer exist in the repo, so nothing runs them.
 - State ledger: `pnpm run ax:status` → `pnpm run ax:next` → work → `pnpm run ax:record` → `pnpm run ax:verify`.
 - Ship-It: `pnpm run ship:gate` → public → push `main` → `pnpm run ship:watch` → fix/push on red without asking → `pnpm run ax:record` → private only after Build & Deploy for this SHA succeeds → live health.

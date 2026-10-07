@@ -191,5 +191,4 @@ Required checks before merge:
 
 - `npx tsc --noEmit`
 - `npm run lint`
-- `npm test`
-- `dotnet test backend/OetLearner.sln`
+- Tests: none. The test code was deleted 2026-10-08 (tag `last-commit-with-tests`); CI runs typecheck and lint only.

@@ -52,7 +52,6 @@ NEXT_PUBLIC_API_BASE_URL=http://localhost:5198
 
 ```bash
 dotnet build backend/OetLearner.sln
-dotnet test backend/OetLearner.sln
 powershell -ExecutionPolicy Bypass -File .\scripts\probe-production.ps1
 ```
 
@@ -61,5 +60,6 @@ Or from `package.json`:
 ```bash
 pnpm run backend:run
 pnpm run backend:build
-pnpm run backend:test
 ```
+
+Backend test code was deleted on 2026-10-08 (tag `last-commit-with-tests`), so there is no `dotnet test` or `backend:test` step. Compile checks run in `Build images` on GitHub Actions.

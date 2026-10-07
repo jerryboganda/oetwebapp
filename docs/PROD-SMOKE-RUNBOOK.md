@@ -1,6 +1,6 @@
 # Production Smoke — How to run
 
-> Spec: [tests/e2e/prod-smoke.spec.ts](../tests/e2e/prod-smoke.spec.ts)
+> Spec: `tests/e2e/prod-smoke.spec.ts` was deleted on 2026-10-08 with the rest of the test code (last copy at tag `last-commit-with-tests`).
 > Target: `https://app.oetwithdrhesham.co.uk`
 
 ## 1. Set credentials (NEVER commit these)
@@ -17,27 +17,24 @@ Or add to a local-only `.env.local.prod` (already covered by `.gitignore`).
 ## 2. Install Playwright browsers (once)
 
 ```powershell
-docker exec oet-local-web npm run test:e2e:install
+# Removed 2026-10-08: the Playwright suite was deleted, so there are no browsers to install.
 ```
 
 ## 3. Run the smoke
 
 ```powershell
-docker exec -e PROD_LEARNER_EMAIL="$env:PROD_LEARNER_EMAIL" -e PROD_LEARNER_PASSWORD="$env:PROD_LEARNER_PASSWORD" oet-local-web npx playwright test tests/e2e/prod-smoke.spec.ts --project=chromium-unauth --workers=1
+# Removed 2026-10-08: tests/e2e/prod-smoke.spec.ts was deleted, so there is no smoke run to start.
 ```
 
-> The `chromium-unauth` project has no saved auth state, which matches what the
-> spec expects (it signs in itself with the env credentials). Avoid
-> `chromium-learner` etc. because those projects preload a saved learner auth
-> state from `tests/e2e/setup/` which would conflict.
+> The Playwright projects this note described (`chromium-unauth`, `chromium-learner`) and the saved auth state in `tests/e2e/setup/` were deleted on 2026-10-08 with the rest of the test code.
 
 ## 4. Read the report
 
 ```powershell
-docker exec oet-local-web npx playwright show-report
+# Removed 2026-10-08: no Playwright report is produced any more.
 ```
 
-Screenshots of each learner surface will be written to `playwright-report-prod/`.
+Screenshots of each learner surface were written to `playwright-report-prod/` by the spec, which was deleted on 2026-10-08.
 
 ## AI worker + acceptance journeys
 

@@ -1,6 +1,6 @@
 // Pure decisions of the Writing production QA harness (no network, no browser): script validation, inputs,
 // discovery plan, credit / timer / provider verdicts, preflight + guard decisions, the lane mutex and pacing,
-// report checks and the QA-2 evidence table. Every function here is covered by lib.test.ts.
+// report checks and the QA-2 evidence table. lib.test.ts covered every function here until it was deleted 2026-10-08.
 import { createHash } from 'node:crypto';
 import {
   CATEGORIES, CATEGORY_LETTER_TYPE, CONTRACT_GROUPS, CORRECTIONS_PREVIEW, CREDITS_PER_LETTER, EMPTY_MODEL, FALLBACK_LETTER_TYPES,

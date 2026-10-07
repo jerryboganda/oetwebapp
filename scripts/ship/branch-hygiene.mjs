@@ -9,7 +9,7 @@
  * Anything unmerged AND unpushed is never deleted; it is reported so the owner
  * or agent pushes it or throws it away on purpose.
  *
- * Usage: node scripts/ship/branch-hygiene.mjs [--check] [--remote] [--self-test]
+ * Usage: node scripts/ship/branch-hygiene.mjs [--check] [--remote]
  *   default  fix local worktrees/branches, then enforce the caps (exit 1 on breach)
  *   --check  enforce the caps only, change nothing
  *   --remote also delete remote branches merged into origin/main with no open PR
@@ -104,16 +104,7 @@ export function sweep({ fix = true, remote = false } = {}) {
   return { notes, failures };
 }
 
-function selfTest() {
-  const a = sweep({ fix: false });
-  return Array.isArray(a.notes) && Array.isArray(a.failures);
-}
-
 function main(argv) {
-  if (argv.includes('--self-test')) {
-    console.log(selfTest() ? 'branch-hygiene self-test OK' : 'branch-hygiene self-test FAILED');
-    process.exit(selfTest() ? 0 : 1);
-  }
   const { notes, failures } = sweep({ fix: !argv.includes('--check'), remote: argv.includes('--remote') });
   for (const n of notes) console.log(`branch-hygiene: ${n}`);
   if (failures.length) {

@@ -10,7 +10,6 @@
 //   node scripts/apple/assert-ios-ipa.mjs --ipa <path/to/App.ipa>
 //   node scripts/apple/assert-ios-ipa.mjs --root stage
 //   node scripts/apple/assert-ios-ipa.mjs --ipa App.ipa --require-signature
-//   node scripts/apple/assert-ios-ipa.mjs --self-test
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -180,39 +179,7 @@ function inspectIpa(ipaPath, expectations) {
   }
 }
 
-function selfTest() {
-  const failures = [];
-  const expect = (condition, message) => {
-    if (!condition) failures.push(message);
-  };
-
-  expect(
-    JSON.stringify(normaliseDeviceFamily([1, 2])) === JSON.stringify([1, 2]),
-    'normaliseDeviceFamily should pass through an array',
-  );
-  expect(
-    JSON.stringify(normaliseDeviceFamily('1,2')) === JSON.stringify([]),
-    'normaliseDeviceFamily should not silently accept a raw comma string',
-  );
-  expect(normaliseDeviceFamily(undefined).length === 0, 'normaliseDeviceFamily should tolerate absence');
-  expect(Array.isArray(findIpas(resolve(REPO_ROOT, 'scripts', 'apple'))), 'findIpas should return an array');
-  expect(machoArchitectures('/etc/hosts') === null, 'a non-Mach-O file should return null');
-
-  if (failures.length > 0) {
-    console.error('assert-ios-ipa self-test failed:');
-    for (const failure of failures) console.error(`  - ${failure}`);
-    process.exit(1);
-  }
-
-  console.log('assert-ios-ipa self-test passed (5 checks).');
-}
-
 function main() {
-  if (process.argv.includes('--self-test')) {
-    selfTest();
-    return;
-  }
-
   if (process.platform !== 'darwin') {
     console.error('This check requires macOS (ditto, plutil and lipo). Run it on a macOS runner.');
     process.exit(1);

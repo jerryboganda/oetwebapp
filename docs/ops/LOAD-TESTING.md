@@ -95,7 +95,7 @@ generator leg to stay under the `AuthBruteforce` limit of 100 per minute per IP.
 
 | Path | Role |
 | --- | --- |
-| `tests/load/fleet-1000.k6.js` | the scenario: setup (content discovery), `learners` and `experts` scenarios, thresholds, `handleSummary` |
+| `tests/load/fleet-1000.k6.js` (deleted 2026-10-08 with all test code) | the scenario: setup (content discovery), `learners` and `experts` scenarios, thresholds, `handleSummary` |
 | `tests/load/fleet/*.mjs` | pure, node-tested modules: `profiles` (timeline and leg maths), `thresholds`, `classify`, `signalr-frames`, `accounts` (incl. the production-host guard), `extract`, `summary-model`, `cadence` (effective think time under hub polling) |
 | `tests/load/fleet/*.js` | k6-side modules: `config` (env), `contract` (every endpoint in one place), `http` (sessions, auth, headers, metrics), `signalr` (long-poll client), `flows`, `metrics` |
 | `tests/load/seed/` | `seed-accounts.mjs` (create, `--purge`), `audit-ledger.mjs` (duplicate-charge audit) |
@@ -137,7 +137,7 @@ from the repository root:
 cp .env.staging.example .env.staging          # fill in the staging secrets: never production values
 export API_IMAGE=ghcr.io/jerryboganda/oetwebapp-api:<sha> WEB_IMAGE=ghcr.io/jerryboganda/oetwebapp-web:<sha>
 docker compose --env-file .env.staging \
-  -f docker-compose.staging.yml -f tests/load/sut/docker-compose.load-overrides.yml up -d --no-build
+  -f docker-compose.staging.yml -f tests/load/sut/docker-compose.load-overrides.yml up -d --no-build   # tests/load/ was deleted 2026-10-08 with all test code; this overlay no longer exists
 ```
 
 Required settings (the overlay supplies the simulator ones; the rest is `.env.staging`):
@@ -239,7 +239,7 @@ On the load-generator host, seed the accounts (section 5), then run one smoke le
 ```bash
 export K6_API_URL=https://api.staging.example K6_WEB_URL=https://app.staging.example \
        K6_PROFILE=smoke OET_LOAD_PASSWORD=... K6_SUMMARY_PATH=leg0.json K6_VERSION_STRING="$(k6 version)"
-k6 run tests/load/fleet-1000.k6.js
+k6 run tests/load/fleet-1000.k6.js   # deleted 2026-10-08 with all test code; no harness to run
 node tests/load/report/k6-load-report.mjs --input leg0.json --out report.md --json verdict.json --allow-no-data
 ```
 

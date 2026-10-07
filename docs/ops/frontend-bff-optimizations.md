@@ -8,8 +8,8 @@ user can observe are listed under "Behaviour changes".
 **Verification status: not tested - owner QA** (owner directive 2026-10-06: no automated QA runs
 anywhere). The only automated check on this change is compilation inside `Build images`
 (`next build`, `dotnet publish`); nothing was built, run or benchmarked locally. The `*.test.*` /
-`__tests__` files it adds describe the intended behaviour and stay in git as inert manual tools: no CI
-lane runs them and none has been run for this change.
+`__tests__` files it adds were deleted on 2026-10-08 with all test code (still in git history at tag `last-commit-with-tests`); no CI
+lane runs tests and none has been run for this change.
 
 ## 1. Bytes on the wire
 

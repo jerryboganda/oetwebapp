@@ -38,25 +38,25 @@ Run locally in Docker Desktop before deploy. The production VPS is deployment-on
 ```powershell
 npm run docker:tsc
 npm run docker:lint
-npm run docker:test
+# npm run docker:test: test code was deleted 2026-10-08 (commit `f1b855bcc`); nothing to run
 docker exec oet-local-web npm run build
 docker exec oet-local-api dotnet build
-docker exec oet-local-api dotnet test
+# dotnet test: backend test code was deleted 2026-10-08 (commit `f1b855bcc`); nothing to run
 ```
 
-Required: zero TypeScript errors, zero ESLint errors, all Vitest suites green,
-all backend tests green except the pre-existing baseline failures tracked in
-`security-analysis-progress.md`.
+Required: zero TypeScript errors and zero ESLint errors (CI runs typecheck and lint only).
+Test code was deleted 2026-10-08 (commit `f1b855bcc`), so no test suite is
+required to be green.
 
 ## 3. Smoke E2E
 
-Run the four Speaking smokes from the local Docker web container, targeting the deployed environment by configuration when needed. Do not execute Playwright on the VPS.
+The Speaking E2E smokes were deleted on 2026-10-08 with all test code (commit `f1b855bcc`), so there is no smoke step. Do not run anything on the VPS.
 
 ```powershell
-docker exec oet-local-web npm run test:e2e:smoke -- --grep speaking
+# npm run test:e2e:smoke: deleted 2026-10-08 with all test code; no smoke command exists
 ```
 
-Smokes cover: warm-up timer enforcement, self-practice happy path, two-roleplay
+The deleted smokes covered: warm-up timer enforcement, self-practice happy path, two-roleplay
 mock with assessment seeding, and live-tutor calibration banner.
 
 ## 4. Production deploy

@@ -26,7 +26,7 @@ agent-console/
   README.md                   this file
   Dockerfile                  node:22-bookworm-slim (digest-pinned); users agent (10002); pinned CLIs
   package.json, package-lock.json   exact-pinned direct deps + committed lockfile (Dockerfile + CI use npm ci)
-  tsconfig.json, vitest.config.ts
+  tsconfig.json                 (vitest.config.ts was deleted 2026-10-08)
   src/
     server.ts                 Fastify control server :8410 (token + owner-account checks, routes of CONTRACT §3) + runtime wiring
     config.ts                 env + /run/secrets configuration; refuses to start without the internal token
@@ -61,7 +61,7 @@ agent-console/
     auth/
       claude.ts               PTY-driven `claude auth login` (URL + paste-back code)
       codex.ts                ChatGPT device-code login
-  tests/                      unit tests (no network, no real engines, no credentials)
+  tests/                      unit tests, deleted 2026-10-08 (only helpers.ts is left; nothing runs it)
   bin/
     entrypoint.sh             container entrypoint (control plane, uid 0)
     as-agent                  run a command as the agent uid (10002)
@@ -116,11 +116,11 @@ The loop is: edit → push a branch → GitHub Actions → read logs → fix →
   `workflow_dispatch` (input `apply=true` recreates containers even with
   active turns — the console's **Apply update** drains first, then
   dispatches with it).
-- **Test job** (one matrix leg each for the sidecar, `egress/` and
-  `dockerproxy/`): install (`npm ci` from the committed lockfile),
-  type-check, the unit tests in `tests/`, and
-  `codex execpolicy check` on `etc/oet.rules` (sidecar leg only).
-  `npm audit signatures` runs in the sidecar `Dockerfile` build stage.
+- **Guards job:** runs `scripts/deploy/verify-compute-offload.sh` and checks the
+  compose file's schema. There is no test job (owner directive 2026-10-06): the
+  unit tests in `tests/` were deleted 2026-10-08, and no workflow runs
+  `codex execpolicy check` on `etc/oet.rules` any more.
+  `npm audit signatures` still runs in the sidecar `Dockerfile` build stage.
 - **Build job:** three images →
   `ghcr.io/jerryboganda/oetwebapp-agent-console{,-egress,-dockerproxy}:<sha>`.
 - **Deploy job** (Environment `production`, `main` only): SSH to the VPS,

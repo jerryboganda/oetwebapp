@@ -7,7 +7,7 @@
 
 `RandomisationHelper.SeededShuffle<T>` provides a **deterministic, learner-keyed** Fisher-Yates shuffle that mock authoring + learner delivery surfaces can use to vary item order without losing reproducibility for grading and analytics.
 
-The helper lives in `backend/src/OetLearner.Api/Services/RandomisationHelper.cs` and ships with 9 unit tests. **It is intentionally not yet wired into the live Reading / Listening DTO projections** — see "Why deferred" below.
+The helper lives in `backend/src/OetLearner.Api/Services/RandomisationHelper.cs` and shipped with 9 unit tests, deleted 2026-10-08 with the rest of the test code. **It is intentionally not yet wired into the live Reading / Listening DTO projections** — see "Why deferred" below.
 
 ## API
 
@@ -69,12 +69,11 @@ Until that migration ships, the helper exists for:
 ## Validation
 
 ```powershell
-dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~RandomisationHelper"
-# → Passed: 9, Failed: 0, Total: 9
+# dotnet test removed 2026-10-08 with the rest of the test code (tag `last-commit-with-tests`)
 ```
 
 ## Cross-links
 
 - [`MOCKS-OPTION-ID-MIGRATION.md`](./MOCKS-OPTION-ID-MIGRATION.md) — structural migration plan (Wave 1.1).
 - `backend/src/OetLearner.Api/Services/RandomisationHelper.cs`.
-- `backend/tests/OetLearner.Api.Tests/Mocks/RandomisationHelperTests.cs`.
+- `backend/tests/OetLearner.Api.Tests/Mocks/RandomisationHelperTests.cs` (deleted 2026-10-08 with the rest of the test code).

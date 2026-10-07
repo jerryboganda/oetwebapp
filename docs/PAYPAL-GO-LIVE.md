@@ -70,14 +70,7 @@ After saving, confirm the wiring without spending money:
    `{ name: "paypal", mode: "embedded" }`.
 3. On `/checkout/review`, PayPal appears in the picker and the buttons render.
 
-**Gated live gateway test.** `PayPalSandboxLiveTests` drives the real gateway code path
-(effective-settings → OAuth → order create, plus the sandbox/live host switch) against the
-live sandbox REST API. It no-ops unless creds are supplied via env, so it never blocks CI:
-
-```
-PAYPAL_SANDBOX_CLIENT_ID=... PAYPAL_SANDBOX_SECRET=... \
-  dotnet test --filter FullyQualifiedName~PayPalSandboxLiveTests
-```
+**Gated live gateway test (removed).** `PayPalSandboxLiveTests` was deleted on 2026-10-08 with the rest of the test code (last copy at tag `last-commit-with-tests`). It drove the real gateway code path against the live sandbox REST API when sandbox credentials were supplied in env. There is no test command to run now.
 
 ### Sandbox end-to-end (do this before flipping to live)
 

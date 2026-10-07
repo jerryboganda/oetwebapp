@@ -68,8 +68,8 @@ Model audio is not a publish-gate blocker today because a fresh DB must still be
 
 1. Edit the profession JSON under `rulebooks/pronunciation/<profession>/rulebook.v1.json`.
 2. Bump the `version` field on the rulebook.
-3. Run backend tests: `dotnet test backend/OetLearner.sln`.
-4. Run the pronunciation rulebook loader tests — these will catch schema breakage.
+3. Backend tests were deleted 2026-10-08 with the rest of the test code (tag `last-commit-with-tests`); there is no `dotnet test` to run.
+4. The pronunciation rulebook loader tests were deleted 2026-10-08, so no automated check runs in their place.
 5. Every admin AI draft produced against the new version will have the new `RulebookVersion` stamped on the `AiUsageRecord` row.
 
 The backend embeds every file under `rulebooks/**/*.json` via `<EmbeddedResource>` at build time. There is no runtime file loading — a production pod cannot diverge from the repo snapshot it shipped with.
