@@ -147,6 +147,30 @@ const droppedGarbage = (word) => {
   droppedWords.push(word.text);
 };
 
+/** Human-verified corrections for OCR misreads, one file per asset in
+ * scripts/materials/retype-corrections/<oldAssetId>.json:
+ *   [ { "find": "exact OCR text or /regex/", "replace": "correct text" } ]
+ * Applied to each drawn line AFTER grouping. Every file here is authored from
+ * the side-by-side review (the human-verification layer of this pipeline). */
+function loadCorrections(assetId) {
+  const file = path.join(HERE, 'retype-corrections', `${assetId}.json`);
+  if (!fs.existsSync(file)) return [];
+  return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+function applyCorrections(text, corrections) {
+  let out = text;
+  for (const c of corrections) {
+    if (c.find.startsWith('/')) {
+      const m = /\/(.*)\/([a-z]*)/.exec(c.find);
+      if (m) out = out.replace(new RegExp(m[1], m[2]), c.replace);
+    } else if (out.includes(c.find)) {
+      out = out.split(c.find).join(c.replace);
+    }
+  }
+  return out;
+}
+
 function ocrPageTsv(pagePng) {
   const base = pagePng.replace(/\.png$/, '');
   run('tesseract', [pagePng, base, '--dpi', String(DPI), '-c', 'preserve_interword_spaces=1', 'tsv']);
@@ -158,6 +182,8 @@ function ocrPageTsv(pagePng) {
     const confidence = Number(conf);
     if (!Number.isFinite(confidence) || confidence < 0) continue;
     const word = { left: Number(left), top: Number(top), width: Number(width), height: Number(height), confidence, text: text.trim() };
+    // Photo-edge noise: sub-10 px glyphs at 300 dpi are never real text.
+    if (word.height < 10) { droppedGarbage(word); continue; }
     // Logo/letterhead glyphs are far taller than body text at 300 dpi.
     if (word.height > 110 && confidence < 90) { droppedGarbage(word); continue; }
     if (isGarbageWord(word)) { droppedGarbage(word); continue; }
@@ -184,6 +210,8 @@ function pngSize(pngPath) {
 }
 
 function buildVectorPdf(pdfPath, outPath, report, assetId) {
+  const corrections = loadCorrections(assetId);
+  report.correctionsApplied = corrections.length;
   const pages = Number((run('pdfinfo', [pdfPath]).match(/^Pages:\s+(\d+)/m) ?? [])[1] ?? 0);
   if (!pages) throw new Error('no pages');
   fs.mkdirSync(RETYPE_DIR, { recursive: true });
@@ -196,6 +224,7 @@ function buildVectorPdf(pdfPath, outPath, report, assetId) {
     const dims = pngSize(png);
     if (!dims.w || !dims.h) throw new Error(`no png dimensions for ${png}`);
     const lines = groupLines(words);
+    for (const line of lines) line.text = applyCorrections(line.text, corrections);
     pyInputs.push({ png, pageW: dims.w, pageH: dims.h, words: lines });
     report.wordCount += words.length;
     report.lowConfidence.push(...words.filter((wd) => wd.confidence < MIN_CONFIDENCE).map((wd) => ({ page: p, ...wd })));
@@ -225,7 +254,10 @@ function groupLines(words) {
     const line = lines.find((l) => {
       const lh = l.height || 1;
       const overlap = Math.min(l.top + lh, w.top + h) - Math.max(l.top, w.top);
-      return overlap > 0.45 * Math.min(lh, h);
+      // Photo skew tilts columns: require real vertical overlap AND similar
+      // heights, or a tall heading swallows every nearby small line.
+      if (overlap <= 0.45 * Math.min(lh, h)) return false;
+      return Math.abs(lh - h) <= 0.6 * Math.max(lh, h);
     });
     if (line) {
       line.words.push(w);
@@ -326,7 +358,12 @@ for page in payload["pages"]:
         y = A4H - (offY + (w["top"] + w["height"]) * scale)
         size = max(4.0, min(28.0, height_pt * 0.82))
         c.setFont("Body", size)
-        # Left-align at the box x, baseline at box bottom. Draw only if it fits.
+        # Shrink to the measured box so a DejaVu-metric string can never
+        # overflow the page edge the way the original photo crop did.
+        measured = c.stringWidth(w["text"], "Body", size)
+        if measured > width_pt and measured > 0:
+            size = max(3.0, size * width_pt / measured)
+            c.setFont("Body", size)
         c.drawString(x, y, w["text"])
     c.showPage()
 c.save()
