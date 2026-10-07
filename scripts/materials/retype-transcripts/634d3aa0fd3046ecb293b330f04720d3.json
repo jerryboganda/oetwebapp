@@ -3,91 +3,526 @@
   "pages": [
     {
       "lines": [
-        { "t": "OCCUPATIONAL ENGLISH TEST", "x": 60, "y": 130, "s": 17, "b": true },
-        { "t": "WRITING SUB-TEST:   NURSING", "x": 60, "y": 162, "s": 12, "b": true },
-        { "t": "TIME ALLOWED:", "x": 60, "y": 188, "s": 12, "b": true },
-        { "t": "READING TIME: 5 MINUTES", "x": 235, "y": 188, "s": 12, "b": true },
-        { "t": "WRITING TIME: 40 MINUTES", "x": 235, "y": 206, "s": 12, "b": true },
-        { "t": "Read the case notes below and complete the writing task which follows:", "x": 60, "y": 234, "s": 10.5 },
-        { "t": "Notes:", "x": 60, "y": 260, "s": 12, "b": true },
-        { "t": "Patient details:", "x": 68, "y": 288, "s": 11, "b": true },
-        { "t": "Mr James Andresen", "x": 220, "y": 288, "s": 11 },
-        { "t": "14 Leggal Ave", "x": 220, "y": 306, "s": 11 },
-        { "t": "Hornsby NSW", "x": 220, "y": 324, "s": 11 },
-        { "t": "Date of birth:", "x": 68, "y": 352, "s": 11, "b": true },
-        { "t": "12 September 1944", "x": 220, "y": 352, "s": 11 },
-        { "t": "Marital status:", "x": 68, "y": 376, "s": 11, "b": true },
-        { "t": "Married (wife, Margaret)", "x": 220, "y": 376, "s": 11 },
-        { "t": "Admission date:", "x": 68, "y": 400, "s": 11, "b": true },
-        { "t": "12 January 2017", "x": 220, "y": 400, "s": 11 },
-        { "t": "Discharge date:", "x": 68, "y": 424, "s": 11, "b": true },
-        { "t": "19 January 2017", "x": 220, "y": 424, "s": 11 },
-        { "t": "Diagnosis:", "x": 68, "y": 448, "s": 11, "b": true },
-        { "t": "Aspiration pneumonia", "x": 220, "y": 448, "s": 11 },
-        { "t": "Social background:", "x": 68, "y": 472, "s": 11, "b": true },
-        { "t": "Lives with wife in duplex", "x": 220, "y": 472, "s": 11 },
-        { "t": "Retired university professor (biology)", "x": 220, "y": 489, "s": 11 },
-        { "t": "On age pension", "x": 220, "y": 506, "s": 11 },
-        { "t": "Medical background:", "x": 68, "y": 530, "s": 11, "b": true },
-        { "t": "Diagnosed with Alzheimer's disease in 2015", "x": 220, "y": 530, "s": 11 },
-        { "t": "No previous hospitalisations", "x": 220, "y": 547, "s": 11 },
-        { "t": "High cholesterol diagnosed 2010", "x": 220, "y": 564, "s": 11 },
-        { "t": "Medications:", "x": 68, "y": 588, "s": 11, "b": true },
-        { "t": "Memantine", "x": 220, "y": 588, "s": 11 },
-        { "t": "Lipitor", "x": 220, "y": 605, "s": 11 },
-        { "t": "Management and progress:", "x": 68, "y": 629, "s": 11, "b": true },
-        { "t": "12.01.17", "x": 110, "y": 647, "s": 11, "b": true },
-        { "t": "Pt admitted to Prince of Wales Hospital", "x": 220, "y": 647, "s": 10.5 },
-        { "t": "3-day hx of SOB, coughing (purulent phlegm), lethargy, generalised", "x": 220, "y": 664, "s": 10.5 },
-        { "t": "weakness, fever (wife called ambulance)", "x": 220, "y": 681, "s": 10.5 },
-        { "t": "Sputum sample M/C/S revealed Klebsiella pneumoniae infection.", "x": 220, "y": 698, "s": 10.5 },
-        { "t": "IV Abs, fluids given", "x": 220, "y": 715, "s": 10.5 },
-        { "t": "Tendency to choke on food. Meal sizes reduced, frequency increased.", "x": 220, "y": 732, "s": 10.5 }
+        {
+          "t": "OCCUPATIONAL ENGLISH TEST",
+          "x": 60,
+          "y": 130,
+          "s": 17,
+          "b": true
+        },
+        {
+          "t": "WRITING SUB-TEST:   NURSING",
+          "x": 60,
+          "y": 162,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "TIME ALLOWED:",
+          "x": 60,
+          "y": 188,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "READING TIME: 5 MINUTES",
+          "x": 235,
+          "y": 188,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "WRITING TIME: 40 MINUTES",
+          "x": 235,
+          "y": 206,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "Read the case notes below and complete the writing task which follows:",
+          "x": 60,
+          "y": 234,
+          "s": 10.5
+        },
+        {
+          "t": "Notes:",
+          "x": 60,
+          "y": 260,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "Patient details:",
+          "x": 68,
+          "y": 288,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Mr James Andresen",
+          "x": 245,
+          "y": 288,
+          "s": 11
+        },
+        {
+          "t": "14 Leggal Ave",
+          "x": 245,
+          "y": 306,
+          "s": 11
+        },
+        {
+          "t": "Hornsby NSW",
+          "x": 245,
+          "y": 324,
+          "s": 11
+        },
+        {
+          "t": "Date of birth:",
+          "x": 68,
+          "y": 352,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "12 September 1944",
+          "x": 245,
+          "y": 352,
+          "s": 11
+        },
+        {
+          "t": "Marital status:",
+          "x": 68,
+          "y": 376,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Married (wife, Margaret)",
+          "x": 245,
+          "y": 376,
+          "s": 11
+        },
+        {
+          "t": "Admission date:",
+          "x": 68,
+          "y": 400,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "12 January 2017",
+          "x": 245,
+          "y": 400,
+          "s": 11
+        },
+        {
+          "t": "Discharge date:",
+          "x": 68,
+          "y": 424,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "19 January 2017",
+          "x": 245,
+          "y": 424,
+          "s": 11
+        },
+        {
+          "t": "Diagnosis:",
+          "x": 68,
+          "y": 448,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Aspiration pneumonia",
+          "x": 245,
+          "y": 448,
+          "s": 11
+        },
+        {
+          "t": "Social background:",
+          "x": 68,
+          "y": 472,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Lives with wife in duplex",
+          "x": 245,
+          "y": 472,
+          "s": 11
+        },
+        {
+          "t": "Retired university professor (biology)",
+          "x": 245,
+          "y": 489,
+          "s": 11
+        },
+        {
+          "t": "On age pension",
+          "x": 245,
+          "y": 506,
+          "s": 11
+        },
+        {
+          "t": "Medical background:",
+          "x": 68,
+          "y": 530,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Diagnosed with Alzheimer's disease in 2015",
+          "x": 245,
+          "y": 530,
+          "s": 11
+        },
+        {
+          "t": "No previous hospitalisations",
+          "x": 245,
+          "y": 547,
+          "s": 11
+        },
+        {
+          "t": "High cholesterol diagnosed 2010",
+          "x": 245,
+          "y": 564,
+          "s": 11
+        },
+        {
+          "t": "Medications:",
+          "x": 68,
+          "y": 588,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Memantine",
+          "x": 245,
+          "y": 588,
+          "s": 11
+        },
+        {
+          "t": "Lipitor",
+          "x": 245,
+          "y": 605,
+          "s": 11
+        },
+        {
+          "t": "Management and progress:",
+          "x": 68,
+          "y": 629,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "12.01.17",
+          "x": 125,
+          "y": 647,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Pt admitted to Prince of Wales Hospital",
+          "x": 245,
+          "y": 647,
+          "s": 10.5
+        },
+        {
+          "t": "3-day hx of SOB, coughing (purulent phlegm), lethargy, generalised",
+          "x": 245,
+          "y": 664,
+          "s": 10
+        },
+        {
+          "t": "weakness, fever (wife called ambulance)",
+          "x": 245,
+          "y": 681,
+          "s": 10.5
+        },
+        {
+          "t": "Sputum sample M/C/S revealed Klebsiella pneumoniae infection.",
+          "x": 245,
+          "y": 698,
+          "s": 10.5
+        },
+        {
+          "t": "IV Abs, fluids given",
+          "x": 245,
+          "y": 715,
+          "s": 10.5
+        },
+        {
+          "t": "Tendency to choke on food. Meal sizes reduced, frequency increased.",
+          "x": 245,
+          "y": 732,
+          "s": 9.5
+        }
       ]
     },
     {
       "lines": [
-        { "t": "13.01.17", "x": 175, "y": 90, "s": 11, "b": true },
-        { "t": "Pt encouraged to ambulate 2x daily to reduce risk of deconditioning", "x": 280, "y": 90, "s": 10.5 },
-        { "t": "Wife reports poor feeding ability, pt often chokes on food", "x": 280, "y": 107, "s": 10.5 },
-        { "t": "IV Abs continued (fluids ceased, commenced orally)", "x": 280, "y": 124, "s": 10.5 },
-        { "t": "Temp. range 38.5-39.0 degrees, other vitals normal", "x": 280, "y": 141, "s": 10.5 },
-        { "t": "14.01.17", "x": 175, "y": 170, "s": 11, "b": true },
-        { "t": "Physio visit - reduced power in arms (3/5) and legs (4/5). Advised to", "x": 280, "y": 170, "s": 10.5 },
-        { "t": "continue mobilising, exercise programme commenced.", "x": 280, "y": 187, "s": 10.5 },
-        { "t": "Dietician visit - advice provided re: maximising nutrition, feeding", "x": 280, "y": 204, "s": 10.5 },
-        { "t": "schedule (more frequent, smaller meals)", "x": 280, "y": 221, "s": 10.5 },
-        { "t": "Temp. range 37.5-38.5 degrees, other obs normal.", "x": 280, "y": 238, "s": 10.5 },
-        { "t": "IV Abs continued", "x": 280, "y": 255, "s": 10.5 },
-        { "t": "15.01.17", "x": 175, "y": 284, "s": 11, "b": true },
-        { "t": "Pt mobilising with 4-wheel-walker, mobility belt, 2 person assist", "x": 280, "y": 284, "s": 10.5 },
-        { "t": "All vitals normal (switched to 2 sets of obs/day)", "x": 280, "y": 301, "s": 10.5 },
-        { "t": "IV Abs continued", "x": 280, "y": 318, "s": 10.5 },
-        { "t": "No BM since admission - ?constipation (Sienna added to Rx regime)", "x": 280, "y": 335, "s": 10.5 },
-        { "t": "16.01.17", "x": 175, "y": 364, "s": 11, "b": true },
-        { "t": "All vitals normal", "x": 280, "y": 364, "s": 10.5 },
-        { "t": "IV Abs ceased", "x": 280, "y": 381, "s": 10.5 },
-        { "t": "BM x 2 with Sienna (fibre supplement)", "x": 280, "y": 398, "s": 10.5 },
-        { "t": "17.01.17", "x": 175, "y": 427, "s": 11, "b": true },
-        { "t": "Uneventful", "x": 280, "y": 427, "s": 10.5 },
-        { "t": "1 x BM", "x": 280, "y": 444, "s": 10.5 },
-        { "t": "All vitals normal.", "x": 280, "y": 461, "s": 10.5 },
-        { "t": "18.01.17", "x": 175, "y": 490, "s": 11, "b": true },
-        { "t": "Pt to be discharged home.", "x": 280, "y": 490, "s": 10.5 },
-        { "t": "Wife counselled re: feeding techniques and regular monitoring of", "x": 280, "y": 507, "s": 10.5 },
-        { "t": "temperature", "x": 280, "y": 524, "s": 10.5 },
-        { "t": "Discharge plan:", "x": 145, "y": 553, "s": 11, "b": true },
-        { "t": "Continue exercise programme, Sienna, diet plan", "x": 280, "y": 553, "s": 10.5 },
-        { "t": "Follow-up visits from physio for 2/52 post-discharge", "x": 280, "y": 570, "s": 10.5 },
-        { "t": "Community nurse to visit in 1/52 - check coping at home", "x": 280, "y": 587, "s": 10.5 },
-        { "t": "Writing Task:", "x": 120, "y": 615, "s": 12, "b": true },
-        { "t": "You are the charge nurse. Using the information given in the case notes, write a letter to the patient's GP,", "x": 120, "y": 640, "s": 10.5 },
-        { "t": "Dr William Richardson, at Royston Medical Centre, 1 Royston Parade, Asquith.", "x": 120, "y": 657, "s": 10.5 },
-        { "t": "In your answer,", "x": 120, "y": 682, "s": 11, "b": true },
-        { "t": "- Expand the relevant case notes into complete sentences", "x": 120, "y": 706, "s": 10.5, "b": true },
-        { "t": "- Do not use point form", "x": 120, "y": 723, "s": 10.5, "b": true },
-        { "t": "- Use letter format", "x": 120, "y": 740, "s": 10.5, "b": true },
-        { "t": "The body of the letter should be approximately 180-200 words.", "x": 120, "y": 766, "s": 10.5, "b": true }
+        {
+          "t": "13.01.17",
+          "x": 175,
+          "y": 90,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Pt encouraged to ambulate 2x daily to reduce risk of deconditioning",
+          "x": 280,
+          "y": 90,
+          "s": 8.5
+        },
+        {
+          "t": "Wife reports poor feeding ability, pt often chokes on food",
+          "x": 280,
+          "y": 107,
+          "s": 9.5
+        },
+        {
+          "t": "IV Abs continued (fluids ceased, commenced orally)",
+          "x": 280,
+          "y": 124,
+          "s": 10.5
+        },
+        {
+          "t": "Temp. range 38.5-39.0 degrees, other vitals normal",
+          "x": 280,
+          "y": 141,
+          "s": 10.5
+        },
+        {
+          "t": "14.01.17",
+          "x": 175,
+          "y": 170,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Physio visit - reduced power in arms (3/5) and legs (4/5). Advised to",
+          "x": 280,
+          "y": 170,
+          "s": 8.5
+        },
+        {
+          "t": "continue mobilising, exercise programme commenced.",
+          "x": 280,
+          "y": 187,
+          "s": 10.5
+        },
+        {
+          "t": "Dietician visit - advice provided re: maximising nutrition, feeding",
+          "x": 280,
+          "y": 204,
+          "s": 8.5
+        },
+        {
+          "t": "schedule (more frequent, smaller meals)",
+          "x": 280,
+          "y": 221,
+          "s": 10.5
+        },
+        {
+          "t": "Temp. range 37.5-38.5 degrees, other obs normal.",
+          "x": 280,
+          "y": 238,
+          "s": 10.5
+        },
+        {
+          "t": "IV Abs continued",
+          "x": 280,
+          "y": 255,
+          "s": 10.5
+        },
+        {
+          "t": "15.01.17",
+          "x": 175,
+          "y": 284,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Pt mobilising with 4-wheel-walker, mobility belt, 2 person assist",
+          "x": 280,
+          "y": 284,
+          "s": 8.5
+        },
+        {
+          "t": "All vitals normal (switched to 2 sets of obs/day)",
+          "x": 280,
+          "y": 301,
+          "s": 10.5
+        },
+        {
+          "t": "IV Abs continued",
+          "x": 280,
+          "y": 318,
+          "s": 10.5
+        },
+        {
+          "t": "No BM since admission - ?constipation (Sienna added to Rx regime)",
+          "x": 280,
+          "y": 335,
+          "s": 8.5
+        },
+        {
+          "t": "16.01.17",
+          "x": 175,
+          "y": 364,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "All vitals normal",
+          "x": 280,
+          "y": 364,
+          "s": 10.5
+        },
+        {
+          "t": "IV Abs ceased",
+          "x": 280,
+          "y": 381,
+          "s": 10.5
+        },
+        {
+          "t": "BM x 2 with Sienna (fibre supplement)",
+          "x": 280,
+          "y": 398,
+          "s": 10.5
+        },
+        {
+          "t": "17.01.17",
+          "x": 175,
+          "y": 427,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Uneventful",
+          "x": 280,
+          "y": 427,
+          "s": 10.5
+        },
+        {
+          "t": "1 x BM",
+          "x": 280,
+          "y": 444,
+          "s": 10.5
+        },
+        {
+          "t": "All vitals normal.",
+          "x": 280,
+          "y": 461,
+          "s": 10.5
+        },
+        {
+          "t": "18.01.17",
+          "x": 175,
+          "y": 490,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Pt to be discharged home.",
+          "x": 280,
+          "y": 490,
+          "s": 10.5
+        },
+        {
+          "t": "Wife counselled re: feeding techniques and regular monitoring of",
+          "x": 280,
+          "y": 507,
+          "s": 8.5
+        },
+        {
+          "t": "temperature",
+          "x": 280,
+          "y": 524,
+          "s": 10.5
+        },
+        {
+          "t": "Discharge plan:",
+          "x": 145,
+          "y": 553,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Continue exercise programme, Sienna, diet plan",
+          "x": 280,
+          "y": 553,
+          "s": 10.5
+        },
+        {
+          "t": "Follow-up visits from physio for 2/52 post-discharge",
+          "x": 280,
+          "y": 570,
+          "s": 10.5
+        },
+        {
+          "t": "Community nurse to visit in 1/52 - check coping at home",
+          "x": 280,
+          "y": 587,
+          "s": 10
+        },
+        {
+          "t": "Writing Task:",
+          "x": 120,
+          "y": 615,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "You are the charge nurse. Using the information given in the case notes, write a letter to the patient's GP,",
+          "x": 120,
+          "y": 640,
+          "s": 8.5
+        },
+        {
+          "t": "Dr William Richardson, at Royston Medical Centre, 1 Royston Parade, Asquith.",
+          "x": 120,
+          "y": 657,
+          "s": 10.5
+        },
+        {
+          "t": "In your answer,",
+          "x": 120,
+          "y": 682,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "- Expand the relevant case notes into complete sentences",
+          "x": 120,
+          "y": 706,
+          "s": 10.5,
+          "b": true
+        },
+        {
+          "t": "- Do not use point form",
+          "x": 120,
+          "y": 723,
+          "s": 10.5,
+          "b": true
+        },
+        {
+          "t": "- Use letter format",
+          "x": 120,
+          "y": 740,
+          "s": 10.5,
+          "b": true
+        },
+        {
+          "t": "The body of the letter should be approximately 180-200 words.",
+          "x": 120,
+          "y": 766,
+          "s": 10.5,
+          "b": true
+        }
       ]
     }
   ]

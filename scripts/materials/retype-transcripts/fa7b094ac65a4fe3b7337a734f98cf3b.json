@@ -3,97 +3,560 @@
   "pages": [
     {
       "lines": [
-        { "t": "OCCUPATIONAL ENGLISH TEST", "x": 42, "y": 48, "s": 17, "b": true },
-        { "t": "WRITING SUB-TEST:", "x": 42, "y": 80, "s": 12, "b": true },
-        { "t": "MEDICINE", "x": 220, "y": 80, "s": 12, "b": true },
-        { "t": "TIME ALLOWED:", "x": 42, "y": 102, "s": 12, "b": true },
-        { "t": "READING TIME:  5 MINUTES", "x": 220, "y": 102, "s": 12, "b": true },
-        { "t": "WRITING TIME:  40 MINUTES", "x": 220, "y": 120, "s": 12, "b": true },
-        { "t": "Read the case notes below and complete the writing task which follows.", "x": 42, "y": 148, "s": 11 },
-        { "t": "Notes:", "x": 42, "y": 176, "s": 12, "b": true },
-        { "t": "You are a general practitioner. Ms Sarah Day, 20 years old, has been attending your practice since her early childhood.", "x": 42, "y": 202, "s": 10.5 },
-        { "t": "Patient:", "x": 42, "y": 228, "s": 11, "b": true },
-        { "t": "Ms Sarah Day, D.O.B. 29.07.1997", "x": 170, "y": 228, "s": 11 },
-        { "t": "Past medical history:", "x": 42, "y": 252, "s": 11, "b": true },
-        { "t": "Jul 2001:  varicella", "x": 170, "y": 252, "s": 11 },
-        { "t": "Apr 2002:  measles", "x": 170, "y": 270, "s": 11 },
-        { "t": "Jan 2004:  fractured ulna", "x": 170, "y": 288, "s": 11 },
-        { "t": "Jun 2006:  URTI", "x": 170, "y": 306, "s": 11 },
-        { "t": "Sep 2008:  plantar warts", "x": 170, "y": 324, "s": 11 },
-        { "t": "Dec 2011:  dysmenorrhoea", "x": 170, "y": 342, "s": 11 },
-        { "t": "Apr 2013:  teenage acne", "x": 170, "y": 360, "s": 11 },
-        { "t": "Aug 2014:  pre-menstrual syndrome", "x": 170, "y": 378, "s": 11 },
-        { "t": "Jun 2015:  exam-related anxiety", "x": 170, "y": 396, "s": 11 },
-        { "t": "Nov 2016:  oro-facial herpes simplex virus", "x": 170, "y": 414, "s": 11 },
-        { "t": "Social background:", "x": 42, "y": 440, "s": 11, "b": true },
-        { "t": "University student - not happy with course of study", "x": 170, "y": 440, "s": 11 },
-        { "t": "Part-time job - McDonald's", "x": 170, "y": 458, "s": 11 },
-        { "t": "Irregular hours, 5-8 hrs sleep/night", "x": 170, "y": 476, "s": 11 },
-        { "t": "Smokes, drinks moderately", "x": 170, "y": 494, "s": 11 },
-        { "t": "Lives at home with parents, boyfriend for 7 months", "x": 170, "y": 512, "s": 11 },
-        { "t": "Medications:", "x": 42, "y": 538, "s": 11, "b": true },
-        { "t": "Oral contraceptive pill (prescribed April 2013) cyproterone acetate/ethinylestradiol - mane", "x": 170, "y": 538, "s": 10.5 },
-        { "t": "06.12.17", "x": 42, "y": 564, "s": 11, "b": true },
-        { "t": "Pt presented with mother complaining of unilateral headache - occipital, temporal extending to", "x": 170, "y": 564, "s": 10.5 },
-        { "t": "vertex, dizziness/loss of balance, with nausea and anxiety. Visual disturbances. Better when lying", "x": 170, "y": 581, "s": 10.5 },
-        { "t": "down. Symptoms not affected by red wine, alcohol, chocolate, cheese, sunlight. Not related to", "x": 170, "y": 598, "s": 10.5 },
-        { "t": "menstrual cycle or stress.", "x": 170, "y": 615, "s": 10.5 },
-        { "t": "Pt reports workload stress, pressure of assignments & exams.", "x": 170, "y": 640, "s": 10.5 },
-        { "t": "Episodes:", "x": 56, "y": 668, "s": 11, "b": true },
-        { "t": "x2 in past 2 weeks.", "x": 170, "y": 668, "s": 11 },
-        { "t": "Pain:", "x": 56, "y": 692, "s": 11, "b": true },
-        { "t": "Steady, not throbbing.", "x": 170, "y": 692, "s": 11 },
-        { "t": "Onset:", "x": 56, "y": 716, "s": 11, "b": true },
-        { "t": "Rapid", "x": 170, "y": 716, "s": 11 },
-        { "t": "Aura", "x": 170, "y": 733, "s": 11 },
-        { "t": "Symptoms last 1-2 days (severe for several hours).", "x": 170, "y": 750, "s": 11 },
-        { "t": "No family history of headaches/migraines.", "x": 170, "y": 767, "s": 11 },
-        { "t": "Examination:", "x": 56, "y": 792, "s": 11, "b": true },
-        { "t": "No abnormal neurological signs.", "x": 170, "y": 792, "s": 11 }
+        {
+          "t": "OCCUPATIONAL ENGLISH TEST",
+          "x": 42,
+          "y": 48,
+          "s": 17,
+          "b": true
+        },
+        {
+          "t": "WRITING SUB-TEST:",
+          "x": 42,
+          "y": 80,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "MEDICINE",
+          "x": 220,
+          "y": 80,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "TIME ALLOWED:",
+          "x": 42,
+          "y": 102,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "READING TIME:  5 MINUTES",
+          "x": 220,
+          "y": 102,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "WRITING TIME:  40 MINUTES",
+          "x": 220,
+          "y": 120,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "Read the case notes below and complete the writing task which follows.",
+          "x": 42,
+          "y": 148,
+          "s": 11
+        },
+        {
+          "t": "Notes:",
+          "x": 42,
+          "y": 176,
+          "s": 12,
+          "b": true
+        },
+        {
+          "t": "You are a general practitioner. Ms Sarah Day, 20 years old, has been attending your practice since her early childhood.",
+          "x": 42,
+          "y": 202,
+          "s": 8.5
+        },
+        {
+          "t": "Patient:",
+          "x": 42,
+          "y": 228,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Ms Sarah Day, D.O.B. 29.07.1997",
+          "x": 170,
+          "y": 228,
+          "s": 11
+        },
+        {
+          "t": "Past medical history:",
+          "x": 42,
+          "y": 252,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Jul 2001:  varicella",
+          "x": 182,
+          "y": 252,
+          "s": 11
+        },
+        {
+          "t": "Apr 2002:  measles",
+          "x": 182,
+          "y": 270,
+          "s": 11
+        },
+        {
+          "t": "Jan 2004:  fractured ulna",
+          "x": 182,
+          "y": 288,
+          "s": 11
+        },
+        {
+          "t": "Jun 2006:  URTI",
+          "x": 182,
+          "y": 306,
+          "s": 11
+        },
+        {
+          "t": "Sep 2008:  plantar warts",
+          "x": 182,
+          "y": 324,
+          "s": 11
+        },
+        {
+          "t": "Dec 2011:  dysmenorrhoea",
+          "x": 182,
+          "y": 342,
+          "s": 11
+        },
+        {
+          "t": "Apr 2013:  teenage acne",
+          "x": 182,
+          "y": 360,
+          "s": 11
+        },
+        {
+          "t": "Aug 2014:  pre-menstrual syndrome",
+          "x": 182,
+          "y": 378,
+          "s": 11
+        },
+        {
+          "t": "Jun 2015:  exam-related anxiety",
+          "x": 182,
+          "y": 396,
+          "s": 11
+        },
+        {
+          "t": "Nov 2016:  oro-facial herpes simplex virus",
+          "x": 182,
+          "y": 414,
+          "s": 11
+        },
+        {
+          "t": "Social background:",
+          "x": 42,
+          "y": 440,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "University student - not happy with course of study",
+          "x": 182,
+          "y": 440,
+          "s": 11
+        },
+        {
+          "t": "Part-time job - McDonald's",
+          "x": 182,
+          "y": 458,
+          "s": 11
+        },
+        {
+          "t": "Irregular hours, 5-8 hrs sleep/night",
+          "x": 182,
+          "y": 476,
+          "s": 11
+        },
+        {
+          "t": "Smokes, drinks moderately",
+          "x": 182,
+          "y": 494,
+          "s": 11
+        },
+        {
+          "t": "Lives at home with parents, boyfriend for 7 months",
+          "x": 182,
+          "y": 512,
+          "s": 11
+        },
+        {
+          "t": "Medications:",
+          "x": 42,
+          "y": 538,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Oral contraceptive pill (prescribed April 2013) cyproterone acetate/ethinylestradiol - mane",
+          "x": 182,
+          "y": 538,
+          "s": 8.5
+        },
+        {
+          "t": "06.12.17",
+          "x": 42,
+          "y": 564,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Pt presented with mother complaining of unilateral headache - occipital, temporal extending to",
+          "x": 182,
+          "y": 564,
+          "s": 8.5
+        },
+        {
+          "t": "vertex, dizziness/loss of balance, with nausea and anxiety. Visual disturbances. Better when lying",
+          "x": 182,
+          "y": 581,
+          "s": 8.5
+        },
+        {
+          "t": "down. Symptoms not affected by red wine, alcohol, chocolate, cheese, sunlight. Not related to",
+          "x": 182,
+          "y": 598,
+          "s": 8.5
+        },
+        {
+          "t": "menstrual cycle or stress.",
+          "x": 182,
+          "y": 615,
+          "s": 10.5
+        },
+        {
+          "t": "Pt reports workload stress, pressure of assignments & exams.",
+          "x": 182,
+          "y": 640,
+          "s": 10.5
+        },
+        {
+          "t": "Episodes:",
+          "x": 56,
+          "y": 668,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "x2 in past 2 weeks.",
+          "x": 182,
+          "y": 668,
+          "s": 11
+        },
+        {
+          "t": "Pain:",
+          "x": 56,
+          "y": 692,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Steady, not throbbing.",
+          "x": 182,
+          "y": 692,
+          "s": 11
+        },
+        {
+          "t": "Onset:",
+          "x": 56,
+          "y": 716,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Rapid",
+          "x": 182,
+          "y": 716,
+          "s": 11
+        },
+        {
+          "t": "Aura",
+          "x": 182,
+          "y": 733,
+          "s": 11
+        },
+        {
+          "t": "Symptoms last 1-2 days (severe for several hours).",
+          "x": 182,
+          "y": 750,
+          "s": 11
+        },
+        {
+          "t": "No family history of headaches/migraines.",
+          "x": 182,
+          "y": 767,
+          "s": 11
+        },
+        {
+          "t": "Examination:",
+          "x": 56,
+          "y": 792,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "No abnormal neurological signs.",
+          "x": 182,
+          "y": 792,
+          "s": 11
+        }
       ]
     },
     {
       "lines": [
-        { "t": "Treatment:", "x": 56, "y": 60, "s": 11, "b": true },
-        { "t": "Education: rest/relaxation/meditation, adequate sleep, regular eating.", "x": 170, "y": 60, "s": 10.5 },
-        { "t": "During attack: sleep, dark room, ice.", "x": 170, "y": 78, "s": 10.5 },
-        { "t": "Metoclopramide 10 mg - orally -> 20 mins later paracetamol 1 g - 4 hrly (max 4 g/24 hrs).", "x": 170, "y": 96, "s": 10.5 },
-        { "t": "04.01.18", "x": 42, "y": 124, "s": 11, "b": true },
-        { "t": "Attacks more frequent. Prescribed medications ineffective.", "x": 170, "y": 124, "s": 10.5 },
-        { "t": "Pain felt in neck.", "x": 170, "y": 142, "s": 10.5 },
-        { "t": "Anxiety becoming worse.", "x": 170, "y": 160, "s": 10.5 },
-        { "t": "Dizziness during attacks.", "x": 170, "y": 178, "s": 10.5 },
-        { "t": "Vomited on one occasion.", "x": 170, "y": 196, "s": 10.5 },
-        { "t": "Mother reports Pt becoming afraid to leave house in case attack occurs.", "x": 170, "y": 214, "s": 10.5 },
-        { "t": "No identifiable triggers.", "x": 170, "y": 232, "s": 10.5 },
-        { "t": "Dark room, ice - no effect.", "x": 170, "y": 250, "s": 10.5 },
-        { "t": "Treatment:", "x": 56, "y": 278, "s": 11, "b": true },
-        { "t": "Eletriptan 40 mg - orally on attack.", "x": 170, "y": 278, "s": 10.5 },
-        { "t": "Ibuprofen 400 mg - 6 hrly (max t.d.s.).", "x": 170, "y": 296, "s": 10.5 },
-        { "t": "31.01.18", "x": 42, "y": 324, "s": 11, "b": true },
-        { "t": "Pt complained of drowsiness and diarrhoea since commenced on eletriptan.", "x": 170, "y": 324, "s": 10.5 },
-        { "t": "No improvement in symptoms. Anxiety worse - Pt describes as 'panic' accompanying symptoms.", "x": 170, "y": 342, "s": 10.5 },
-        { "t": "Mother concerned daughter becoming depressed: withdrawn, housebound, losing interest in", "x": 170, "y": 360, "s": 10.5 },
-        { "t": "activities & boyfriend, oversleeping, comfort eating -> weight gain.", "x": 170, "y": 378, "s": 10.5 },
-        { "t": "B.P 120/80", "x": 170, "y": 404, "s": 10.5 },
-        { "t": "Treatment:", "x": 56, "y": 428, "s": 11, "b": true },
-        { "t": "Amitriptyline 25 mg - b.d.", "x": 170, "y": 428, "s": 10.5 },
-        { "t": "24.02.18", "x": 42, "y": 456, "s": 11, "b": true },
-        { "t": "Pt presented alone. Complains of numbness and tingling (paraesthesia) in fingers 4 & 5 left hand.", "x": 170, "y": 456, "s": 10.5 },
-        { "t": "No improvement in symptoms.", "x": 170, "y": 474, "s": 10.5 },
-        { "t": "Pt reported car accident Jun 2017. Not previously disclosed as wishes to keep from mother.", "x": 170, "y": 492, "s": 10.5 },
-        { "t": "Sustained 'whiplash injury'.", "x": 170, "y": 510, "s": 10.5 },
-        { "t": "No treatment sought at time.", "x": 170, "y": 528, "s": 10.5 },
-        { "t": "Referral to neurologist, for investigation and management.", "x": 170, "y": 546, "s": 10.5 },
-        { "t": "Writing Task:", "x": 42, "y": 600, "s": 13, "b": true },
-        { "t": "Using the information in the case notes, write a letter of referral to Dr Robert Edwards, a neurologist. Outline Ms Day's recent", "x": 42, "y": 626, "s": 10.5 },
-        { "t": "history and request further investigations and management. Address the letter to Dr Robert Edwards, Rushford Hospital,", "x": 42, "y": 643, "s": 10.5 },
-        { "t": "Long Gully Road, Littletown.", "x": 42, "y": 660, "s": 10.5 },
-        { "t": "In your answer:", "x": 42, "y": 690, "s": 11, "b": true },
-        { "t": "-  Expand the relevant notes into complete sentences", "x": 70, "y": 714, "s": 11, "b": true },
-        { "t": "-  Do not use note form", "x": 70, "y": 736, "s": 11, "b": true },
-        { "t": "-  Use letter format", "x": 70, "y": 758, "s": 11, "b": true },
-        { "t": "The body of the letter should be approximately 180-200 words.", "x": 42, "y": 782, "s": 11, "b": true }
+        {
+          "t": "Treatment:",
+          "x": 56,
+          "y": 60,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Education: rest/relaxation/meditation, adequate sleep, regular eating.",
+          "x": 170,
+          "y": 60,
+          "s": 10.5
+        },
+        {
+          "t": "During attack: sleep, dark room, ice.",
+          "x": 170,
+          "y": 78,
+          "s": 10.5
+        },
+        {
+          "t": "Metoclopramide 10 mg - orally -> 20 mins later paracetamol 1 g - 4 hrly (max 4 g/24 hrs).",
+          "x": 170,
+          "y": 96,
+          "s": 8.5
+        },
+        {
+          "t": "04.01.18",
+          "x": 42,
+          "y": 124,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Attacks more frequent. Prescribed medications ineffective.",
+          "x": 170,
+          "y": 124,
+          "s": 10.5
+        },
+        {
+          "t": "Pain felt in neck.",
+          "x": 170,
+          "y": 142,
+          "s": 10.5
+        },
+        {
+          "t": "Anxiety becoming worse.",
+          "x": 170,
+          "y": 160,
+          "s": 10.5
+        },
+        {
+          "t": "Dizziness during attacks.",
+          "x": 170,
+          "y": 178,
+          "s": 10.5
+        },
+        {
+          "t": "Vomited on one occasion.",
+          "x": 170,
+          "y": 196,
+          "s": 10.5
+        },
+        {
+          "t": "Mother reports Pt becoming afraid to leave house in case attack occurs.",
+          "x": 170,
+          "y": 214,
+          "s": 10.5
+        },
+        {
+          "t": "No identifiable triggers.",
+          "x": 170,
+          "y": 232,
+          "s": 10.5
+        },
+        {
+          "t": "Dark room, ice - no effect.",
+          "x": 170,
+          "y": 250,
+          "s": 10.5
+        },
+        {
+          "t": "Treatment:",
+          "x": 56,
+          "y": 278,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Eletriptan 40 mg - orally on attack.",
+          "x": 170,
+          "y": 278,
+          "s": 10.5
+        },
+        {
+          "t": "Ibuprofen 400 mg - 6 hrly (max t.d.s.).",
+          "x": 170,
+          "y": 296,
+          "s": 10.5
+        },
+        {
+          "t": "31.01.18",
+          "x": 42,
+          "y": 324,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Pt complained of drowsiness and diarrhoea since commenced on eletriptan.",
+          "x": 170,
+          "y": 324,
+          "s": 10.5
+        },
+        {
+          "t": "No improvement in symptoms. Anxiety worse - Pt describes as 'panic' accompanying symptoms.",
+          "x": 170,
+          "y": 342,
+          "s": 8.5
+        },
+        {
+          "t": "Mother concerned daughter becoming depressed: withdrawn, housebound, losing interest in",
+          "x": 170,
+          "y": 360,
+          "s": 8.5
+        },
+        {
+          "t": "activities & boyfriend, oversleeping, comfort eating -> weight gain.",
+          "x": 170,
+          "y": 378,
+          "s": 10.5
+        },
+        {
+          "t": "B.P 120/80",
+          "x": 170,
+          "y": 404,
+          "s": 10.5
+        },
+        {
+          "t": "Treatment:",
+          "x": 56,
+          "y": 428,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Amitriptyline 25 mg - b.d.",
+          "x": 170,
+          "y": 428,
+          "s": 10.5
+        },
+        {
+          "t": "24.02.18",
+          "x": 42,
+          "y": 456,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "Pt presented alone. Complains of numbness and tingling (paraesthesia) in fingers 4 & 5 left hand.",
+          "x": 170,
+          "y": 456,
+          "s": 8.5
+        },
+        {
+          "t": "No improvement in symptoms.",
+          "x": 170,
+          "y": 474,
+          "s": 10.5
+        },
+        {
+          "t": "Pt reported car accident Jun 2017. Not previously disclosed as wishes to keep from mother.",
+          "x": 170,
+          "y": 492,
+          "s": 8.5
+        },
+        {
+          "t": "Sustained 'whiplash injury'.",
+          "x": 170,
+          "y": 510,
+          "s": 10.5
+        },
+        {
+          "t": "No treatment sought at time.",
+          "x": 170,
+          "y": 528,
+          "s": 10.5
+        },
+        {
+          "t": "Referral to neurologist, for investigation and management.",
+          "x": 170,
+          "y": 546,
+          "s": 10.5
+        },
+        {
+          "t": "Writing Task:",
+          "x": 42,
+          "y": 600,
+          "s": 13,
+          "b": true
+        },
+        {
+          "t": "Using the information in the case notes, write a letter of referral to Dr Robert Edwards, a neurologist. Outline Ms Day's recent",
+          "x": 42,
+          "y": 626,
+          "s": 8.5
+        },
+        {
+          "t": "history and request further investigations and management. Address the letter to Dr Robert Edwards, Rushford Hospital,",
+          "x": 42,
+          "y": 643,
+          "s": 8.5
+        },
+        {
+          "t": "Long Gully Road, Littletown.",
+          "x": 42,
+          "y": 660,
+          "s": 10.5
+        },
+        {
+          "t": "In your answer:",
+          "x": 42,
+          "y": 690,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "-  Expand the relevant notes into complete sentences",
+          "x": 70,
+          "y": 714,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "-  Do not use note form",
+          "x": 70,
+          "y": 736,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "-  Use letter format",
+          "x": 70,
+          "y": 758,
+          "s": 11,
+          "b": true
+        },
+        {
+          "t": "The body of the letter should be approximately 180-200 words.",
+          "x": 42,
+          "y": 782,
+          "s": 11,
+          "b": true
+        }
       ]
     }
   ]
