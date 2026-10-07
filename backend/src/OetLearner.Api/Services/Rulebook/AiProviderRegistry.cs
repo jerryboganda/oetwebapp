@@ -138,7 +138,11 @@ public sealed class RegistryBackedProvider(
     private static readonly TimeSpan OpenCodeProviderTimeout = TimeSpan.FromSeconds(100);
 
     // Forced thinking can spend the whole output budget before the first answer token.
-    private const int OpenCodeMinMaxTokens = 6144;
+    // SAMI UAT finding (2026-10-07): at effort=max deepseek-v4.1-flash exhausts 6,144
+    // tokens reasoning on long learner turns and returns finish_reason=length with no
+    // content. The model supports up to 64k output; floor raised to 16,384 so the
+    // answer survives the thinking budget.
+    private const int OpenCodeMinMaxTokens = 16384;
 
     private static bool IsUbagFacadeRequest(string baseUrl, AiProviderRequest request)
         => string.Equals(request.ProviderCode, "ubag", StringComparison.OrdinalIgnoreCase)
