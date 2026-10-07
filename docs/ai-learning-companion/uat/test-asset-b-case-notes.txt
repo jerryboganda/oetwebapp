@@ -1,0 +1,20 @@
+TEST ASSET B - Writing Case Notes (OET-style synthetic task, Medicine)
+
+Patient: Mr Daniel Price, 58 years old.
+General practice appointment: 7 September 2026.
+Type 2 diabetes diagnosed 8 years ago.
+HbA1c remains high despite metformin and lifestyle advice.
+Home glucose readings frequently 11-15 mmol/L.
+Reports increasing thirst and nocturia over the last 6 weeks.
+No chest pain or acute shortness of breath.
+Blood pressure 132/78 mmHg.
+Enjoys gardening and watches football every weekend.
+Weight increased by 4 kg in 6 months.
+Medication: metformin 1 g twice daily; adherence reported as good.
+Previous dietitian review 10 months ago.
+Plan: refer to endocrinologist for optimisation of diabetes management and consideration of additional therapy.
+
+WRITING TASK
+Using the information in the case notes, write a referral letter to Dr Emily Ross,
+Consultant Endocrinologist, Riverside Specialist Centre, requesting further assessment
+and optimisation of Mr Price's diabetes management.
