@@ -129,6 +129,24 @@ async function downloadStimulus(profession, mediaAssetId, destFile) {
 }
 
 // ── OCR: tesseract TSV -> words with boxes + confidence ──────────────────────
+
+/** A word is GARBAGE when it is mostly non-word symbols at low confidence —
+ * the OCR's reading of logos, form boxes and candidate-number circles. Those
+ * are never shipped: they are dropped and counted in the report for review. */
+function isGarbageWord(word) {
+  const text = word.text ?? '';
+  const alphanumeric = (text.match(/[0-9A-Za-z]/g) ?? []).length;
+  if (alphanumeric === 0) return true;
+  if (alphanumeric / text.length < 0.5 && word.confidence < 90) return true;
+  if (text.length >= 8 && /[^(](?:[()]|[@#§€£]){4,}/.test(text) && word.confidence < 80) return true;
+  return false;
+}
+
+const droppedWords = [];
+const droppedGarbage = (word) => {
+  droppedWords.push(word.text);
+};
+
 function ocrPageTsv(pagePng) {
   const base = pagePng.replace(/\.png$/, '');
   run('tesseract', [pagePng, base, '--dpi', String(DPI), '-c', 'preserve_interword_spaces=1', 'tsv']);
@@ -139,7 +157,11 @@ function ocrPageTsv(pagePng) {
     if (level !== '5' || !text?.trim()) continue;
     const confidence = Number(conf);
     if (!Number.isFinite(confidence) || confidence < 0) continue;
-    words.push({ left: Number(left), top: Number(top), width: Number(width), height: Number(height), confidence, text: text.trim() });
+    const word = { left: Number(left), top: Number(top), width: Number(width), height: Number(height), confidence, text: text.trim() };
+    // Logo/letterhead glyphs are far taller than body text at 300 dpi.
+    if (word.height > 110 && confidence < 90) { droppedGarbage(word); continue; }
+    if (isGarbageWord(word)) { droppedGarbage(word); continue; }
+    words.push(word);
   }
   try { fs.unlinkSync(`${base}.tsv`); } catch { /* ignore */ }
   try { fs.unlinkSync(`${base}.txt`); } catch { /* ignore */ }
@@ -161,7 +183,7 @@ function pngSize(pngPath) {
   return { w: head.readUInt32BE(16), h: head.readUInt32BE(20) };
 }
 
-function buildVectorPdf(pdfPath, outPath, report) {
+function buildVectorPdf(pdfPath, outPath, report, assetId) {
   const pages = Number((run('pdfinfo', [pdfPath]).match(/^Pages:\s+(\d+)/m) ?? [])[1] ?? 0);
   if (!pages) throw new Error('no pages');
   fs.mkdirSync(RETYPE_DIR, { recursive: true });
@@ -176,12 +198,16 @@ function buildVectorPdf(pdfPath, outPath, report) {
     pyInputs.push({ png, pageW: dims.w, pageH: dims.h, words });
     report.wordCount += words.length;
     report.lowConfidence.push(...words.filter((wd) => wd.confidence < MIN_CONFIDENCE).map((wd) => ({ page: p, ...wd })));
+    // Keep the SOURCE render for the human review pair (original vs rebuilt).
+    fs.copyFileSync(png, path.join(OUT_DIR, `source-${assetId}-${p}.png`));
   }
   const pyScript = path.join(RETYPE_DIR, 'build.py');
   const payload = { out: outPath, pages: pyInputs, a4: [595.276, 841.89] };
   fs.writeFileSync(path.join(RETYPE_DIR, 'payload.json'), JSON.stringify(payload));
   fs.writeFileSync(pyScript, PY_BUILDER);
   run('python3', [pyScript, path.join(RETYPE_DIR, 'payload.json')]);
+  report.droppedGarbage = droppedWords.length;
+  droppedWords.length = 0;
   // cleanup page pngs (big)
   for (const f of fs.readdirSync(RETYPE_DIR)) if (f.startsWith('page-')) fs.unlinkSync(path.join(RETYPE_DIR, f));
 }
@@ -251,7 +277,7 @@ async function main() {
       entry.wordCount = 0;
       entry.lowConfidence = [];
       const outPath = path.join(OUT_DIR, `${row.oldAssetId}.pdf`);
-      buildVectorPdf(tmpPdf, outPath, entry);
+      buildVectorPdf(tmpPdf, outPath, entry, row.oldAssetId);
       verifyBuilt(outPath, entry);
       entry.ok = entry.imageCount === 0 && entry.fontsEmbedded;
       // preview at 110 dpi
