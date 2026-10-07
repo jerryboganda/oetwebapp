@@ -115,10 +115,25 @@
             name: nftables
             enabled: true
 
+        - name: Self-test the dial port from the host itself (recorded, never fatal)
+          when: (fleet_dial_ports | default([])) | length > 0
+          ansible.builtin.shell: |
+            port="$(echo '{{ fleet_dial_ports | join(" ") }}' | awk '{print $1}')"
+            if timeout 6 bash -c "echo > /dev/tcp/127.0.0.1/$port" 2>/dev/null; then
+              echo "self-test: 127.0.0.1:$port answers (published and listening)"
+            else
+              refused=0
+              timeout 3 bash -c "echo > /dev/tcp/127.0.0.1/$port" 2>/dev/null || refused=$?
+              echo "self-test: 127.0.0.1:$port no answer (rc=$refused) — container publish or listener down"
+            fi
+          register: fleet_dial_selftest
+          changed_when: false
+          check_mode: false
+
         - name: Record success
           ansible.builtin.include_tasks: tasks/record-result.yml
           vars:
-            fleet_result_json: "{{ {'ok': true, 'summary': 'inbound default-deny; SSH allowed from the primary and the connecting address; dial ports: ' + ((fleet_dial_ports | default([])) | join(',') | default('none'))} | to_json }}"
+            fleet_result_json: "{{ {'ok': true, 'summary': 'inbound default-deny; SSH allowed from the primary and the connecting address; dial ports: ' + ((fleet_dial_ports | default([])) | join(',') | default('none')) + '; ' + ((fleet_dial_selftest.stdout | default('self-test skipped')) | trim)} | to_json }}"
 
       rescue:
         - name: Remove our table so the host stays reachable
