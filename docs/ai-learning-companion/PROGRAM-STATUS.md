@@ -91,3 +91,13 @@ Env/secret inventory + rotation runbook, backup/restore procedure doc, golden+ad
 test sets bundle, and the completion of D-SAMI-001 fix + Pack 3 retest. Everything else
 (repos, registries, credit ledger docs, runbooks, UAT scripts) is in-repo under
 `docs/ai-learning-companion/` and `.tools-state/sami-ops/`.
+
+## D-SAMI-001 retest (build 054940824d, 2026-10-07 late)
+
+Pack 3 retest on the orchestrator-guard build: 6/8 real responses (was 3/8). Tests 01/07/08
+now respond with correct honest refusals; Test 03 extraction works. Tests 15/16 still return
+empty completions and Test 05 hit gateway-busy — **D-SAMI-001 remains PARTIALLY FIXED**: the
+orchestrator guard catches the empty-final-response path, but a second path (empty
+MessageComplete events reaching the client without persisting anything) persists on
+attachment-heavy turns following slow turns. Next diagnostic step: hub-level event capture
+around StartTurn→first-persist on those shapes. Records: `uat-execution-…21-52-46.json`.

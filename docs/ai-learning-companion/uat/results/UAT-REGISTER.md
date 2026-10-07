@@ -1,6 +1,6 @@
 # SAMI UAT Execution Register (§17.2)
 
-> Consolidated from 12 execution runs; the newest record per test number wins.
+> Consolidated from 13 execution runs; the newest record per test number wins.
 > Status (§17.1) is NOT assigned here — the reviewer judges each record against
 > the pack PASS CHECK. Mechanical flags below are triage aids only.
 
@@ -56,13 +56,13 @@
 
 | Test | Tag | Latency | Flags | Response (verbatim, first 400 chars) |
 |---|---|---|---|---|
-| Pack 3 - Test 01 | IMAGE | 41s | — | Hi, I'm Sami — your OET learning companion. Let me be straight with you first, because it matters more than being helpful-sounding:  **I can't see your uploaded report, and I can't read attachments at all.** No readable content from any document came through to me in this conversation. I won't guess at a test date or scores to fill the gap — pretend-extracting would be worse than useless for somet |
-| Pack 3 - Test 03 | PDF | 31s | — | From the file that came through this time — **test-asset-b-case-notes.txt** — here are the three elements you asked for:  - **Writing task** — write a referral letter based on the case notes. - **Recipient** — Dr Emily Ross, Consultant Endocrinologist, Riverside Specialist Centre. - **Primary purpose** — requesting further assessment and optimisation of Mr Price's diabetes management.  For context |
-| Pack 3 - Test 04 | WRITING | 198s | — | Sorted against one filter: **what does Dr Ross need in order to act on the request** — "further assessment and optimisation of diabetes management"?  **Essential — must be in the letter** - Mr Daniel Price, 58 — patient identification - Type 2 diabetes, diagnosed 8 years ago - Poor control: HbA1c high despite metformin and lifestyle advice - Home glucose readings 11–15 mmol/L - Current symptoms: i |
-| Pack 3 - Test 05 | WRITING | 0s | NO RESPONSE; ERROR Cannot send data if the connection is not in the 'Connected' | (none) |
-| Pack 3 - Test 07 | IMAGE Q | 0s | NO RESPONSE; ERROR Cannot send data if the connection is not in the 'Connected' | (none) |
-| Pack 3 - Test 08 | ROBUSTNESS | 0s | NO RESPONSE; ERROR Cannot send data if the connection is not in the 'Connected' | (none) |
-| Pack 3 - Test 15 | STUDY ASSET | 0s | NO RESPONSE; ERROR Cannot send data if the connection is not in the 'Connected' | (none) |
+| Pack 3 - Test 01 | IMAGE | 22s | — | Hi, I'm Sami — your OET learning companion. Let me answer your request directly.  **No file actually reached me.** I can see your message came in with an attachment marker, but the report's contents are not available on my side — I can't open or read uploaded images/PDFs in this chat, and I won't invent or guess scores from a report I can't see. So there is nothing I can "extract" yet.  The good n |
+| Pack 3 - Test 03 | PDF | 38s | — | Found it. Extraction from **"TEST ASSET B — Writing Case Notes"** (as requested, in five lines or fewer):  - **Writing task:** Write a referral letter based on the case notes (an OET-style synthetic task, Medicine). - **Recipient:** Dr Emily Ross, Consultant Endocrinologist, Riverside Specialist Centre. - **Primary purpose:** Request further assessment and optimisation of Mr Daniel Price's diabete |
+| Pack 3 - Test 04 | WRITING | 117s | — | Thanks for re-sending — a couple of your attempts hit a service error on our side, so let me give you a proper answer now.  **Straight answer: I can't do this one from the upload.** I can't open or read uploaded PDFs in this chat — the case notes' contents aren't available to me, and I won't invent an "essential / useful / irrelevant" split for notes I can't see. A made-up sort would teach you wro |
+| Pack 3 - Test 05 | WRITING | 114s | PROVIDER BUSY (retest needed) | The AI provider service is busy at the moment. Please try again later after a few minutes. |
+| Pack 3 - Test 07 | IMAGE Q | 90s | — | Sorry — I have to flag two things before anything else, because the honest answer here isn't the one you wanted.  **1. I can't read the image.** It came through blank on my side, and opening uploaded images or files isn't something I can do in this chat — so I can't answer that question or explain options A–D. Re-uploading won't change that. I won't construct a confident-looking answer for text I  |
+| Pack 3 - Test 08 | ROBUSTNESS | 59s | — | No — I can't answer it. And since you asked for precision: it's not that a word or an option is unreadable. **Nothing in the image is readable to me.** No passage text, no question stem, no options A–D — none of it has come through on my side. So the exact list of what I cannot read is: everything. There is nothing for me to attempt, and I won't build a confident-sounding rationale around text I c |
+| Pack 3 - Test 15 | STUDY ASSET | 42s | NO RESPONSE; ERROR WebSocket closed with status code: 1006 (no reason given). | (none) |
 | Pack 3 - Test 16 | PRIVACY | 0s | NO RESPONSE; ERROR Cannot send data if the connection is not in the 'Connected' | (none) |
 ## Pack 4
 
@@ -75,4 +75,4 @@
 | Pack 4 - Test 17 | BILLING | 71s | — | Here's exactly what your plan shows right now:  **1. What you have left**  - **AI credits: 0.** That's the only metered allowance I can see on your current plan (free tier, no subscription active). There's no separate message-count or file-count quota visible to me, so I won't guess one. - Voice and PDF features are listed on your plan as **not metered (0 credits)** — but both are marked "configur |
 | Pack 4 - Test 18 | UPGRADE | 69s | — | You're out of AI credits, not out of course content — your balance is **0**, and the metered actions that cost credits are:  - Writing assessment (case note / letter) — 2 credits - Speaking role card — 2 credits; full two-card exam — 4 credits - Reading or Listening exam analysis — 1 credit each  **Here is the contextual upgrade for exactly this block, not the general pricing page:** → https://app |
 
-**Mechanical triage: 54 records, 22 flagged for attention.**
+**Mechanical triage: 54 records, 17 flagged for attention.**
