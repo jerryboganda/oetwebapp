@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Fleet.Core.Domain;
+using Fleet.Core.Policy;
 using Fleet.Core.Ssh;
 using Fleet.Manager.Api;
 using Fleet.Manager.Persistence;
+using Fleet.Manager.Projects;
 using Fleet.Manager.Vault;
 
 namespace Fleet.Manager.Operations;
@@ -541,7 +543,9 @@ public sealed partial class StepExecutor
         return await ImageAsync(ctx, cancellationToken);
     }
 
-    /// <summary>Replaces the container with the new digest. The ctl <c>run</c> verb also rewrites the digest in the env file, so the token is untouched.</summary>
+    /// <summary>Replaces the container with the new digest. The ctl <c>run</c> verb also rewrites the digest in the env file, so the token is untouched.
+    /// Trust plane (decision D3): the bundle is (re)rendered BEFORE <c>run</c> — start_agent refuses a container whose env enables
+    /// the listener without the certificate files, so a rollout re-provisions identity exactly like S10 does (and rotates leaves).</summary>
     private async Task<StepOutcome> RollRunAsync(StepContext ctx, CancellationToken cancellationToken)
     {
         var host = ctx.RequireHost();
@@ -557,6 +561,15 @@ public sealed partial class StepExecutor
             return StepOutcome.Skipped("the agent already runs the target digest");
         }
 
+        if (_options.Value.Ubag.TrustEnabled)
+        {
+            var render = await RenderTrustBundleAsync(host, cancellationToken);
+            if (render is not null)
+            {
+                return render;
+            }
+        }
+
         var run = await _access.CtlAsync(host, "run", new[] { digest }, null, cancellationToken);
         if (!run.Success)
         {
@@ -565,6 +578,30 @@ public sealed partial class StepExecutor
 
         await _hosts.UpdateAsync(host.Id, h => h.AgentDigest = digest, cancellationToken);
         return StepOutcome.Done("the agent was replaced");
+    }
+
+    /// <summary>Issues (or reuses) the host's UBAG node certificate and renders it through <c>put-certs</c>.
+    /// Returns null on success, or the failure outcome. Shared by the enrollment agent step and rollouts.</summary>
+    private async Task<StepOutcome?> RenderTrustBundleAsync(HostEntity host, CancellationToken cancellationToken)
+    {
+        UbagNodeBundle bundle;
+        try
+        {
+            bundle = await _trust.EnsureBundleAsync(host.Id, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return StepOutcome.Fail(FailureReasons.TokenRenderFailed, ex.Message, "cert render failed");
+        }
+
+        var payload = FleetJson.Serialize(new
+        {
+            ca = bundle.CaPem,
+            cert = bundle.CertPem,
+            key = bundle.KeyPem,
+        });
+        var putCerts = await _access.CtlAsync(host, "put-certs", Array.Empty<string>(), payload, cancellationToken);
+        return putCerts.Success ? null : FromCtl(putCerts, FailureReasons.TokenRenderFailed, "node certificate could not be written");
     }
 
     private async Task<StepOutcome> RollVerifyAsync(StepContext ctx, CancellationToken cancellationToken)
