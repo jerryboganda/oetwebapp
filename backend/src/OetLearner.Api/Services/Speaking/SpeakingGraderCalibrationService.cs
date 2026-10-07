@@ -645,3 +645,4 @@ public sealed partial class SpeakingGraderCalibrationService(
     private static int ReadMs(JsonElement segment, string property)
         => segment.TryGetProperty(property, out var value) && value.TryGetDouble(out var ms) ? (int)Math.Max(0, ms) : 0;
 }
+
