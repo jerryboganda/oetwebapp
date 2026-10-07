@@ -111,6 +111,30 @@ public sealed class UbagAllocationService
     /// enrolled host id keeps them stable across re-enrollments.</summary>
     public static string NodeIdFor(string hostId) => "ubag-" + hostId;
 
+    /// <summary>Parses the owner's Hosts setting: "*" or a comma-separated id list. An exact-id
+    /// entry lists that host whatever its lifecycle (the lifecycle gates still apply); "*" lists
+    /// Active hosts only. Unknown/blank tokens are ignored.</summary>
+    internal static bool IsListed(string hostsSetting, string hostId, string lifecycle)
+    {
+        var listed = false;
+        foreach (var raw in hostsSetting.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (raw == "*")
+            {
+                if (lifecycle is nameof(HostLifecycle.Active))
+                {
+                    return true;
+                }
+            }
+            else if (string.Equals(raw, hostId, StringComparison.Ordinal))
+            {
+                listed = true;
+            }
+        }
+
+        return listed;
+    }
+
     /// <summary>The URI SAN UBAG's trust plane matches (UBAG nodes/types.go URISANPrefix).</summary>
     public static string UriSanFor(string nodeId) => "spiffe://ubag/node/" + nodeId;
 
@@ -187,9 +211,7 @@ public sealed class UbagAllocationService
             return null;
         }
 
-        var listed = options.Hosts.Contains(host.Id, StringComparer.Ordinal)
-            || (options.Hosts.Contains("*", StringComparer.Ordinal) && host.Lifecycle is nameof(HostLifecycle.Active));
-        if (!listed)
+        if (!IsListed(options.Hosts, host.Id, host.Lifecycle))
         {
             return null;
         }
@@ -222,24 +244,31 @@ public sealed class UbagAllocationService
             return null; // An addressable helper is a UBAG dialling assumption; never publish a blank one.
         }
 
-        // The trust plane (decision D3): the pin is published only for a certificate S10 has actually
-        // rendered. Identity and pin are set together — a URI SAN without a pin (or the reverse) would
-        // describe an identity the helper cannot present, and UBAG's strict parser deserves honesty.
-        string uriSan = string.Empty;
-        string spkiSha256 = string.Empty;
+        // The trust plane (decision D3): publish ONLY a host whose certificate S10 has actually
+        // rendered, with identity and pin set together. A pinless entry is not "capacity without a
+        // pin" — UBAG's strict parser rejects any allocation whose uri_san is not exactly the node's
+        // identity, and it rejects the WHOLE list, so one unfinished host would blind the gateway to
+        // every other grant too. Skip instead: the trust-plane state is repaired by the next S10
+        // (rollout or repair) and the host appears on a later poll.
+        string uriSan;
+        string spkiSha256;
         try
         {
-            if (await _trust.GetIdentityAsync(host.Id, cancellationToken) is { } identity)
+            if (await _trust.GetIdentityAsync(host.Id, cancellationToken) is not { } identity
+                || string.IsNullOrEmpty(identity.UriSan) || string.IsNullOrEmpty(identity.SpkiSha256))
             {
-                uriSan = identity.UriSan;
-                spkiSha256 = identity.SpkiSha256;
+                return null;
             }
+
+            uriSan = identity.UriSan;
+            spkiSha256 = identity.SpkiSha256;
         }
         catch (Exception ex) when (ex is InvalidOperationException or CryptographicException)
         {
-            // Publish the capacity without the pin rather than failing the whole list; the trust-plane
-            // state is repaired by the next S10 (rollout or repair). No certificate material can appear
-            // in the message, and the exception itself is not logged from a poll path.
+            // Unreadable trust-plane state is the same as no certificate: skip, don't publish.
+            // No certificate material can appear in a message, and the exception itself is not
+            // logged from a poll path.
+            return null;
         }
 
         return new UbagAllocationWire

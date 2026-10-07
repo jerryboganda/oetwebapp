@@ -228,8 +228,14 @@ public sealed class UbagOptions
     /// <summary>Bearer file under the secrets directory. Absent = the endpoint is disabled (404), like the sync and metrics tokens.</summary>
     public string TokenFile { get; set; } = "fleet_ubag_token";
 
-    /// <summary>Host ids eligible for UBAG work (exact <see cref="Persistence.HostEntity.Id"/> match, or "*" for every Active host with known hardware). Empty publishes nothing.</summary>
-    public string[] Hosts { get; set; } = Array.Empty<string>();
+    /// <summary>
+    /// Host ids eligible for UBAG work, comma-separated, or "*" for every Active host with known
+    /// hardware. Empty publishes nothing. A scalar string ON PURPOSE: the configuration binder does
+    /// not bind a bare environment value (or a JSON value form) to a string[] — only indexed
+    /// <c>__0</c> keys do — and a silently-empty array was observed publishing nothing with the
+    /// owner's setting in place. Parsed by <see cref="Projects.UbagAllocationService.HostList"/>.
+    /// </summary>
+    public string Hosts { get; set; } = string.Empty;
 
     /// <summary>
     /// The helper's dialable <c>host:port</c> template for the mTLS gRPC server UBAG dials (no WireGuard exists;

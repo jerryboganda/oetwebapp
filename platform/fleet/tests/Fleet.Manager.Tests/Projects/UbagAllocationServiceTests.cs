@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Fleet.Core.Domain;
 using Fleet.Core.Policy;
@@ -6,6 +8,8 @@ using Fleet.Manager.Monitoring;
 using Fleet.Manager.Persistence;
 using Fleet.Manager.Projects;
 using Fleet.Manager.Tests.Infrastructure;
+using Fleet.Manager.Vault;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Fleet.Manager.Tests.Projects;
@@ -13,40 +17,71 @@ namespace Fleet.Manager.Tests.Projects;
 /// <summary>
 /// The UBAG project allocation (the shared manager's second consumer, OET first): the published
 /// grant is min(the UBAG ceiling for the host's hardware, the hardware minus the OET budget in
-/// force), only for hosts the owner listed, and never for a host that cannot safely receive work.
-/// These are owner-run manual tests like the rest of this suite; no workflow executes them.
+/// force), only for hosts the owner listed, and only when the trust plane has actually rendered
+/// the host's node certificate — a pinless entry would fail UBAG's strict parser and blind it to
+/// the whole list. These are owner-run manual tests like the rest of this suite; no workflow
+/// executes them.
 /// </summary>
 public sealed class UbagAllocationServiceTests : IAsyncLifetime
 {
     private FleetTestHost _host = null!;
     private EnrollmentDriver _driver = null!;
+    private string _secretsDirectory = null!;
 
     public async Task InitializeAsync()
     {
         _host = await FleetTestHost.CreateAsync();
         _driver = new EnrollmentDriver(_host);
+        _secretsDirectory = Directory.CreateTempSubdirectory("fleet-ca-").FullName;
+        WriteCaFiles(_secretsDirectory);
     }
 
-    public async Task DisposeAsync() => await _host.DisposeAsync();
+    public async Task DisposeAsync()
+    {
+        await _host.DisposeAsync();
+        try { Directory.Delete(_secretsDirectory, recursive: true); }
+        catch (IOException) { }
+    }
 
     private FleetWorld World => _host.World;
 
-    private async Task<UbagAllocationSnapshot?> BuildAsync(UbagOptions options)
+    /// <summary>The service under test, with the trust plane reading the same CA files the
+    /// provisioning helper uses, so EnsureBundleAsync-issued leaves are visible to the builder.</summary>
+    private async Task<UbagAllocationSnapshot?> BuildAsync(UbagOptions options, bool provisionIdentity = false)
     {
+        var trust = new UbagTrustService(
+            _host.Get<CredentialStore>(),
+            new OptionsWrapper<FleetOptions>(new FleetOptions
+            {
+                Secrets = new SecretsOptions { Directory = _secretsDirectory },
+                Ubag = new UbagOptions { TrustEnabled = true },
+            }),
+            World.Time,
+            NullLogger<UbagTrustService>.Instance);
+        if (provisionIdentity)
+        {
+            await trust.EnsureBundleAsync((await _driver.HostAsync()).Id, CancellationToken.None);
+        }
+
         var service = new UbagAllocationService(
             _host.Get<HostStore>(),
             _host.Get<Fleet.Manager.Operations.PolicyService>(),
             _host.Get<FleetState>(),
-            _host.Get<Fleet.Manager.Projects.UbagTrustService>(),
-            new OptionsWrapper<FleetOptions>(new FleetOptions { Ubag = options }),
+            trust,
+            new OptionsWrapper<FleetOptions>(new FleetOptions
+            {
+                Secrets = new SecretsOptions { Directory = _secretsDirectory },
+                Ubag = options,
+            }),
             World.Time);
         return await service.BuildAsync(CancellationToken.None);
     }
 
-    private static UbagOptions Enabled(params string[] hosts) => new()
+    private static UbagOptions Enabled(string hosts, bool trust = true) => new()
     {
         Enabled = true,
         Hosts = hosts,
+        TrustEnabled = trust,
     };
 
     [Fact]
@@ -56,6 +91,19 @@ public sealed class UbagAllocationServiceTests : IAsyncLifetime
         Assert.Equal((3000, 5120), UbagAllocationService.CeilingFor(4, 7900));
         // Any other size: 75 % CPU / 62.5 % RAM.
         Assert.Equal((6000, 6250), UbagAllocationService.CeilingFor(8, 10000));
+    }
+
+    [Fact]
+    public void The_hosts_setting_parses_the_scalar_forms_the_owner_writes()
+    {
+        // The binder cannot map a bare env value onto a string[] (observed live: a set-and-forget
+        // "*" published nothing), which is why the setting is a scalar string parsed here.
+        Assert.True(UbagAllocationService.IsListed("*", "h1", nameof(HostLifecycle.Active)));
+        Assert.False(UbagAllocationService.IsListed("*", "h1", nameof(HostLifecycle.Draining)));
+        Assert.True(UbagAllocationService.IsListed("h1, h2 ,h3", "h2", nameof(HostLifecycle.Draining)));
+        Assert.True(UbagAllocationService.IsListed("h1,h2", "h1", nameof(HostLifecycle.Removed)));
+        Assert.False(UbagAllocationService.IsListed("h1,h2", "h9", nameof(HostLifecycle.Active)));
+        Assert.False(UbagAllocationService.IsListed("", "h1", nameof(HostLifecycle.Active)));
     }
 
     [Fact]
@@ -83,7 +131,7 @@ public sealed class UbagAllocationServiceTests : IAsyncLifetime
         await _driver.EnrollToActiveAsync();
         var host = await _driver.HostAsync();
 
-        var snapshot = await BuildAsync(Enabled(host.Id));
+        var snapshot = await BuildAsync(Enabled(host.Id), provisionIdentity: true);
         Assert.NotNull(snapshot);
         using var document = JsonDocument.Parse(snapshot!.Body);
         var list = document.RootElement;
@@ -91,6 +139,7 @@ public sealed class UbagAllocationServiceTests : IAsyncLifetime
         var allocation = Assert.Single(list.GetProperty("allocations").EnumerateArray());
         Assert.Equal("ubag-" + host.Id, allocation.GetProperty("node_id").GetString());
         Assert.Equal("spiffe://ubag/node/ubag-" + host.Id, allocation.GetProperty("cert_identity").GetProperty("uri_san").GetString());
+        Assert.Equal(64, allocation.GetProperty("cert_identity").GetProperty("spki_sha256").GetString()!.Length);
         Assert.Equal("203.0.113.10:7443", allocation.GetProperty("endpoint").GetString());
 
         // OET's effective budget on a 4-core default policy is (4-1)*1000 CPU and 65 % of RAM;
@@ -110,6 +159,25 @@ public sealed class UbagAllocationServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_listed_host_without_a_provisioned_identity_publishes_nothing()
+    {
+        var helper = World.Provisioner.AddHost(EnrollmentDriver.DefaultAddress);
+        helper.CpuCores = 4;
+        helper.MemMiB = 7900;
+        await _driver.EnrollToActiveAsync();
+        var host = await _driver.HostAsync();
+
+        // No EnsureBundleAsync ran: S10 has not rendered this host's leaf. A pinless entry would
+        // fail UBAG's strict parser and take the whole list down with it (observed live).
+        Assert.Contains("\"allocations\":[]", (await BuildAsync(Enabled(host.Id)))!.Body);
+
+        // Provision a leaf, then turn the trust plane off: GetIdentity answers nothing, so the
+        // host still publishes nothing.
+        await BuildAsync(Enabled(host.Id), provisionIdentity: true);
+        Assert.Contains("\"allocations\":[]", (await BuildAsync(Enabled(host.Id, trust: false)))!.Body);
+    }
+
+    [Fact]
     public async Task A_draining_or_unhealthy_host_publishes_draining_and_a_removed_one_publishes_nothing()
     {
         var helper = World.Provisioner.AddHost(EnrollmentDriver.DefaultAddress);
@@ -119,17 +187,17 @@ public sealed class UbagAllocationServiceTests : IAsyncLifetime
         var host = await _driver.HostAsync();
 
         // A fresh Active host publishes active.
-        Assert.Contains("\"state\":\"active\"", (await BuildAsync(Enabled(host.Id)))!.Body);
+        Assert.Contains("\"state\":\"active\"", (await BuildAsync(Enabled(host.Id), provisionIdentity: true))!.Body);
 
         // The API heartbeat goes stale, so the monitor's node is no longer usable.
         World.Time.Advance(TimeSpan.FromMinutes(15));
         await _host.Get<NodeMonitor>().PollOnceAsync(CancellationToken.None);
-        var snapshot = await BuildAsync(Enabled(host.Id));
+        var snapshot = await BuildAsync(Enabled(host.Id), provisionIdentity: true);
         Assert.Contains("\"state\":\"draining\"", snapshot!.Body);
 
         // A removed host is not named at all: UBAG keeps it draining through the absence rule.
         await _host.Get<HostStore>().UpdateAsync(host.Id, h => h.Lifecycle = nameof(HostLifecycle.Removing));
-        var removed = await BuildAsync(Enabled(host.Id));
+        var removed = await BuildAsync(Enabled(host.Id), provisionIdentity: true);
         Assert.Contains("\"allocations\":[]", removed!.Body);
     }
 
@@ -147,7 +215,7 @@ public sealed class UbagAllocationServiceTests : IAsyncLifetime
         var full = PolicyDefaults.ForHost(2, 3950);
         await policies.SetHostOverrideAsync(host.Id, full, "owner", CancellationToken.None);
 
-        var snapshot = await BuildAsync(Enabled("*"));
+        var snapshot = await BuildAsync(Enabled("*"), provisionIdentity: true);
         Assert.NotNull(snapshot);
         Assert.Contains("\"allocations\":[]", snapshot!.Body);
     }
@@ -160,5 +228,16 @@ public sealed class UbagAllocationServiceTests : IAsyncLifetime
         Assert.Equal("default", UbagAllocationService.SanitizeRegion(null));
         Assert.Equal("default", UbagAllocationService.SanitizeRegion("-west"));
         Assert.Equal("default", UbagAllocationService.SanitizeRegion(new string('a', 33)));
+    }
+
+    private static void WriteCaFiles(string directory)
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var request = new CertificateRequest("CN=oet fleet test CA", key, HashAlgorithmName.SHA256);
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+        request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.KeyCertSign, true));
+        using var ca = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddYears(5));
+        File.WriteAllText(Path.Combine(directory, "fleet_ca_cert"), ca.ExportCertificatePem());
+        File.WriteAllText(Path.Combine(directory, "fleet_ca_key"), PemEncoding.WriteString("PRIVATE KEY", key.ExportPkcs8PrivateKey()));
     }
 }

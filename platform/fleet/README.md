@@ -173,8 +173,13 @@ and the CA files below, S10 issues each host an ECDSA P-256 leaf (URI SAN
 `spiffe://ubag/node/<node_id>`, 90 days, renewed automatically at the next agent step inside 30
 days of expiry), renders it onto the helper through the restricted `put-certs` verb, and the
 allocation publishes `uri_san` + `spki_sha256` (lowercase hex of SHA-256 over the certificate's
-SPKI DER) only for hosts that carry a provisioned certificate; a host without one publishes an
-empty pin and stays unusable to UBAG's prober, which is the honest direction. What the trust plane
+SPKI DER) only for hosts that carry a provisioned certificate; a host without one is LEFT OUT of
+the list entirely. An earlier revision published such hosts with an empty pin on the theory that
+an unusable helper is the honest direction — production disagreed: UBAG's strict parser rejects
+any allocation whose uri_san is not exactly the node's identity, and it rejects the WHOLE list,
+so one unfinished host blinded the gateway to every other grant (`untrusted manager response:
+allocation 0`, observed live). Absence is the honest and the safe shape: UBAG treats an absent
+node as draining, and the host appears on the first poll after S10 renders its leaf. What the trust plane
 does NOT include yet is the workload plane: behind the dial the helper serves the standard gRPC
 health service (`grpc.health.v1.Health/Check` → SERVING) and `/healthz`, and answers every other
 gRPC path with status 12 (unimplemented), so UBAG's prober can pass while workloads fail loudly
