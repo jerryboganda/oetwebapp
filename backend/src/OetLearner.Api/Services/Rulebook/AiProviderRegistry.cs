@@ -119,8 +119,19 @@ public sealed class RegistryBackedProvider(
     // OpenCode inference gateway (owner directive 2026-10-04). Slow paid-gateway calls get their own
     // small lane instead of the shared platform gate, so they cannot stall Claude/Writing traffic;
     // a full lane fails fast (the learner sees the busy message) rather than queueing.
-    private const int OpenCodeMaxInFlight = 4;
+    // SAMI UAT finding (2026-10-07): one max-effort ReAct turn holds a slot across SEVERAL
+    // sequential gateway calls, so a lane of 4 saturated with two learners chatting. The
+    // capacity is now configuration-tunable (AiOpenAiCompatible:OpenCodeMaxInFlight) with a
+    // higher default; the lane still protects Claude/Writing traffic by staying separate.
+    public static int OpenCodeMaxInFlight { get; } =
+        LoadLaneCapacity();
     private static readonly TimeSpan OpenCodeLaneWait = TimeSpan.FromSeconds(5);
+
+    private static int LoadLaneCapacity()
+    {
+        var raw = Environment.GetEnvironmentVariable("AiOpenAiCompatible__OpenCodeMaxInFlight");
+        return int.TryParse(raw, out var parsed) && parsed is >= 1 and <= 32 ? parsed : 8;
+    }
     private static readonly SemaphoreSlim OpenCodeLane = new(OpenCodeMaxInFlight, OpenCodeMaxInFlight);
 
     // Below the ~120 s edge read limit for a non-streamed call, so a stall surfaces as our own timeout.
