@@ -28,8 +28,8 @@ public class CompanionHandoff
     [MaxLength(1024)]
     public string Issue { get; set; } = default!;
 
-    /// <summary>The prepared summary shown to the learner before sending.</summary>
-    [MaxLength(4096)]
+    /// <summary>The prepared summary shown to the learner before sending. No [MaxLength]: the column is unbounded
+    /// text (migration 20270113090000 and the snapshot); a MaxLength here makes the model drift from both.</summary>
     public string Summary { get; set; } = default!;
 
     /// <summary>Scores/exam context at handoff time (structured, from memory).</summary>
