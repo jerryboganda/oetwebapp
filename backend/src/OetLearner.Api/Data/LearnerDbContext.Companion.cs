@@ -16,6 +16,7 @@ public partial class LearnerDbContext
     public DbSet<ErrorDnaEntry> ErrorDnaEntries => Set<ErrorDnaEntry>();
     public DbSet<CompanionJourney> CompanionJourneys => Set<CompanionJourney>();
     public DbSet<CompanionAvailability> CompanionAvailabilities => Set<CompanionAvailability>();
+    public DbSet<AiCreditCost> AiCreditCosts => Set<AiCreditCost>();
 
     partial void OnModelCreatingCompanion(ModelBuilder modelBuilder)
     {
@@ -108,6 +109,11 @@ public partial class LearnerDbContext
         modelBuilder.Entity<CompanionAvailability>(e =>
         {
             e.HasKey(x => x.UserId);
+        });
+
+        modelBuilder.Entity<AiCreditCost>(e =>
+        {
+            e.HasKey(x => x.ActionCode);
         });
     }
 }

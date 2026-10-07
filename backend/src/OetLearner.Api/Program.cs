@@ -2268,6 +2268,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionAvailabil
     OetLearner.Api.Services.Companion.CompanionAvailabilityService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Planner.INextBestActionService,
     OetLearner.Api.Services.Planner.NextBestActionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAiCreditCostService,
+    OetLearner.Api.Services.Billing.AiCreditCostService>();
 // Score-import proposal store (singleton, in-memory, per user+thread): preview → confirm later turn.
 builder.Services.AddSingleton<OetLearner.Api.Services.AiTools.Tools.CompanionScoreProposalStore>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
@@ -3490,6 +3492,9 @@ if (app.Environment.IsDevelopment())
         await seedScope.ServiceProvider
             .GetRequiredService<OetLearner.Api.Services.Planner.SamiPlanTemplateSeeder>()
             .SeedIfMissingAsync(CancellationToken.None);
+        await seedScope.ServiceProvider
+            .GetRequiredService<OetLearner.Api.Services.Billing.IAiCreditCostService>()
+            .SeedDefaultsAsync(CancellationToken.None);
     }
     catch (Exception ex)
     {
