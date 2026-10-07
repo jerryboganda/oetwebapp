@@ -139,8 +139,18 @@ while (-not $runId) {
                         }
                     }
                     if (-not $promoted) {
-                        [void]$stoodDown.Add($id)
-                        Write-Output "SHIP-WATCH_STOOD_DOWN run=$id - following the actual promoting descendant"
+                        # Artifacts may become visible after the completed-run
+                        # response. Never permanently exclude an unproven run:
+                        # recheck it while also following promoting descendants.
+                        $rolloutSkipped = $rolloutJob.Count -eq 1 -and @($rolloutJob[0].steps | Where-Object {
+                            $_.name -eq 'Deploy to VPS over SSH (pull + blue/green redeploy)' -and $_.conclusion -eq 'skipped'
+                        }).Count -eq 1
+                        if ($rolloutSkipped) {
+                            [void]$stoodDown.Add($id)
+                            Write-Output "SHIP-WATCH_STOOD_DOWN run=$id - actual rollout skipped; following the promoting descendant"
+                        } else {
+                            Write-Output "SHIP-WATCH_AWAITING_PROMOTION_PROOF run=$id - rechecking evidence and promoting descendants"
+                        }
                         continue
                     }
                 }
