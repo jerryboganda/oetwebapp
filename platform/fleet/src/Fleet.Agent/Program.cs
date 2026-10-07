@@ -2,6 +2,7 @@ using System.Net;
 using System.Security.Authentication;
 using Fleet.Agent.Net;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 

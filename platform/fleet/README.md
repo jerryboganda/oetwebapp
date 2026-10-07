@@ -148,6 +148,8 @@ newer than the build, or without `schema_info`, is refused. EF Core migrations a
 | `Fleet__Ubag__Enabled` | `false` | the UBAG allocation poll endpoint answers 503 while false |
 | `Fleet__Ubag__Hosts` | *(empty)* | comma-separated host ids (or `*`) eligible for UBAG work |
 | `Fleet__Ubag__EndpointTemplate` | `{address}:7443` | the helper `host:port` UBAG dials; per-host `Fleet__Ubag__EndpointOverrides__<hostId>` wins |
+| `Fleet__Ubag__TrustEnabled` | `false` | the trust plane (decision D3): CA identity, `put-certs` provisioning, allocation pins, S5 opens 7443 |
+| `Fleet__Secrets__CaCertFile` / `CaKeyFile` | `fleet_ca_cert` / `fleet_ca_key` | the trust-plane CA pair under the secrets directory; absent = the plane cannot start |
 
 ## UBAG project allocations (the second consumer, OET first)
 
@@ -166,11 +168,19 @@ scaled default), so tuning OET policy automatically re-scopes UBAG on the next p
 draining hosts, stale heartbeats and disabled hosts publish `draining`; removed/failed hosts and
 hosts whose remaining capacity is zero are left out entirely (UBAG treats absence as draining).
 
-Honest limits: `spki_sha256` is empty until the manager CA exists (UBAG decision D3), so a helper
-cannot yet pass UBAG's mTLS dial even when a grant is published — the grant says what capacity
-WOULD be assigned, and UBAG's prober keeps the node unusable until the trust plane lands.
-`voice_capable` is always false. `max_browser_workloads` starts at 1 (the plan's qualified-helper
-starting point) via `Fleet__Ubag__MaxBrowserWorkloads`. Node ids are `ubag-<hostId>` with URI SAN
+Honest limits: the trust plane (UBAG decision D3) now EXISTS — with `Fleet__Ubag__TrustEnabled=true`
+and the CA files below, S10 issues each host an ECDSA P-256 leaf (URI SAN
+`spiffe://ubag/node/<node_id>`, 90 days, renewed automatically at the next agent step inside 30
+days of expiry), renders it onto the helper through the restricted `put-certs` verb, and the
+allocation publishes `uri_san` + `spki_sha256` (lowercase hex of SHA-256 over the certificate's
+SPKI DER) only for hosts that carry a provisioned certificate; a host without one publishes an
+empty pin and stays unusable to UBAG's prober, which is the honest direction. What the trust plane
+does NOT include yet is the workload plane: behind the dial the helper serves the standard gRPC
+health service (`grpc.health.v1.Health/Check` → SERVING) and `/healthz`, and answers every other
+gRPC path with status 12 (unimplemented), so UBAG's prober can pass while workloads fail loudly
+until the browser-workload protocol is specified with UBAG. `voice_capable` is always false.
+`max_browser_workloads` starts at 1 (the plan's qualified-helper starting point) via
+`Fleet__Ubag__MaxBrowserWorkloads`. Node ids are `ubag-<hostId>` with URI SAN
 `spiffe://ubag/node/<node_id>`; generation is the host's `DesiredRevision` (monotonic in practice).
 
 Turning it on after a rollout (owner settings live in `.env.production`, which
@@ -182,6 +192,18 @@ the sync job copies into the generated fleet.env only when well formed):
 overrides (`Fleet__Ubag__EndpointOverrides__<hostId>`) are not part of the
 sync allowlist; add them to the generated fleet.env only if you accept that a
 rollout regenerates that file.
+
+The trust plane has its own two switches and two secret files. In
+`.env.production`: `FLEET_UBAG_TRUST_ENABLED=true`. In `$FLEET_SECRETS_DIR`:
+`fleet_ca_cert` and `fleet_ca_key` (PEM; a dedicated ECDSA P-256 self-signed
+CA, created once with openssl and never used for anything else — the manager
+refuses to start the plane without them and logs, never prints, key material).
+With the plane on, the S5 firewall step opens the dial port (7443) inbound on
+every helper — the listener behind it presents the node certificate, requires
+TLS 1.2+, and validates any presented client certificate against the same CA.
+Rotation of the CA itself is deliberately manual: generate a new pair, replace
+both files, re-run the agent step per host (rollout or repair) so every helper
+re-issues under the new CA, then update the allocation pins on the next poll.
 
 Reaching the endpoint from the UBAG gateway: the manager publishes on the host's loopback only,
 so attach the gateway container to the manager's bridge once

@@ -1,8 +1,10 @@
 using Fleet.Core.Domain;
+using Fleet.Core.Policy;
 using Fleet.Core.Ssh;
 using Fleet.Manager.Api;
 using Fleet.Manager.Configuration;
 using Fleet.Manager.Persistence;
+using Fleet.Manager.Projects;
 using Fleet.Manager.Vault;
 
 namespace Fleet.Manager.Operations;

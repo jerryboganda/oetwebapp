@@ -60,10 +60,9 @@ public sealed class UbagAllocationWire
 public sealed class UbagCertIdentityWire
 {
     /// <summary>The identity UBAG's trust plane expects on the helper certificate:
-    /// spiffe://ubag/node/&lt;node_id&gt;. The manager CA that will issue such certificates is a
-    /// planned step (UBAG decision D3); until it exists the pin below stays empty and a helper
-    /// cannot actually pass UBAG's mTLS dial, which keeps an unbuilt helper unusable rather
-    /// than trusted.</summary>
+    /// spiffe://ubag/node/&lt;node_id&gt;. Published only when the manager's CA (UBAG decision D3) has
+    /// provisioned the host — until then the pin below stays empty and a helper cannot actually pass
+    /// UBAG's mTLS dial, which keeps an unbuilt helper unusable rather than trusted.</summary>
     [JsonPropertyName("uri_san")]
     public string UriSan { get; set; } = string.Empty;
 
