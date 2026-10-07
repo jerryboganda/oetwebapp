@@ -14,6 +14,8 @@ export interface RunOptions {
   maxOutputBytes?: number;
   /** Run through the as-agent wrapper (uid 10002). */
   asAgent?: boolean;
+  /** Kill the whole tool process group on cancellation/timeout (Linux console). */
+  killProcessGroup?: boolean;
   signal?: AbortSignal;
 }
 
@@ -70,6 +72,7 @@ export function createRunner(asAgentPath: string): Runner {
         cwd: options.cwd,
         env: options.env ?? minimalEnv(),
         windowsHide: true,
+        detached: options.killProcessGroup && process.platform !== 'win32',
       });
 
       const outChunks: Buffer[] = [];
@@ -101,7 +104,9 @@ export function createRunner(asAgentPath: string): Runner {
       child.stdin.on('error', () => undefined);
 
       const kill = (): void => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+        if (options.killProcessGroup && process.platform !== 'win32' && child.pid) {
+          try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+        } else if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
       };
       const timer = setTimeout(() => {
         timedOut = true;
@@ -110,6 +115,7 @@ export function createRunner(asAgentPath: string): Runner {
       timer.unref();
       const onAbort = (): void => kill();
       options.signal?.addEventListener('abort', onAbort, { once: true });
+      if (options.signal?.aborted) kill();
 
       child.on('error', (error) => {
         clearTimeout(timer);

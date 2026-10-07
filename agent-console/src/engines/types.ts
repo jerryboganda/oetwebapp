@@ -61,7 +61,7 @@ export interface ConnectFlow {
 export interface EngineConnectOptions {
   providerId?: string;
   methodIndex?: number;
-  /** OpenCode only: connect a provider with an API key instead of OAuth. */
+  /** Legacy wire field; the direct gateway rejects console credential input. */
   apiKey?: string;
 }
 
@@ -112,7 +112,7 @@ export interface EngineHooks {
   emit(event: EngineEvent): void;
   /**
   * Called for EVERY tool call before it executes (Claude: PreToolUse; Codex: untrusted approval;
-  * OpenCode: native permission request). Resolves after Guard + (optional) owner
+  * OpenCode: gateway tool call). Resolves after Guard + (optional) owner
    * approval + (optional) pre-snapshot. May take minutes.
    */
   onToolCall(req: ToolCallRequest, signal: AbortSignal): Promise<ToolDecision>;
@@ -120,6 +120,9 @@ export interface EngineHooks {
 
 export interface SessionEngineOptions {
   sessionId: string;
+  ownerAccountId?: string;
+  /** Bounded visible transcript for legacy gateway continuation. */
+  historySummary?: string;
   /** Worktree directory; must be identical on resume. */
   cwd: string;
   model: string;

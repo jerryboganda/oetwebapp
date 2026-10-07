@@ -1,3 +1,4 @@
+import { lstat, readdir, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import type { AppConfig } from './config.js';
 import type { Engine } from './engines/types.js';
@@ -12,17 +13,13 @@ import type { Logger } from './log.js';
 // They are owned by the agent uid, so every deletion runs through as-agent (a
 // planted symlink can never redirect a root-privileged delete).
 
-export type RetentionConfig = AgentEnvConfig & Pick<AppConfig, 'claudeConfigDir' | 'codexHome' | 'opencodeBinPath' | 'worktreeRoot'>;
+export type RetentionConfig = AgentEnvConfig & Pick<AppConfig, 'claudeConfigDir' | 'codexHome' | 'sessionsDir'>;
 
 /** Engine session / thread ids are ULID/UUID-like; anything else never reaches `find -name`. */
 const ENGINE_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 
 export function engineTranscriptDirs(config: Pick<AppConfig, 'claudeConfigDir' | 'codexHome'>): string[] {
   return [path.posix.join(config.claudeConfigDir, 'projects'), path.posix.join(config.codexHome, 'sessions')];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function countLines(stdout: string): number {
@@ -51,53 +48,23 @@ export async function pruneEngineTranscripts(run: Runner, config: RetentionConfi
   }
 }
 
-/** Prunes OpenCode sessions via its native CLI without touching auth.json. */
-export async function pruneOpenCodeSessions(run: Runner, config: RetentionConfig, days: number, logger?: Logger): Promise<number> {
+/** Gateway state is root-owned control-plane data. Historical native volumes are retained. */
+export async function pruneGatewayTranscripts(config: RetentionConfig, days: number, logger?: Logger): Promise<number> {
   if (!Number.isInteger(days) || days < 1) return 0;
   let removed = 0;
-  const env = buildAgentEnv(config);
+  const directory = path.join(config.sessionsDir, 'gateway');
   try {
-    const dirs = await run(
-      'find',
-      [config.worktreeRoot, '-xdev', '-mindepth', '1', '-maxdepth', '1', '-type', 'd', '-print'],
-      { asAgent: true, env, timeoutMs: 120_000, maxOutputBytes: 4 * 1024 * 1024 },
-    );
-    const cutoff = Date.now() - days * 86_400_000;
-    for (const cwd of dirs.stdout.split(/\r?\n/).filter(Boolean)) {
-      try {
-        const listed = await run(config.opencodeBinPath, ['--pure', 'session', 'list', '--format', 'json'], {
-          asAgent: true,
-          cwd,
-          env,
-          timeoutMs: 30_000,
-          maxOutputBytes: 8 * 1024 * 1024,
-        });
-        if (listed.code !== 0 || listed.timedOut) continue;
-        const sessions = listed.stdout.trim() ? JSON.parse(listed.stdout) as unknown : [];
-        if (!Array.isArray(sessions)) continue;
-        for (const session of sessions) {
-          if (!isRecord(session) || typeof session['id'] !== 'string' || !ENGINE_ID_PATTERN.test(session['id'])) continue;
-          if (typeof session['updated'] !== 'number' || session['updated'] >= cutoff) continue;
-          if (typeof session['directory'] === 'string' && path.posix.resolve(session['directory']) !== path.posix.resolve(cwd)) continue;
-          const deleted = await run(config.opencodeBinPath, ['--pure', 'session', 'delete', session['id']], {
-            asAgent: true,
-            cwd,
-            env,
-            timeoutMs: 30_000,
-            maxOutputBytes: 4096,
-          });
-          if (!deleted.timedOut && deleted.code === 0) removed += 1;
-        }
-      } catch {
-        logger?.warn('retention: OpenCode session prune failed for one worktree');
-      }
+    for (const name of await readdir(directory)) {
+      if (!/^[0-7][0-9A-HJKMNP-TV-Z]{25}\.json$/.test(name)) continue;
+      const file = path.join(directory, name);
+      const stat = await lstat(file);
+      if (stat.isFile() && stat.mtimeMs < Date.now() - days * 86400000) { await unlink(file); removed++; }
     }
-  } catch {
-    logger?.warn('retention: OpenCode worktree scan failed');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') logger?.warn('retention: gateway state prune failed');
   }
   return removed;
 }
-
 /** Erasure: deletes the engine-native transcript data for the given session id. */
 export async function removeEngineTranscripts(
   run: Runner,
@@ -115,18 +82,12 @@ export async function removeEngineTranscripts(
     }
     try {
       if (engine === 'opencode') {
-        if (!cwd) {
-          logger?.warn('erase: OpenCode session has no worktree directory');
-          continue;
+        const sessionId = /^gateway_([0-7][0-9A-HJKMNP-TV-Z]{25})$/.exec(id)?.[1];
+        if (sessionId) {
+          await unlink(path.join(config.sessionsDir, 'gateway', sessionId + '.json'));
+          removed++;
         }
-        const result = await run(config.opencodeBinPath, ['--pure', 'session', 'delete', id], {
-          asAgent: true,
-          cwd,
-          env: buildAgentEnv(config),
-          timeoutMs: 30_000,
-          maxOutputBytes: 4096,
-        });
-        if (!result.timedOut && result.code === 0) removed += 1;
+        // Legacy native data stays on the historical home volume; no CLI remains.
         continue;
       }
       const result = await run(
@@ -141,3 +102,5 @@ export async function removeEngineTranscripts(
   }
   return removed;
 }
+
+

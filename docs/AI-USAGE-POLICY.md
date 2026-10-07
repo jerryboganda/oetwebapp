@@ -477,8 +477,7 @@ one `AiUsageRecord`, preserving the audit invariant.
 The **Owner Agent Console** (`/admin/agent-console`, sidecar
 `oet-agent-console`) runs **Claude Code**, **OpenAI Codex**, and **OpenCode**
 on the production VPS. Claude and Codex use the owner's **own** subscriptions
-(Claude Max, ChatGPT Business); OpenCode connects only through provider OAuth
-methods selected in the console. Provider terms and costs vary. It is an
+(Claude Max, ChatGPT Business); OpenCode uses the shared encrypted backend gateway provider. Provider terms and costs vary. It is an
 engineering/operations tool for the owner, **not** an AI feature of the
 product. Runbook: [`docs/ops/OWNER-AGENT-CONSOLE.md`](ops/OWNER-AGENT-CONSOLE.md);
 wire contract: [`agent-console/CONTRACT.md`](../agent-console/CONTRACT.md);
@@ -532,16 +531,11 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
 
 **Credentials**
 
-- Sign-in completes inside the container through native OAuth: the
-  SDK-bundled `claude auth login`, Codex ChatGPT device-code login, and
-  OpenCode provider OAuth. The console relays only safe authorization URLs,
-  method labels and callback codes; it never reads, copies, logs or returns
-  provider credentials.
+- Claude/Codex sign-in completes inside the container through their native subscription flows. Direct OpenCode gateway uses the encrypted backend provider row instead.
 - Provider API-key entry is not exposed. `ANTHROPIC_*`,
   `CLAUDE_CODE_USE_*`, `OPENAI_API_KEY` and `CODEX_API_KEY` are stripped from
   engine environments; Codex is pinned to `forced_login_method = "chatgpt"`
-  plus the Business workspace id. OpenCode provider records are projected to
-  safe metadata and its OAuth credentials remain in its native auth store.
+  plus the Business workspace id. Direct OpenCode gateway credentials remain only in the backend.
 - One credential store per machine: never copy `auth.json` or
   `.credentials.json` between machines (stricter than the vendors require).
 - GitHub access uses two fine-grained, repo-scoped PATs (agent PAT, Ship
@@ -588,8 +582,7 @@ repo-rule exception: `AGENTS.md` → "Owner Agent Console exception".
   credentials, and sizes Pro/Max limits for ordinary individual use.
   Anthropic's announced move of Agent SDK usage to a separate credit pool
   is **paused, not cancelled** — "$0 marginal cost" holds only while it
-  stays paused. OpenCode may connect to third-party OAuth providers; check
-  the selected provider's terms and billing before use. Sources and quotes:
+  stays paused. Direct OpenCode gateway terms and billing apply. Sources and quotes:
   runbook → "Vendor terms".
 
 ### Owner directive 2026-09-30 — subscription route extended to `speaking.grade`
@@ -653,31 +646,29 @@ rows. On 2026-09-30 the owner extended the same route to Speaking grading:
   row's `BaseUrl` host is on `OET_INTERNAL_AI_HOSTS`, so an admin re-pointing a sidecar row at a
   vendor URL cannot leave it looking credentialed.
 
-## 21. OpenCode provider (learner chatbot)
+## 21. Direct OpenCode gateway (learner, admin and owner console)
 
-**Owner directive 2026-10-04.** Add OpenCode as an AI provider for the learner chatbot (AI Learning
-Companion, feature `ai_assistant.learner`) via the existing `OpenAiCompatible` dialect. No CLI,
-no sidecar, no new container or egress path.
+**Owner directive 2026-10-08.** All three surfaces use the same active encrypted
+`opencode` provider configuration through HTTPS chat-completions. No OpenCode
+CLI, SDK, native server, OAuth sign-in or inference container is used.
+Configuration is managed only at `/admin/ai-providers`. Gateway keys never reach
+browser responses, transcripts or console tool environments.
 
-- **Credential:** paid OpenCode gateway API key (`oc_sk_…`), stored Data-Protection-encrypted in the
-  `opencode` provider row. Never written to code, docs, tests, env files or agent prompts.
-- **Transport:** Zen (`https://opencode.ai/zen/v1`) or Go (`https://opencode.ai/zen/go/v1`),
-  `POST {base}/chat/completions`, `stream:false`. The admin Test button discriminates Zen vs Go.
-- **Ships inactive and keyless** (priority 900). Reachable only via the per-thread model picker;
-  learner-only. Default models: `glm-5.3-flash` (default), `glm-5.3`.
-- **Tool calls stay enabled.** A learner must be able to create a study plan from chat.
-- **No fallback provider.** Any OpenCode failure shows the learner exactly
-  `OpenCodeProviderDefaults.LearnerBusyMessage` ("The AI provider service is busy at the moment.
-  Please try again later after a few minutes.").
-- **Failure classification** still goes to `AiUsageRecord` (quota, auth, rate, invalid, etc.).
-- **Data position (TV-029):** learner profile, entitlement/credit state and retrieved paid-content
-  excerpts go to a third party (OpenCode gateway). Record DPA, region, retention, training use.
-- **Quota note (R3):** the companion prompt is est. ~8k tokens/call (unmeasured). Free plan 5k/day
-  cannot finish a study-plan flow. Owner should raise companion-plan caps.
-- **ToS gate:** OpenCode ToS (effective 2026-08-15) says "own internal use only". Owner must get
-  written OK or accept the risk before ticking Active.
-- **Default route stays Claude.** A non-Claude default route needs a recorded benchmark run
-  (`AiProviderRouteApprovalService`). No endpoint records one.
+Admin and Learner roles may explicitly select allowed gateway models. Keep the
+current learner default `deepseek-v4.1-flash`/`max` and the existing admin/console
+defaults. Existing role tools, grounding, quotas, confirmations and product usage
+accounting remain. Owner-console usage remains session events + AuditEvent,
+separate from product AI usage. The owner accepted the activation/routing risk
+in DECISION_LOG; old inactive/keyless and learner-only statements are historical.
+
+DeepSeek reasoning metadata is encrypted and retained privately for continuation.
+Legacy conversations use bounded transcript references. No automatic provider
+fallback or replay of interrupted operations after tool execution is permitted.
+Learners retain `OpenCodeProviderDefaults.LearnerBusyMessage`; admins/console
+owners receive sanitized actionable errors. Provider-error records alone do not
+establish their root cause. See [the direct gateway runbook](ops/DIRECT-OPENCODE-GATEWAY.md)
+for transport, state boundaries, staged release and manual acceptance scenarios.
+Functional acceptance is **not tested—owner QA**.
 
 ## 22. Fleet helpers make no AI calls
 
@@ -697,3 +688,4 @@ agent images by digest. They are not AI providers and are outside every routing,
   `AiUsageRecord`.
 - **Third-party processing.** By owner decision any data may leave the primary for a helper; the helper's VPS vendor is a processor. Record each
   node's region and provider in the processor register (privacy notice and transfer assessment are an owner/legal task).
+

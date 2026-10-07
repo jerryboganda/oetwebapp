@@ -342,7 +342,7 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     // targets. Zen = pay-as-you-go credits. Reasoning effort is not copied by applyPreset;
     // the seeded row carries `low`, otherwise set it in the form (see the hint below).
     code: 'opencode',
-    name: 'OpenCode (inference gateway) - Zen',
+    name: 'Direct OpenCode gateway',
     dialect: 'OpenAiCompatible',
     category: 'TextChat',
     baseUrl: 'https://opencode.ai/zen/v1',
@@ -360,7 +360,7 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
   'opencode-go': {
     // Go = subscription. Same code and key shape as Zen; only the endpoint (entitlement) differs.
     code: 'opencode',
-    name: 'OpenCode (inference gateway) - Go',
+    name: 'Direct OpenCode gateway',
     dialect: 'OpenAiCompatible',
     category: 'TextChat',
     baseUrl: 'https://opencode.ai/zen/go/v1',
@@ -495,7 +495,7 @@ export default function AiProvidersPage() {
 
   const columns: Column<AiProviderRow>[] = [
     { key: 'code', header: 'Code', render: (p) => <span className="font-mono">{p.code}</span> },
-    { key: 'name', header: 'Name', render: (p) => p.name },
+    { key: 'name', header: 'Name', render: (p) => p.code === 'opencode' ? 'Direct OpenCode gateway' : p.name },
     { key: 'd', header: 'Dialect', render: (p) => p.dialect },
     { key: 'cat', header: 'Category', render: (p) => <Badge variant={p.category === 'TextChat' ? 'info' : 'success'}>{p.category}</Badge> },
     { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-admin-fg-muted">{p.baseUrl}</span> },
@@ -516,7 +516,7 @@ export default function AiProvidersPage() {
     {
       key: 'acts', header: 'Actions', render: (p) => (
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" onClick={() => { setEditing({ ...p, apiKey: '' }); setCreating(false); }}>Edit</Button>
+          <Button variant="ghost" size="sm" onClick={() => { setEditing({ ...p, name: p.code === 'opencode' ? 'Direct OpenCode gateway' : p.name, apiKey: '' }); setCreating(false); }}>Edit</Button>
           <Button variant="ghost" size="sm" onClick={() => setAccountsFor(p)}>Accounts</Button>
           <Button variant="ghost" size="sm" disabled={testingCode === p.code} onClick={() => void runTest(p.code)}>
             {testingCode === p.code ? 'Testing…' : 'Test'}
@@ -635,7 +635,7 @@ export default function AiProvidersPage() {
                 <span className="text-sm text-admin-fg-muted mr-1">Quick preset:</span>
                 {Object.entries(PRESETS).map(([key, preset]) => (
                   <Button key={key} variant="outline" size="sm" onClick={() => applyPreset(key)} title={preset.name}>
-                    {preset.name}
+                    {preset.name}{key === 'opencode-go' ? ' · Go' : key === 'opencode-zen' ? ' · Zen' : ''}
                   </Button>
                 ))}
               </div>
@@ -725,11 +725,10 @@ export default function AiProvidersPage() {
               )}
               {editing.code === 'opencode' && (
                 <p className="col-span-2 text-xs text-admin-fg-muted">
-                  OpenCode inference gateway (learner chat only, picked per thread, never an implicit default).
-                  Zen is pay-as-you-go credits, Go is a subscription. Paste the NEW key here only, never share it
-                  in chat. Save, then press Test. A 401 (auth) or a credits error means the key belongs to the other
-                  plan, so switch to the other endpoint (the Zen and Go presets set the Base URL). Set Reasoning
-                  effort to low, and keep Active off until the OpenCode terms / TV-029 gate is cleared.
+                  Direct OpenCode gateway is shared by admin chat, learner chat and the owner console.
+                  Manage its encrypted API key, allowed models and reasoning effort here. Go uses a subscription;
+                  Zen uses pay-as-you-go credits. The existing learner default remains DeepSeek v4.1 Flash/max.
+                  Owner-console inference uses this same configuration and never stores a provider key.
                 </p>
               )}
             </div>
@@ -745,10 +744,11 @@ export default function AiProvidersPage() {
         <AiProviderAccountsModal
           open={true}
           providerId={accountsFor.id}
-          providerLabel={accountsFor.name || accountsFor.code}
+          providerLabel={accountsFor.code === 'opencode' ? 'Direct OpenCode gateway' : accountsFor.name || accountsFor.code}
           onClose={() => setAccountsFor(null)}
         />
       )}
     </>
   );
 }
+

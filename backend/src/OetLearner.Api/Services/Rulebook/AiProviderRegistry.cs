@@ -247,6 +247,7 @@ public sealed class RegistryBackedProvider(
     private async Task<AiProviderCompletion> CallOpenAiCompatibleAsync(
         string baseUrl, string apiKey, string? reasoningEffort, AiProviderRequest request, CancellationToken ct)
     {
+        if (request.OnBeforeInference is { } authorize) await authorize(ct);
         var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
         if (unsafeBaseUrlReason is not null)
             throw new InvalidOperationException(unsafeBaseUrlReason);

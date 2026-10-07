@@ -5,8 +5,10 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiTools;
+using OetLearner.Api.Services.AiAssistant;
 using OetLearner.Api.Services.OwnerAgent;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -35,7 +37,8 @@ public static class OwnerOpenCodeGatewayEndpoints
         {
             var provider = await registry.FindByCodeAsync("opencode", ct);
             var models = provider is null ? [] : Models(provider);
-            var ready = provider is not null && GatewayUrl(provider.BaseUrl) && models.Length > 0
+            var ready = provider is not null && provider.Dialect == AiProviderDialect.OpenAiCompatible
+                && OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(provider.BaseUrl) && models.Length > 0
                 && !string.IsNullOrWhiteSpace(await registry.GetPlatformKeyAsync(provider.Code, ct));
             return Results.Ok(new { ready, transport = "direct_gateway", label = "Direct OpenCode gateway", models,
                 defaultModel = models.Contains(provider?.DefaultModel) ? provider!.DefaultModel : models.FirstOrDefault(),
@@ -48,13 +51,8 @@ public static class OwnerOpenCodeGatewayEndpoints
     private static string[] Models(OetLearner.Api.Domain.AiProvider provider)
     {
         var allowed = (provider.AllowedModelsCsv ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return new[] { "deepseek-v4.1-flash", "glm-5.3-flash", "glm-5.3" }.Where(m => allowed.Contains(m, StringComparer.Ordinal)).ToArray();
+        return AssistantModelCatalog.OpenCodeModels.Where(m => allowed.Contains(m, StringComparer.Ordinal)).ToArray();
     }
-
-    private static bool GatewayUrl(string? value) => Uri.TryCreate(value, UriKind.Absolute, out var uri)
-        && uri.Scheme == "https" && uri.Host == "opencode.ai" && uri.IsDefaultPort && uri.UserInfo.Length == 0
-        && uri.Query.Length == 0 && uri.Fragment.Length == 0
-        && uri.AbsolutePath.TrimEnd('/') is "/zen/go/v1" or "/zen/v1";
 
     private static async Task CompleteAsync(HttpContext context, GatewayTurn turn, IAiProviderRegistry registry,
         IEnumerable<IAiModelProvider> providers, OwnerAgentClient console, CancellationToken ct)
@@ -70,7 +68,8 @@ public static class OwnerOpenCodeGatewayEndpoints
             return;
         }
         var provider = await registry.FindByCodeAsync("opencode", ct);
-        if (provider is null || !GatewayUrl(provider.BaseUrl) || !Models(provider).Contains(turn.Model)
+        if (provider is null || provider.Dialect != AiProviderDialect.OpenAiCompatible
+            || !OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(provider.BaseUrl) || !Models(provider).Contains(turn.Model)
             || string.IsNullOrWhiteSpace(await registry.GetPlatformKeyAsync(provider.Code, ct)))
         {
             context.Response.StatusCode = 503;
@@ -113,6 +112,13 @@ public static class OwnerOpenCodeGatewayEndpoints
                 Tools = turn.Tools.Select(t => new AiToolDefinition(t.Name, t.Name, t.Description, AiToolCategory.Read, t.Parameters.GetRawText())).ToArray(),
                 ToolChoice = "auto", MaxTokens = 16384,
                 OnTextDelta = (text, token) => Write(new { type = "text_delta", text }, token),
+                OnBeforeInference = async token =>
+                {
+                    var latest = await console.SendAsync(HttpMethod.Get, $"v1/sessions/{turn.SessionId}/gateway-context", null, owner, null, token);
+                    var view = latest.TryParse();
+                    if (!latest.IsSuccess || view is null || !view.Value.TryGetProperty("allowed", out var active) || active.ValueKind != JsonValueKind.True)
+                        throw new InvalidOperationException("Console authorization expired before inference.");
+                },
             }, lifetime.Token);
             await Write(new { type = "completion", text = completion.Text, providerState = completion.ProviderState,
                 model = completion.ServedModel ?? turn.Model, usage = completion.Usage, finishReason = completion.FinishReason,
@@ -121,8 +127,14 @@ public static class OwnerOpenCodeGatewayEndpoints
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
         catch (Exception ex)
         {
-            await Write(new { type = "error", code = ex is OperationCanceledException ? "gateway_timeout" : "gateway_failed",
-                message = "Direct OpenCode gateway did not complete this operation. Check provider readiness and retry explicitly; executed tools are retained." }, ct);
+            var code = ex is OperationCanceledException ? "gateway_timeout" : AiGatewayService.ClassifyError(ex);
+            var action = ex is AiProviderHttpException { StatusCode: 401 or 403 }
+                ? "Update the shared credential in /admin/ai-providers."
+                : ex is AiProviderHttpException { StatusCode: 429 }
+                    ? "Check gateway quota/rate limits and wait before an explicit retry."
+                    : "Check the active console lease and provider readiness in /admin/ai-providers.";
+            await Write(new { type = "error", code,
+                message = $"Direct OpenCode gateway did not complete this operation ({code}). {action} Executed tools are retained; review them before retrying." }, ct);
         }
         finally { lifetime.Cancel(); await heartbeat; }
     }

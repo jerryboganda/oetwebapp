@@ -65,7 +65,8 @@ export interface AppConfig {
   agentHome: string;
   claudeConfigDir: string;
   codexHome: string;
-  opencodeBinPath: string;
+  /** Private API router; carries no gateway credential. */
+  gatewayBaseUrl: string;
   agentTokenPath: string;
   asAgentPath: string;
   manualPath: string;
@@ -267,7 +268,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     agentHome,
     claudeConfigDir: str(env, 'AGENT_CONSOLE_CLAUDE_CONFIG_DIR', `${agentHome}/.claude`),
     codexHome: str(env, 'AGENT_CONSOLE_CODEX_HOME', `${agentHome}/.codex`),
-    opencodeBinPath: str(env, 'AGENT_CONSOLE_OPENCODE_BIN', '/usr/local/lib/oet-agent/opencode'),
+    gatewayBaseUrl: 'http://learner-api:8080/internal/owner-agent/opencode',
     agentTokenPath: `${agentHome}/.config/oet-agent/github-token`,
     asAgentPath: str(env, 'AGENT_CONSOLE_AS_AGENT', '/usr/local/bin/as-agent'),
     manualPath: str(env, 'AGENT_CONSOLE_MANUAL_PATH', '/app/etc/MANUAL.md'),

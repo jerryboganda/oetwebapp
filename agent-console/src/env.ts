@@ -33,6 +33,7 @@ export const STRIPPED_ENV_PATTERNS: readonly RegExp[] = [
   /^OWNER_AGENT_/i,
   /^OWNERAGENT__/i,
   /^AGENT_CONSOLE_/i,
+  /^OPENCODE_/i,
   /^GH_TOKEN$/i,
   /^GITHUB_TOKEN$/i,
   /^GH_ENTERPRISE_TOKEN$/i,

@@ -1,0 +1,76 @@
+# Direct OpenCode gateway
+
+Owner-approved replacement, 2026-10-08. Functional acceptance: **not tested—owner QA**.
+
+Admin chat, learner chat and the owner agent console share the active, encrypted
+`opencode` provider row managed at `/admin/ai-providers`. Inference is an HTTPS
+chat-completions call from the application API to the configured OpenCode gateway.
+No OpenCode executable, SDK, local server or inference container is packaged in
+the console. Its existing service retains sessions, worktrees, Guard, approvals,
+snapshots, taint handling, egress/Docker restrictions, cancellation and Ship.
+
+The learner default remains `deepseek-v4.1-flash`, effort `max`; admin and console
+defaults stay as configured. OpenCode is selectable and is labeled **Direct
+OpenCode gateway**. Discovery requires an active provider, a decryptable key,
+an approved HTTPS gateway URL and an allowed model from the curated catalogue.
+
+## Credential and state boundaries
+
+- Provider keys stay encrypted in the backend database. Console tools, child
+  environments, browser responses and transcripts receive no provider key.
+- Assistant reasoning metadata is encrypted with ASP.NET Data Protection and
+  bound to the conversation id. The additive `EncryptedProviderState` column is
+  absent from public message DTOs. DeepSeek replays decrypted `reasoning_content`
+  only inside provider payloads, including tool continuations.
+- Console control calls use the existing internal token and owner allowlist over
+  `oet_agent_ctl` through the API router. `/internal/owner-agent/opencode/status`
+  reports readiness; `/completions` emits heartbeat, text and completion/error
+  events. Completion state is opaque ciphertext, stored in root-only
+  `/var/lib/oet-agent/sessions/gateway/<session-id>.json`, never public events.
+- Each inference checks a running OpenCode session and an active owner lease
+  (bounded by the backend unlock), plus the kill switch. Every tool is separately
+  checked by the existing Guard/approval hook and runs as UID `10002`.
+- `Read`, `Write`, `Edit` and `Bash` have bounded arguments/output. File tools
+  refuse paths and symlinks escaping the session worktree. Cancellations/timeouts
+  kill tool process groups. Shell commands remain subject to existing policy.
+
+## Continuation and failures
+
+Historical visible transcripts and worktrees are preserved. Missing legacy
+reasoning metadata starts a new provider context from a bounded reference
+summary. Obsolete console native model ids normalize to the shared default.
+Historical home volumes remain mounted but native OpenCode auth/session stores
+are no longer read, written or pruned by a CLI.
+
+The console persists complete tool-call intent before execution and each result
+after execution. Interrupted or unknown outcomes are closed explicitly on resume;
+they are never automatically executed again. Inspect the worktree before an
+explicit retry. Malformed calls, unmatched results, interrupted streams and the
+24-step limit stop the turn with an actionable error. There is no provider
+fallback. Learners retain the specified busy message; admins/owners receive
+sanitized gateway errors. Earlier provider-error records do not prove a cause.
+
+## Release and owner acceptance
+
+Release the backend compatibility/migration/router network first through Build
+images → Deploy production. Then release the console/UI through the existing
+application and Owner Agent Console workflows. Active-turn draining applies.
+Compilation is verified by image builds; no automated QA runs locally or in CI.
+Record serving images, migration presence, health, gateway readiness and absence
+of native OpenCode runtime paths after deployment.
+
+Owner manual acceptance remains required for:
+
+| Scenario | Expected result |
+| --- | --- |
+| Select OpenCode on all three surfaces | Same label; allowed models; existing defaults retained |
+| Learner study-plan preview and confirmation | Preview first; mutation only after learner confirmation |
+| Admin tools | Existing role/tool permissions, grounding and usage accounting |
+| Console Read/Edit/Bash, approve and deny | Guard and approvals govern every tool; denied tools do not execute |
+| Interrupt, timeout, stop and resume | Work remains visible; no completed/unknown operation is replayed automatically |
+| Continue legacy session | Worktree/transcript retained; summary and valid gateway model used |
+| Disabled/missing credential or disallowed model | Unavailable readiness; sanitized error; no fallback |
+| Provider failure/malformed or truncated stream | Explicit stop; no tool executes from incomplete arguments |
+
+Health/readiness checks and successful builds are deployment evidence; functional
+acceptance stays **not tested—owner QA** until the owner confirms these scenarios.

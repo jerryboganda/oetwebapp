@@ -795,7 +795,7 @@ public static class AiAssistantEndpoints
     private static async Task<string[]> GetOpenCodeModelsAsync(IAiProviderRegistry providerRegistry, CancellationToken ct)
     {
         var row = await providerRegistry.FindByCodeAsync(OpenCodeProviderDefaults.ProviderCode, ct);
-        if (row is null || !OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(row.BaseUrl)
+        if (row is null || row.Dialect != AiProviderDialect.OpenAiCompatible || !OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(row.BaseUrl)
             || string.IsNullOrWhiteSpace(await providerRegistry.GetPlatformKeyAsync(row.Code, ct))) return [];
         var allowed = row.AllowedModelsCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return AssistantModelCatalog.OpenCodeModels.Where(m => allowed.Contains(m, StringComparer.Ordinal)).ToArray();

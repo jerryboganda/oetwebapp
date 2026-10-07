@@ -2,7 +2,7 @@
   "name": "oet-agent-console",
   "version": "0.1.0",
   "private": true,
-  "description": "Owner Agent Console sidecar: control plane (Fastify :8410, Guard, session store, Ship executor) plus the Claude Code / Codex engine adapters. Built, tested and packaged on GitHub Actions only.",
+  "description": "Owner Agent Console control plane with Claude Code, Codex and Direct OpenCode gateway. Built and packaged on GitHub Actions; functional QA is owner-manual only.",
   "type": "module",
   "main": "dist/server.js",
   "engines": {
@@ -19,11 +19,9 @@
     "@anthropic-ai/sdk": "0.128.0",
     "@modelcontextprotocol/sdk": "1.30.1",
     "@openai/codex": "0.160.0",
-    "@opencode-ai/sdk": "1.18.34",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.5",
     "node-pty": "1.1.0",
-    "opencode-ai": "1.18.34",
     "pino": "10.3.1",
     "ulid": "3.0.2",
     "zod": "4.6.5"

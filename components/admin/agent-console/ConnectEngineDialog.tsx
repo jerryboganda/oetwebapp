@@ -18,16 +18,6 @@ import { VisibleText } from './VisibleText';
 const POLL_MS = 2_500;
 const TERMINAL_STATES: ReadonlySet<ConnectFlow['state']> = new Set(['completed', 'failed', 'cancelled', 'expired']);
 
-function safeOpenCodeAuthUrl(value: string | undefined): string | null {
-  if (!value || /[\u0000-\u001f\u007f]/.test(value)) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 export function isConnectFlowFinished(flow: ConnectFlow | null | undefined): boolean {
   return Boolean(flow && TERMINAL_STATES.has(flow.state));
 }
@@ -60,9 +50,7 @@ export interface ConnectEngineDialogProps {
  *   page shows back here; the CLI in the sidecar stores its own credentials.
  * - Codex (device_code): open the OpenAI verification URL and enter the user
  *   code before the countdown ends; completion is detected by polling.
- * - OpenCode: opens an HTTPS provider OAuth URL; device-code flows complete by
- *   polling and paste-code flows return through the native provider callback.
- * Claude/Codex links use approved vendor hosts; OpenCode provider links must be HTTPS.
+ * Claude/Codex links use approved vendor hosts.
  */
 export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: ConnectEngineDialogProps) {
   const [flow, setFlow] = useState<ConnectFlow | null>(initialFlow);
@@ -113,9 +101,7 @@ export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: 
 
   if (!flow) return null;
 
-  const safeUrl = flow.engine === 'opencode'
-    ? safeOpenCodeAuthUrl(flow.verificationUrl)
-    : safeExternalUrl(flow.verificationUrl, flow.engine === 'claude' ? ANTHROPIC_SIGN_IN_HOSTS : OPENAI_SIGN_IN_HOSTS);
+  const safeUrl = safeExternalUrl(flow.verificationUrl, flow.engine === 'claude' ? ANTHROPIC_SIGN_IN_HOSTS : OPENAI_SIGN_IN_HOSTS);
 
   const close = () => {
     if (!finished) {
@@ -253,3 +239,4 @@ export function ConnectEngineDialog({ flow: initialFlow, onClose, onFinished }: 
     </Modal>
   );
 }
+

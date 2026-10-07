@@ -905,6 +905,19 @@ export class SessionManager {
     if (live.opening) return live.opening;
     live.opening = (async () => {
       const adapter = await this.deps.engines.get(row.engine);
+      if (row.engine === 'opencode') {
+        const status = await this.deps.engines.status('opencode', true);
+        if (status.auth.state !== 'signed_in' || status.models.length === 0)
+          throw conflict('gateway_not_ready', 'Configure Direct OpenCode gateway in /admin/ai-providers.');
+        if (!status.models.some((m) => m.value === row.model)) {
+          const model = status.models[0]!;
+          row = this.deps.store.updateSession(row.id, { model: model.value, effort: model.defaultEffort ?? null }) ?? row;
+          this.emit(row.id, 'model_changed', { model: row.model, effort: row.effort, reason: 'legacy_gateway_model' });
+        }
+        const configuredEffort = status.models.find((m) => m.value === row.model)?.defaultEffort ?? null;
+        if (row.effort !== configuredEffort)
+          row = this.deps.store.updateSession(row.id, { effort: configuredEffort }) ?? row;
+      }
       await (this.deps.prepareDockerConfig ?? ((sessionId: string) => ensureDockerConfig(this.deps.config, sessionId)))(row.id);
       const options: SessionEngineOptions = {
         sessionId: row.id,
@@ -916,6 +929,12 @@ export class SessionManager {
       };
       if (row.effort) options.effort = row.effort;
       if (row.resumeId) options.resumeId = row.resumeId;
+      if (row.engine === 'opencode') {
+        if (row.createdBy) options.ownerAccountId = row.createdBy;
+        const events = await this.deps.store.readEvents(row.id, Math.max(0, row.lastSeq - 100));
+        options.historySummary = events.filter((event) => event.turnId !== live.turn?.turnId && ['user_message', 'text', 'tool_result'].includes(event.type))
+          .map((event) => `${event.type}: ${JSON.stringify(event.data)}`).join('\n').slice(-12000);
+      }
       const session = await adapter.openSession(options);
       live.engineSession = session;
       return session;

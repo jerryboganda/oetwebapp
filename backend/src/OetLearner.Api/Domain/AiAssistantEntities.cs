@@ -60,6 +60,7 @@ public class AiAssistantMessage
     public string? ToolCallsJson { get; set; }
 
     // Conversation-bound ciphertext; omitted from all public DTOs.
+    [System.Text.Json.Serialization.JsonIgnore]
     public string? EncryptedProviderState { get; set; }
 
     /// <summary>If this is a tool result message, the tool_call_id it responds to.</summary>

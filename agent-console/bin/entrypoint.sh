@@ -11,7 +11,6 @@
 #        $CODEX_HOME/{config.toml,AGENTS.md,AGENTS.override.md,rules/oet.rules}
 #   3. execs the control server.
 #
-# OpenCode OAuth credentials persist at $AGENT_HOME/.local/share/opencode (uid agent, mode 0700).
 # $CODEX_HOME and the agent home are root:agent 1770 (sticky, group-writable): the agent can
 # create its own state files (auth.json, sessions/, ...) but cannot replace or rename the
 # root-owned policy files. src/engines/codex.ts verifies this layout before starting Codex.
@@ -24,7 +23,6 @@ AGENT_GID=10002
 AGENT_HOME=/home/agent
 CLAUDE_DIR="$AGENT_HOME/.claude"
 CODEX_DIR="$AGENT_HOME/.codex"
-OPENCODE_DATA_DIR="$AGENT_HOME/.local/share/opencode"
 WORKSPACE=/workspace
 DATA_DIR=/var/lib/oet-agent
 DOCKER_CONFIG_ROOT=/run/oet-agent/docker
@@ -70,7 +68,6 @@ dir "$AGENT_HOME/.config" "$AGENT_UID:$AGENT_GID" 0700
 dir "$AGENT_HOME/.cache" "$AGENT_UID:$AGENT_GID" 0700
 dir "$AGENT_HOME/.local" "$AGENT_UID:$AGENT_GID" 0700
 dir "$AGENT_HOME/.local/share" "$AGENT_UID:$AGENT_GID" 0700
-dir "$OPENCODE_DATA_DIR" "$AGENT_UID:$AGENT_GID" 0700
 dir "$CODEX_DIR" "0:$AGENT_GID" 1770
 
 dir "$WORKSPACE" "$AGENT_UID:$AGENT_GID" 0750
@@ -142,3 +139,4 @@ log "policy files installed (claude managed settings, codex managed config/requi
 
 cd "$APP_DIR"
 exec node "$SERVER_ENTRY"
+

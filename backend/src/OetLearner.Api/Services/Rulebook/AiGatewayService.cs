@@ -2671,6 +2671,8 @@ public sealed class AiProviderRequest
 
     // Optional transport callback; never serialized into a provider payload.
     public Func<string, CancellationToken, Task>? OnTextDelta { get; init; }
+    // Control-plane authorization is rechecked after any provider-lane queue.
+    public Func<CancellationToken, Task>? OnBeforeInference { get; init; }
 }
 
 public sealed class AiProviderAudioAttachment

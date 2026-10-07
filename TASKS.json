@@ -279,12 +279,12 @@
     {
       "id": "OCG-01",
       "title": "Shared direct OpenCode transport, admin selection and encrypted provider state",
-      "status": "in_progress",
+      "status": "done",
       "owner": "direct-opencode",
       "blockedBy": [],
       "verify": "Build images and production deployment; not tested - owner QA",
       "evidence": [
-        "User-approved plan; backend compatibility must be live before console replacement"
+        "Build images 37678854057 compiled backend/web; production deploy 37679851932 serves 8956f7f489aee1aa2c4b78b9f3b9bc9b9bc784f5; encrypted-state migration applied; private readiness HTTP 200 via learner-api with shared default DeepSeek v4.1 Flash/max. Not tested - owner QA."
       ],
       "files": [
         "backend/src/OetLearner.Api/Endpoints/OwnerOpenCodeGatewayEndpoints.cs"
@@ -293,13 +293,15 @@
     {
       "id": "OCG-02",
       "title": "Replace native console inference with guarded direct gateway loop and shared settings",
-      "status": "pending",
+      "status": "in_progress",
       "owner": "direct-opencode",
       "blockedBy": [
         "OCG-01"
       ],
       "verify": "Console image build and production inspection; not tested - owner QA",
-      "evidence": [],
+      "evidence": [
+        "Native inference/runtime/dependencies removed in replacement; guarded loop and shared settings ready for image compilation and rollout. Functional acceptance not tested - owner QA."
+      ],
       "files": [
         "agent-console/src/engines/opencode.ts"
       ]

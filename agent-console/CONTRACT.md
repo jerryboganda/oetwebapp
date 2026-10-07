@@ -21,14 +21,13 @@ base32) unless stated otherwise.
 | Identity | Container uid | Runs | Can read |
 |---|---|---|---|
 | control ("console") | `0` with `cap_drop: ALL` + `cap_add: SETUID, SETGID, KILL, CHOWN, FOWNER, DAC_OVERRIDE`, `no-new-privileges` | Fastify control server, Guard, session store, Ship executor | everything in the container |
-| agent | `10002:10002` | `claude` CLI (via Agent SDK), `codex app-server`, per-session headless `opencode serve`, every tool subprocess | `/home/agent` (engine creds, agent PAT), `/workspace`, `/opt/oetwebapp` (ro) |
+| agent | `10002:10002` | `claude` CLI (via Agent SDK), `codex app-server`, gateway Read/Write/Edit/Bash tool subprocesses (no OpenCode inference runtime) | `/home/agent` (engine creds, agent PAT), `/workspace`, `/opt/oetwebapp` (ro) |
 
 - Engines are spawned through `/usr/local/bin/as-agent` (`setpriv --reuid=10002 --regid=10002 --clear-groups --reset-env`-style wrapper) with an allow-listed env (`src/env.ts`).
 - Control-only secrets: `/run/secrets/owner_agent_internal_token` (mode 0400 root), `/var/lib/oet-agent/ship-token` (0400 root), session store `/var/lib/oet-agent/sessions` (0700 root).
-- Networks: `oet_agent_ctl` (internal; API slots ↔ sidecar :8410) and `oet_agent_net` (internal; sidecar ↔ `oet-agent-egress:3128`, `oet-agent-dockerproxy:2375`, `oet-agent-dbproxy:5432`).
+- Networks: `oet_agent_ctl` (internal; API slots ↔ console :8410; console → API router :8080) and `oet_agent_net` (internal; sidecar ↔ `oet-agent-egress:3128`, `oet-agent-dockerproxy:2375`, `oet-agent-dbproxy:5432`).
 - Agent env: `HTTPS_PROXY=HTTP_PROXY=http://oet-agent-egress:3128`, `NO_PROXY=oet-agent-dockerproxy,oet-agent-dbproxy,localhost,127.0.0.1`, `DOCKER_HOST=tcp://oet-agent-dockerproxy:2375`, `OET_AGENT_DATABASE_URL=postgres://oet_owner_agent:…@oet-agent-dbproxy:5432/<db>`.
-- OpenCode credentials remain in `/home/agent/.local/share/opencode/auth.json` on the existing `oet_agent_home` volume. The control API exposes provider IDs, names, connected state, OAuth method labels and API-key method labels only; API keys and raw provider records are never returned.
-- Each OpenCode console session owns a loopback-only `opencode serve` process with that session's worktree and attributed allow-listed environment. The server runs `--pure`; every permission defaults to `ask`; each `permission.updated` request is mapped to `EngineHooks.onToolCall` and answered only after Guard/approval. Unsupported or incomplete permissions are rejected. `--auto` is never used.
+- Direct OpenCode gateway uses the shared encrypted backend provider row. Console inference calls the API router over the private control network; no provider key, SDK, executable, server, OAuth or native auth store is used. Read/Write/Edit/Bash run through Guard/approvals and the UID 10002 runner. Root-only gateway transcripts retain opaque encrypted provider state. See [direct gateway runbook](../docs/ops/DIRECT-OPENCODE-GATEWAY.md).
 
 ## 3. Sidecar HTTP API (internal only)
 
@@ -45,9 +44,9 @@ Errors: `{ "error": { "code": string, "message": string } }` with 400/401/403/40
 | GET | `/healthz` | – | `{ ok: true, version, activeTurns, draining }` (no auth) |
 | GET | `/v1/status` | – | `ConsoleStatus` |
 | POST | `/v1/lease` | `{ expiresAt }` | `{ expiresAt }` (server clamps to now+3 min) |
-| POST | `/v1/auth/:engine/connect` | OpenCode: `{ providerId, methodIndex }` for OAuth, or `{ providerId, apiKey }` for an API-key provider; Claude/Codex: – | `ConnectFlow` |
+| POST | `/v1/auth/:engine/connect` | Claude/Codex: –; OpenCode rejects sign-in (shared provider settings) | `ConnectFlow` |
 | GET | `/v1/auth/:engine/flows/:flowId` | – | `ConnectFlow` |
-| POST | `/v1/auth/:engine/code` | `{ flowId, code }` | `ConnectFlow` (Claude paste-code or OpenCode OAuth code flows only) |
+| POST | `/v1/auth/:engine/code` | `{ flowId, code }` | `ConnectFlow` (Claude paste-code only) |
 | POST | `/v1/auth/:engine/cancel` | `{ flowId }` | `ConnectFlow` |
 | POST | `/v1/auth/:engine/logout` | – | `EngineAuth` |
 | PUT | `/v1/github-tokens` | `{ agentToken?: string, shipToken?: string }` | `GithubStatus` (tokens are write-only, never returned) |
@@ -122,7 +121,7 @@ type EngineStatus = {
   auth: EngineAuth;
   models: ModelInfo[];                 // empty until signed in
   rateLimits: RateLimit[] | null;      // null = unknown yet
-  providers?: EngineProvider[];        // OpenCode: safe provider names, OAuth and API-key methods only
+  providers?: EngineProvider[];        // optional legacy wire metadata; absent for direct gateway
 };
 type EngineProvider = {
   id: string; name: string; connected: boolean;
@@ -146,7 +145,7 @@ type ConnectFlow = {
   flowId: string; engine: Engine; kind: "paste_code" | "device_code" | "api_key";
   state: "pending" | "awaiting_code" | "completed" | "failed" | "cancelled" | "expired";
   verificationUrl?: string; userCode?: string; expiresAt?: string; detail?: string;
-  providerId?: string; providerName?: string; // OpenCode sign-in flows
+  providerId?: string; providerName?: string; // legacy wire fields
 };
 type GithubStatus = { agentTokenSet: boolean; shipTokenSet: boolean; login?: string };
 type CreateSession = {
@@ -310,3 +309,4 @@ Every decision is logged as JSON lines to stdout (`docker logs oet-agent-dockerp
 ## 7. Audit
 
 API-side `AuditEvent.ResourceType = "OwnerAgent"` actions: `unlock`, `unlock_failed`, `lock`, `engine_connect`, `engine_logout`, `github_tokens_updated`, `session_created`, `message_sent`, `approval_decided`, `mode_changed`, `ship_started`, `kill_switch`, `apply_update`, `resume`. `Details` never contains secrets or message bodies beyond the first 200 chars. When Jev triage ran, `message_sent` / `session_created` details also carry `jevStatus`, `jevModel`, `jevTask`, `jevRisk`, `jevEffort`, `jevReason` (§5, "Jev triage").
+

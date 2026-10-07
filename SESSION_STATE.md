@@ -1,60 +1,53 @@
 # SESSION STATE
 
-Session: oet-fleet-optimization
-Goal: OET optimization + automatic VPS fleet manager: PRs 321-326 merged; helper 213.163.201.37 Active; remote job-kind flags still OFF; fleet-service credential to rotate; owner QA pending
+Session: direct-opencode-gateway
+Goal: Direct OpenCode gateway across admin chat, learner chat and owner console; shared encrypted provider; remove native inference
 Mode: execute
-Updated: 2026-10-06T22:12:04Z
-Branch: work/2026-10-05
-HEAD: c2e2b898b
-
-<!--
-The current run's working memory. This is layer 2 of three:
-  1. AGENTS.md / .github/instructions/**  permanent rules
-  2. SESSION_STATE.md + TASKS.json         this run        <- you are here
-  3. VERIFICATION.md / git / Actions runs  objective truth
-
-Rules
-- Header keys are required, and `Mode` must be plan | execute | verify | blocked | done.
-- The seven H2 sections below are required and the order is load-bearing
-  (`pnpm run ax:check` enforces it).
-- Never tick a gate without evidence. A `PASS` row needs a run id, a workflow
-  file, or `local:<command>`. Record real runs with `pnpm run ax:record`.
-- Keep it short. It is working memory, not a history file.
-- Two sessions writing this at once? Take the newer `Updated:` block wholesale —
-  do not hand-merge. The durable, merge-safe ledger is PROGRESS.md.
--->
+Updated: 2026-10-08T01:32:00+05:00
+Branch: work/direct-opencode-gateway
+HEAD: 8956f7f489aee1aa2c4b78b9f3b9bc9b9bc784f5
 
 ## Objective
 
-<2–4 lines. What this session is changing and why. Include the defect or the
-acceptance bar, not the implementation detail.>
+Implement the approved direct gateway on all three surfaces. Preserve defaults, history and guarded console tools; remove native OpenCode inference and console credential input.
 
 ## Acceptance criteria
 
-- [ ] AC-1 <observable outcome>
-- [ ] AC-2 <observable outcome>
+- [x] Backend compatibility and additive encrypted-state migration live before replacement.
+- [ ] Application and console replacement releases live with serving-image evidence.
+- [ ] Production readiness and absence of native inference paths verified.
+- [ ] Functional acceptance: not tested—owner QA (manual matrix in docs/ops/DIRECT-OPENCODE-GATEWAY.md).
 
 ## Decisions (do not revisit)
 
-- D-1 <decision> — <why>. Reversing this costs <what>.
+- Shared encrypted provider managed only in /admin/ai-providers; no OpenCode inference CLI, SDK, server or container.
+- Keep current defaults; learner DeepSeek v4.1 Flash/max. No provider fallback or automatic replay of interrupted tools.
+- Existing Guard, approvals, snapshots and UID 10002 tool runner remain authoritative.
+- Image builds compile; no automated QA locally or CI; functional acceptance belongs to owner.
 
 ## Touched files
 
 | Path | Change |
 | --- | --- |
-| <path> | <new / edit / delete> |
+| backend/src/OetLearner.Api | Shared gateway, role selection, encrypted state, session controls |
+| agent-console | Native replacement, guarded tools, retention and packaging |
+| app/admin and components/admin/agent-console | Direct gateway labels and shared settings |
+| docs/ops/DIRECT-OPENCODE-GATEWAY.md | Manual acceptance and rollout record |
 
 ## Verification gates
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| deploy | production-deploy.yml | NOT RUN | NOT RUN |
+| compatibility compilation | build-images.yml | 37678854057 | PASS |
+| compatibility deployment | production-deploy.yml | 37679851932; exact serving SHA 8956f7f489 | PASS |
+| migration/readiness | Production read-only inspection | AddAssistantProviderState applied; private learner-api status HTTP 200 ready | PASS |
+| replacement build/deploy | build-images.yml and agent-console.yml | Awaiting release | NOT RUN |
+| functional acceptance | Owner manual QA | docs/ops/DIRECT-OPENCODE-GATEWAY.md | NOT TESTED |
 
 ## Blockers
 
-- None.
+- None for implementation/release. Functional owner QA remains unperformed.
 
 ## Next action
 
-1. Owner: rotate the hand-inserted fleet-service credential via the owner-gated endpoint, then enable remote job-kind flags one at a time (start pdf.extract in shadow mode); owner QA of the fleet dashboard and live helper 213.163.201.37. Not tested - owner QA; the 1,000-learner target is unproven until the manual load tools are run.
+1. Ship replacement via existing workflows, verify serving images and native runtime removal, then record deployment evidence. Owner performs manual acceptance.

@@ -1,3 +1,5 @@
+[Direct OpenCode gateway](DIRECT-OPENCODE-GATEWAY.md) supersedes all historical native OpenCode instructions below. Functional acceptance: not tested—owner QA.
+
 # Owner Agent Console — runbook
 
 > **Status:** authoritative operations runbook for the Owner Agent Console
@@ -66,7 +68,7 @@ Browser /admin/agent-console ──REST (x-csrf-token) + SignalR long-poll──
         ▼
   oet-agent-console  (compose project `oet-agent-console`; no published ports)
     control (uid 0, caps dropped) : Fastify control server :8410, session store, Guard, Ship executor, Ship PAT, token
-    uid agent (10002)             : Claude Agent SDK → bundled `claude` CLI ; `codex app-server` ; per-session `opencode serve` ; git/gh/psql/docker CLIs
+    uid agent (10002)             : Claude Agent SDK → bundled `claude` CLI ; `codex app-server` ; gateway guarded tools (no OpenCode process) ; git/gh/psql/docker CLIs
         │  net oet_agent_net (internal:true)
         ├─▶ oet-agent-egress      allowlist CONNECT proxy (only container with internet)
         ├─▶ oet-agent-dockerproxy sole holder of /var/run/docker.sock; policy by container/volume/verb
@@ -95,8 +97,8 @@ Key properties:
   store; the agent uid (which runs all three engines and every tool subprocess)
   can read none of them.
 - **Resource caps.** Sidecar `mem_limit`/`memswap_limit` 3 GiB, 1.5 CPUs,
-  512 pids; at most 2 live turns across all engines. OpenCode servers are
-  isolated per session and closed by the configured idle-session timeout.
+  512 pids; at most 2 live turns across all engines. Gateway sessions close
+  after the configured idle-session timeout; no OpenCode server runs.
 - **Enforcement boundary** = uid split + Postgres privileges + GitHub
   ruleset + docker policy proxy + egress proxy. The **Guard** (command
   classifier) is a seatbelt on top, not the boundary.
@@ -377,36 +379,15 @@ exports the engines' credential files.
 4. Status shows `signed_in` with plan/workspace. Codex is pinned to ChatGPT
    login and to the workspace id; API-key login is never offered.
 
-### 5.3 OpenCode providers (OAuth or API key)
+### 5.3 Direct OpenCode gateway
 
-1. Settings → **Connect OpenCode** and choose a provider plus one of its
-   advertised methods. Pick **OAuth** and choose one of its advertised OAuth
-   methods, or pick **API key** and paste the provider's API key. Both store
-   credentials in OpenCode's own `auth.json` on the console volume; API keys
-   are write-only and never returned by the API.
-2. A `code` method displays its authorization URL and accepts the returned
-   code in the dialog. An `auto` method is accepted only when OpenCode supplies
-   an explicit device code; the sidecar polls the native callback while the
-   owner authorizes it. An API-key connect completes immediately with a
-   `completed` flow.
-3. Browser-loopback OAuth methods fail closed because the isolated container
-   cannot receive the owner's browser callback. Choose a headless/device-code
-   method instead.
-4. Provider credentials stay in OpenCode's native
-   `/home/agent/.local/share/opencode/auth.json` on the existing
-   `oet_agent_home` volume. Status exposes safe provider metadata only.
-   OpenCode models do not advertise reasoning effort, so the UI offers none.
-
-### 5.4 Re-auth and logout
-
-- Re-auth when an engine shows `signed_out` / `error`, or turns fail with an
-  auth error: repeat §5.1–§5.3 (it replaces the stored credentials).
-- **Logout** (Settings) signs the engine out inside the
-  container. To also kill the vendor-side session, sign out of all devices
-  / revoke sessions in the vendor's account settings.
-- Rate limits show `unknown` until the first rate-limit event of a turn;
-  that is normal.
-- Break-glass sign-in over SSH: §8.3.
+Open `/admin/ai-providers` to manage the shared encrypted `opencode` provider,
+allowed models and reasoning effort. Console Settings displays gateway readiness
+and links there; it has no OpenCode sign-in or credential controls. The console
+calls the API over `oet_agent_ctl`; the API sends HTTPS requests to the gateway.
+Historical sessions/worktrees/transcripts are retained and legacy model ids
+normalize to the gateway default. See [Direct OpenCode gateway](DIRECT-OPENCODE-GATEWAY.md)
+for transport/state details and the manual owner acceptance matrix.
 
 ## 6. Modes, approvals, taint and the lease
 
@@ -623,11 +604,9 @@ browser flow is broken:
 docker exec -it -u agent oet-agent-console claude auth login
 docker exec -it -u agent oet-agent-console claude auth status
 docker exec -it -u agent oet-agent-console codex login --device-auth
-docker exec -it -u agent oet-agent-console opencode auth login
 ```
 
-The image sets `CLAUDE_CONFIG_DIR` / `CODEX_HOME`, and OpenCode uses
-`/home/agent/.local/share/opencode`; `docker-compose.agent-console.yml`
+The image sets `CLAUDE_CONFIG_DIR` / `CODEX_HOME`; `docker-compose.agent-console.yml`
 sets `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` at container level, and `-u agent`
 gives `HOME=/home/agent` from the image's `agent` user, so these commands land
 credentials exactly where the engines look for them. If a command cannot
@@ -635,8 +614,7 @@ reach the vendor, or the console still shows `signed_out` afterwards, the
 exec'd shell is missing that environment: add
 `-e HOME=/home/agent -e HTTPS_PROXY=http://oet-agent-egress:3128` plus the
 same `CLAUDE_CONFIG_DIR` / `CODEX_HOME` values the sidecar gives the engines
-(`agent-console/src/env.ts`; Codex uses `/home/agent/.codex`). OpenCode uses
-the `agent` user's `HOME` and its native XDG data path. A login
+(`agent-console/src/env.ts`; Codex uses `/home/agent/.codex`). Direct OpenCode gateway credentials are managed only in `/admin/ai-providers`. A login
 written to a different config dir is invisible to the console. If the image
 has no named `agent` user, use `-u 10002:10002`. Afterwards use Settings →
 refresh status, or `docker restart oet-agent-console` when `/healthz` shows
@@ -666,10 +644,8 @@ out of the container, never paste tokens into the console, chat or tickets.
   ```
 
 - Engine versions (`@anthropic-ai/claude-agent-sdk` with its bundled CLI,
-  `@openai/codex`, `opencode-ai`, and `@opencode-ai/sdk`) are pinned in
-  `agent-console/package.json` + lockfile; the image build asserts OpenCode
-  reports exactly `1.18.34`;
-  auto-updaters are disabled in the image. Bump them by PR. Credentials
+  `@openai/codex`) are pinned in
+  `agent-console/package.json` + lockfile; OpenCode has no native dependency; auto-updaters are disabled in the image. Bump them by PR. Credentials
   survive recreation (`oet_agent_home` volume); re-auth only if the vendor
   invalidates sessions.
 - Main web/API deploys never touch the sidecar; an unrelated deploy
@@ -699,7 +675,7 @@ e.g. `printf %s "$VALUE" | sha256sum`.
 |---|---|---|
 | Session events (JSONL, one line per event, redacted) + SQLite index | `oet_agent_sessions` → `/var/lib/oet-agent/sessions/<id>/events.jsonl` | **90 days** after the session's last update, then purged |
 | Engine-native transcripts (needed for resume) | `oet_agent_home` → `$CLAUDE_CONFIG_DIR/projects/**` (e.g. `/home/agent/.claude/projects`), `$CODEX_HOME/sessions/**` (`/home/agent/.codex/sessions`) | `*.jsonl` not modified for **90 days** are deleted by the same retention sweep (every 6 h) |
-| OpenCode sessions and credentials | `oet_agent_home` → native session database under `/home/agent/.local/share/opencode`; OAuth credentials in `auth.json` | Native sessions not updated for **90 days** are deleted with `opencode session delete`; OAuth credentials are retained |
+| Direct gateway private state | `oet_agent_sessions` → `sessions/gateway/<id>.json` | 90-day retention; historical native home data is preserved and unused |
 | Claude subscription sidecar sessions (`oet-writing-claude`: Writing letters and Speaking transcripts) written by sidecar images **before** the session-persistence-off change; not console sessions | the same `oet_agent_home` volume → `$CLAUDE_CONFIG_DIR/projects/-tmp/*.jsonl` (the sidecar's working directory is `/tmp`) | Same 90-day `*.jsonl` sweep, or earlier by the purge in [WRITING-AI-PROVIDERS.md](WRITING-AI-PROVIDERS.md) §9. Newer sidecar images write none (once deployed and the flags validated) |
 | Audit | Postgres `AuditEvent` (`ResourceType = "OwnerAgent"`), hash-chained | platform audit retention; no secrets, message text ≤ 200 chars |
 | Postgres statement log (`log_statement = 'mod'`) | `oet-postgres` container log (50 MB × 5 rotation) | rotation |
@@ -733,8 +709,7 @@ secrets into prompts.
    root-only secret file and passed to `curl` on stdin, never on a command
   line. Re-run the step-2 `grep` to confirm no matching JSONL remains (a match inside
   an unrelated session means that session must be erased too). The reported
-  `engineTranscripts` count includes native OpenCode session deletions; auth
-  credentials are deliberately retained. A match under
+  `engineTranscripts` includes direct gateway state deletions; historical native OpenCode home data is retained and unused. A match under
    `projects/-tmp` is a sidecar-written file, not a console session: it has no
    console session id, so `oet-console-erase` does not remove it; delete it or
    purge the folder as described in [WRITING-AI-PROVIDERS.md](WRITING-AI-PROVIDERS.md) §9.
@@ -773,9 +748,7 @@ changing how an engine authenticates.
   ChatGPT and to one workspace. The docs also describe copying cached
   credentials to a headless machine as a fallback; **this project forbids
   it** (one credential store per machine).
-- **OpenCode providers** — only native OAuth methods are offered; the console
-  does not accept provider API keys. Terms, data retention and billing depend
-  on the selected provider; verify them before connecting an account.
+- **Direct OpenCode gateway** — the encrypted key is managed only in shared provider settings. No native OAuth or console key storage remains.
 
 ## 13. Residual risks (accepted)
 
@@ -873,3 +846,5 @@ docker stats --no-stream oet-agent-console oet-agent-egress oet-agent-dockerprox
 # deployed image refs
 cat /opt/oetwebapp/.deploy/agent-console.env
 ```
+
+

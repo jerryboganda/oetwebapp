@@ -17,7 +17,7 @@ import type { ConsoleStatus, Engine, GithubStatus, ShipState } from './contract.
 import { ENGINES, SYSTEM_SESSION_ID, ULID_PATTERN } from './contract.js';
 import { DockerClient, createHttpTransport } from './docker.js';
 import { EngineRegistry, EngineUnavailableError } from './engine-registry.js';
-import type { ConnectFlow, EngineAdapter, EngineAuth, EngineConnectOptions } from './engines/types.js';
+import type { ConnectFlow, EngineAdapter, EngineAuth } from './engines/types.js';
 import { buildAgentEnv } from './env.js';
 import { HttpError, badRequest, errorEnvelope, notFound, unauthorized, forbidden } from './errors.js';
 import { createRunner } from './exec.js';
@@ -26,7 +26,7 @@ import { ControlState, LeaseManager, killAgentProcesses, stopAll, stopSessionCon
 import { createLogger, type Logger } from './log.js';
 import { ProxyGrants } from './proxies.js';
 import { Redactor } from './redact.js';
-import { pruneEngineTranscripts, pruneOpenCodeSessions, removeEngineTranscripts } from './retention.js';
+import { pruneEngineTranscripts, pruneGatewayTranscripts, removeEngineTranscripts } from './retention.js';
 import { SessionManager, parseSessionListQuery } from './sessions.js';
 import { ShipExecutor } from './ship.js';
 import { SnapshotService } from './snapshot.js';
@@ -190,6 +190,12 @@ export function buildServer(ctx: ServerContext, options: ServerOptions = {}): Fa
     }),
   );
 
+  app.get<{ Params: { id: string } }>('/v1/sessions/:id/gateway-context', async (request) => {
+    const row = ctx.sessions.requireSession(requireUlid(request.params.id, 'session_not_found', 'session'));
+    return { allowed: row.engine === 'opencode' && !row.archived && ctx.sessions.isRunning(row.id)
+      && ctx.lease.isActive() && !ctx.control.killed };
+  });
+
   app.post('/v1/lease', async (request) => {
     const obj = asObject(request.body, false);
     const expiresAt = reqString(obj, 'expiresAt', 64);
@@ -206,26 +212,8 @@ export function buildServer(ctx: ServerContext, options: ServerOptions = {}): Fa
 
   app.post<{ Params: { engine: string } }>('/v1/auth/:engine/connect', async (request): Promise<ConnectFlow> => {
     const engine = requireEngine(request.params.engine);
-    let options: EngineConnectOptions | undefined;
-    if (engine === 'opencode') {
-      const obj = asObject(request.body, false);
-      const providerId = reqString(obj, 'providerId', 128).trim();
-      if (!/^[A-Za-z0-9_.-]{1,128}$/.test(providerId)) throw badRequest('bad_request', 'providerId is invalid.');
-      const apiKey = obj['apiKey'];
-      if (apiKey !== undefined) {
-        if (typeof apiKey !== 'string' || !apiKey.trim() || apiKey.length > 512 || /[\u0000-\u001f\u007f]/.test(apiKey)) {
-          throw badRequest('bad_request', 'apiKey is invalid.');
-        }
-        options = { providerId, apiKey: apiKey.trim() };
-      } else {
-        const methodIndex = obj['methodIndex'];
-        if (typeof methodIndex !== 'number' || !Number.isInteger(methodIndex) || methodIndex < 0 || methodIndex > 100) {
-          throw badRequest('bad_request', 'methodIndex must be an integer from 0 through 100.');
-        }
-        options = { providerId, methodIndex };
-      }
-    }
-    const flow = await (await adapterFor(engine)).connect(options);
+    if (engine === 'opencode') throw badRequest('gateway_settings_required', 'Configure Direct OpenCode gateway in /admin/ai-providers.');
+    const flow = await (await adapterFor(engine)).connect();
     ctx.engines.invalidate(engine);
     return flow;
   });
@@ -238,7 +226,7 @@ export function buildServer(ctx: ServerContext, options: ServerOptions = {}): Fa
 
   app.post<{ Params: { engine: string } }>('/v1/auth/:engine/code', async (request): Promise<ConnectFlow> => {
     const engine = requireEngine(request.params.engine);
-    if (engine !== 'claude' && engine !== 'opencode') throw badRequest('not_supported', 'Paste-back codes are only used by Claude and OpenCode OAuth flows.');
+    if (engine !== 'claude') throw badRequest('not_supported', 'Paste-back codes are only used by Claude.');
     const obj = asObject(request.body, false);
     const flowId = flowIdFrom(obj);
     const code = reqString(obj, 'code', 4096).trim();
@@ -484,7 +472,7 @@ export function createRuntime(config: AppConfig, logger: Logger): Runtime {
     readManual: () => readFile(config.manualPath, 'utf8'),
     revokeProxyGrants: (sessionId) => proxyGrants.revokeSession(sessionId),
     pruneEngineTranscripts: async (days) =>
-      (await pruneEngineTranscripts(run, config, days, logger)) + (await pruneOpenCodeSessions(run, config, days, logger)),
+      (await pruneEngineTranscripts(run, config, days, logger)) + (await pruneGatewayTranscripts(config, days, logger)),
     removeEngineTranscripts: (ids, engine, cwd) => removeEngineTranscripts(run, config, ids, logger, engine, cwd),
   });
   const ship = new ShipExecutor({
@@ -623,3 +611,5 @@ if (entry && import.meta.url === pathToFileURL(entry).href) {
     process.exit(1);
   });
 }
+
+

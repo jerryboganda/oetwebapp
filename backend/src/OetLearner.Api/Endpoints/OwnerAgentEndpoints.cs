@@ -316,34 +316,9 @@ public static partial class OwnerAgentEndpoints
         var validEngine = OwnerAgentIds.RequireEngine(engine);
         object? body = null;
         if (validEngine == OwnerAgentIds.OpenCode)
-        {
-            var providerId = OwnerAgentIds.RequireOpaque(request?.ProviderId, "providerId", 128);
-            if (!string.IsNullOrWhiteSpace(request?.ApiKey))
-            {
-                var apiKey = request.ApiKey.Trim();
-                if (apiKey.Length > 512)
-                {
-                    throw ApiException.Validation("invalid_api_key", "'apiKey' is too long.");
-                }
-
-                body = new { providerId, apiKey };
-            }
-            else
-            {
-                var methodIndex = request?.MethodIndex;
-                if (methodIndex is null or < 0 or > 100)
-                {
-                    throw ApiException.Validation("invalid_method_index", "'methodIndex' must be from 0 through 100.");
-                }
-
-                body = new { providerId, methodIndex };
-            }
-        }
-        else if (request?.ProviderId is not null || request?.MethodIndex is not null || !string.IsNullOrWhiteSpace(request?.ApiKey))
-        {
-            throw ApiException.Validation("invalid_engine_auth", "Provider selection is only supported for OpenCode.");
-        }
-
+            throw ApiException.Validation("gateway_settings_required", "Configure Direct OpenCode gateway in /admin/ai-providers.");
+        if (request?.ProviderId is not null || request?.MethodIndex is not null || !string.IsNullOrWhiteSpace(request?.ApiKey))
+            throw ApiException.Validation("invalid_engine_auth", "Engine sign-in does not accept provider credentials.");
         var relay = await RelayAsync(client, http, HttpMethod.Post, OwnerAgentSidecarRoutes.AuthConnect(validEngine), body);
         var details = new Dictionary<string, object?>
         {
@@ -351,15 +326,6 @@ public static partial class OwnerAgentEndpoints
             ["status"] = relay.Status,
             ["flowId"] = ReadString(relay.Json, "flowId"),
         };
-        if (body is not null)
-        {
-            details["providerId"] = request!.ProviderId;
-            details["method"] = !string.IsNullOrWhiteSpace(request.ApiKey) ? "api_key" : "oauth";
-            if (string.IsNullOrWhiteSpace(request.ApiKey))
-            {
-                details["methodIndex"] = request.MethodIndex;
-            }
-        }
         await audit.WriteAsync(http.User, OwnerAgentAuditActions.EngineConnect, validEngine, details, http.RequestAborted);
         return relay.Result;
     }
@@ -965,3 +931,5 @@ internal sealed class OwnerAgentGateFilter : IEndpointFilter
         return await next(context);
     }
 }
+
+

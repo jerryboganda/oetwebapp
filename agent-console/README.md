@@ -1,8 +1,10 @@
+[Direct OpenCode gateway contract and owner acceptance](../docs/ops/DIRECT-OPENCODE-GATEWAY.md) is authoritative for the OpenCode engine.
+
 # OET Owner Agent Console — sidecar
 
 Node 22 / TypeScript sidecar that runs **Claude Code** (via the Claude Agent
-SDK and its bundled CLI), **OpenAI Codex** (`codex app-server`), and **OpenCode**
-(`opencode serve` per session) for the **owner only**, behind
+SDK and its bundled CLI), **OpenAI Codex** (`codex app-server`), and **Direct OpenCode gateway**
+(shared backend HTTPS provider) for the **owner only**, behind
 `/admin/agent-console`. It is an operations tool, not a product AI feature: it
 is never an `AiProvider`, never reachable by learner
 traffic, and writes no `AiUsageRecord`.
@@ -55,8 +57,7 @@ agent-console/
       claude.ts               Agent SDK query() adapter (PreToolUse hook → Guard)
       codex.ts                codex app-server JSON-RPC adapter (approval requests → Guard)
       codex-protocol.ts       hand-written app-server wire shapes + pure mappers
-      opencode.ts             per-session headless server + native permission mediation
-      opencode-protocol.ts    OpenCode permission/provider/model projections
+      opencode.ts             direct API transport + bounded guarded tool loop
     auth/
       claude.ts               PTY-driven `claude auth login` (URL + paste-back code)
       codex.ts                ChatGPT device-code login
@@ -152,23 +153,20 @@ Never claim tests pass without quoting the Actions run, job and step.
   `OPENAI_API_KEY`, `CODEX_API_KEY` and `OWNER_AGENT_*` must stay stripped
   (a test asserts it).
 - **Credentials.** The engines own their credential files. Sidecar code never
-  reads, copies, logs or returns them; OpenCode status projects safe provider
-  metadata (OAuth + API-key method labels) only. Provider API keys are
-  write-only: they are forwarded to OpenCode's `PUT /auth/{id}` and never
-  returned, logged or echoed. There is no paste-token login path. GitHub
-  tokens are write-only.
+  reads, copies, logs or returns them. OpenCode uses the encrypted backend provider configuration and exposes no console credential input.
+  GitHub tokens are write-only.
 - **No secrets in code, tests, fixtures or examples.** Use obviously fake
   values; the redactor's own tests build token-shaped strings at runtime.
 - **Pinned versions.** Base image by digest; Agent SDK (with bundled CLI),
-  `@openai/codex`, `opencode-ai` and `@opencode-ai/sdk` (both 1.18.34),
-  gitleaks and apt packages are pinned; the image asserts the OpenCode
-  version; auto-updaters stay
-  disabled. Bumps go by PR. The Codex app-server wire shapes in
+  `@openai/codex`,
+  gitleaks and apt packages are pinned; auto-updaters stay disabled. OpenCode has no executable or SDK dependency. Bumps go by PR. The Codex app-server wire shapes in
   `src/engines/codex-protocol.ts` are hand-written; before a `@openai/codex`
   bump, re-check every function marked VERIFY-ON-PIN against
   `codex app-server generate-ts` output of the new version (on Actions,
   never on a workstation).
 - **Resource budget.** Hard caps are 3 GiB RAM / 1.5 CPU / 512 pids, with at
-  most 2 live turns across all engines. OpenCode's per-session servers close
+  most 2 live turns across all engines. Direct gateway sessions close
   after the configured idle timeout. Don't add hosted
   services to the .NET API for console work; it runs in three processes.
+
+
