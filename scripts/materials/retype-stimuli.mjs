@@ -188,8 +188,20 @@ function applyCorrections(text, corrections) {
 }
 
 function ocrPageTsv(pagePng) {
+  let words = ocrOnce(pagePng, []);
+  if (!words.length) {
+    // Some photo-scan PDFs read as blank to stock tesseract (gray background,
+    // unusual colorspace). Retry with psm 6 ("assume a uniform block of
+    // text"), then with inversion.
+    words = ocrOnce(pagePng, ['--psm', '6']);
+    if (!words.length) words = ocrOnce(pagePng, ['-c', 'tessedit_do_invert=1']);
+  }
+  return words;
+}
+
+function ocrOnce(pagePng, extraArgs) {
   const base = pagePng.replace(/\.png$/, '');
-  run('tesseract', [pagePng, base, '--dpi', String(DPI), '-c', 'preserve_interword_spaces=1', 'tsv']);
+  run('tesseract', [pagePng, base, '--dpi', String(DPI), '-c', 'preserve_interword_spaces=1', ...extraArgs, 'tsv']);
   const tsv = fs.readFileSync(`${base}.tsv`, 'utf8').split('\n');
   const words = [];
   for (const line of tsv.slice(1)) {
