@@ -456,14 +456,12 @@ jobs:
       - name: Publish API on the Actions host
         run: |
           set -euo pipefail
-          # Finish the .NET first-run setup BEFORE anything runs in the background: the
-          # backgrounded tool install and `dotnet restore` otherwise race on the
-          # NuGet-Migrations mutex and fail the build (seen in about 1 of 8 runs).
+          # NuGet initializes its migrations mutex in restore/tool install, not
+          # dotnet --version. Keep those operations sequential to avoid EEXIST.
           export DOTNET_NOLOGO=1 DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
           dotnet --version >/dev/null
-          dotnet tool install --tool-path "$RUNNER_TEMP/dotnet-tools" dotnet-ef --version 10.0.5 &
-          ef_pid=$!
           dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj --nologo
+          dotnet tool install --tool-path "$RUNNER_TEMP/dotnet-tools" dotnet-ef --version 10.0.5
           rm -rf backend/publish
           # /m:1 + BuildInParallel=false + UseSharedCompilation=false were tuned
           # for a small build box. Hosted runners have 4 vCPU / 16 GB, so MSBuild
@@ -477,7 +475,6 @@ jobs:
             /p:UseSharedCompilation=true \
             /p:RunAnalyzers=false
           test -n "$(find backend/publish -mindepth 1 -maxdepth 1 -print -quit)"
-          wait "$ef_pid"
       - name: Generate SQL from the exact published Release compilation
         id: sql
         env:
