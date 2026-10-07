@@ -156,6 +156,9 @@ export function useAiAssistant(
   const threadModelRef = useRef<string | null>(null);
   const pendingVoiceTranscriptRef = useRef<string | null>(null);
   const pendingUserMessageIdRef = useRef<string | null>(null);
+  // D-SAMI-001: `connect` is declared before the recovery callback, so its
+  // socket lifecycle handlers reach it through a ref rather than a closure.
+  const abandonInFlightTurnRef = useRef<(message: string) => void>(() => {});
 
   // Keep refs in sync
   useEffect(() => { activeThreadRef.current = activeThread; }, [activeThread]);
@@ -190,13 +193,21 @@ export function useAiAssistant(
     try {
       connection = await createAssistantConnection(() => tokenRef.current, {
         onReconnecting: () => {
-          if (connectionAttemptRef.current === attempt) setConnectionState('reconnecting');
+          if (connectionAttemptRef.current !== attempt) return;
+          setConnectionState('reconnecting');
+          abandonInFlightTurnRef.current(
+            'The assistant connection dropped while your answer was still being written. Reconnecting now.',
+          );
         },
         onReconnected: () => {
           if (connectionAttemptRef.current === attempt) setConnectionState('connected');
         },
         onClose: () => {
-          if (connectionAttemptRef.current === attempt) setConnectionState('disconnected');
+          if (connectionAttemptRef.current !== attempt) return;
+          setConnectionState('disconnected');
+          abandonInFlightTurnRef.current(
+            'The assistant connection closed before your answer arrived. Please sign in again and resend.',
+          );
         },
       });
     } catch (err) {
@@ -263,6 +274,18 @@ export function useAiAssistant(
         turnRunningRef.current = false;
         pendingVoiceTranscriptRef.current = null;
         pendingUserMessageIdRef.current = null;
+        // D-SAMI-001: a completion carrying no text would render as a blank
+        // bubble that looks like Sami ignored the message. The server treats an
+        // empty completion as a provider failure; if one still arrives, surface
+        // it as a retryable error rather than an empty turn.
+        if (!fullText.trim()) {
+          setError('[PROVIDER_EMPTY_COMPLETION] Sami returned an empty response for that turn. Please try again in a moment.');
+          setStreamingStatus('idle');
+          setStreamingText('');
+          setActiveToolCalls([]);
+          setCitations([]);
+          return;
+        }
         const assistantMsg: AiAssistantMessage = {
           id: messageId,
           threadId: activeThreadRef.current?.id ?? '',
@@ -319,6 +342,40 @@ export function useAiAssistant(
       setError('Failed to connect to AI assistant');
     }
   }, [token]);
+
+  // `connect` is defined ahead of the recovery callback, so the socket
+  // lifecycle handlers reach it through `abandonInFlightTurnRef`.
+
+  /**
+   * D-SAMI-001 recovery. A turn still running when the socket drops cannot be
+   * resumed: SignalR does not replay hub messages, and the server will not
+   * re-send MessageComplete for it. Without this the panel stays on "thinking"
+   * and the learner's message disappears with no explanation.
+   *
+   * The turn itself is asynchronous, so the server usually finishes and
+   * persists the answer anyway — re-reading the thread picks it up rather than
+   * throwing that work away.
+   */
+  const abandonInFlightTurn = useCallback((message: string) => {
+    const wasRunning = turnRunningRef.current;
+    turnRunningRef.current = false;
+    pendingVoiceTranscriptRef.current = null;
+    pendingUserMessageIdRef.current = null;
+    setStreamingStatus('idle');
+    setStreamingText('');
+    setActiveToolCalls([]);
+    setCitations([]);
+    if (!wasRunning) return;
+
+    setError(message);
+    const threadId = activeThreadRef.current?.id;
+    if (!threadId) return;
+    void apiGetMessages(threadId).then((history) => {
+      if (activeThreadRef.current?.id === threadId) setMessages(history);
+    }).catch(() => {});
+  }, []);
+
+  abandonInFlightTurnRef.current = abandonInFlightTurn;
 
   const disconnect = useCallback(() => {
     turnRunningRef.current = false;
