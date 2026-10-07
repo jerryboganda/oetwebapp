@@ -105,6 +105,14 @@ public sealed class AnsibleProvisioner : IProvisioner
                     ? ProvisionResult.AlreadySatisfied("restricted login works")
                     : ProvisionResult.NotSatisfied("predicate not satisfied");
 
+            case EnrollStep.Firewall:
+                // The check-mode run records ok without applying anything (record-result runs with
+                // check_mode:false), so a satisfied verdict here would skip S5 forever — and a
+                // desired-table change (the UBAG dial port, 7 Oct) would never reach the helper.
+                // The apply is the honest predicate: nft loads atomically and the lockout dance
+                // re-verifies SSH, so re-asserting the firewall on every repair is safe.
+                return ProvisionResult.NotSatisfied("the firewall re-asserts on every repair");
+
             default:
                 return await RunPlaybookAsync(request, check: true, cancellationToken);
         }
