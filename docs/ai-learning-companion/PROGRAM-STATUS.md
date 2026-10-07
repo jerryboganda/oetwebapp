@@ -1,0 +1,51 @@
+# SAMI Program Status — running state (updated 2026-10-07)
+
+Authoritative running state for the SAMI 100% implementation program. Baseline:
+`source/SAMI_FINAL_PRODUCTION_HANDOVER_1.0_FINAL.md`. Decisions: `DECISION_LOG.md`
+(D-001..D-007). Feature-level truth: `traceability/features.{json,csv}`.
+
+## Shipped and verified live (with evidence)
+
+| Wave | Delivered | Evidence |
+|---|---|---|
+| 0 | SAMI baseline imported; decision log; register dispositions | commits + validator PASS |
+| 0 | Learner-chat default route = opencode/deepseek-v4.1-flash, effort max | benchmark run `a41bbe05e7e24526a35056341ab775bc` (100% schema validity, 100% grounding, 0 fabrications, 96.92% cost reduction); route row flipped audited; rollback target anthropic:claude-sonnet-5 |
+| 0 | Companion flags ON (master/retrieval/actions/credits); score_display OFF pending calibration | FeatureFlags rows |
+| 0 | OpenCode connection probe given a thinking budget (deepseek reasons before answering) | ship run 37530286350/37531078948 |
+| 1 | Memory spine: CompanionMemoryEntries / ErrorDnaEntries / CompanionJourneys / CompanionAvailabilities | migration `20270112090000_AddAiCreditCosts`-preceded `20261007090000_AddCompanionMemoryErrorDna` applied (history row + 4 tables verified) |
+| 1 | 7 learner tools (record/confirm scores confirm-gated, set availability, start journey, next best action, train mistakes, why score change) | allowlist + grants + composer injection |
+| 1 | 6 plan templates (exam-eve, final-3d, emergency-7d, intensive-14d, single-subtest, 20-min) + availability shaper inside plan creation | `tmpl-sami-*` rows verified in prod |
+| 2 | Image understanding live on deepseek vision + honest refusal on unreadable input; document attachments FOLDED into prompts (gap found live, fixed) | E2E turns in `AiAssistantThreads` (task/recipient/purpose extraction correct) |
+| 3 | AI Credit action costs as live config (§9.1 baseline seeded; admin CRUD; show-allowance carries price table) | slice shipped via `_sami-ship-wt` (verify Actions run id in VERIFICATION.md) |
+| 3 | Sellable catalog: 3 tiers × monthly/3-month/annual + 3 top-ups + 6 course add-ons at PDF §10 prices; quota-plan descriptions corrected to £7.99/£14.99/£26.99 | `wave3-catalog.mjs` output, products 201 |
+
+## UAT infrastructure ready
+
+- Accounts (`.tools-state/sami-ops/uat-accounts.json`): `uat-a-medicine` (Full Course + companion),
+  `uat-b-free` (Free, no package), `uat-c-crash` (Crash Course, nursing) — trusted devices pinned,
+  quota overrides for A/C.
+- Section-21 assets: `docs/ai-learning-companion/uat/` (score cards A + A-v2, case notes B,
+  reading question C, voice/handwriting/privacy scripts D).
+- E2E harness: `.tools-state/sami-ops/wave2-e2e.mjs` (SignalR learner client; text/image/document turns).
+
+## Remaining (in order)
+
+1. **Wave 3 finish**: ship the credit-cost slice (background retry loop owns the visibility
+   lease contention); contextual upgrade + resume-chat-after-purchase (F-111/112/142); tutor
+   handoff (F-108/123).
+2. **Wave 4**: corpus scale-out (workshops/correction sessions/videos per §13.1 pipeline —
+   infrastructure exists: indexer/releases/governance); admin dashboards F-126..129/132
+   (partially exist; audit vs spec); automated Error-DNA feeders from graded attempts.
+3. **Wave 5**: execute all 80 UAT scenarios on the production build with the accounts/assets
+   above; §15 handover package; legacy-persona sweep as release gate.
+4. **Wave 6**: F-168..F-184 expansion (foundations: ExamFamilyCode/ExamTypeCode axis exists).
+
+## Operational traps (read before touching)
+
+- Hand migrations need `[DbContext(typeof(LearnerDbContext))]` AND `[Migration("id")]`
+  (ADR 0001 convention). Verify discovery by grepping the `migrations.sql` release artifact.
+- Migration ids must sort AFTER `20270111090000` (prod history runs ~3 months ahead).
+- Temp-admin credentials: `.tools-state/sami-ops/temp-admin.json` (rotate at handover).
+- Shared GitHub rate limit + ship visibility lease are contended by concurrent agent
+  sessions — never force-release; retry.
+- Never use shell heredocs to patch source (corrupts `\n`/`\b` — two incidents this session).
