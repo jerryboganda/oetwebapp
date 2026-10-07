@@ -13,6 +13,10 @@ on:
         description: "Max rows to build this run (0 = all)"
         type: string
         default: "6"
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/materials/retype-ledger.json'
 
 permissions:
   contents: read
