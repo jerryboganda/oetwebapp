@@ -50,6 +50,7 @@ services:
       Fleet__Provisioning__ScratchDirectory: /tmp/fleet
       Fleet__Provisioning__DockerSource: ${FLEET_DOCKER_SOURCE:-distro}
       Fleet__Image__Mode: ${FLEET_IMAGE_MODE:-scoped-token}
+      Fleet__Image__AutoApproveDigests: ${FLEET_IMAGE_AUTOAPPROVEDIGESTS:-false}
       # UBAG project integration (off until the owner turns it on): the allocation poll endpoint
       # answers 503 without Enabled, publishes nothing without Hosts (comma-separated host ids,
       # or "*"), and 404 without the bearer secret. See README "UBAG project allocations".
