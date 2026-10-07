@@ -23,9 +23,9 @@ internal static class Doc06LearningCompanion
                 "operating rule, restated in the repository's always-loaded agent contract, is explicit: reuse the " +
                 "platform's existing authentication, entitlement, credit and rulebook systems rather than building a " +
                 "second product, and never invent a `TO VERIFY` value — a legal, pricing, calibration or content-" +
-                "inventory fact the specification deliberately leaves open (EV-COMPANION-003). The working persona " +
-                "name used during planning was \"Jana\"; the shipped, candidate-facing default persona name in code " +
-                "is \"Sami\", configurable via `Companion:PersonaName` so it never hard-codes a literal the platform " +
+                "inventory fact the specification deliberately leaves open (EV-COMPANION-003). The shipped, " +
+                "candidate-facing default persona name in code is \"Sami\", configurable via " +
+                "`Companion:PersonaName` so it never hard-codes a literal the platform " +
                 "cannot later change (EV-COMPANION-004)."),
             new DocumentationSectionBlock(
                 "Independent, audited gap analysis rather than a self-reported status",

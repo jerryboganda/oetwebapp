@@ -48,9 +48,9 @@ public sealed class CompanionPromptComposer(
     internal const string PersonaSettingKey = "Companion:PersonaName";
 
     /// <summary>
-    /// The final user-facing name, per the owner's decision. The earlier working
-    /// name "Jana" must not appear anywhere a candidate can see it — the acceptance
-    /// packs test for it explicitly. <c>PersonaNameTests</c> guards that.
+    /// The final user-facing name, per the owner's decision. Any legacy planning
+    /// name must not appear anywhere a candidate can see it — the acceptance
+    /// packs test for legacy names explicitly. <c>PersonaNameTests</c> guards that.
     /// </summary>
     internal const string DefaultPersona = "Sami";
 
