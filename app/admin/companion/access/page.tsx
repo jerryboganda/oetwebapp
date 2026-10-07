@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Bot, RotateCcw, ShieldCheck } from 'lucide-react';
+import { Bot, RotateCcw, Search, ShieldCheck, UserCheck, UserCog, UserX } from 'lucide-react';
 import { AdminTableLayout } from '@/components/admin/layout/admin-table-layout';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
@@ -27,7 +27,45 @@ interface AccessResponse {
   items: PlanAccessRow[];
 }
 
+/** SAMI §9 — one learner's effective companion state and the override behind it. */
+interface UserAccessRow {
+  userId: string;
+  effective: boolean;
+  source: string | null;
+  reason: string;
+  planCode: string | null;
+  planName: string | null;
+  overrideEnabled: boolean | null;
+  overrideSource: string | null;
+  overrideExpiresAt: string | null;
+  overrideNote: string | null;
+  updatedByAdminId: string | null;
+  updatedAt: string | null;
+}
+
 type PageStatus = 'loading' | 'success' | 'error';
+type UserStatus = 'idle' | 'loading' | 'success' | 'error';
+
+const SOURCE_LABELS: Record<string, string> = {
+  package_included: 'Included in package',
+  admin_enabled: 'Enabled by admin',
+  promotional: 'Promotional grant',
+  manually_disabled: 'Disabled by admin',
+  expired: 'Grant expired',
+  none: 'No access',
+};
+
+const REASON_LABELS: Record<string, string> = {
+  ok: 'Allowed',
+  package_required: 'No package includes it',
+  plan_excludes_companion: 'Plan excludes the companion',
+  ai_disabled: 'AI disabled for this account',
+  kill_switch: 'Emergency kill switch active',
+  policy_unavailable: 'Policy could not be read',
+  companion_disabled: 'Companion switched off platform-wide',
+  manually_disabled: 'Disabled by an admin',
+  expired: 'Grant expired',
+};
 
 function sourceBadge(source: PlanAccessRow['source']): 'success' | 'warning' | 'default' {
   switch (source) {
@@ -49,6 +87,55 @@ export default function CompanionAccessPage() {
   const [rows, setRows] = useState<PlanAccessRow[]>([]);
   const [revokeTarget, setRevokeTarget] = useState<PlanAccessRow | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // ── Per-learner lookup (SAMI §9) ──────────────────────────────────────────
+  const [userQuery, setUserQuery] = useState('');
+  const [userRow, setUserRow] = useState<UserAccessRow | null>(null);
+  const [userStatus, setUserStatus] = useState<UserStatus>('idle');
+  const [userError, setUserError] = useState<string | null>(null);
+  const [grantNote, setGrantNote] = useState('');
+  const [grantExpiry, setGrantExpiry] = useState('');
+  const [userSaving, setUserSaving] = useState(false);
+
+  const lookupUser = useCallback(async (userId: string) => {
+    const id = userId.trim();
+    if (!id) return;
+    try {
+      setUserStatus('loading');
+      setUserError(null);
+      const data = await apiClient.get<UserAccessRow>(
+        `/v1/admin/companion/access/users/${encodeURIComponent(id)}`,
+      );
+      setUserRow(data);
+      setUserStatus('success');
+    } catch (err) {
+      setUserRow(null);
+      setUserStatus('error');
+      setUserError(err instanceof Error ? err.message : 'Could not read that learner.');
+    }
+  }, []);
+
+  /** Apply or clear the per-learner override, then re-read the effective state. */
+  const applyUserOverride = useCallback(async (
+    userId: string,
+    body: { enabled: boolean; source?: string; expiresAt?: string; note?: string } | null,
+  ) => {
+    try {
+      setUserSaving(true);
+      setUserError(null);
+      const path = `/v1/admin/companion/access/users/${encodeURIComponent(userId)}`;
+      if (body === null) {
+        await apiClient.delete(path);
+      } else {
+        await apiClient.post(path, body);
+      }
+      await lookupUser(userId);
+    } catch (err) {
+      setUserError(err instanceof Error ? err.message : 'Could not save that change.');
+    } finally {
+      setUserSaving(false);
+    }
+  }, [lookupUser]);
 
   const loadAccess = useCallback(async () => {
     try {
@@ -219,6 +306,179 @@ export default function CompanionAccessPage() {
           emptyMessage="No plans found"
         />
       </AsyncStateWrapper>
+
+      {/* ── Per-learner access (SAMI §9) ────────────────────────────────────
+          Eligibility auto-enables from the package; this is the administrative
+          override for the cases the package rule cannot cover — a learner who
+          should have Sami without the package, or one who must be stopped
+          despite having it. */}
+      <div className="mt-6 rounded-admin border border-admin-border bg-admin-bg-surface p-4">
+        <h2 className="text-sm font-bold text-admin-fg-strong">
+          <UserCog className="mr-2 inline-block h-4 w-4 text-admin-fg-muted" />
+          Per-learner access
+        </h2>
+        <p className="mt-1 text-xs text-admin-fg-muted">
+          An eligible package enables Sami automatically. Use this to override a single
+          learner either way; the override beats the package rule in both directions.
+        </p>
+
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="min-w-0 flex-1">
+            <span className="block text-xs font-medium text-admin-fg-muted">Learner user ID</span>
+            <input
+              type="text"
+              value={userQuery}
+              onChange={(e) => setUserQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void lookupUser(userQuery); }}
+              placeholder="learner_…"
+              className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-strong"
+            />
+          </label>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={userStatus === 'loading' || !userQuery.trim()}
+            onClick={() => void lookupUser(userQuery)}
+          >
+            <Search className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            {userStatus === 'loading' ? 'Reading…' : 'Check access'}
+          </Button>
+        </div>
+
+        {userError && (
+          <p className="mt-3 text-xs text-red-700 dark:text-red-300" role="alert">{userError}</p>
+        )}
+
+        {userRow && (
+          <div className="mt-4 border-t border-admin-border pt-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={userRow.effective ? 'success' : 'default'} intensity="tinted" size="sm">
+                {userRow.effective ? 'Sami available' : 'Sami blocked'}
+              </Badge>
+              <Badge variant="default" intensity="tinted" size="sm">
+                {SOURCE_LABELS[userRow.source ?? 'none'] ?? userRow.source ?? 'No access'}
+              </Badge>
+              <span className="text-xs text-admin-fg-muted">
+                {REASON_LABELS[userRow.reason] ?? userRow.reason}
+                {userRow.planName ? ` · ${userRow.planName}` : ''}
+              </span>
+            </div>
+
+            <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
+              <div className="flex justify-between gap-2">
+                <dt className="text-admin-fg-muted">User</dt>
+                <dd className="truncate text-admin-fg-strong">{userRow.userId}</dd>
+              </div>
+              <div className="flex justify-between gap-2">
+                <dt className="text-admin-fg-muted">Manual override</dt>
+                <dd className="text-admin-fg-strong">
+                  {userRow.overrideEnabled === null
+                    ? 'None'
+                    : userRow.overrideEnabled ? 'Enabled' : 'Disabled'}
+                </dd>
+              </div>
+              {userRow.overrideSource && (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-admin-fg-muted">Override source</dt>
+                  <dd className="text-admin-fg-strong">
+                    {SOURCE_LABELS[userRow.overrideSource] ?? userRow.overrideSource}
+                  </dd>
+                </div>
+              )}
+              {userRow.overrideExpiresAt && (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-admin-fg-muted">Expires</dt>
+                  <dd className="text-admin-fg-strong">
+                    {new Date(userRow.overrideExpiresAt).toLocaleString()}
+                  </dd>
+                </div>
+              )}
+              {userRow.updatedByAdminId && (
+                <div className="flex justify-between gap-2">
+                  <dt className="text-admin-fg-muted">Last changed by</dt>
+                  <dd className="truncate text-admin-fg-strong">{userRow.updatedByAdminId}</dd>
+                </div>
+              )}
+              {userRow.overrideNote && (
+                <div className="flex justify-between gap-2 sm:col-span-2">
+                  <dt className="text-admin-fg-muted">Note</dt>
+                  <dd className="truncate text-admin-fg-strong">{userRow.overrideNote}</dd>
+                </div>
+              )}
+            </dl>
+
+            {userRow.overrideEnabled === null && (
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label>
+                  <span className="block text-xs font-medium text-admin-fg-muted">
+                    Grant note (optional)
+                  </span>
+                  <input
+                    type="text"
+                    value={grantNote}
+                    onChange={(e) => setGrantNote(e.target.value)}
+                    placeholder="Why this learner is being granted access"
+                    className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-strong"
+                  />
+                </label>
+                <label>
+                  <span className="block text-xs font-medium text-admin-fg-muted">
+                    Expires (optional)
+                  </span>
+                  <input
+                    type="date"
+                    value={grantExpiry}
+                    onChange={(e) => setGrantExpiry(e.target.value)}
+                    className="mt-1 w-full rounded-admin border border-admin-border bg-admin-bg-surface px-3 py-2 text-sm text-admin-fg-strong"
+                  />
+                </label>
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {userRow.overrideEnabled === null ? (
+                <>
+                  <Button
+                    size="sm"
+                    disabled={userSaving || userRow.effective}
+                    onClick={() => void applyUserOverride(userRow.userId, {
+                      enabled: true,
+                      source: 'admin_enabled',
+                      ...(grantExpiry ? { expiresAt: new Date(`${grantExpiry}T23:59:59Z`).toISOString() } : {}),
+                      ...(grantNote.trim() ? { note: grantNote.trim() } : {}),
+                    })}
+                  >
+                    <UserCheck className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    Enable for this learner
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={userSaving || !userRow.effective}
+                    onClick={() => void applyUserOverride(userRow.userId, { enabled: false })}
+                  >
+                    <UserX className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                    Disable for this learner
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={userSaving}
+                  onClick={() => void applyUserOverride(userRow.userId, null)}
+                >
+                  <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                  Clear override (back to package rule)
+                </Button>
+              )}
+              <p className="text-xs text-admin-fg-muted">
+                A learner whose package already includes Sami needs no override.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {revokeTarget && (
         <Modal open onClose={() => setRevokeTarget(null)} title="Disable companion access">
