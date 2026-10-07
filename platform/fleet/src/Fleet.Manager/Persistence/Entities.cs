@@ -167,7 +167,7 @@ public sealed class CredentialEntity
 
     public string HostId { get; set; } = string.Empty;
 
-    /// <summary><c>owner-bootstrap</c>, <c>manager-ssh</c> or <c>node-token-render</c>.</summary>
+    /// <summary><c>owner-bootstrap</c>, <c>manager-ssh</c>, <c>node-token-render</c>, <c>owner-totp</c>, <c>ubag-node-cert</c> or <c>ubag-node-key</c>.</summary>
     public string Purpose { get; set; } = string.Empty;
 
     /// <summary>Vault record (section 8.5). Null for <c>node-token-render</c>, which keeps only a fingerprint.</summary>

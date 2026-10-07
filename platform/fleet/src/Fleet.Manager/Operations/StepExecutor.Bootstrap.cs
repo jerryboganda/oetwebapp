@@ -49,7 +49,8 @@ public sealed partial class StepExecutor
         HostEntity host,
         OwnerCredential? owner,
         SecretBuffer? managerKey,
-        string? managerPublicKey) =>
+        string? managerPublicKey,
+        Dictionary<string, object?>? data = null) =>
         new(
             step,
             _access.TargetFor(host),
@@ -57,7 +58,7 @@ public sealed partial class StepExecutor
             owner?.Key,
             managerKey,
             managerPublicKey,
-            new Dictionary<string, object?>());
+            data ?? new Dictionary<string, object?>());
 
     /// <summary>S1: read-only host checks with the owner credential (OS, arch, cores, RAM, disk, clock, no foreign workloads).</summary>
     private async Task<StepOutcome> PreflightAsync(StepContext ctx, CancellationToken cancellationToken)
@@ -107,7 +108,14 @@ public sealed partial class StepExecutor
         }
 
         using var managerKey = await _credentials.OpenAsync(host.Id, CredentialPurposes.ManagerSsh, cancellationToken);
-        var request = BuildRequest(step, host, owner, managerKey, null);
+        var data = new Dictionary<string, object?>();
+        if (step == EnrollStep.Firewall && _options.Value.Ubag.TrustEnabled)
+        {
+            // The UBAG dial plane (decision D3): the helper's mTLS listener port is opened inbound only
+            // when the manager runs in trust mode. The listener itself requires our node certificate.
+            data["ubag_allow_ports"] = StepExecutor.TrustListenerPort.ToString(CultureInfo.InvariantCulture);
+        }
+        var request = BuildRequest(step, host, owner, managerKey, null, data);
         var check = await _provisioner.CheckAsync(request, cancellationToken);
         if (check.Success && check.Satisfied)
         {

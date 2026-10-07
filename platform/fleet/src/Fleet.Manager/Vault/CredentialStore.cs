@@ -13,6 +13,12 @@ public static class CredentialPurposes
     public const string NodeTokenRender = "node-token-render";
     public const string OwnerTotp = "owner-totp";
 
+    /// <summary>The helper's UBAG node certificate (PEM, public data kept with the rest for one read path).</summary>
+    public const string UbagNodeCert = "ubag-node-cert";
+
+    /// <summary>The helper's UBAG node certificate private key (PEM). Rendered once over the restricted ctl, never published.</summary>
+    public const string UbagNodeKey = "ubag-node-key";
+
     /// <summary>Host id used in the AAD of records that belong to no host (the owner's TOTP secret).</summary>
     public const string OwnerScope = "owner";
 }

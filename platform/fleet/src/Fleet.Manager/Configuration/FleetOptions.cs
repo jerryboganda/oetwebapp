@@ -57,6 +57,12 @@ public sealed class SecretsOptions
 
     /// <summary>Optional bearer for <c>GET /metrics</c> from a scraper. Absent file = only an owner session may read metrics.</summary>
     public string MetricsTokenFile { get; set; } = "fleet_metrics_token";
+
+    /// <summary>The UBAG trust-plane CA certificate (PEM). Absent file = the trust plane cannot start and nothing is issued or published.</summary>
+    public string CaCertFile { get; set; } = "fleet_ca_cert";
+
+    /// <summary>The UBAG trust-plane CA private key (PEM, ECDSA P-256). Same lifecycle as the certificate file.</summary>
+    public string CaKeyFile { get; set; } = "fleet_ca_key";
 }
 
 public sealed class ApiOptions
@@ -226,13 +232,21 @@ public sealed class UbagOptions
     public string[] Hosts { get; set; } = Array.Empty<string>();
 
     /// <summary>
-    /// The helper's WireGuard-reachable <c>host:port</c> template for the mTLS gRPC server UBAG dials.
-    /// <c>{address}</c> is the enrolled host address. Per-host overrides live in <see cref="EndpointOverrides"/>;
-    /// when the fleet moves to WireGuard-only reachability the owner sets the peer address there.
+    /// The helper's dialable <c>host:port</c> template for the mTLS gRPC server UBAG dials (no WireGuard exists;
+    /// decision D3 keeps every plane on plain TCP/IP). <c>{address}</c> is the enrolled host address. Per-host
+    /// overrides live in <see cref="EndpointOverrides"/>.
     /// </summary>
     public string EndpointTemplate { get; set; } = "{address}:7443";
 
     public Dictionary<string, string> EndpointOverrides { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The trust plane (UBAG decision D3). False: no CA identity is issued or published — <c>cert_identity.spki_sha256</c>
+    /// stays empty, the helper is never provisioned with a node certificate, and UBAG's prober keeps the node unusable.
+    /// True: the manager requires the CA files, issues one leaf certificate per host (URI SAN
+    /// <c>spiffe://ubag/node/&lt;node_id&gt;</c>), renders it onto the helper during S10, and publishes the SPKI pin.
+    /// </summary>
+    public bool TrustEnabled { get; set; }
 
     /// <summary>Initial per-node browser workload ceiling (the plan's "start each qualified helper at one; raise after measurement"). 0..64.</summary>
     public int MaxBrowserWorkloads { get; set; } = 1;

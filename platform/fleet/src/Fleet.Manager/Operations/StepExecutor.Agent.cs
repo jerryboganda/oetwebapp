@@ -196,6 +196,35 @@ public sealed partial class StepExecutor
             return StepOutcome.Fail(FailureReasons.TokenRenderFailed, "the agent environment could not be rendered", "env render failed");
         }
 
+        // Trust plane (decision D3): issue or reuse the node certificate and render it onto the helper
+        // BEFORE the env (start_agent refuses to create a container whose env enables the listener
+        // without the certificate files in place). The key transits only this in-memory bundle, the
+        // stdin of put-certs, and the encrypted vault record — never a log or a result.
+        if (_options.Value.Ubag.TrustEnabled)
+        {
+            UbagNodeBundle bundle;
+            try
+            {
+                bundle = await _trust.EnsureBundleAsync(host.Id, cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StepOutcome.Fail(FailureReasons.TokenRenderFailed, ex.Message, "cert render failed");
+            }
+
+            var payload = FleetJson.Serialize(new
+            {
+                ca = bundle.CaPem,
+                cert = bundle.CertPem,
+                key = bundle.KeyPem,
+            });
+            var putCerts = await _access.CtlAsync(host, "put-certs", Array.Empty<string>(), payload, cancellationToken);
+            if (!putCerts.Success)
+            {
+                return FromCtl(putCerts, FailureReasons.TokenRenderFailed, "node certificate could not be written");
+            }
+        }
+
         var putEnv = await _access.CtlAsync(host, "put-env", Array.Empty<string>(), envText, cancellationToken);
         if (!putEnv.Success)
         {
