@@ -385,6 +385,8 @@ jobs:
             pass_through FLEET_UBAG_GRANT_TTL_MINUTES '^[0-9]{1,4}$'
             # Trust plane (decision D3): CA identity + allocation pins; see platform/fleet/README.md.
             pass_through FLEET_UBAG_TRUST_ENABLED '^(true|false)$'
+            # Trial-firewall workaround: per-host dial endpoint override (host:port the allocation publishes).
+            pass_through FLEET_UBAG_ENDPOINT_OVERRIDE_1B7E58F5 '^[0-9.]{7,15}:[0-9]{1,5}$'
             optional_secret fleet_ubag_token FLEET_UBAG_TOKEN_FILE
             optional_secret fleet_ca_cert FLEET_CA_CERT_FILE
             optional_secret fleet_ca_key FLEET_CA_KEY_FILE

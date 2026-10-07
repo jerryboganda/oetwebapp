@@ -62,6 +62,10 @@ services:
       # Trust plane (decision D3): off unless the owner sets FLEET_UBAG_TRUST_ENABLED=true; the CA pair
       # comes in through the secrets block below (empty files = the plane refuses to start, loudly).
       Fleet__Ubag__TrustEnabled: ${FLEET_UBAG_TRUST_ENABLED:-false}
+      # Trial-firewall workaround: the helper's provider firewall is immutable and allows only
+      # 22/80/443/ICMP, so the upcloud-singapore dial endpoint is published on 443 (S5 redirects
+      # 443 -> the 7443 listener). Empty = the endpoint template ({address}:7443) wins.
+      Fleet__Ubag__EndpointOverrides__1b7e58f5-f984-4474-b9b4-6e93bdbf89d8: ${FLEET_UBAG_ENDPOINT_OVERRIDE_1B7E58F5:-}
     secrets:
       - fleet_master_key
       - fleet_master_key_prev
