@@ -98,6 +98,11 @@ public static class WritingGradeChain
     public static int ReviewResourceVersion(int epoch, int pass, int attempt)
         => 5_000_000 + epoch * 256 + pass * 64 + attempt * 16;
 
+    /// <summary>Slot of the API-fallback review attempt (Anthropic row). Disjoint from both the grading
+    /// slots and the Codex review slots, so the coordinator never replays the fallback into a Codex slot.</summary>
+    public static int ReviewApiResourceVersion(int epoch, int pass)
+        => 7_000_000 + epoch * 256 + pass * 64;
+
     internal sealed record Step(WritingGradeHop Hop, string Provider, string Model, int Attempts, int BudgetSeconds);
 
     /// <summary>The run plan. The API hop exists only behind the Max hop (a test host's stub

@@ -550,7 +550,7 @@ Scoring rules:
         }
         else
         {
-            var reviewed = await SpeakingGradeReviewer.ReviewAsync(aiGateway, gradeRequest, aiResult, logger, ct);
+            var reviewed = await SpeakingGradeReviewer.ReviewAsync(aiGateway, gradeRequest, aiResult, logger, ct, input.LogKey);
             completion = reviewed.Completion;
             review = reviewed.Trace;
         }
@@ -631,6 +631,9 @@ Scoring rules:
         {
             status = review.Status,
             model = review.Model,
+            // Which route ran the review and, when the shared reviewer pipeline left Codex, why.
+            provider = review.Provider,
+            fallbackReason = review.FallbackReason,
             primaryScores = review.PrimaryScores,
             reviewerScores = review.ReviewerScores,
             changes = review.Changes,

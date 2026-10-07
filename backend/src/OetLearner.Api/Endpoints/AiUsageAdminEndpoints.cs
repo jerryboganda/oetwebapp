@@ -211,6 +211,49 @@ public static class AiUsageAdminEndpoints
             });
         });
 
+        // ═══ Shared reviewer queue (Writing + Speaking, GPT-6.1 Sol / Codex) ═══
+        // Live read-only view of the one capacity gate both assessment types share: configured limits, per-type
+        // queue depth and in-flight Codex jobs, Codex success/failure/quota counts, API fallback counts and the
+        // last fallback reason. In-process counters; the durable per-call record stays in AiUsageRecords.
+        group.MapGet("/reviewer-queue", () =>
+        {
+            var snapshot = OetLearner.Api.Services.Ai.Review.ReviewerQueueMetrics.Instance.Snapshot();
+            var options = OetLearner.Api.Services.Ai.Review.SharedReviewerOptions.Current;
+            return Results.Ok(new
+            {
+                maxConcurrency = OetLearner.Api.Services.Ai.Review.CodexReviewerGate.Default.Capacity,
+                maxQueueWaitSeconds = OetLearner.Api.Services.Ai.Review.CodexReviewerGate.Default.MaxQueueWaitSeconds,
+                codexProvider = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.Codex,
+                codexModel = OetLearner.Api.Services.Writing.WritingSubscriptionProviders.CodexModel,
+                apiFallbackProvider = options.ApiFallbackProvider,
+                apiFallbackModel = options.ApiFallbackModel,
+                codexAttemptSeconds = options.CodexAttemptSeconds,
+                codexBudgetSeconds = options.CodexBudgetSeconds,
+                apiAttemptSeconds = options.ApiAttemptSeconds,
+                types = snapshot.Items.Select(i => new
+                {
+                    assessmentType = i.AssessmentType,
+                    arrived = i.Arrived,
+                    queued = i.Queued,
+                    waiting = i.Waiting,
+                    inFlight = i.InFlight,
+                    gateTimeouts = i.GateTimeouts,
+                    codexTotal = i.CodexTotal,
+                    codexSuccess = i.CodexSuccess,
+                    codexQuota = i.CodexQuota,
+                    codexTimeout = i.CodexTimeout,
+                    codexUnavailable = i.CodexUnavailable,
+                    codexOtherFailure = i.CodexOtherFailure,
+                    apiFallbacks = i.ApiFallbacks,
+                    completed = i.TotalCompleted,
+                    fallbackCompleted = i.FallbackCompleted,
+                    avgQueueWaitMs = i.AvgQueueWaitMs,
+                    avgTotalDurationMs = i.AvgTotalDurationMs,
+                    lastFallbackReason = i.LastFallbackReason,
+                }),
+            });
+        });
+
         // ═══ Writing AI subscription provider (owner directive 2026-09-29) ════
         // Read model for the /admin/writing-ai page: mode, thresholds, quota
         // snapshot, current primary, and per-provider counters for the six
@@ -271,6 +314,13 @@ public static class AiUsageAdminEndpoints
             var reviewerSuccessesWeek = await db.AiUsageRecords.AsNoTracking()
                 .Where(r => r.FeatureCode == reviewCode && r.CreatedAt >= weekAgo && r.Outcome == AiCallOutcome.Success)
                 .CountAsync(ct);
+            // Which route actually ran each review this week: the Codex subscription, or the API reviewer
+            // fallback the shared reviewer pipeline routes to when Codex cannot take/complete the review.
+            var reviewerByProviderWeek = await db.AiUsageRecords.AsNoTracking()
+                .Where(r => r.FeatureCode == reviewCode && r.CreatedAt >= weekAgo)
+                .GroupBy(r => r.ProviderId)
+                .Select(g => new { provider = g.Key, calls = g.Count(), successes = g.Count(x => x.Outcome == AiCallOutcome.Success) })
+                .ToListAsync(ct);
 
             var claudeRow = usage.FirstOrDefault(u => u.provider == claude);
             var claudeApiRow = usage.FirstOrDefault(u => u.provider == claudeApi);
@@ -316,6 +366,7 @@ public static class AiUsageAdminEndpoints
                 fallbackCountWeek,
                 reviewerCallsWeek,
                 reviewerSuccessesWeek,
+                reviewerByProviderWeek = reviewerByProviderWeek.Select(r => new { provider = r.provider, calls = r.calls, successes = r.successes }),
                 claude = new { callsWeek = claudeRow?.callsWeek ?? 0, tokensWeek = claudeRow?.tokensWeek ?? 0L },
                 claudeApi = new
                 {

@@ -2487,6 +2487,22 @@ builder.Services.Configure<OetLearner.Api.Services.Writing.Review.WritingReviewO
     builder.Configuration.GetSection(OetLearner.Api.Services.Writing.Review.WritingReviewOptions.SectionName));
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.Review.IWritingGradeReviewer,
     OetLearner.Api.Services.Writing.Review.WritingGradeReviewer>();
+// Shared secondary-reviewer capacity for Writing AND Speaking (Reviewer:Shared). One bounded FIFO gate + one
+// automatic API fallback, both static singletons so the Writing (DI) reviewer and the static Speaking reviewer use
+// the same limits. CODEX_REVIEWER_MAX_CONCURRENCY is honoured as a flat env override of MaxConcurrency.
+{
+    var sharedReviewer = OetLearner.Api.Services.Ai.Review.SharedReviewerOptions.Current;
+    builder.Configuration.GetSection(OetLearner.Api.Services.Ai.Review.SharedReviewerOptions.SectionName).Bind(sharedReviewer);
+    var envMaxConcurrency = builder.Configuration[OetLearner.Api.Services.Ai.Review.SharedReviewerOptions.MaxConcurrencyEnvVar];
+    if (int.TryParse(envMaxConcurrency, out var envConcurrency) && envConcurrency > 0)
+    {
+        sharedReviewer.MaxConcurrency = envConcurrency;
+    }
+
+    OetLearner.Api.Services.Ai.Review.CodexReviewerGate.Default.Configure(
+        sharedReviewer.MaxConcurrency,
+        sharedReviewer.MaxQueueWaitSeconds);
+}
 // WAI-05: QA-only per-learner grade fault switch (FeatureFlags rows; off by default).
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingQaFault>();
 // Writing AI subscription routing (owner directive 2026-09-29): quota gauge +

@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Ai.TypeSafe;
+using OetLearner.Api.Services.Ai.Review;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Writing.Review;
@@ -34,8 +35,12 @@ public interface IWritingGradeReviewer
 /// <summary>
 /// Reviewer on the existing <c>writing-codex-sub</c> route (GPT-6.1 Sol), pinned in the request and sent through
 /// <see cref="IAiGatewayService"/> with a grounded prompt, so every physical call is one AiOperation and one
-/// AiUsageRecord under <see cref="AiFeatureCodes.WritingGradeReview"/>. Never the paid API, never Max (the reviewer is
-/// not a grade hop and <see cref="WritingSubscriptionSelector"/> is not consulted), never a credit debit.
+/// AiUsageRecord under <see cref="AiFeatureCodes.WritingGradeReview"/>. Never Max (the reviewer is not a grade hop
+/// and <see cref="WritingSubscriptionSelector"/> is not consulted) and never a credit debit. Every call goes through the
+/// SHARED reviewer pipeline (<see cref="OetLearner.Api.Services.Ai.Review.SharedReviewerRunner"/>), so Writing and Speaking
+/// share one bounded Codex capacity gate and one automatic API fallback (the repo's existing <c>anthropic</c> row, the same
+/// one the grade chain uses as L2): a reviewer outage can no longer park a letter for hours waiting on a Codex quota reset.
+/// If BOTH routes fail, Enforce still holds the letter (bounded, see <see cref="WritingGradeChainOptions"/>).
 ///
 /// Proposals only: <see cref="WritingReviewApplier"/> decides. Each pass is persisted through the request, so a held
 /// letter resumes without a second provider call; the passes are stateless against the PRIMARY values, so the final
@@ -224,6 +229,12 @@ public sealed class WritingGradeReviewer(
             notes.Model = passes[^1].Model;
         }
 
+        if (passes.Any(p => string.Equals(p.Provider, WritingSubscriptionProviders.ClaudeApi, StringComparison.OrdinalIgnoreCase)))
+        {
+            // The shared reviewer gate/fallback moved this review off Codex onto the API route.
+            notes.Flags.Add("codex_api_fallback");
+        }
+
         var tutorReasons = final.TutorReasons.ToList();
         if (unresolved)
         {
@@ -315,32 +326,60 @@ public sealed class WritingGradeReviewer(
         var kind = pass == 0
             ? (enhanced ? "enhanced" : "review")
             : (issues.Count > 0 ? "corrective" : "enhanced");
-        return await WritingGradeChain.RunReviewAsync(
-            gateway,
-            template,
-            request.GradeEpoch,
-            pass,
-            result =>
-            {
-                // Parsing happens inside the attempt: an unreadable reply fails over like any provider failure.
-                if (!WritingReviewDecisionParser.TryParse(result.Completion, knownIds, out var parsed))
-                {
-                    throw new WritingRubricUnreadableException("Writing review returned an unreadable response.");
-                }
 
-                return (parsed, new WritingReviewPassRecord(
-                    kind,
-                    parsed.RawJson,
-                    result.ResolvedProvider,
-                    result.ResolvedModel,
-                    result.UsageRecordId,
-                    clock.GetUtcNow()));
+        (WritingReviewDecision Decision, WritingReviewPassRecord Record) ParseResult(AiGatewayResult result)
+        {
+            // Parsing happens inside the attempt: an unreadable reply fails over like any provider failure.
+            if (!WritingReviewDecisionParser.TryParse(result.Completion, knownIds, out var parsed))
+            {
+                throw new WritingRubricUnreadableException("Writing review returned an unreadable response.");
+            }
+
+            return (parsed, new WritingReviewPassRecord(
+                kind,
+                parsed.RawJson,
+                result.ResolvedProvider,
+                result.ResolvedModel,
+                result.UsageRecordId,
+                clock.GetUtcNow()));
+        }
+
+        var shared = SharedReviewerOptions.Current;
+        var (runResult, _) = await SharedReviewerRunner.RunAsync(
+            shared,
+            CodexReviewerGate.Default,
+            "writing",
+            request.SubmissionId.ToString("N"),
+            async token => await WritingGradeChain.RunReviewAsync(
+                gateway,
+                template,
+                request.GradeEpoch,
+                pass,
+                ParseResult,
+                _chain,
+                remaining,
+                clock,
+                logger,
+                token),
+            async token =>
+            {
+                // The review cap from the same provider row: never Max, never a new integration. The API fallback
+                // uses the same prompt/parse/merge semantics, so the fallback is a real review, not a skip.
+                var apiTemplate = template with
+                {
+                    Provider = WritingSubscriptionProviders.ClaudeApi,
+                    Model = WritingSubscriptionProviders.ClaudeModel,
+                    ResourceVersion = WritingGradeChain.ReviewApiResourceVersion(request.GradeEpoch, pass),
+                };
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+                timeout.CancelAfter(TimeSpan.FromSeconds(Math.Min(shared.ApiAttemptSeconds, (int)Math.Max(remaining.TotalSeconds, 1))));
+                var apiResult = await gateway.CompleteAsync(apiTemplate, timeout.Token);
+                return ParseResult(apiResult);
             },
-            _chain,
-            remaining,
-            clock,
             logger,
             ct);
+
+        return runResult;
     }
 
     private TimeSpan StageBudget(WritingReviewRequest request)

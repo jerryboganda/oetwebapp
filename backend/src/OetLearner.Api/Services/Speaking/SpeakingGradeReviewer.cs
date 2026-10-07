@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai.Review;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Writing;
 
@@ -9,16 +10,18 @@ namespace OetLearner.Api.Services.Speaking;
 /// <summary>
 /// Secondary reviewer of a Speaking grade (<c>speaking.grade.review</c>): after Claude (Max) has graded, GPT-6.1 Sol on the
 /// Codex subscription route re-reads the same transcript and Claude's grade and returns a corrected grade in the same JSON schema.
-/// Best effort and bounded: the reviewer can move a criterion score by at most one band, it never blocks or fails a grade
-/// (any failure, timeout or unreadable reply returns Claude's grade untouched), and it is never a paid API route.
-/// Works on the completion text so the classic and v1.1 assessors share it unchanged.
+/// Runs through the SHARED reviewer pipeline (<see cref="SharedReviewerRunner"/> + <see cref="CodexReviewerGate"/>), so
+/// Writing and Speaking reviews share one bounded capacity limit, wait FIFO, and one automatic fallback: when Codex cannot
+/// take or complete the review inside its bounded budgets (saturated lane, quota, unavailable, timeout, retries exhausted)
+/// the SAME review prompt runs on the configured API reviewer route instead. Bounded and best effort: the reviewer can move
+/// a criterion score by at most one band and it never blocks or fails a grade - if BOTH routes fail, Claude's grade stands
+/// untouched and the trace records why. Works on the completion text so the classic and v1.1 assessors share it unchanged.
 /// </summary>
 public static class SpeakingGradeReviewer
 {
     // v2 (8 Oct 2026): the reviewer may no longer move a score for accent or pronunciation (owner guardrail: a noticeable
     // first-language accent is not a penalty while the candidate is easily understood), nor lower two criteria for one event.
     public const string TemplateId = "speaking.grade.review.v2";
-    private const int BudgetSeconds = 600;
 
     private const string Instructions = """
 
@@ -41,37 +44,36 @@ public static class SpeakingGradeReviewer
         """;
 
     /// <summary>
-    /// The grade to parse (Claude's, or Claude's with the reviewer's bounded corrections) and what the review did, so a result
-    /// can later be explained: Claude's own scores before the review, the reviewer's, and every change it made.
+    /// Reviews one primary Speaking grade through the shared reviewer pipeline. <paramref name="assessmentId"/> is the
+    /// session/exam id for queue logs; <paramref name="options"/> defaults to the startup-configured shared policy
+    /// (tests pass their own bounded policy). Returns Claude's grade untouched when both reviewer routes fail
+    /// (never fails the grade, never waits on a Codex quota reset).
     /// </summary>
     public static async Task<SpeakingReviewResult> ReviewAsync(
         IAiGatewayService gateway,
         AiGatewayRequest primaryRequest,
         AiGatewayResult primary,
         ILogger logger,
-        CancellationToken ct)
+        CancellationToken ct,
+        string assessmentId = "speaking_session",
+        SharedReviewerOptions? options = null)
     {
+        var shared = options ?? SharedReviewerOptions.Current;
+        var template = ReviewRequest(primaryRequest);
+
         try
         {
-            using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            budget.CancelAfter(TimeSpan.FromSeconds(BudgetSeconds));
-            var review = await gateway.CompleteAsync(primaryRequest with
-            {
-                UserInput = primaryRequest.UserInput + "\n\n── FIRST ASSESSOR'S GRADE ──\n" + primary.Completion + Instructions,
-                Provider = WritingSubscriptionProviders.Codex,
-                Model = WritingSubscriptionProviders.CodexModel,
-                MaxTokens = 8000,
-                FeatureCode = AiFeatureCodes.SpeakingGradeReview,
-                PromptTemplateId = TemplateId,
-                // Reviews a grade the learner already holds: no credit movement, no plan-feature gate.
-                FreeSampleGrant = true,
-            }, budget.Token);
+            var (result, info) = await SharedReviewerRunner.RunAsync(
+                shared,
+                CodexReviewerGate.Default,
+                "speaking",
+                assessmentId,
+                token => AttemptAsync(gateway, template, primary, WritingSubscriptionProviders.Codex, WritingSubscriptionProviders.CodexModel, token),
+                token => AttemptAsync(gateway, template, primary, shared.ApiFallbackProvider, shared.ApiFallbackModel, token),
+                logger,
+                ct);
 
-            var merged = Merge(primary.Completion, review.Completion);
-            var model = string.IsNullOrWhiteSpace(review.ResolvedModel) ? WritingSubscriptionProviders.CodexModel : review.ResolvedModel.Trim();
-            return new SpeakingReviewResult(
-                merged ?? primary.Completion,
-                BuildTrace(primary.Completion, review.Completion, merged, model));
+            return result with { Trace = result.Trace with { Provider = info.FinalProvider, FallbackReason = info.FallbackReason } };
         }
         catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
         {
@@ -80,6 +82,39 @@ public static class SpeakingGradeReviewer
                 primary.Completion,
                 new SpeakingReviewTrace("failed", null, ScoresOf(primary.Completion) ?? new Dictionary<string, int>(), null, []));
         }
+    }
+
+    /// <summary>The reviewer request for one route: Claude's grade plus the review instructions, pinned per attempt.</summary>
+    private static AiGatewayRequest ReviewRequest(AiGatewayRequest primaryRequest) => primaryRequest with
+    {
+        MaxTokens = 8000,
+        FeatureCode = AiFeatureCodes.SpeakingGradeReview,
+        PromptTemplateId = TemplateId,
+        // Reviews a grade the learner already holds: no credit movement, no plan-feature gate.
+        FreeSampleGrant = true,
+    };
+
+    private static async Task<SpeakingReviewResult> AttemptAsync(
+        IAiGatewayService gateway,
+        AiGatewayRequest template,
+        AiGatewayResult primary,
+        string providerCode,
+        string model,
+        CancellationToken token)
+    {
+        // The per-attempt wall-clock budget is the shared runner's (CodexAttemptSeconds); the token arrives with it.
+        var review = await gateway.CompleteAsync(template with
+        {
+            UserInput = template.UserInput + "\n\n── FIRST ASSESSOR'S GRADE ──\n" + primary.Completion + Instructions,
+            Provider = providerCode,
+            Model = model,
+        }, token);
+
+        var merged = Merge(primary.Completion, review.Completion);
+        var resolvedModel = string.IsNullOrWhiteSpace(review.ResolvedModel) ? model : review.ResolvedModel.Trim();
+        return new SpeakingReviewResult(
+            merged ?? primary.Completion,
+            BuildTrace(primary.Completion, review.Completion, merged, resolvedModel));
     }
 
     /// <summary>What the review did: <c>ran</c> (it moved at least one criterion), <c>unchanged</c> (it replied and agreed) or
@@ -192,14 +227,18 @@ public sealed record SpeakingReviewChange(string Criterion, int From, int To, in
 /// <summary>
 /// What the secondary review did to one grade. <c>Status</c>: <c>ran</c> | <c>unchanged</c> | <c>failed</c> | <c>skipped</c> (the
 /// first grade was unreadable, so no review was attempted). <c>PrimaryScores</c> are Claude's own scores BEFORE the review;
-/// <c>ReviewerScores</c> what the reviewer proposed (null when it failed). Scores only: no transcript, no learner text.
+/// <c>ReviewerScores</c> what the reviewer proposed (null when it failed). <c>Provider</c> is the route that produced the
+/// review (<c>writing-codex-sub</c> or the API fallback row) and <c>FallbackReason</c> why the shared pipeline left Codex
+/// (null on a Codex review). Scores only: no transcript, no learner text.
 /// </summary>
 public sealed record SpeakingReviewTrace(
     string Status,
     string? Model,
     IReadOnlyDictionary<string, int> PrimaryScores,
     IReadOnlyDictionary<string, int>? ReviewerScores,
-    IReadOnlyList<SpeakingReviewChange> Changes)
+    IReadOnlyList<SpeakingReviewChange> Changes,
+    string? Provider = null,
+    string? FallbackReason = null)
 {
     public static SpeakingReviewTrace Skipped(IReadOnlyDictionary<string, int>? primaryScores = null)
         => new("skipped", null, primaryScores ?? new Dictionary<string, int>(), null, []);
@@ -207,3 +246,4 @@ public sealed record SpeakingReviewTrace(
 
 /// <summary>The completion to parse after the review, and what the review did.</summary>
 public sealed record SpeakingReviewResult(string Completion, SpeakingReviewTrace Trace);
+

@@ -476,6 +476,7 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
 - `.github/instructions/validation.instructions.md` — CI validation ladder (which workflow runs which check).
 - `.github/instructions/deployment.instructions.md` — Docker/CI/CD/storage/VPS/desktop/mobile.
 - `.github/instructions/admin-hallmark.instructions.md` — admin operational UI discipline.
+- `docs/SHARED-CODEX-REVIEWER.md` — the ONE shared GPT-6.1 Sol / Codex reviewer pipeline for Writing AND Speaking: single FIFO capacity gate (`Reviewer:Shared` / `CODEX_REVIEWER_MAX_CONCURRENCY`), bounded waits, automatic API-reviewer fallback, observability (`/v1/admin/ai/reviewer-queue`). Load it before touching either reviewer; never give either assessment type its own queue or an unbounded wait on Codex quota.
 - `docs/play-store-automation.md` — Google Play Console release/listing/tester/review
   automation via service-account toolkit; compulsory before any Play Store action.
 - `docs/app-release-playbook.md` — the "cut app releases" procedure across Android,
