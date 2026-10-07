@@ -1,50 +1,53 @@
 # SESSION STATE
 
-Session: staff-chatbot-access
-Goal: Enable direct gateway chatbot for all admin and instructor/expert dashboards
-Mode: verify
+Session: admin-chat-long-tasks
+Goal: Repair failed admin sends and multi-tool long tasks, retain short-task behavior and safe interruption
+Mode: execute
 Updated: 2026-10-08
 Branch: main
-HEAD: 2849fb62f
+HEAD: 6ce8f33f9
 
 ## Objective
 
-All admins already mount the role-authorized chatbot. Enable the missing expert launcher and direct OpenCode selection/inference for every expert account, retaining role-specific tool boundaries.
+Production admin hub requests returned 429 during polling and negotiation. Fix the transport limiter and harden connection refresh, turn serialization, durable tool progress and interrupted history.
 
 ## Acceptance criteria
 
-- [x] Admin and expert launchers mount without learner feature flag or owner-account allowlist.
-- [x] Expert catalogue, model selection and inference admit the shared direct gateway.
-- [x] Expert read-only tool permissions and learner-only model policy retained.
-- [x] Application release live with serving evidence.
-- [ ] Functional acceptance: not tested—owner QA.
+- [x] Assistant polling has separate bounded 600/min transport allowance; negotiation remains capped.
+- [x] Token refresh preserves connection; account/role changes invalidate it; events filtered by conversation.
+- [x] One running turn per conversation; tool intent and each result saved immediately; no automatic resend.
+- [x] Interrupted tool history normalized; orphan/duplicate results omitted; tool context and provider stream reads bounded.
+- [ ] Image build and production serving proof recorded.
+- [ ] Short/long tool tasks, cancel, token refresh and interruption functional acceptance: not tested—owner QA.
 
 ## Decisions (do not revisit)
 
-- No change to owner-console privileges pending clarification: this task enables the role-authorized dashboard chatbot.
-- Admin and expert defaults retained; direct gateway selectable through the existing encrypted provider.
-- No automated QA; image builds and live release health provide deployment evidence only.
+- Production evidence: admin long-poll GET and reconnect negotiate requests returned 429 at 22:29 UTC Oct 7. MapHub used shared HubConnect 30/min for every poll.
+- Retain existing role permissions, provider routing, reasoning metadata, quotas, guard/approval and iteration limits.
+- No automatic task resubmission or tool retry after interruption. Unknown tool outcomes explicitly require inspection/confirmation.
+- No automated QA. Compile through image builds and record serving/health evidence; owner functional QA remains separate.
 
 ## Touched files
 
 | Path | Change |
 | --- | --- |
-| components/providers/companion-mount.tsx | All expert dashboard chatbot mount |
-| backend/src/OetLearner.Api/Endpoints/AiAssistantEndpoints.cs | Expert gateway catalogue/selection |
-| backend/src/OetLearner.Api/Services/AiAssistant/AiAssistantGateway.cs | Expert inference role |
+| backend/src/OetLearner.Api/Program.cs | Separate bounded assistant transport rate bucket |
+| backend/src/OetLearner.Api/Services/AiAssistant/AiAssistantOrchestrator.cs | Single turn, durable tool progress and complete history |
+| backend/src/OetLearner.Api/Services/Ai/OpenCodeStreamingCall.cs | Async reads and stream deadline |
+| hooks/use-ai-assistant.ts, contexts/ai-assistant-context.tsx, lib/ai-assistant/signalr.ts | Stable account-scoped connection, scoped events and honest interruption |
 
 ## Verification gates
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| compilation | build-images.yml | 37694493229 | PASS |
-| deployment | production-deploy.yml | 37695201719 | PASS |
-| functional acceptance | Owner manual QA | Admin and expert accounts, gateway selection and tool boundaries | NOT TESTED |
+| compilation | build-images.yml | Awaiting release | NOT RUN |
+| deployment | production-deploy.yml | Awaiting release | NOT RUN |
+| functional acceptance | Owner manual QA | Short/long/cancel/reconnect/history scenarios | NOT TESTED |
 
 ## Blockers
 
-- Separate Owner Agent Console privilege expansion awaits user clarification; dashboard chatbot work proceeds.
+- Hindsight service refused connection; diagnosis uses current source and production evidence.
 
 ## Next action
 
-1. Owner manual QA: admin and expert dashboard launcher, direct gateway selection and preserved tool permissions. Await clarification only for separate Owner Agent Console privilege expansion.
+1. Ship scoped changes through existing wrapper; repair compilation if necessary and verify exact serving release.

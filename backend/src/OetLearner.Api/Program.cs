@@ -429,6 +429,17 @@ builder.Services.AddRateLimiter(options =>
         var userId = httpContext.User.Identity?.IsAuthenticated == true
             ? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous"
             : httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        // Long polling consumes one HTTP request for each streamed batch, not just
+        // connection establishment. Keep negotiations capped while giving assistant
+        // transport its own bounded bucket, separate from the other hubs.
+        if (httpContext.Request.Path.StartsWithSegments("/v1/ai-assistant/hub")
+            && !httpContext.Request.Path.Value!.EndsWith("/negotiate", StringComparison.OrdinalIgnoreCase))
+            return RateLimitPartition.GetFixedWindowLimiter($"assistant-transport-{userId}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 600,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            });
         return RateLimitPartition.GetFixedWindowLimiter($"hub-connect-{userId}", _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 30,

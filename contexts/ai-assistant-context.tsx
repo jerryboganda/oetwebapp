@@ -63,7 +63,7 @@ export function AiAssistantProvider({ children }: { children: ReactNode }) {
 
   // Only connect when the user has access AND a surface asked for the hub.
   const assistant = useAiAssistant(
-    { token: hasAccess ? token : null, autoConnect: activated },
+    { token: hasAccess ? token : null, autoConnect: activated, connectionKey: userId ? `${userId}:${userRole}` : null },
     userRole,
   );
 

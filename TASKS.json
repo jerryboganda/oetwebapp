@@ -331,6 +331,17 @@
         "Build images 37694493229 success",
         "Deploy production 37695201719 success; 3b17f4f7b green, exact web/API serving-image proof; functional acceptance not tested-owner QA"
       ]
+    },
+    {
+      "id": "ALT-01",
+      "title": "Repair admin multi-tool and short task transport and continuation",
+      "status": "in_progress",
+      "owner": "admin-chat-long-tasks",
+      "blockedBy": [],
+      "verify": "Image compilation and live serving proof; owner manual functional acceptance",
+      "evidence": [
+        "Production admin assistant poll/negotiate HTTP429; HubConnect 30/min applied to every transport request"
+      ]
     }
   ]
 }

@@ -143,3 +143,5 @@ Older still: `git log -- PROGRESS.md`.
 - 2026-10-08 staff-chatbot-access: all admin accounts already have the chatbot; enabled expert launcher and direct gateway catalogue/selection/inference for all experts. Role-specific tools retained. Owner-console privilege expansion awaiting clarification. Deployment pending; functional QA not tested—owner QA.
 
 - staff-chatbot-access live: 3b17f4f7bf7241f99e290a40c0867d1a20034224; build 37694493229 and deploy 37695201719 successful. Green serving images and release headers verified. All admin/expert dashboard chatbot roles allowed; separate owner console privileges unchanged pending clarification. Functional acceptance not tested—owner QA.
+
+- 2026-10-08 admin-chat-long-tasks: production admin hub poll/negotiate HTTP429 traced to shared 30/min HubConnect. Separate assistant transport bucket, stable token-refresh connection, scoped events, single-turn guard, durable tool progress and interrupted-history normalization implemented. Compilation/deployment pending; functional QA not tested—owner QA.

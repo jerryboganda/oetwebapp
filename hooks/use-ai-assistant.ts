@@ -113,7 +113,7 @@ export interface UseAiAssistantReturn {
 }
 
 export function useAiAssistant(
-  tokenOrOptions?: string | null | { token: string | null; autoConnect?: boolean },
+  tokenOrOptions?: string | null | { token: string | null; autoConnect?: boolean; connectionKey?: string | null },
   userRole?: UserRole | null,
 ): UseAiAssistantReturn {
   // Handle both call signatures for backward compatibility
@@ -123,6 +123,10 @@ export function useAiAssistant(
   // it once the learner actually opens the assistant pass `autoConnect: false`
   // until then; every other caller keeps the original connect-on-token default.
   const autoConnect = options?.autoConnect ?? true;
+  const connectionKey = token ? options?.connectionKey ?? token : null;
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
+  const turnRunningRef = useRef(false);
   const resolvedRole = userRole ?? 'learner';
 
   const [connectionState, setConnectionState] = useState<AssistantConnectionState>('disconnected');
@@ -184,7 +188,7 @@ export function useAiAssistant(
     setConnectionState('connecting');
     let connection: HubConnection;
     try {
-      connection = await createAssistantConnection(token, {
+      connection = await createAssistantConnection(() => tokenRef.current, {
         onReconnecting: () => {
           if (connectionAttemptRef.current === attempt) setConnectionState('reconnecting');
         },
@@ -218,22 +222,21 @@ export function useAiAssistant(
       },
       onToolCallStart: (toolCallId: string, toolName: string, args: string) => {
         setStreamingStatus('tool-calling');
-        setActiveToolCalls((prev: ToolCallInfo[]) => [
-          ...prev,
-          { id: toolCallId, toolName, arguments: args },
-        ]);
+        const next = [...activeToolCallsRef.current, { id: toolCallId, toolName, arguments: args }];
+        activeToolCallsRef.current = next;
+        setActiveToolCalls(next);
       },
       onToolCallResult: (toolCallId: string, result: string, isError: boolean) => {
-        setActiveToolCalls((prev: ToolCallInfo[]) =>
-          prev.map((tc) =>
-            tc.id === toolCallId ? { ...tc, result, isError } : tc,
-          ),
-        );
+        const next = activeToolCallsRef.current.map((tc) =>
+          tc.id === toolCallId ? { ...tc, result, isError } : tc);
+        activeToolCallsRef.current = next;
+        setActiveToolCalls(next);
         setStreamingStatus('streaming');
       },
       onCitations: (incoming: AssistantCitation[]) => {
         // Arrive before the first token; bound to the message on completion.
         setCitations(incoming);
+        citationsRef.current = incoming;
       },
       onVoiceTranscript: (text: string) => {
         // Hub already folded this into the stored user turn. Mirror it locally
@@ -257,6 +260,7 @@ export function useAiAssistant(
         });
       },
       onTurnComplete: (messageId: string, fullText: string) => {
+        turnRunningRef.current = false;
         pendingVoiceTranscriptRef.current = null;
         pendingUserMessageIdRef.current = null;
         const assistantMsg: AiAssistantMessage = {
@@ -279,6 +283,7 @@ export function useAiAssistant(
         setCitations([]);
       },
       onTurnError: (code: string, message: string) => {
+        turnRunningRef.current = false;
         pendingVoiceTranscriptRef.current = null;
         pendingUserMessageIdRef.current = null;
         setError(`[${code}] ${message}`);
@@ -287,7 +292,7 @@ export function useAiAssistant(
         setActiveToolCalls([]);
         setCitations([]);
       },
-    });
+    }, () => activeThreadRef.current?.id);
 
     unsubRef.current = unsub;
 
@@ -316,6 +321,7 @@ export function useAiAssistant(
   }, [token]);
 
   const disconnect = useCallback(() => {
+    turnRunningRef.current = false;
     connectionAttemptRef.current += 1;
     if (unsubRef.current) {
       unsubRef.current();
@@ -340,13 +346,19 @@ export function useAiAssistant(
       disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, autoConnect]);
+  }, [connectionKey, autoConnect]);
 
   // ─── Load threads on connect ────────────────────────────────────────────
 
   useEffect(() => {
     if (connectionState === 'connected') {
       void refreshThreads();
+      const threadId = activeThreadRef.current?.id;
+      if (threadId && !turnRunningRef.current) {
+        void apiGetMessages(threadId).then((history) => {
+          if (!turnRunningRef.current && activeThreadRef.current?.id === threadId) setMessages(history);
+        }).catch(() => {});
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionState]);
@@ -414,6 +426,10 @@ export function useAiAssistant(
   }, []);
 
   const selectThread = useCallback(async (threadId: string) => {
+    if (turnRunningRef.current) {
+      setError('Finish or cancel the running task before switching conversations.');
+      return;
+    }
     try {
       // Re-selected conversations re-read the authoritative row (rename
       // titles, model picks) alongside the transcript, so stale list copies
@@ -438,6 +454,7 @@ export function useAiAssistant(
       setStreamingText('');
       setStreamingStatus('idle');
       setActiveToolCalls([]);
+      activeToolCallsRef.current = [];
       setError(null);
     } catch (err) {
       console.error('[AI Assistant] Failed to load messages:', err);
@@ -446,6 +463,10 @@ export function useAiAssistant(
   }, []);
 
   const createNewThread = useCallback(async (title?: string): Promise<AiAssistantThread | undefined> => {
+    if (turnRunningRef.current) {
+      setError('Finish or cancel the running task before creating a conversation.');
+      return;
+    }
     try {
       const thread = await apiCreateThread(assistantRole, title);
       setThreads((prev) => [thread, ...prev]);
@@ -512,6 +533,11 @@ export function useAiAssistant(
         setError('Not connected to assistant');
         return;
       }
+      if (turnRunningRef.current) {
+        setError('A task is already running. Wait for it to finish or cancel it.');
+        return;
+      }
+      turnRunningRef.current = true;
 
       // Ensure we have an active thread (a pending model pick created before
       // the first thread is applied to it right away).
@@ -521,6 +547,7 @@ export function useAiAssistant(
           const thread = await apiCreateThread(assistantRole);
           setThreads((prev) => [thread, ...prev]);
           setActiveThread(thread);
+          activeThreadRef.current = thread;
           threadId = thread.id;
           const pendingModel = threadModelRef.current;
           if (pendingModel) {
@@ -535,6 +562,7 @@ export function useAiAssistant(
         } catch (err) {
           console.error('[AI Assistant] Failed to create thread:', err);
           setError('Failed to create thread');
+          turnRunningRef.current = false;
           return;
         }
       }
@@ -545,6 +573,7 @@ export function useAiAssistant(
         wire = encodeAttachments(attachments);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not read attachment');
+        turnRunningRef.current = false;
         return;
       }
 
@@ -575,8 +604,11 @@ export function useAiAssistant(
         await invokeStartTurn(connection, threadId, content, context, wire);
       } catch (err) {
         console.error('[AI Assistant] Failed to start turn:', err);
-        setError('Failed to send message');
-        setStreamingStatus('idle');
+        if (turnRunningRef.current) {
+          turnRunningRef.current = false;
+          setError('The connection interrupted this task. Reopen the conversation to inspect saved messages and tool results before continuing. The task was not automatically resent.');
+          setStreamingStatus('idle');
+        }
       }
     },
     [assistantRole],
@@ -591,7 +623,10 @@ export function useAiAssistant(
       await invokeCancelTurn(connection, thread.id);
     } catch (err) {
       console.error('[AI Assistant] Failed to cancel turn:', err);
+      setError('Could not confirm cancellation. Reconnect and inspect the conversation before continuing.');
+      return;
     }
+    turnRunningRef.current = false;
     setStreamingStatus('idle');
     setStreamingText('');
     setActiveToolCalls([]);

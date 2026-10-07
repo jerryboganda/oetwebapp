@@ -70,7 +70,7 @@ export interface AssistantConnectionOptions {
  * The connection is NOT started — call `.start()` after attaching event handlers.
  */
 export async function createAssistantConnection(
-  token: string,
+  token: string | (() => string | null),
   options?: AssistantConnectionOptions,
 ): Promise<HubConnection> {
   const {
@@ -90,7 +90,8 @@ export async function createAssistantConnection(
     .withUrl(hubUrl, {
       // Refresh on every (re)connect and long-poll: the token captured at
       // mount expires, and a fixed one made every reconnect fail with 401.
-      accessTokenFactory: async () => (await ensureFreshAccessToken().catch(() => null)) ?? token,
+      accessTokenFactory: async () => (await ensureFreshAccessToken().catch(() => null))
+        ?? (typeof token === 'function' ? token() : token) ?? '',
       ...(transport !== undefined ? { transport } : {}),
     })
     .withAutomaticReconnect({
@@ -212,12 +213,17 @@ export interface AssistantCitation {
 export function registerHubCallbacks(
   connection: HubConnection,
   callbacks: AssistantHubCallbacks,
+  activeThreadId?: () => string | undefined,
 ): () => void {
   const handlers: Array<[string, (...args: unknown[]) => void]> = [];
 
   function on(method: string, handler: (...args: unknown[]) => void) {
-    connection.on(method, handler);
-    handlers.push([method, handler]);
+    const filtered = (...args: unknown[]) => {
+      if (activeThreadId && args[0] !== activeThreadId()) return;
+      handler(...args);
+    };
+    connection.on(method, filtered);
+    handlers.push([method, filtered]);
   }
 
   // Event names and argument order below MUST match AiAssistantHub.StartTurn.

@@ -94,7 +94,11 @@ public sealed class AiAssistantOrchestrator(
         AiProviderDocumentAttachment? documentAttachment = null)
     {
         using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _activeTurns[threadId] = (userId, turnCts);
+        if (!_activeTurns.TryAdd(threadId, (userId, turnCts)))
+        {
+            yield return new AssistantTurnError("TURN_ALREADY_RUNNING", "A task is already running in this conversation. Wait for it or cancel it before starting another.");
+            yield break;
+        }
 
         try
         {
@@ -296,6 +300,7 @@ public sealed class AiAssistantOrchestrator(
                 };
                 db.AiAssistantMessages.Add(toolCallMsg);
                 history.Add(toolCallMsg);
+                await db.SaveChangesAsync(turnCts.Token);
 
                 // Execute each tool call
                 foreach (var toolCall in toolCalls)
@@ -318,7 +323,6 @@ public sealed class AiAssistantOrchestrator(
                         : JsonSerializer.Serialize(new { error = result.ErrorMessage ?? "Tool execution failed" });
 
                     var isError = result.Outcome != AiToolOutcome.Success;
-                    yield return new AssistantToolCallResult(toolCall.Id, resultJson, isError);
 
                     // Persist tool result message
                     var toolResultMsg = new AiAssistantMessage
@@ -333,6 +337,8 @@ public sealed class AiAssistantOrchestrator(
                     };
                     db.AiAssistantMessages.Add(toolResultMsg);
                     history.Add(toolResultMsg);
+                    await db.SaveChangesAsync(CancellationToken.None);
+                    yield return new AssistantToolCallResult(toolCall.Id, resultJson, isError);
                 }
             }
 
@@ -569,7 +575,13 @@ public sealed class AiAssistantOrchestrator(
     {
         var messages = new List<LlmMessage> { new("system", systemPrompt) };
 
-        var expectingToolResult = false;
+        var pending = new HashSet<string>(StringComparer.Ordinal);
+        void CloseInterruptedCalls()
+        {
+            foreach (var id in pending)
+                messages.Add(new LlmMessage("tool", "Interrupted: no outcome was recorded for this operation. Do not automatically repeat it. Inspect saved results and request explicit confirmation before retrying.") { ToolCallId = id });
+            pending.Clear();
+        }
 
         foreach (var msg in history)
         {
@@ -578,12 +590,14 @@ public sealed class AiAssistantOrchestrator(
                 // Drop orphaned tool results: at the history-window boundary a
                 // tool row can appear without the assistant tool-call turn that
                 // produced it (orphans crash strict providers with a 400).
-                if (!expectingToolResult)
+                if (msg.ToolCallId is null || !pending.Remove(msg.ToolCallId))
                 {
                     continue;
                 }
 
-                messages.Add(new LlmMessage("tool", msg.Content ?? "")
+                var result = msg.Content ?? "";
+                if (result.Length > 12000) result = result[..12000] + "\n[Tool result shortened for context; the full result remains in the conversation.]";
+                messages.Add(new LlmMessage("tool", result)
                 {
                     ToolCallId = msg.ToolCallId,
                     Name = msg.ToolName,
@@ -591,10 +605,12 @@ public sealed class AiAssistantOrchestrator(
             }
             else
             {
-                expectingToolResult = msg.ToolCallsJson is { Length: > 2 };
+                CloseInterruptedCalls();
 
                 if (msg.ToolCallsJson != null)
                 {
+                    foreach (var call in JsonSerializer.Deserialize<List<LlmToolCall>>(msg.ToolCallsJson) ?? [])
+                        pending.Add(call.Id);
                     messages.Add(new LlmMessage("assistant", msg.Content ?? "")
                     {
                         ToolCallsJson = msg.ToolCallsJson,
@@ -608,6 +624,7 @@ public sealed class AiAssistantOrchestrator(
             }
         }
 
+        CloseInterruptedCalls();
         return messages;
     }
 }

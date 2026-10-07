@@ -55,9 +55,10 @@ public static class OpenCodeStreamingCall
 
         using var stream = await response.Content.ReadAsStreamAsync(ct);
         using var reader = new StreamReader(stream);
-        while (!reader.EndOfStream && !ct.IsCancellationRequested)
+        using var streamDeadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        streamDeadline.CancelAfter(TimeSpan.FromMinutes(10));
+        while (await reader.ReadLineAsync(streamDeadline.Token) is { } line)
         {
-            var line = await reader.ReadLineAsync(ct);
             if (line is { Length: > 1048576 }) throw new InvalidOperationException("OpenCode stream event exceeded its limit.");
             if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data:", StringComparison.Ordinal)) continue;
             var data = line[5..].Trim();
