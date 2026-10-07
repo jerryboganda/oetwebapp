@@ -120,6 +120,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IAiCreditReservationService? creditReservations = null,
     IJevWritingPilot? writingPilot = null,
     Microsoft.Extensions.Options.IOptions<WritingGradeChainOptions>? gradeChainOptions = null,
+    OetLearner.Api.Services.Writing.IWritingErrorDnaFeeder? errorDnaFeeder = null,
     WritingQaFault? qaFault = null,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
     // Secondary reviewer: optional LAST parameter, so every pipeline built by hand (tests, tools) keeps
@@ -821,6 +822,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     assessmentReport.Report.CandidateReportVisible = true;
                     assessmentReport.Report.ConfidenceLabel = "medium";
                     assessmentReport.Report.ConfidenceRange = "calibration-approved range";
+                    await FeedErrorDnaAsync(assessmentReport.Report.Id, submission, ct);
                 }
             }
             db.WritingAssessmentReportsV11.Add(assessmentReport.Report);
@@ -1344,7 +1346,25 @@ public sealed class WritingSubmissionEvaluationPipeline(
     /// snapshot is an audit record only: candidate result pages resolve the
     /// LIVE verified answer at read time (<see cref="WritingAssessmentV11ResultService"/>).
     /// </summary>
-    private async Task AttachTaskModelAnswerAsync(
+        private async Task FeedErrorDnaAsync(Guid reportId, WritingSubmission submission, CancellationToken ct)
+    {
+        if (errorDnaFeeder is null) return;
+        try
+        {
+            var fed = await errorDnaFeeder.FeedFromReportAsync(reportId, submission.UserId, ct);
+            if (fed > 0)
+            {
+                logger.LogInformation("Error-DNA feeder: recorded {Count} writing findings for report {ReportId}", fed, reportId);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Best effort by contract: grading must never fail because the feeder did.
+            logger.LogWarning(ex, "Error-DNA feeder failed for report {ReportId}", reportId);
+        }
+    }
+
+private async Task AttachTaskModelAnswerAsync(
         WritingAssessmentModelAnswer target,
         WritingSubmission submission,
         DateTimeOffset now,
@@ -1990,6 +2010,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     assessmentReport.Report.CandidateReportVisible = true;
                     assessmentReport.Report.ConfidenceLabel = "medium";
                     assessmentReport.Report.ConfidenceRange = "calibration-approved range";
+                    await FeedErrorDnaAsync(assessmentReport.Report.Id, submission, ct);
                 }
             }
             db.WritingAssessmentReportsV11.Add(assessmentReport.Report);

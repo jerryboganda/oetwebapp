@@ -2272,6 +2272,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAiCreditCostService,
     OetLearner.Api.Services.Billing.AiCreditCostService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionHandoffService,
     OetLearner.Api.Services.Companion.CompanionHandoffService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionOpsService,
+    OetLearner.Api.Services.Companion.CompanionOpsService>();
+// Error-DNA feeder: published writing findings become the learner's evidenced recurring errors.
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingErrorDnaFeeder,
+    OetLearner.Api.Services.Writing.WritingErrorDnaFeeder>();
 // Score-import proposal store (singleton, in-memory, per user+thread): preview → confirm later turn.
 builder.Services.AddSingleton<OetLearner.Api.Services.AiTools.Tools.CompanionScoreProposalStore>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,

@@ -42,6 +42,27 @@ public static class CompanionKnowledgeAdminEndpoints
         // prompt, and (b) the corpus holds only one authority class, so every
         // "official fact" answer is really a teaching rule. Neither is visible
         // from a total chunk count, and both invalidate a whole test run.
+        // ── Operations reporting (F-126..F-129/F-132 companion slice) ────────
+        group.MapGet("/ops/quality", async (
+            OetLearner.Api.Services.Companion.ICompanionOpsService ops,
+            CancellationToken ct, int days = 30, int take = 15)
+            => Results.Ok(new { rows = await ops.QualityAsync(days, take, ct) }));
+
+        group.MapGet("/ops/coverage", async (
+            OetLearner.Api.Services.Companion.ICompanionOpsService ops,
+            CancellationToken ct)
+            => Results.Ok(new { rows = await ops.CoverageAsync(ct) }));
+
+        group.MapGet("/ops/cost", async (
+            OetLearner.Api.Services.Companion.ICompanionOpsService ops,
+            CancellationToken ct, int days = 30)
+            => Results.Ok(new { rows = await ops.CostByDayAsync(days, ct) }));
+
+        group.MapGet("/ops/snapshot", async (
+            OetLearner.Api.Services.Companion.ICompanionOpsService ops,
+            CancellationToken ct)
+            => Results.Ok(await ops.SnapshotAsync(ct)));
+
         group.MapGet("/status", async (
             LearnerDbContext db,
             ICompanionFeatureFlags flags,
