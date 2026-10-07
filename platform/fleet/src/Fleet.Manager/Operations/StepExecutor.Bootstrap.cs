@@ -114,7 +114,9 @@ public sealed partial class StepExecutor
         {
             // The UBAG dial plane (decision D3): the helper's mTLS listener port is opened inbound only
             // when the manager runs in trust mode. The listener itself requires our node certificate.
-            data["ubag_allow_ports"] = StepExecutor.TrustListenerPort.ToString(CultureInfo.InvariantCulture);
+            // 443 joins 7443 because UpCloud TRIAL-mode provider firewalls allow only 22/80/443/ICMP and
+            // cannot be modified — S5 accepts 443 and redirects it to the 7443 listener.
+            data["ubag_allow_ports"] = StepExecutor.TrustListenerPort.ToString(CultureInfo.InvariantCulture) + ",443";
         }
         var request = BuildRequest(step, host, owner, managerKey, null, data);
         var check = await _provisioner.CheckAsync(request, cancellationToken);

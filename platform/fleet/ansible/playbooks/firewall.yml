@@ -62,6 +62,11 @@
                   ip6 nexthdr icmpv6 accept
                   tcp dport {{ fleet_target_port }} ip saddr { {{ fleet_allowed_v4 | join(', ') }} } accept
                   {{ fleet_allow_v6_rule }}
+                  {% if 443 in fleet_dial_ports %}
+                  # Trial-firewall workaround (UpCloud trial firewalls allow only 22/80/443/ICMP and are
+                  # immutable): dials arrive on 443 and are redirected to the listener on 7443.
+                  tcp dport 443 redirect to :7443
+                  {% endif %}
                   {% for port in fleet_dial_ports %}
                   # UBAG dial plane: the mTLS listener behind it refuses everything without the node certificate.
                   tcp dport {{ port }} accept
