@@ -37,7 +37,7 @@ for key in sorted(latest):
     if 'busy at the moment' in resp.lower():
         flags.append('PROVIDER BUSY (retest needed)')
         problems += 1
-    if 'exhausted' in resp.lower():
+    if 'exhausted' in resp.lower() and 'daily ai credits exhausted' in resp.lower():
         flags.append('QUOTA EXHAUSTED (retest needed)')
         problems += 1
     if rec.get('error'):
