@@ -1,6 +1,6 @@
 # PROGRESS — Durable Checkpoint Ledger
 
-Last updated: 2026-10-06
+Last updated: 2026-10-07
 
 ## How this file works
 
@@ -10,6 +10,14 @@ Last updated: 2026-10-06
   Verified evidence is `VERIFICATION.md` (machine-written — never hand-edit it).
 - Do not paste historical ledgers here. Verbatim history lives in
   `docs/PROGRESS-ARCHIVE-2026.md`; older still is `git log -- PROGRESS.md`.
+
+## Active checkpoint - Writing-AI urgent production patch (2026-10-07)
+
+- P0 root cause (live, SSH+DB evidence): the codex sidecar's ChatGPT workspace is OUT OF CREDITS — every gpt-6.1-sol reviewer call 502s ("Your workspace is out of credits", 14/14 attempts in 24 h). Grader (writing-claude-sub) healthy; the owner's 2 letters exhausted retries into failed/grading_delayed during the outage (letters intact, Retryable). OWNER MUST TOP UP the ChatGPT workspace; then Retry proves grader→Sol→stored.
+- 15-minute release acceptance PASSED live with zero problems (run 37547511993): countdown 14:59 at submit, reload 14:49, close+75 s reopen 13:29 (no reset), Post Submissions row present, auto-release exactly at the server instant, results opened, one grade call (no dup charge); reviewer outage completed the letter via the bounded WAI-07 fallback. Evidence: .tools-state/writing-samples-7oct/.
+- Nursing Free Sample (Adam White) REPLACED with the approved verbatim vector retype and verified live (build 37546219716, swap run 37549715914, new asset b9243d78…, 24× smaller, fonts embedded, zero images, publishReady=true).
+- All 223 published Writing stimuli classified (poppler on VPS): 136 vector + 81 crisp digital rasters (PASS legibility) + 6 genuine photo-scans (Erika Stone, Jonathon Apple, Sarah Day, Robert Smithson, James Andresen, Roger Stanton). Retype pipeline (OCR line-segment rebuild + corrections layer + review pairs): scripts/materials/retype-stimuli.mjs, retype-ledger.json (86 rows), workflows writing-samples-retype.yml / writing-stimulus-swap.yml. The 6 photo-scans need further per-document corrections cycles before swap.
+- writing-release-qa.yml lives PARKED in .github/manual-workflows/ (pipeline contract: CI never runs automated QA); move-in → dispatch → move-out per the README there. Repo flipped PUBLIC 23:53 UTC 6 Oct for the Actions wave — flip PRIVATE once the photo-scan rebuilds finish.
 
 ## Active checkpoint - Writing AI-Final handoff (2026-10-06)
 
