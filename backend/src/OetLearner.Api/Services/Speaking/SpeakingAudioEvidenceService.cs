@@ -217,6 +217,13 @@ public sealed class SpeakingAudioEvidenceService(
             return Described(SpeakingAudioEvidence.Unavailable("no_audio"), 0, 0);
         }
 
+        // Give a helper a head start on this session's join (one job per session, flag-gated, never throws): this grade still
+        // joins locally unless the job already finished, and a later pass is served the precomputed mp3 instead of ffmpeg.
+        if (remoteJoin is not null)
+        {
+            _ = await remoteJoin.EnqueueForSessionAsync(request.SessionId, ct);
+        }
+
         // A join a helper already prepared for exactly these clips (flag-gated, fail-soft, null when there is none) skips the local
         // ffmpeg run. The local transcoder below is ALWAYS the fallback: the grade never waits for, or depends on, a remote job.
         var join = await TryServePrecomputedJoinAsync(request.SessionId, recordings, ct);

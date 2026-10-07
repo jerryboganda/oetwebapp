@@ -642,7 +642,7 @@ public static class FleetNodeCli
         foreach (var job in JsonArray(jobs))
         {
             Console.WriteLine(
-                (Str(job, "id", "Id") ?? "?").PadRight(26)
+                (Str(job, "id", "Id") ?? "?").PadRight(31)
                 + (Str(job, "kind", "Kind") ?? "?").PadRight(26)
                 + (Str(job, "state", "State") ?? "?").PadRight(14)
                 + ("a" + (Int(job, "attempt", "Attempt")?.ToString() ?? "?")).PadRight(5)
