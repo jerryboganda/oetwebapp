@@ -169,6 +169,66 @@ public sealed class HttpFleetApi : IFleetApi
         return document.RootElement.Clone();
     }
 
+    public async Task<JsonElement> GetJobsAsync(string? state, string? kind, string? nodeId, int limit, CancellationToken cancellationToken)
+    {
+        var query = new List<string> { "limit=" + Math.Clamp(limit, 1, 200).ToString(System.Globalization.CultureInfo.InvariantCulture) };
+        if (!string.IsNullOrWhiteSpace(state))
+        {
+            query.Add("state=" + Uri.EscapeDataString(state));
+        }
+
+        if (!string.IsNullOrWhiteSpace(kind))
+        {
+            query.Add("kind=" + Uri.EscapeDataString(kind));
+        }
+
+        if (!string.IsNullOrWhiteSpace(nodeId))
+        {
+            query.Add("nodeId=" + Uri.EscapeDataString(nodeId));
+        }
+
+        using var response = await SendAsync(HttpMethod.Get, Root + "/jobs?" + string.Join("&", query), null, retryReads: true, cancellationToken);
+        var text = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var document = JsonDocument.Parse(text);
+        return document.RootElement.Clone();
+    }
+
+    public async Task<JsonElement?> GetJobAsync(string jobId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Get, JobPath(jobId), null, retryReads: true, cancellationToken);
+            var text = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var document = JsonDocument.Parse(text);
+            return document.RootElement.Clone();
+        }
+        catch (FleetApiException ex) when (ex.Status == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+    }
+
+    public async Task PostJobActionAsync(string action, string jobId, CancellationToken cancellationToken)
+    {
+        if (action is not ("requeue" or "force-local" or "cancel"))
+        {
+            throw new ArgumentException("Not a known job action.", nameof(action));
+        }
+
+        using var response = await SendAsync(HttpMethod.Post, JobPath(jobId) + "/" + action, new { }, retryReads: false, cancellationToken);
+    }
+
+    /// <summary>Job ids are opaque tokens the API issued; the path guard only has to stop URL injection.</summary>
+    private static string JobPath(string jobId)
+    {
+        if (!System.Text.RegularExpressions.Regex.IsMatch(jobId, @"\A[A-Za-z0-9_-]{1,80}\z", System.Text.RegularExpressions.RegexOptions.CultureInvariant))
+        {
+            throw new ArgumentException("Not a valid job id.", nameof(jobId));
+        }
+
+        return Root + "/jobs/" + jobId;
+    }
+
     /// <summary>Tolerant parse: the registry lives under <c>kinds</c> (strings or objects with a <c>kind</c> member).</summary>
     internal static ApiStatus ParseStatus(string json)
     {
