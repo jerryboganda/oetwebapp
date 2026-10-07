@@ -168,6 +168,19 @@ const droppedGarbage = (word) => {
  *   [ { "find": "exact OCR text or /regex/", "replace": "correct text" } ]
  * Applied to each drawn line AFTER grouping. Every file here is authored from
  * the side-by-side review (the human-verification layer of this pipeline). */
+/** Human-verified transcription for one asset, when reading the photo beats
+ * OCR: scripts/materials/retype-transcripts/<assetId>.json =
+ *   { "pages": [ { "lines": [ { "t": "text", "x": 42, "y": 60, "s": 11, "b": false } ] } ] }
+ * x/y are A4 points (top-left origin), s = font pt (default 11), b = bold.
+ * When present this REPLACES OCR for that document entirely. */
+function loadTranscript(assetId) {
+  const file = path.join(HERE, 'retype-transcripts', `${assetId}.json`);
+  if (!fs.existsSync(file)) return null;
+  const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!Array.isArray(doc.pages) || !doc.pages.length) throw new Error(`transcript ${assetId} has no pages`);
+  return doc;
+}
+
 function loadCorrections(assetId) {
   const file = path.join(HERE, 'retype-corrections', `${assetId}.json`);
   if (!fs.existsSync(file)) return [];
@@ -187,7 +200,7 @@ function applyCorrections(text, corrections) {
   return out;
 }
 
-function ocrPageTsv(pagePng) {
+function ocrPageTsv(pagePng, pdfPath, pageIndex) {
   let words = ocrOnce(pagePng, []);
   if (!words.length) {
     // Some photo-scan PDFs read as blank to stock tesseract (gray background,
@@ -196,8 +209,19 @@ function ocrPageTsv(pagePng) {
     words = ocrOnce(pagePng, ['--psm', '6']);
     if (!words.length) words = ocrOnce(pagePng, ['-c', 'tessedit_do_invert=1']);
   }
+  if (!words.length && fs.existsSync(RENDER_FALLBACK_PY)) {
+    // Last resort: re-render the page with pymupdf (different rasterizer) and
+    // OCR that PNG — pdftoppm output defeats tesseract on some scans.
+    try {
+      const alt = pagePng.replace(/\.png$/, '-fitz.png');
+      run('python3', [RENDER_FALLBACK_PY, pdfPath, String(pageIndex + 1), alt, String(DPI)]);
+      words = ocrOnce(alt, []);
+      if (!words.length) words = ocrOnce(alt, ['--psm', '6']);
+    } catch { /* fall through as empty */ }
+  }
   return words;
 }
+const RENDER_FALLBACK_PY = path.join(HERE, 'render-page.py');
 
 function ocrOnce(pagePng, extraArgs) {
   const base = pagePng.replace(/\.png$/, '');
@@ -240,6 +264,7 @@ function pngSize(pngPath) {
 function buildVectorPdf(pdfPath, outPath, report, assetId) {
   const corrections = loadCorrections(assetId);
   report.correctionsApplied = corrections.length;
+  const transcript = loadTranscript(assetId);
   const pages = Number((run('pdfinfo', [pdfPath]).match(/^Pages:\s+(\d+)/m) ?? [])[1] ?? 0);
   if (!pages) throw new Error('no pages');
   fs.mkdirSync(RETYPE_DIR, { recursive: true });
@@ -248,14 +273,25 @@ function buildVectorPdf(pdfPath, outPath, report, assetId) {
   for (let p = 1; p <= pages; p++) {
     const png = path.join(RETYPE_DIR, `page-${p}.png`);
     if (!fs.existsSync(png)) throw new Error(`render missing: ${png}`);
-    const words = ocrPageTsv(png);
     const dims = pngSize(png);
     if (!dims.w || !dims.h) throw new Error(`no png dimensions for ${png}`);
-    const lines = groupLines(words);
-    for (const line of lines) line.text = applyCorrections(line.text, corrections);
-    pyInputs.push({ png, pageW: dims.w, pageH: dims.h, words: lines });
-    report.wordCount += words.length;
-    report.lowConfidence.push(...words.filter((wd) => wd.confidence < MIN_CONFIDENCE).map((wd) => ({ page: p, ...wd })));
+    let lines;
+    if (transcript) {
+      // Human-verified transcription (the human-verification layer of this
+      // pipeline): positioned lines on the A4 canvas, no OCR damage. The
+      // source render is kept only as the review-pair image.
+      lines = transcript.pages[p - 1]?.lines ?? [];
+      if (!lines.length) throw new Error(`transcript has no lines for page ${p}`);
+      report.wordCount += lines.join(' ').split(/\s+/).filter(Boolean).length;
+      report.transcribed = true;
+    } else {
+      const words = ocrPageTsv(png);
+      lines = groupLines(words);
+      for (const line of lines) line.text = applyCorrections(line.text, corrections);
+      report.wordCount += words.length;
+      report.lowConfidence.push(...words.filter((wd) => wd.confidence < MIN_CONFIDENCE).map((wd) => ({ page: p, ...wd })));
+    }
+    pyInputs.push({ png, pageW: dims.w, pageH: dims.h, words: lines, transcriptLines: transcript ? (transcript.pages[p - 1]?.lines ?? []) : null });
     // Keep the SOURCE render for the human review pair (original vs rebuilt).
     fs.copyFileSync(png, path.join(OUT_DIR, `source-${assetId}-${p}.png`));
   }
@@ -367,6 +403,8 @@ def font(*paths):
 
 REG = TTFont("Body", font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
 pdfmetrics.registerFont(REG)
+BOLD = TTFont("Body-Bold", font("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
+pdfmetrics.registerFont(BOLD)
 
 payload = json.load(open(sys.argv[1]))
 A4W, A4H = payload["a4"]
@@ -375,6 +413,21 @@ for page in payload["pages"]:
     c.setFillColor(white)
     c.rect(0, 0, A4W, A4H, stroke=0, fill=1)
     c.setFillColor(black)
+    if page.get("transcriptLines"):
+        for ln in page["transcriptLines"]:
+            text = ln.get("t", "")
+            if not text:
+                continue
+            x = float(ln.get("x", 42))
+            size = float(ln.get("s", 11))
+            bold = bool(ln.get("b", False))
+            # y is measured TOP-DOWN in A4 points (matches how the transcripts
+            # were authored against the source renders).
+            y = A4H - float(ln.get("y", 60)) - size
+            c.setFont("Body-Bold" if bold else "Body", size)
+            c.drawString(x, y, text)
+        c.showPage()
+        continue
     scale = min(A4W / page["pageW"], A4H / page["pageH"])
     offX = (A4W - page["pageW"] * scale) / 2.0
     offY = (A4H - page["pageH"] * scale) / 2.0
