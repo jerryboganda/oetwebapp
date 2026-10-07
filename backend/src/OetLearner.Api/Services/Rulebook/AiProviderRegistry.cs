@@ -125,7 +125,10 @@ public sealed class RegistryBackedProvider(
     // higher default; the lane still protects Claude/Writing traffic by staying separate.
     public static int OpenCodeMaxInFlight { get; } =
         LoadLaneCapacity();
-    private static readonly TimeSpan OpenCodeLaneWait = TimeSpan.FromSeconds(5);
+    // UAT finding (2026-10-07): 5s of queueing failed whole turns while slots were
+    // held by slow max-effort calls. 90s of bounded queueing answers instead — the
+    // learner waits longer rather than seeing the busy message.
+    private static readonly TimeSpan OpenCodeLaneWait = TimeSpan.FromSeconds(90);
 
     private static int LoadLaneCapacity()
     {
