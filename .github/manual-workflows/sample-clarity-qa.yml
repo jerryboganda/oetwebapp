@@ -1,0 +1,50 @@
+name: sample-clarity-qa
+
+# Writing sample clarity acceptance on an emulated phone (owner patch 7 Oct 2026,
+# check #5): the replaced Nursing Free Sample (Adam White) opened through the real
+# learner path on an iPhone-14 viewport, screenshotted at 100% and zoomed.
+# Manual only; PARKED like writing-release-qa.yml (pipeline contract: CI never runs
+# automated QA). Move into .github/workflows/, dispatch, move back.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: writing-qa-admin-singleton
+  cancel-in-progress: false
+
+jobs:
+  clarity-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install browser dependencies
+        run: |
+          cd scripts/qa
+          npm init -y >/dev/null 2>&1 || true
+          npm install playwright@latest --no-fund --no-audit
+          npx playwright install chromium --with-deps
+
+      - name: Run the clarity acceptance
+        env:
+          OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+          OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+          QA_OUT_DIR: clarity-qa-out
+        run: node scripts/qa/sample-clarity-qa.mjs
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-clarity-qa-${{ github.run_id }}
+          path: clarity-qa-out
+          retention-days: 30
