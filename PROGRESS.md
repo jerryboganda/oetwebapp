@@ -141,3 +141,5 @@ Older still: `git log -- PROGRESS.md`.
 - learner-personal-assistant deployed: f7ae11a35d5cfebf18f46313ae8c21cd025f9166; build 37692008180 and deploy 37692695925 successful. Exact blue serving image/headers verified; web/API health green. Functional acceptance not tested—owner QA.
 
 - 2026-10-08 staff-chatbot-access: all admin accounts already have the chatbot; enabled expert launcher and direct gateway catalogue/selection/inference for all experts. Role-specific tools retained. Owner-console privilege expansion awaiting clarification. Deployment pending; functional QA not tested—owner QA.
+
+- staff-chatbot-access live: 3b17f4f7bf7241f99e290a40c0867d1a20034224; build 37694493229 and deploy 37695201719 successful. Green serving images and release headers verified. All admin/expert dashboard chatbot roles allowed; separate owner console privileges unchanged pending clarification. Functional acceptance not tested—owner QA.

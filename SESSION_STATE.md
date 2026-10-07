@@ -2,7 +2,7 @@
 
 Session: staff-chatbot-access
 Goal: Enable direct gateway chatbot for all admin and instructor/expert dashboards
-Mode: execute
+Mode: verify
 Updated: 2026-10-08
 Branch: main
 HEAD: 2849fb62f
@@ -16,7 +16,7 @@ All admins already mount the role-authorized chatbot. Enable the missing expert 
 - [x] Admin and expert launchers mount without learner feature flag or owner-account allowlist.
 - [x] Expert catalogue, model selection and inference admit the shared direct gateway.
 - [x] Expert read-only tool permissions and learner-only model policy retained.
-- [ ] Application release live with serving evidence.
+- [x] Application release live with serving evidence.
 - [ ] Functional acceptance: not tested—owner QA.
 
 ## Decisions (do not revisit)
@@ -37,8 +37,8 @@ All admins already mount the role-authorized chatbot. Enable the missing expert 
 
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
-| compilation | build-images.yml | Awaiting release | NOT RUN |
-| deployment | production-deploy.yml | Awaiting release | NOT RUN |
+| compilation | build-images.yml | 37694493229 | PASS |
+| deployment | production-deploy.yml | 37695201719 | PASS |
 | functional acceptance | Owner manual QA | Admin and expert accounts, gateway selection and tool boundaries | NOT TESTED |
 
 ## Blockers
@@ -47,4 +47,4 @@ All admins already mount the role-authorized chatbot. Enable the missing expert 
 
 ## Next action
 
-1. Commit scoped changes and ship via the existing release wrapper; record successful release and serving evidence.
+1. Owner manual QA: admin and expert dashboard launcher, direct gateway selection and preserved tool permissions. Await clarification only for separate Owner Agent Console privilege expansion.

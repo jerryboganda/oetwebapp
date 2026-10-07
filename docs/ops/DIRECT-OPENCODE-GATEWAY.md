@@ -117,3 +117,9 @@ The learner-safe tool allowlist continues to filter discovery and execution. No 
 Release `f7ae11a35d5cfebf18f46313ae8c21cd025f9166`: Build images `37692008180`, Deploy production `37692695925`, both success. Serving headers and router/image proof match the release in blue. Web digest `sha256:291c3574f5e61d932513cec11a511169faa7d7d643620f457fa7983f45a56c14`; API digest `sha256:2fba8b1d0b75bdf840fdbd4dbcccb5b051fe65f50ca9f606e527c5a2abad3d4a`.
 
 Owner manual QA: a learner receives an OET study reply; old Claude/UBAG/GLM pins use the approved assistant; explicit unsupported model updates fail; provider/model names are hidden; authorized materials work; codebase/tool and off-topic requests are refused. Functional acceptance **not tested—owner QA**.
+
+## Staff dashboard access, 2026-10-08
+
+All admin accounts already had the dashboard chatbot. The expert/instructor launcher is now mounted for every expert account without the learner feature flag. Model discovery, selection and direct gateway inference now admit the expert role. Existing execution-time read-only guards, role tool grants and the learner single-model/study-only policy remain enforced. This does not expand the separate Owner Agent Console allowlist; that scope awaits clarification.
+
+Build images 37694493229 and Deploy production 37695201719 succeeded for release 3b17f4f7bf7241f99e290a40c0867d1a20034224. Live headers/router/image proof match the green slot; web sha256:ab9f23786a65125fba27224d7a08562b6f159a23d4d345e03625025109677bee, API sha256:60f5c2899019817ee01f0af73ab8f8ab7a47b074564223d02aa6721c35006054. Manual account-level and chat acceptance remains **not tested—owner QA**.
