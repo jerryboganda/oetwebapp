@@ -14,12 +14,12 @@ namespace Fleet.Agent.Net;
 /// Go <c>grpc_health_probe</c>-style prober checks) and a plain-text <c>/healthz</c>. Any other path
 /// answers the gRPC "unimplemented" status so a future UBAG rollout fails loudly instead of hanging.
 /// </summary>
-public static class UbagListener
+internal static class UbagListener
 {
     /// <summary>Holds the loaded certificate material. Files are provisioned before the container is
     /// created, but a restart race must never take the OET job plane down: connections before the files
     /// are readable fail their TLS handshake and the dialer retries.</summary>
-    public sealed class CertificateHolder
+    internal sealed class CertificateHolder
     {
         private readonly object _gate = new();
         private X509Certificate2? _node;
@@ -132,7 +132,7 @@ public static class UbagListener
 
     /// <summary>Background loader: reads the provisioned certificate files until they appear (or shutdown),
     /// so a container created a moment before the mount settled heals itself without restarting.</summary>
-    public sealed class CertificateLoader : IHostedService
+    internal sealed class CertificateLoader : IHostedService
     {
         public static readonly TimeSpan RetryEvery = TimeSpan.FromSeconds(30);
 
