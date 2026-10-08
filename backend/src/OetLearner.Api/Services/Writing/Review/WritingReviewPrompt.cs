@@ -10,11 +10,11 @@ namespace OetLearner.Api.Services.Writing.Review;
 public static class WritingReviewPrompt
 {
     /// <summary>Folded into the stage fingerprint: a prompt change never resumes an older stage.</summary>
-    public const string Version = "writing-review.v1";
+    public const string Version = "writing-review.v2";
 
     // Both stay under the AiOperation.PromptVersion column (varchar 32).
-    public const string TemplateId = "writing.review.v1";
-    public const string EnhancedTemplateId = "writing.review.enh.v1";
+    public const string TemplateId = "writing.review.v2";
+    public const string EnhancedTemplateId = "writing.review.enh.v2";
 
     private const string ReplySchema = """
         {
@@ -74,6 +74,7 @@ public static class WritingReviewPrompt
 
         sb.AppendLine("WHAT TO CHECK");
         sb.AppendLine("1. Validate every correction against the case notes, the task and the letter. Remove false positives (verdict false_positive).");
+        sb.AppendLine("   SOURCE GROUNDING: for EVERY finding that says a fact is invented, unsupported or not in the case notes (a date of birth, an age, a measurement, a range of movement, a dose, a name), FIRST search the WHOLE case-notes block and the task for it in every written form: date formats (28 February 1968 = 28 Feb 1968 = 28/02/1968 = 28.02.68), DOB = D.O.B. = date of birth, a degree sign = degrees = deg, R = right and L = left, and a label and its value on separate lines (the notes are a flat list of lines taken from a PDF, so table columns can be read across). An age worked out from a recorded date of birth and the task date is supported. If the fact is there in any form AND the letter attributes it to the same side, joint, label, date-event, drug and frequency, the verdict is false_positive and the criterion score it lowered may be raised; a value the notes record for a DIFFERENT side, joint, event or dose is a wrong fact, not a format difference, so confirm it. Never ADD such a finding unless you searched and the fact is truly absent or contradicted; its `evidence` must then be the nearest case-note line. A fact written in a different format is at most a style point, never an invention.");
         sb.AppendLine("2. Find false negatives: a real mistake or a material omission the assessment missed (add it under `added`, with an exact quote from the letter, or for an omission the case-note line that proves it).");
         sb.AppendLine("3. Check every severity label against the doctrine above (verdict severity_change). Coaching-only items are advisory (verdict advisory). Two findings about the same problem: mark the weaker one duplicate of the other.");
         sb.AppendLine("4. Check that the six criterion scores, the /500 estimate and the grade band agree with each other and with the findings. The /500 is holistic and NOT a linear function of the six scores.");
@@ -150,6 +151,16 @@ public static class WritingReviewPrompt
             sb.AppendLine($"   quote: {OneLine(f.Quote)}");
             sb.AppendLine($"   explanation: {OneLine(f.Message)}");
             sb.AppendLine($"   suggested fix: {OneLine(f.FixSuggestion)}");
+            if (row.Origin == WritingReviewFindingOrigin.Rule) continue;
+            if (WritingSourcePresence.IsFalseAbsenceClaim(
+                    f.Quote, f.Message, request.Letter, request.CaseNotesSnapshot, request.TaskSnapshot, out var proof))
+            {
+                sb.AppendLine($"   source check (computed from the case notes): the fact this finding calls absent IS in the case notes or the task, with the same label ({OneLine(proof)}); rule it false_positive.");
+            }
+            else if (WritingSourcePresence.ValueLookup(f.Quote, f.Message, request.CaseNotesSnapshot, request.TaskSnapshot) is { } seen)
+            {
+                sb.AppendLine($"   source lookup (computed): the value this finding calls absent appears in the case notes or the task on: {OneLine(seen)}. If it is the same side, joint, event, drug and dose as in the letter, rule this finding false_positive; if it belongs to something else, confirm it.");
+            }
         }
 
         sb.AppendLine();

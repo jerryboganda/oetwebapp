@@ -23,8 +23,23 @@ public sealed record WritingFactMap(IReadOnlyList<WritingFactEvidence> Facts)
 /// </summary>
 public static class WritingFactMapService
 {
-    private static readonly string[] ClinicalClaimWords =
-    ["diabetes", "cancer", "hiv", "pregnancy", "renal failure", "stroke", "epilepsy", "myocardial infarction", "heart attack"];
+    // Source grounding: a claim is "invented" only when the letter says it and NONE of the forms the case notes use for
+    // it is present. Word-bounded ("hives" is not HIV) and synonym-aware ("diabetic", "T2DM", "CVA", "seizures", "LMP").
+    private static readonly (string Claim, Regex InLetter, Regex InSource)[] ClinicalClaims =
+    [
+        ("diabetes", Rx(@"\bdiabet\w*"), Rx(@"\bdiabet\w*|\bt[12]dm\b|\bniddm\b|\biddm\b")),
+        ("cancer", Rx(@"\bcancer\w*"), Rx(@"\bcancer\w*|carcinoma|\bmalignan\w*|\bneoplas\w*")),
+        ("hiv", Rx(@"\bhiv\b"), Rx(@"\bhiv\b")),
+        ("pregnancy", Rx(@"\bpregnan\w*"), Rx(@"\bpregnan\w*|\bgravid\w*|\bantenatal\b|\bgestation\w*")),
+        ("renal failure", Rx(@"\brenal\s+failure\b"), Rx(@"\brenal\s+(?:failure|impairment|insufficiency)\b|\bkidney\s+(?:failure|disease)\b|\bckd\b|\besrf\b")),
+        ("stroke", Rx(@"\bstroke\b"), Rx(@"\bstroke\b|\bcva\b|cerebrovascular")),
+        ("epilepsy", Rx(@"\bepilep\w*"), Rx(@"\bepilep\w*|\bseizure\w*|\bconvuls\w*")),
+        ("myocardial infarction", Rx(@"\bmyocardial\s+infarct\w*"), Rx(@"\bmyocardial\s+infarct\w*|\bstemi\b|\bnstemi\b|\bheart\s+attack\b")),
+        ("heart attack", Rx(@"\bheart\s+attack\b"), Rx(@"\bheart\s+attack\b|\bmyocardial\s+infarct\w*|\bstemi\b|\bnstemi\b")),
+    ];
+
+    private static Regex Rx(string pattern)
+        => new(pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     private static readonly string[] RequiredWords =
     ["diagnosis", "symptom", "finding", "management", "medicine", "medication", "treatment", "follow", "referral", "request", "allergy", "asthma", "eczema", "hay fever", "smoking", "alcohol", "drink"];
@@ -74,10 +89,9 @@ public static class WritingFactMapService
                 "The specification requires allergy status for asthma, eczema, and hay fever regardless of recipient."));
         }
 
-        foreach (var claim in ClinicalClaimWords)
+        foreach (var (claim, inLetter, inSource) in ClinicalClaims)
         {
-            if (source.Contains(claim, StringComparison.OrdinalIgnoreCase)
-                || !candidate.Contains(claim, StringComparison.OrdinalIgnoreCase)) continue;
+            if (inSource.IsMatch(source) || !inLetter.IsMatch(candidate)) continue;
             facts.Add(new WritingFactEvidence(
                 claim,
                 "candidate-letter",

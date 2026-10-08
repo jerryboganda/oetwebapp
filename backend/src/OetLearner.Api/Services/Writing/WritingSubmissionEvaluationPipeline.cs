@@ -783,6 +783,48 @@ public sealed class WritingSubmissionEvaluationPipeline(
             FlagJevReview(WritingJevReviewReasons.ReviewerUnresolved);
         }
 
+        // Source grounding for a grade the reviewer's applier did not decide (review off, shadow, skipped, outage
+        // fallback or bypassed): a grader finding that calls a fact invented or absent from the case notes, when that
+        // fact IS in the case notes or the task, is withdrawn here by the same deterministic check the applier uses.
+        // The reviewed path never reaches this: its applier already removed such findings and relieved their criterion.
+        if (candidateFindings is not null && review is not { Status: WritingReviewStatus.Reviewed })
+        {
+            var withdrawn = 0;
+            candidateFindings = candidateFindings
+                .Where(f =>
+                {
+                    if (!WritingCandidateSeverityPolicy.IsGraderRuleId(f.RuleId)
+                        || !WritingSourcePresence.IsFalseAbsenceClaim(
+                            f.Quote, f.Message, submission.LetterContent,
+                            assessmentPreflightResult.CaseNotesSnapshot, assessmentPreflightResult.TaskSnapshot, out _))
+                    {
+                        return true;
+                    }
+
+                    withdrawn++;
+                    return false;
+                })
+                .ToList();
+            if (withdrawn > 0)
+            {
+                var keptAiFindings = (aiFindings ?? [])
+                    .Where(a => !WritingSourcePresence.IsFalseAbsenceClaim(
+                        a.Quote, a.Message, submission.LetterContent,
+                        assessmentPreflightResult.CaseNotesSnapshot, assessmentPreflightResult.TaskSnapshot, out _))
+                    .ToList();
+                grade.PerCriterionFeedbackJson = RebuildPerCriterionFeedbackJson(rubric, keptAiFindings);
+                if (jevAdvisoryScores is not null && writingPilot is not null)
+                {
+                    grade.PerCriterionFeedbackJson = writingPilot.MergeAdvisoryIntoPerCriterionJson(
+                        grade.PerCriterionFeedbackJson, jevAdvisoryScores);
+                }
+
+                logger.LogInformation(
+                    "Writing source grounding withdrew {Count} grader finding(s) for submission {SubmissionId}: the fact is in the case notes.",
+                    withdrawn, submission.Id);
+            }
+        }
+
         if (jevReviewReasons.Count > 0)
         {
             grade.ConfidenceFlag = JevWritingPilot.TutorReviewConfidenceFlag;
@@ -1781,7 +1823,7 @@ private async Task AttachTaskModelAnswerAsync(
     /// also keys every stored Model Answer), so identical letters are graded afresh after a behaviour change and never
     /// served a grade produced under the old doctrine. Bump it whenever candidate-facing grading changes.
     /// </summary>
-    private const string CandidateGradingVersion = "2026-10-06.1";
+    private const string CandidateGradingVersion = "2026-10-09.1";
 
     /// <summary>Reuse-key tag of the secondary review: only a grade produced WITH review is reusable while it is enforced.</summary>
     private string ReviewTagFor(WritingReviewMode mode)

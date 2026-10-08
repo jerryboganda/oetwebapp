@@ -84,6 +84,31 @@ public static class WritingReviewApplier
         var relieved = new HashSet<string>(StringComparer.Ordinal);
         var overrodeCritical = false;
 
+        // (k) Source grounding. A grader or reviewer finding that calls a fact invented or absent from the case notes,
+        // when that fact IS in the case notes or the task, is a false positive whatever any model said. Decided here, in
+        // code, before the verdict loop: a verified-false Critical can never survive (the advisory refusal below), the
+        // criterion it lowered is relieved so the reviewer may raise it, and a stored reply re-applied on resume gives the
+        // same outcome. No tutor flag: the proof is deterministic. Rule-engine findings are never touched.
+        foreach (var grounded in rows.Where(r => r.Source.Origin != WritingReviewFindingOrigin.Rule))
+        {
+            if (!WritingSourcePresence.IsFalseAbsenceClaim(
+                    grounded.Current.Quote,
+                    grounded.Current.Message,
+                    request.Letter,
+                    request.CaseNotesSnapshot,
+                    request.TaskSnapshot,
+                    out var proof))
+            {
+                continue;
+            }
+
+            grounded.Removed = true;
+            grounded.Handled = true;
+            relieved.Add(grounded.Current.PrimaryCriterionCode);
+            notes.Dispositions.Add(grounded.Source.Id + ":source_verified_false_positive");
+            notes.Flags.Add(grounded.Source.Id + ":found_in_source:" + proof);
+        }
+
         // (e) Finding verdicts. Duplicates are applied last, so a duplicate target's own verdict is already known.
         foreach (var verdict in decision.Findings.OrderBy(x => x.Verdict == "duplicate" ? 1 : 0))
         {
@@ -254,6 +279,14 @@ public static class WritingReviewApplier
             if (message.Length == 0 || WritingCandidateText.ContainsInternalToken(message))
             {
                 notes.Rejected.Add(id + ":added_message_unusable");
+                continue;
+            }
+
+            if (WritingSourcePresence.IsFalseAbsenceClaim(
+                    quote, message, request.Letter, request.CaseNotesSnapshot, request.TaskSnapshot, out _))
+            {
+                // The reviewer itself alleged an absence the case notes disprove: never add it.
+                notes.Rejected.Add(id + ":added_fact_present_in_source");
                 continue;
             }
 

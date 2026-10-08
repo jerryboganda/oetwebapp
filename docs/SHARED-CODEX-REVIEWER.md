@@ -105,3 +105,33 @@ missing/inactive the Writing reviewer reports `Off` (grading runs unreviewed, ne
 - The reviewer is not a paid route in normal operation (Codex subscription). The API fallback exists so an
   assessment completes when Codex capacity is gone; it reuses the existing `anthropic` provider row and
   costs the same as the existing L2 grading hop.
+
+## Source grounding (owner directive 9 Oct 2026, Physiotherapy calibration)
+
+No finding may tell a candidate that a fact is invented or "not in the case notes" when that fact is in the
+full extracted source (`CaseNotesSnapshot` plus `TaskSnapshot`), in any written form (date formats, DOB / D.O.B.,
+degree sign / degrees, R / right, label and value on separate lines).
+
+- One pure verifier, `WritingSourcePresence.IsFalseAbsenceClaim`, enforces it. It is FAIL-SAFE: any doubt keeps the
+  finding. It proves only three classes: a date (a DOB first of all), a range of movement in degrees, and a vital
+  sign / body measurement (mmHg, bpm, degrees C, kg, cm, mm). A dose, frequency, duration, diagnosis or name is
+  NEVER suppressed by code (it goes to the reviewer with `ValueLookup` evidence). The proof is strict: a plain
+  "this value is absent" message (no interpretation, no omission wording); a quote that is letter wording whose
+  every word the notes explain, with no unexplained number; the proof holds for EVERY occurrence of the quote; the
+  value is in the notes with the SAME label (side, joint, DOB, measurement) and the SAME event (admission,
+  discharge, active, passive ...); and the message names nothing beyond that label. A value recorded for another
+  side, joint or event is a real error and is kept. Known limits (all keep the finding): unit conversion, two-digit
+  years in written dates, a letter that omits a side the notes state, a side-only or event-qualified source label,
+  abbreviations outside the vital-sign map.
+- `WritingSourcePresence.ValueLookup` is the non-suppressing sibling: when the strict proof is not met it shows the
+  reviewer the source lines that carry the same value, so the model judges attribution with evidence.
+- `WritingReviewApplier.Apply` removes such grader/reviewer findings before the verdict loop (and refuses to add
+  one), relieving the criterion so the reviewer may raise it. The pipeline runs the same check for grades the
+  reviewer did not decide (review off, shadow, skipped, outage fallback). Deterministic rule findings are never touched.
+- The reviewer prompt (`writing-review.v2`) and the shared grader prompt (`CandidateGradingRules`) both instruct
+  "search the whole notes in every form before alleging absence".
+- The candidate rule-engine lane is deliberately NOT given `CaseNotesText`: that would switch on score-bearing
+  source detectors whose date/age handling has known gaps. Do not add it without replacing those regexes with the verifier.
+- If the stored case-note rows genuinely lack the fact (an extraction or authoring loss, as happened with the Weir
+  DOB), the claim is TRUE for that snapshot and the verifier correctly keeps it: repair the rows in the admin
+  case-notes editor, then re-submit.

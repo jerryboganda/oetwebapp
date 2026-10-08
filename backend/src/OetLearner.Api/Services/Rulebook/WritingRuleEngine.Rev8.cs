@@ -1959,7 +1959,7 @@ public sealed partial class WritingRuleEngine
 
     private static string DateKey(int day, int month, int year) => day + "/" + month + "/" + (year % 100);
 
-    private static HashSet<string> SourceDateKeys(string notes)
+    internal static HashSet<string> SourceDateKeys(string notes)
     {
         var keys = new HashSet<string>(StringComparer.Ordinal);
         foreach (Match m in NumericDateRe.Matches(notes))
