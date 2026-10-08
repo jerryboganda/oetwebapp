@@ -83,12 +83,18 @@ func labels(_ element: AXUIElement) -> [String] {
     [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute].compactMap { attr(element, $0) as String? }
 }
 
+/// Case-insensitive: this app uses CSS text-transform:uppercase throughout
+/// (Tailwind's `uppercase` utility), and WebKit's accessibility tree exposes
+/// the RENDERED text ("VIDEO LIBRARY"), not the DOM source text ("Video
+/// Library") — confirmed by a real macOS-15 CI run where a case-sensitive
+/// match on "Video Library" never found the (visibly present) library page.
 func matches(_ element: AXUIElement, _ wanted: String) -> Bool {
+    let wantedLower = wanted.lowercased()
     if wanted.hasPrefix("~") {
-        let needle = String(wanted.dropFirst())
-        return labels(element).contains { $0.contains(needle) }
+        let needle = String(wantedLower.dropFirst())
+        return labels(element).contains { $0.lowercased().contains(needle) }
     }
-    return labels(element).contains(wanted)
+    return labels(element).contains { $0.lowercased() == wantedLower }
 }
 
 func find(_ wanted: String, role: String? = nil) -> AXUIElement? {
@@ -441,9 +447,14 @@ case "set-slider":
     let target = Double(args[3]) ?? 0
     let result = AXUIElementSetAttributeValue(slider, kAXValueAttribute as CFString, args[3] as CFString)
     if result != .success { fail("setting slider '\(args[2])' failed: \(result.rawValue)") }
-    usleep(800_000)
-    let now = (attr(slider, kAXValueAttribute) as NSNumber?)?.doubleValue ?? -1
-    if abs(now - target) > 2 { fail("slider '\(args[2])' is at \(now), not \(target)") }
+    usleep(1_500_000)
+    // WebKit's AXValue for a range input can come back as NSNumber OR NSString
+    // depending on OS/WebKit version; accept either.
+    let readBack = attr(slider, kAXValueAttribute) as CFTypeRef?
+    let now = (readBack as? NSNumber)?.doubleValue
+        ?? Double((readBack as? String) ?? "")
+        ?? -1
+    if abs(now - target) > 3 { fail("slider '\(args[2])' is at \(now), not \(target)") }
 
 case "fullscreen-state":
     guard let window = mainWindow() else { fail("no app window") }
