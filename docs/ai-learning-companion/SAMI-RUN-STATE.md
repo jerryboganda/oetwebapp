@@ -50,6 +50,30 @@ upgrade path. The revised final spec governs where it conflicts with older tier/
 - Credit **debiting** was already correctly scoped to assessment features only
   (`ShouldDebitAiCredit`), so chat never consumed the learner's balance. Only the quota reserve blocked.
 
+## Session progress since the first candidate (2026-10-08 → 09)
+
+Newest live build at the time of writing: **`005f8cdd6`** (`Build images` and `Deploy production`
+both green). It carries everything below; each item says which pack or check exercises it.
+
+| Item | State | Note |
+| --- | --- | --- |
+| Per-user Sami access + admin UI (F-110/133/142/154) | live | The admin read works: the test learner reports `source=package_included`; 25 plans exist and **2** grant Sami. Pack 3/4 exercise it. |
+| Sami chat un-metered (D-008) | live | Pack 1 went 4/20 → 20/20 real answers. |
+| Length-retry ladder, now 16,384 → 32,768 → 65,536 (D-SAMI-003) | live | Pack 2 refusals 11 → 6; the heaviest Pack 3 turns (Test 14, 10.6 min) now complete instead of refusing, which is direct evidence the ladder is the right lever. |
+| Voice transcription no longer refused (D-SAMI-006) | live, **retest PASS** | Turn 1 returned the sentence verbatim; turn 2 correctly refused to judge pronunciation from a transcript and pointed at `/pronunciation`. |
+| Timestamp rule made consistent with the evidence block | live | Does **not** deliver F-099 — see the gap note in `REGISTER-RECONCILIATION.md`; video is still not indexed. |
+| F-127/128/129 dashboards (quality, content gaps, teaching gaps) | live, compiled | First UI over companion telemetry. Metrics only from real tables; unsupported signals render an explicit "not instrumented" panel rather than a zero. |
+| `CompanionOpsService` date-window bug | live | `&&` bound tighter than `||`, so `ai_assistant*` rows ignored the operator's selected window and returned all-time figures. Parenthesised. |
+| Legacy-persona sweep (§15.1) | done | 20 occurrences → 5, all name-references. |
+| F-001..F-184 register reconciled | done | 184 rows intact (validator PASS); 13 status changes, 33 rows corrected, six stale "locked by `<X>Tests`" claims removed. |
+| §15 handover docs | 4 of 4 written | ENV-BACKUP, TEST-SETS (corrected), PROVIDER-COST-OPS, PRIVACY-RETENTION. |
+
+**Defect class worth carrying into the rest of the handover:** three separate instructions or
+documents described behaviour the code did not have — the `MaxTokens` "length-retry ladder", the
+in-app QA document's claim that a `dotnet test` gate still guards deploys, and the timestamp rule
+forbidding a capability the composer was supplying. Treat statements in this documentation set as a
+map, and the named source file as the authority.
+
 ## Correction to an earlier figure in this document
 
 Pack 2's provider-busy count on `0482ca9bf` was reported here as **9**. The measured value by exact
