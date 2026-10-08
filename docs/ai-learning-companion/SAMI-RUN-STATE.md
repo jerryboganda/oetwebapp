@@ -67,25 +67,35 @@ frozen candidate for the UAT packs; every record below carries this SHA in its `
 
 ## Open defects on the candidate build
 
-**D-SAMI-003 — long single-shot reasoning turns are refused as "provider busy".**
-Nine Pack 2 turns returned the learner busy message at a latency of 101-127 s, while turns that
-interleave tool calls completed normally (Test 08 ran 14 tool calls and answered in 319 s). The
-pattern is that a turn whose whole budget is one long model generation fails, and a turn that keeps
-talking to the provider succeeds. It is not quota: cap refusals are 0, and this is the same
-"gateway-busy" signature the pre-fix runs recorded in `PROGRAM-STATUS.md`. Candidate mechanism is a
-wait expiry in the provider lane / platform concurrency gate
-(`AiProviderRegistry.OpenCodeLaneWait` = 90 s, `AiPlatformConcurrencyGate.MaxInFlight` = 5), but the
-mechanism is **not yet proven** and must be diagnosed from live logs before any fix is attempted.
+**D-SAMI-003 — long single-shot reasoning turns are refused as "provider busy". PARTIALLY FIXED.**
+Root cause proven from live logs, not inferred: `OpenCode reached its output limit. The incomplete
+response was not replayed` (`OpenCodeStreamingCall.cs:164`). At `reasoning_effort=max` the model's
+reasoning can consume the entire output budget and return `finish_reason=length` with no answer.
+`AiProviderRequest.MaxTokens`' doc comment claimed a "length-retry ladder" existed in
+`RegistryBackedProvider`; **it did not** — the budget was set once and both output paths threw. The
+ladder was implemented in `a9a9fcc07` (one raise, OpenCode only, truncation only).
+
+Measured effect on Pack 2 (`0482ca9bf` → `a9a9fcc07`): real answers 9/20 → **14/20**, provider-busy
+11 → **6**, tool-performing turns 8 → **13**. Busy-turn latency rose 105 s → ~230 s, which proves the
+retry now actually runs.
+
+**Still open:** the widened log window shows `OpenCode reached its output limit` **5 times after** the
+retry, i.e. 32_768 tokens is still not enough for the heaviest turns (notably Test 01, the diagnostic
+study plan). The remaining ceiling is a genuine budget limit, not a bug. Nothing further should be
+changed here without an owner decision, because the options trade differently:
+raise the ceiling again (more latency, unknown end), or lower `reasoning_effort` for this feature.
+Relevant context for that decision: D-005's benchmark gate measured schema validity, grounding and
+cost reduction — **it never measured task-completion rate**, which is how effort=max shipped into a
+configuration that truncates its own hardest turns.
 
 **D-SAMI-004 — a completed answer can be persisted without the completion reaching the client.**
-Pack 2 Test 10: the server stored a full 997-character answer at 05:42:07, but the client never
-received `MessageComplete` and the harness sat on the turn. This is the second, deeper path of
-D-SAMI-001 — the first path (empty completion) is guarded server-side and client-side, and a socket
-drop is now surfaced with a message, but a turn that finishes server-side and is not delivered still
-leaves the learner waiting. Diagnostic: compare the persisted assistant row against the delivered
-events for one affected `threadId`; check whether the output-side leak screen
-(`CompanionLeakDetector.Screen`) replaced the answer or ended the turn as an error without a
-`TurnError` reaching the client.
+Pack 2 Test 10 on `0482ca9bf`: the server stored a full 997-character answer at 05:42:07 while the
+client never received `MessageComplete` and the harness sat on the turn. Diagnosed, **not
+root-caused**, and no speculative fix shipped. Note the run on `a9a9fcc07` did **not** reproduce it
+(Test 10 returned in 41 s with 6 tool calls), so it is intermittent. Diagnostic direction: compare the
+persisted assistant row against delivered events for one affected `threadId`, and check whether the
+output-side leak screen replaced the answer or ended the turn without a `TurnError` reaching the
+client.
 | Pack 2 | Definitions ready (`.tools-state/sami-ops/packs/pack2.mjs`). Not yet executed. |
 | Pack 3 | Assets rendered to real files (`.tools-state/sami-ops/assets/`): score cards A and A-v2, reading question clean + blurred, handwriting, sensitive-data trap, and the case-notes PDF that never existed, so the whole-PDF scenarios could not previously run as written. |
 | Pack 4 | Browser-dependent scenarios outstanding (entitlement display, deep links, OCP/device, contextual upgrade). |
