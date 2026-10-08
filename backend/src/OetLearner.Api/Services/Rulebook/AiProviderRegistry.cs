@@ -148,6 +148,19 @@ public sealed class RegistryBackedProvider(
     // answer survives the thinking budget.
     private const int OpenCodeMinMaxTokens = 16384;
 
+    // Hard ceiling for the length-retry ladder. The model's own documented output
+    // maximum is 64k, so this is the point past which another raise would be asking
+    // for more than the provider can return.
+    private const int OpenCodeMaxMaxTokens = 65536;
+
+    // SAMI UAT finding (2026-10-08, D-SAMI-003): one raise was not enough. Pack 2 on
+    // a9a9fcc07 still logged `output limit` AFTER the retry, so the heaviest turns
+    // (the initial diagnostic plan among them) exceed 32,768 output tokens once
+    // reasoning is included. Ladder is now 16,384 -> 32,768 -> 65,536, i.e. at most two
+    // raises, then the honest failure. A learner waiting longer is the intended trade
+    // against refusing the hardest turns outright.
+    private static readonly int[] OpenCodeLengthRetryCeilings = [32768, 65536];
+
     private static bool IsUbagFacadeRequest(string baseUrl, AiProviderRequest request)
         => string.Equals(request.ProviderCode, "ubag", StringComparison.OrdinalIgnoreCase)
             || (Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
@@ -374,11 +387,14 @@ public sealed class RegistryBackedProvider(
                 using var doc = JsonDocument.Parse(body);
                 return ReadNonStreamedCompletion(doc.RootElement, request, ubagFacade, openCode);
             }
-            catch (InvalidOperationException ex) when (openCode && attempt == 0 && IsOutputLengthFailure(ex))
+            catch (InvalidOperationException ex) when (openCode
+                                                       && attempt < OpenCodeLengthRetryCeilings.Length
+                                                       && IsOutputLengthFailure(ex))
             {
-                // Exactly one raise. A second truncation at double the floor is a genuine
-                // runaway generation, and the caller still gets the honest failure.
-                maxTokens = Math.Max(maxTokens * 2, OpenCodeMinMaxTokens * 2);
+                // Bounded ladder: 16,384 -> 32,768 -> 65,536. A truncation past the last
+                // ceiling is a genuine runaway generation and surfaces the honest failure
+                // instead of looping.
+                maxTokens = Math.Min(OpenCodeLengthRetryCeilings[attempt], OpenCodeMaxMaxTokens);
             }
         }
     }

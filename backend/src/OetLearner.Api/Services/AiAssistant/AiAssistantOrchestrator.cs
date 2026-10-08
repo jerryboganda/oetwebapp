@@ -420,12 +420,13 @@ public sealed class AiAssistantOrchestrator(
                 finalMessageId = exhaustedMsg.Id;
             }
 
-            // Update thread timestamp and auto-title
+            // Update thread timestamp. The auto-title is deliberately NOT taken from
+            // `fullResponse` here: the output-side leak screen below runs after this
+            // point, and a withheld answer must not survive as the thread's title —
+            // that would keep up to 80 characters of paid material on a surface the
+            // learner sees, long after the body was replaced with the refusal note.
+            // The title is set from the screened answer further down instead.
             thread.UpdatedAt = DateTimeOffset.UtcNow;
-            if (thread.Title == "New conversation" && fullResponse.Length > 0)
-            {
-                thread.Title = fullResponse.ToString()[..Math.Min(80, fullResponse.Length)].Trim();
-            }
 
             await db.SaveChangesAsync(turnCts.Token);
 
@@ -474,6 +475,14 @@ public sealed class AiAssistantOrchestrator(
                     "it. Ask me to explain the idea, or to walk you through it in my own words.");
 
                 yield break;
+            }
+
+            // Safe answer: this is the first point where the text is cleared for use on
+            // any learner-visible surface, so it is where the auto-title is derived.
+            if (thread.Title == "New conversation" && fullResponse.Length > 0)
+            {
+                thread.Title = fullResponse.ToString()[..Math.Min(80, fullResponse.Length)].Trim();
+                await db.SaveChangesAsync(turnCts.Token);
             }
 
             yield return new AssistantTurnComplete(
