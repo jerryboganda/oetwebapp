@@ -701,7 +701,10 @@ public static class AiUsageAdminEndpoints
         {
             var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Id == id, ct);
             if (row is null) return Results.NotFound();
-            if (!dto.IsActive && IsMaxSubscriptionRow(row)) return MaxAlwaysOn(409);
+            // Owner decision 2026-10-09 (Choice B): the Max row may be switched off. Its marker credential still may not be
+            // replaced by a real key, which would turn the subscription row into a default-eligible API row.
+            if (!string.IsNullOrWhiteSpace(dto.ApiKey) && row.EncryptedApiKey == OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.MarkerKey)
+                return new ApiErrorResult(400, "ai_provider_subscription_row", "This is a subscription bridge and has no API key. Add a separate provider for an API key.");
             if (JudgmentPairingError(dto.Dialect, dto.Category) is { } pairingError)
                 return pairingError;
             row.Name = dto.Name?.Trim() ?? row.Name;
@@ -755,7 +758,6 @@ public static class AiUsageAdminEndpoints
         {
             var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Id == id, ct);
             if (row is null) return Results.NotFound();
-            if (IsMaxSubscriptionRow(row)) return MaxAlwaysOn(409);
             row.IsActive = false;
             row.UpdatedAt = DateTimeOffset.UtcNow;
             await SaveWithAuditAsync(db, http, "AiProviderDeactivated", row.Id, row.Code, ct);

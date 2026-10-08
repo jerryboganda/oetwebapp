@@ -99,6 +99,12 @@ public sealed class LiveVoiceOptions
     /// <summary>Both providers, <see cref="PrimaryProvider"/> first. A blank or unknown primary
     /// orders OpenAI first.</summary>
     public IReadOnlyList<string> ProviderOrder()
+        => OetLearner.Api.Services.AiPipeline.LiveVoiceRouting.EnabledOrder() is { } saved
+            ? saved
+            : LegacyProviderOrder();
+
+    /// <summary>The environment order, used until an owner-saved order has been loaded (and to create it at first setup).</summary>
+    public IReadOnlyList<string> LegacyProviderOrder()
         => NormalizeProvider(PrimaryProvider) == LiveVoiceProviders.Gemini
             ? new[] { LiveVoiceProviders.Gemini, LiveVoiceProviders.OpenAi }
             : new[] { LiveVoiceProviders.OpenAi, LiveVoiceProviders.Gemini };

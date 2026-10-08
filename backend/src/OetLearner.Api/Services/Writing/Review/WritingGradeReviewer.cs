@@ -52,7 +52,9 @@ public sealed class WritingGradeReviewer(
     IOptions<WritingGradeChainOptions> chainOptions,
     IOptions<WritingReviewOptions> reviewOptions,
     TimeProvider clock,
-    ILogger<WritingGradeReviewer> logger) : IWritingGradeReviewer
+    ILogger<WritingGradeReviewer> logger,
+    // AI Pipeline Control Center: owner-saved order and switches of the reviewer stage. Optional LAST parameter.
+    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null) : IWritingGradeReviewer
 {
     /// <summary>FeatureFlags row, Enabled = false turns the reviewer Off (absent row = on while the Codex row is active).</summary>
     public const string ReviewerFlagKey = "writing_ai_reviewer";
@@ -82,6 +84,14 @@ public sealed class WritingGradeReviewer(
 
             var enforce = flags.Where(f => f.Key == ReviewerFlagKey).OrderByDescending(f => f.UpdatedAt).FirstOrDefault();
             if (enforce is { Enabled: false }) return WritingReviewMode.Off;
+
+            if (pipelineStore is not null)
+            {
+                // The owner-saved stage wins over the legacy provider-row check: Off when the stage is switched off
+                // or no step is usable, otherwise Enforce.
+                var plan = await pipelineStore.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.WritingReview, ct);
+                return plan.StageEnabled && plan.Hops.Count > 0 ? WritingReviewMode.Enforce : WritingReviewMode.Off;
+            }
 
             var routeActive = await db.AiProviders.AsNoTracking()
                 .AnyAsync(p => p.Code == WritingSubscriptionProviders.Codex && p.IsActive, ct);
@@ -345,6 +355,16 @@ public sealed class WritingGradeReviewer(
         }
 
         var shared = SharedReviewerOptions.Current;
+        // Owner-saved reviewer steps: which of Codex / the API step run, their models and their order.
+        var reviewPlan = pipelineStore is null ? null : await pipelineStore.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.WritingReview, ct);
+        var codexHop = reviewPlan?.Hops.FirstOrDefault(h => h.Provider == WritingSubscriptionProviders.Codex);
+        var apiHop = reviewPlan?.Hops.FirstOrDefault(h => h.Provider != WritingSubscriptionProviders.Codex);
+        var codexOn = reviewPlan is null || codexHop is not null;
+        var apiOn = reviewPlan is null || apiHop is not null;
+        var apiFirst = codexHop is not null && apiHop is not null && apiHop.Index < codexHop.Index;
+        var codexModel = string.IsNullOrWhiteSpace(codexHop?.Model) ? WritingSubscriptionProviders.CodexModel : codexHop!.Model;
+        var apiProvider = apiHop?.Provider ?? WritingSubscriptionProviders.ClaudeApi;
+        var apiModel = string.IsNullOrWhiteSpace(apiHop?.Model) ? WritingSubscriptionProviders.ClaudeModel : apiHop!.Model;
         var (runResult, _) = await SharedReviewerRunner.RunAsync(
             shared,
             CodexReviewerGate.Default,
@@ -352,7 +372,7 @@ public sealed class WritingGradeReviewer(
             request.SubmissionId.ToString("N"),
             async token => await WritingGradeChain.RunReviewAsync(
                 gateway,
-                template,
+                template with { Model = codexModel },
                 request.GradeEpoch,
                 pass,
                 ParseResult,
@@ -367,8 +387,8 @@ public sealed class WritingGradeReviewer(
                 // uses the same prompt/parse/merge semantics, so the fallback is a real review, not a skip.
                 var apiTemplate = template with
                 {
-                    Provider = WritingSubscriptionProviders.ClaudeApi,
-                    Model = WritingSubscriptionProviders.ClaudeModel,
+                    Provider = apiProvider,
+                    Model = apiModel,
                     ResourceVersion = WritingGradeChain.ReviewApiResourceVersion(request.GradeEpoch, pass),
                 };
                 using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -377,7 +397,10 @@ public sealed class WritingGradeReviewer(
                 return ParseResult(apiResult);
             },
             logger,
-            ct);
+            ct,
+            codexEnabled: codexOn,
+            apiEnabled: apiOn,
+            apiFirst: apiFirst);
 
         return runResult;
     }

@@ -125,7 +125,9 @@ public sealed class WritingSubmissionEvaluationPipeline(
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
     // Secondary reviewer: optional LAST parameter, so every pipeline built by hand (tests, tools) keeps
     // compiling and behaves exactly as before (absent = no review).
-    IWritingGradeReviewer? gradeReviewer = null) : IWritingSubmissionEvaluationPipeline
+    IWritingGradeReviewer? gradeReviewer = null,
+    // AI Pipeline Control Center: the owner-saved provider order. Optional LAST parameter, absent = the legacy selector path.
+    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null) : IWritingSubmissionEvaluationPipeline
 {
     private readonly WritingGradeChainOptions _chainOptions = gradeChainOptions?.Value ?? new WritingGradeChainOptions();
 
@@ -2079,10 +2081,33 @@ private async Task AttachTaskModelAnswerAsync(
         // after the whole run: no intermediate "failed" that a Retry could race.
         try
         {
+            if (pipelineStore is not null)
+            {
+                // The owner-saved order (admin Pipeline page) is read once per run, uncached. It is the only
+                // source of the order; nothing observed during a run can change it.
+                var plan = await pipelineStore.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.WritingGrade, ct);
+                logger.LogInformation(
+                    "Writing grading plan for submission {SubmissionId}: version {Version} ({Source}), hops [{Hops}], skipped [{Skipped}].",
+                    submission.Id, plan.Version, plan.Source,
+                    string.Join(", ", plan.Hops.Select(h => h.Provider)), string.Join("; ", plan.Skipped));
+                var configuredFault = qaFault is null ? null : await qaFault.ReadAsync(submission.UserId, ct);
+                return await WritingGradeChain.RunConfiguredAsync(
+                    aiGateway,
+                    template,
+                    plan,
+                    submission.GradeEpoch,
+                    result => ParseRubric(result) ?? throw Unreadable(submission, result),
+                    _chainOptions,
+                    clock,
+                    logger,
+                    injectFault: configuredFault is { } cf ? hop => cf.ShouldFailHop(hop, submission.GradeEpoch) : null,
+                    ct);
+            }
+
             if (subscriptionSelector is not null)
             {
-                // Owner rule MAX-ALWAYS-ON: the run starts on Max; the chain fails over
-                // to the API and then Codex only inside this run.
+                // Legacy path (no saved order available, e.g. a hand-built pipeline): the run starts on Max;
+                // the chain fails over to the API and then Codex only inside this run.
                 var decision = await subscriptionSelector.DecideAsync(ct);
                 // WAI-05 QA-only fault switch: off unless an admin flagged this learner.
                 var fault = qaFault is null ? null : await qaFault.ReadAsync(submission.UserId, ct);

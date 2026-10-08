@@ -40,7 +40,9 @@ public sealed partial class SpeakingAiAssessmentService(
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null,
     ISpeakingAudioEvidenceService? audioEvidence = null,
     ITypeSafeJudgmentService? judgments = null,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null)
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
+    // AI Pipeline Control Center: owner-saved provider order for grading and the reviewer. Optional LAST parameter.
+    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null)
 {
     // v3 (4 Oct 2026): the system prompt now carries the official OET band descriptors and the
     // "rules guide, never deduct" principles; the model is no longer asked for a readiness band
@@ -519,7 +521,7 @@ Scoring rules:
                 // gateway's mock_assessment_forbidden backstop if a future caller ever bypasses the guard.
                 AssessmentContext = input.Context,
             };
-            aiResult = await SpeakingGradeChain.CompleteAsync(aiGateway, gradeRequest, gradingOptions?.Value, logger, ct);
+            aiResult = await SpeakingGradeChain.CompleteAsync(aiGateway, gradeRequest, gradingOptions?.Value, pipelineStore, logger, ct);
         }
         catch (PromptNotGroundedException)
         {
@@ -543,14 +545,16 @@ Scoring rules:
         // Only when the primary grade is itself readable, so an unparseable Claude reply still fails loud below.
         string completion;
         SpeakingReviewTrace review;
-        if (ParseAssessment(aiResult.Completion) is null)
+        // Owner-saved reviewer stage (admin Pipeline page): its own switch, steps and order. Absent store = legacy behaviour.
+        var reviewPlan = pipelineStore is null ? null : await pipelineStore.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.SpeakingReview, ct);
+        if (ParseAssessment(aiResult.Completion) is null || reviewPlan is { StageEnabled: false } or { Hops.Count: 0 })
         {
             completion = aiResult.Completion;
             review = SpeakingReviewTrace.Skipped(SpeakingGradeReviewer.ScoresOf(aiResult.Completion));
         }
         else
         {
-            var reviewed = await SpeakingGradeReviewer.ReviewAsync(aiGateway, gradeRequest, aiResult, logger, ct, input.LogKey);
+            var reviewed = await SpeakingGradeReviewer.ReviewAsync(aiGateway, gradeRequest, aiResult, logger, ct, input.LogKey, plan: reviewPlan);
             completion = reviewed.Completion;
             review = reviewed.Trace;
         }

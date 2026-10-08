@@ -83,7 +83,7 @@ public static class WritingSubscriptionProviderSeeder
                 CircuitBreakerThreshold = 5,
                 CircuitBreakerWindowSeconds = 60,
                 FailoverPriority = 1,
-                IsActive = true, // MAX-ALWAYS-ON: the Max row is never off
+                IsActive = true, // initial setup only; the owner may switch it off and a boot never switches it back on
             });
             inserted++;
         }
@@ -113,16 +113,10 @@ public static class WritingSubscriptionProviderSeeder
             inserted++;
         }
 
-        // Self-heal on every boot. Owner rule MAX-ALWAYS-ON: the Claude Max row is never
-        // left deactivated. And Level 3 moves to GPT-6.1 Sol: a Codex row still on the old
-        // default is retargeted; a model an admin chose deliberately is left alone.
+        // Owner directive 2026-10-09: a saved decision is never undone by a boot. The Max row is NOT re-activated here
+        // any more (insert-only above). Level 3 moves to GPT-6.1 Sol: a Codex row still on the old default is
+        // retargeted; a model an admin chose deliberately is left alone.
         var changed = false;
-        var max = await db.AiProviders.FirstOrDefaultAsync(p => p.Code == WritingSubscriptionProviderDefaults.ClaudeCode, ct);
-        if (max is { IsActive: false })
-        {
-            max.IsActive = true;
-            changed = true;
-        }
 
         var codex = await db.AiProviders.FirstOrDefaultAsync(
             p => p.Code == WritingSubscriptionProviderDefaults.CodexCode

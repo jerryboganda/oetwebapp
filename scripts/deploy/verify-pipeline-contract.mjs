@@ -619,6 +619,29 @@ export function maxRouteFailures(repoRoot = root) {
   if (!/"PinnedProviderCode"\s*:\s*"writing-claude-sub"/.test(appsettings)) {
     failures.push('appsettings.json: PinnedProviderCode must be writing-claude-sub');
   }
+
+  // Owner-set order (amended rule, 2026-10-09). The saved order has exactly ONE writer, nothing a run observes may reach
+  // it, and the built-in default order starts with Max.
+  const orderWriter = /AiPipelineStages\.(Add|Remove|Update)\s*\(|AiPipelineStageRevisions\.(Add|Remove|Update)\s*\(|\.ChainJson\s*=(?!=)/;
+  for (const file of listCsFiles(apiRoot)) {
+    const relativePath = relative(apiRoot, file).split(sep).join('/');
+    if (relativePath.startsWith('Data/Migrations/') || relativePath === 'Services/AiPipeline/AiPipelineStore.cs') continue;
+    if (orderWriter.test(readFileSync(file, 'utf8'))) {
+      failures.push(`${relativePath}: writes the saved AI pipeline order (only Services/AiPipeline/AiPipelineStore.cs may)`);
+    }
+  }
+  const pipelineModels = join(apiRoot, 'Services', 'AiPipeline', 'AiPipelineModels.cs');
+  const modelsText = existsSync(pipelineModels) ? readFileSync(pipelineModels, 'utf8') : '';
+  for (const stage of ['WritingGrade', 'SpeakingGrade']) {
+    if (!new RegExp(`AiPipelineStageKeys\\.${stage}\\s*=>\\s*\\[\\s*new\\(MaxProvider`).test(modelsText)) {
+      failures.push(`AiPipelineModels.cs: the built-in ${stage} order must start with Max (MaxProvider)`);
+    }
+  }
+  const storeText = existsSync(join(apiRoot, 'Services', 'AiPipeline', 'AiPipelineStore.cs'))
+    ? readFileSync(join(apiRoot, 'Services', 'AiPipeline', 'AiPipelineStore.cs'), 'utf8') : '';
+  if (/AiUsageRecords|AiCircuit|WritingSubscriptionQuota|RuntimeSettings/.test(storeText)) {
+    failures.push('AiPipelineStore.cs: the order store must not read usage, circuit, quota or runtime-settings data');
+  }
   return failures;
 }
 

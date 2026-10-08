@@ -1944,6 +1944,10 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiExplanationCacheServ
         OetLearner.Api.Services.Ai.AiResultCacheService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiProviderRouteApprovalService,
     OetLearner.Api.Services.Ai.AiProviderRouteApprovalService>();
+// AI Pipeline Control Center: owner-saved provider order per stage (uncached read per run) and the live voice snapshot refresher.
+builder.Services.AddScoped<OetLearner.Api.Services.AiPipeline.IAiPipelineStore,
+    OetLearner.Api.Services.AiPipeline.AiPipelineStore>();
+builder.Services.AddHostedService<OetLearner.Api.Services.AiPipeline.LiveVoiceRoutingRefresher>();
 // Route-approval benchmark: executes the learner-route corpus through the real registry-backed
 // dispatch path and records the run (DECISION_LOG D-004/D-005).
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiRouteBenchmarkRunner,
@@ -3203,6 +3207,7 @@ app.MapAnswerKeyReportAdminEndpoints();
 app.MapAdminCampaignEndpoints();
 app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();
+app.MapAiPipelineAdminEndpoints();
 app.MapAiOperationsAdminEndpoints();
 app.MapAdminOpsSnapshotEndpoints();
 app.MapAiEscalationAdminEndpoints();
@@ -3576,6 +3581,26 @@ if (app.Environment.IsDevelopment())
 app.Run();
 
 static bool HasAdminPermission(AuthorizationHandlerContext ctx, params string[] anyOf)
+// AI Pipeline Control Center: creates any MISSING stage row from the built-in default (insert-only, so a saved owner
+// decision is never overwritten). The live voice row starts from the environment order in force today. Non-fatal.
+{
+    using var pipelineSeedScope = app.Services.CreateScope();
+    try
+    {
+        var liveOrder = pipelineSeedScope.ServiceProvider
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.LiveVoiceOptions>>()
+            .Value.LegacyProviderOrder();
+        await pipelineSeedScope.ServiceProvider
+            .GetRequiredService<OetLearner.Api.Services.AiPipeline.IAiPipelineStore>()
+            .EnsureSeededAsync(liveOrder, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        pipelineSeedScope.ServiceProvider.GetRequiredService<ILogger<Program>>()
+            .LogWarning(ex, "AI pipeline stage seeding failed (non-fatal)");
+    }
+}
+
 {
     var perms = ctx.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
     return OetLearner.Api.Security.AdminPermissionEvaluator.HasAny(perms, anyOf);

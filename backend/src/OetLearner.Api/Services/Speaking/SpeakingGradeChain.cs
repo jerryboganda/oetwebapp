@@ -75,6 +75,62 @@ public static class SpeakingGradeChain
         return await gateway.CompleteAsync(template, ct);
     }
 
+    /// <summary>Whole-chain ceiling for an owner-configured order: keeps every hop plus the reviewer inside the operation lease.</summary>
+    internal static readonly TimeSpan ConfiguredChainCeiling = TimeSpan.FromSeconds(1500);
+
+    /// <summary>
+    /// Owner directive 2026-10-09: runs the owner-SAVED order (AI Pipeline Control Center) when a store is available,
+    /// otherwise the legacy pin-then-default-route behaviour above. Each enabled, usable hop is pinned in turn (one
+    /// attempt each: a Speaking request has no per-attempt slot) under its own time limit and the shared ceiling.
+    /// The saved order is read once per grade and never changed by what the grade observes. Failover rules are the
+    /// same as the legacy chain; an empty plan fails the grade rather than falling back to the built-in default.
+    /// </summary>
+    public static async Task<AiGatewayResult> CompleteAsync(
+        IAiGatewayService gateway,
+        AiGatewayRequest template,
+        SpeakingGradingOptions? options,
+        OetLearner.Api.Services.AiPipeline.IAiPipelineStore? store,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        if (store is null)
+            return await CompleteAsync(gateway, template, options, logger, ct);
+
+        var plan = await store.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.SpeakingGrade, ct);
+        logger.LogInformation(
+            "Speaking grading plan: version {Version} ({Source}), hops [{Hops}], skipped [{Skipped}].",
+            plan.Version, plan.Source, string.Join(", ", plan.Hops.Select(h => h.Provider)), string.Join("; ", plan.Skipped));
+        if (plan.Hops.Count == 0)
+            throw new InvalidOperationException($"Speaking grading has no usable provider in the saved order ({string.Join("; ", plan.Skipped)}).");
+
+        var started = DateTimeOffset.UtcNow;
+        Exception? last = null;
+        foreach (var hop in plan.Hops)
+        {
+            var remaining = ConfiguredChainCeiling - (DateTimeOffset.UtcNow - started);
+            if (remaining < TimeSpan.FromSeconds(20))
+                break;
+            var window = TimeSpan.FromSeconds(Math.Clamp(hop.BudgetSeconds, 10, SpeakingGradingOptions.MaxPinnedTimeoutSeconds));
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            budget.CancelAfter(window < remaining ? window : remaining);
+            try
+            {
+                return await gateway.CompleteAsync(
+                    template with { Provider = hop.Provider, Model = hop.Model },
+                    budget.Token);
+            }
+            catch (Exception ex) when (IsFailoverable(ex, ct))
+            {
+                last = ex;
+                logger.LogWarning(
+                    "Speaking grading via {ProviderCode} failed ({ErrorClass}); trying the next step of the saved order.",
+                    hop.Provider, FailureClass(ex));
+            }
+        }
+
+        throw new InvalidOperationException("Speaking grading failed on every step of the saved order.", last);
+    }
+
     /// <summary>The wall-clock budget for the pinned call: null (no cap) for 0 or less, otherwise the
     /// configured seconds clamped to <see cref="SpeakingGradingOptions.MaxPinnedTimeoutSeconds"/>.</summary>
     internal static TimeSpan? PinnedBudget(SpeakingGradingOptions options)

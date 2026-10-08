@@ -155,46 +155,9 @@ public static class DatabaseBootstrapper
             return;
         }
 
-        // Existing row: update the volatile fields if they drift.
-        var changed = false;
-        string? decrypted = null;
-        if (!string.IsNullOrEmpty(row.EncryptedApiKey))
-        {
-            try { decrypted = protector.Unprotect(row.EncryptedApiKey); }
-            catch { decrypted = null; }
-        }
-        if (!string.Equals(decrypted, options.ApiKey, StringComparison.Ordinal))
-        {
-            row.EncryptedApiKey = encrypted;
-            row.ApiKeyHint = hint;
-            changed = true;
-        }
-        if (!string.Equals(row.BaseUrl, baseUrl, StringComparison.OrdinalIgnoreCase))
-        {
-            row.BaseUrl = baseUrl;
-            changed = true;
-        }
-        if (!string.Equals(row.DefaultModel, model, StringComparison.OrdinalIgnoreCase))
-        {
-            row.DefaultModel = model;
-            changed = true;
-        }
-        var desiredEffort = string.IsNullOrWhiteSpace(options.ReasoningEffort)
-            ? null : options.ReasoningEffort.Trim().ToLowerInvariant();
-        if (row.ReasoningEffort is null && desiredEffort is not null)
-        {
-            // Seed the per-provider column from env on first encounter so
-            // admins inherit the configured default. Explicit admin edits
-            // (including explicitly empty = "inherit") take priority afterwards.
-            row.ReasoningEffort = desiredEffort;
-            changed = true;
-        }
-        if (!row.IsActive) { row.IsActive = true; changed = true; }
-        if (changed)
-        {
-            row.UpdatedAt = now;
-            await db.SaveChangesAsync(cancellationToken);
-        }
+        // Owner directive 2026-10-09: an existing row is NEVER rewritten from the environment. Credentials, models and
+        // on/off are managed in the admin Pipeline page; the environment can only create a missing row at first setup.
+        return;
     }
 
 #pragma warning disable EF1002 // Identifiers come from EF model metadata and are sanitized with QuoteIdentifier.

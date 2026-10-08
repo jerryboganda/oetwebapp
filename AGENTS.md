@@ -98,6 +98,7 @@ The owner tests the live product by hand and reports bugs; the agent fixes them 
   compute-offload), secret scanning, the EF pending-model-changes check, the ledger tooling, and the manual
   product-measurement tools in `scripts/qa/` and `tools/` (Speaking calibration, audio probe, Jev calibrate, Listening
   verification, the PDF bench).
+- **Owner-confirmed carve-out (2026-10-09, AI Pipeline Control Center):** an on-demand, in-app **Pipeline self-check** (admin button, runs on the server, never in CI), a provider-usage reconciliation report and manual production scripts under `scripts/qa/` are allowed as product evidence. CI still runs no tests of any kind.
 - **Standing product rules still bind** (Max never off, the $0 Writing rule, Writing house style, scoring and rulebook
   invariants, the Speaking Provisional label ...). With no CI test enforcing them, agents follow them by reading the rules.
 
@@ -313,37 +314,48 @@ Before ANY Writing task, Model Answer, or Writing validator work, load
 - **Cross-model audit (17 Sep 2026, OA6-01..OA6-02; active validator `writing-rules.cross-model-audit.2026-09-17.1`, rule pack `2.5.0-cross-model-audit`):** HARD GLOBAL RULE — the same functional request never appears in both the introduction and the closure, judged by request concept not wording (`no_duplicated_request` branch `DetectCmaDuplicatedRequestConcept`); a closure request to monitor/check/repeat/test a clinical parameter must be planned by a case-note line (new check id `request_action_unsupported`). Both Model Answer only (`WritingRuleEngine.CrossModelAudit.cs`); regression + the 55 final Medicine answers in `WritingCrossModelAuditRegressionTests`.
 - Targeted repair only; never regenerate a good letter for one small defect. Do not expand to further professions/cells without explicit owner approval. STOP after the Medicine owner-review pack — Nursing/Track B/224 need owner say-so.
 
-## Claude Max subscription is NEVER turned off — COMPULSORY (owner directive 2026-10-02; HARD ENFORCED, never bypass)
+## Claude Max is never switched off AUTOMATICALLY — COMPULSORY (owner directive 2026-10-02; amended 2026-10-09 on the owner's explicit say-so, Choice B; HARD ENFORCED)
 
-The Claude Max subscription route (provider code `writing-claude-sub`, model `claude-opus-5-5`) is the owner's paid
-primary for Writing (and Speaking) grading. **Nothing may switch it off, skip it or route around it — not code, not
-config, not an admin toggle, not a "temporary" workaround.** Incident: the old pipeline wrote a 7-day
-`WritingAiClaudeQuotaExceededUntil` marker after any two Max failures (a sidecar redeploy blip), so Max was skipped
-from 30 Sep to 7 Oct and the paid API served every grade.
+The Claude Max subscription route (provider code `writing-claude-sub`, model `claude-opus-5-5`) is the owner's paid primary for
+Writing and Speaking grading BY DEFAULT. The purpose of the rule is unchanged: no code, config, probe, counter, timer, marker or
+admin side effect may switch Max off, skip it or reorder it ON ITS OWN. Incident: the old pipeline wrote a 7-day
+`WritingAiClaudeQuotaExceededUntil` marker after any two Max failures (a sidecar redeploy blip), so Max was skipped from 30 Sep to
+7 Oct and the paid API served every grade.
 
-- Every Writing grade, auto-retry and requeued run **starts on Max**. Failover to L2 (Anthropic API) / L3 (Codex) is
-  allowed ONLY inside the same grade AFTER Max actually returned an error; the next grade starts on Max again.
-- **Forbidden:** any persisted or computed "Max is off/exhausted/cooling down" state; sticky or timed markers
-  (`WritingAiClaudeQuotaExceededUntil` is retired — never assign it); utilisation / weekly-estimate / threshold
-  failover; forced-Codex or forced-API modes; skipping Max because a sidecar `/readyz` or health probe said no
-  (probes are display only); an open circuit for the Max provider (`AiCircuitBreakerStore.IsAlwaysOn` exempts it);
-  deactivating or deleting the `writing-claude-sub` provider row (admin endpoints refuse it, the seeder re-activates it
-  at boot); a sidecar that persistently refuses work.
-- Enforced by the static source scans in `pipeline:check` (`maxRouteFailures` in
-  `scripts/deploy/verify-pipeline-contract.mjs`, ported 2026-10-08): the retired marker is never written, the Writing
-  selector never routes on utilisation, and the Speaking pin cannot be blank. The runtime selector, circuit-exemption and
-  admin-refusal tests were deleted with the test code and are no longer enforced by CI.
-- Speaking uses the same Max route via `Speaking:Grading:PinnedProviderCode`, now **enforced in code**:
-  `SpeakingGradingOptions` defaults the pin to `writing-claude-sub` and an empty/whitespace value resolves to it too,
-  so no configuration can switch the Max-first attempt off (guarded by the `pipeline:check` source scan). **Never change
-  that pin to another provider.**
-- Not covered on purpose (the ONLY exceptions, both owner-approved, both visible in code review): (1) the global
-  emergency kill switch / per-feature kill list stop ALL AI and stay an owner-only emergency lever; (2) the QA-only
-  fault switch (`WritingQaFault`, FeatureFlag rows `writing_grade_fault:{userId}` / `writing_grade_fault_l1l2:{userId}`,
-  approved 2 Oct 2026) which makes ONE named QA learner's hop fail synthetically before any provider call, so failover
-  and Retry can be proven live; it is keyed on the grading learner's id, off by default, fails closed, expires after
-  24 h and can never affect any other learner. Do not weaken or "fix" the tests above to make something else pass;
-  change the owner's rule only on the owner's explicit say-so.
+**Owner-set order (the only way Max is anything but first, or off).** The owner may deliberately set the provider ORDER and the
+per-step ON/OFF of each AI pipeline stage (Writing grading, Writing reviewer, Speaking grading, Speaking reviewer, Speaking live
+voice) on the admin Pipeline page (`/v1/admin/ai/pipelines`). Rules:
+- **Saved is authoritative.** The saved order (`AiPipelineStages`, versioned, with an immutable revision history and rollback) is
+  the source of truth. The built-in default order only CREATES a missing row at first setup (insert-only). No boot task, environment
+  variable, health probe or database error may silently re-enable a provider or revert a saved order; if the database cannot be read
+  the last version that process read is used.
+- **Exactly one writer.** Only `Services/AiPipeline/AiPipelineStore.cs`, reached from the audited admin endpoint, writes the order.
+  Nothing a run observes (usage, allowance, credit balance, circuit, readiness) may write or reorder it. It applies to the NEXT run;
+  a run in flight finishes on the order it started with. Failover inside one run follows the remaining enabled steps in the saved
+  order; the next run starts at the head again.
+- **Choice B guards.** Max may be reordered or disabled independently for Writing and Speaking. Disabling it needs the typed
+  confirmation `DISABLE CLAUDE MAX`, and every grading stage keeps at least one enabled working step. A model that leaves Claude in a
+  scoring stage must pass the benchmark first (`IAiProviderRouteApprovalService`). The two live voice providers can never both be off.
+- **Max record.** Its circuit never opens (`AiCircuitBreakerStore.IsAlwaysOn`), its marker credential can never be replaced by a real
+  key, and no boot task re-activates it. `PUT /writing-provider` stays inert.
+- **Restore.** "Restore built-in order" (Max first) is always available and is itself a new audited version. Every AI admin page
+  shows a banner while Max is not first or is off, naming who changed it and when.
+
+**Still forbidden, no exception:** any automatic, computed or code-written state that skips or reorders a provider — markers
+(`WritingAiClaudeQuotaExceededUntil` is retired, never assign it), utilisation, weekly-estimate, allowance or CREDIT-BALANCE
+thresholds and auto-revert, readiness/health probes, an open Max circuit, forced-Codex/forced-API modes set by code or environment,
+a sidecar that persistently refuses work. Low credit or low allowance may be shown and alerted; it never changes the order.
+The Speaking built-in default pin (`SpeakingGradingOptions`, blank resolves to Max) is unchanged and is overridden only by a saved
+Speaking order.
+
+- Enforced by the static source scans in `pipeline:check` (`maxRouteFailures` in `scripts/deploy/verify-pipeline-contract.mjs`): the
+  retired marker is never written, the Writing selector never routes on utilisation, the Speaking default pin stays on Max, the saved
+  order has exactly one writer, the built-in Writing/Speaking order starts with Max, and the order store reads no usage, circuit,
+  quota or runtime-settings data. Runtime tests were deleted with the test code; production evidence comes from the in-app
+  **Pipeline self-check** (owner-confirmed carve-out, 2026-10-09: on-demand, never CI).
+- Not covered on purpose (owner-approved, visible in code review): the global emergency kill switch / per-feature kill list (stop ALL
+  AI, an owner-only emergency lever) and the QA-only fault switch (`WritingQaFault`, approved 2 Oct 2026; keyed on one named QA
+  learner, off by default, fails closed, expires after 24 h).
 
 ## Official Reading uploads — COMPULSORY
 

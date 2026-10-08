@@ -28,7 +28,8 @@ public sealed class SpeakingSimulationV11AssessmentService(
     ILogger<SpeakingSimulationV11AssessmentService> logger,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null,
     ITypeSafeJudgmentService? judgments = null,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null)
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
+    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null)
 {
     private const string PromptTemplateId = "speaking.simulation.v1.1.assessment";
     private const string CardKind = "card";
@@ -306,7 +307,7 @@ Rules:
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
                 AssessmentContext = AiAssessmentContext.Practice,
-            }, gradingOptions?.Value, logger, ct);
+            }, gradingOptions?.Value, pipelineStore, logger, ct);
         }
         catch (PromptNotGroundedException) { throw; }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -950,7 +951,7 @@ Rules:
                 UserId = exam.UserId,
                 PromptTemplateId = CombinedPromptTemplateId,
                 AssessmentContext = AiAssessmentContext.Practice,
-            }, gradingOptions?.Value, logger, ct);
+            }, gradingOptions?.Value, pipelineStore, logger, ct);
         }
         catch (PromptNotGroundedException) { throw; }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

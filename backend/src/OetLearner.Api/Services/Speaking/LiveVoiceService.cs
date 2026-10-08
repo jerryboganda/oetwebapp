@@ -817,6 +817,16 @@ public sealed class LiveVoiceService(
     /// stale-order client must still attempt the provider, and its outcome feeds the breaker.</summary>
     private void EnsureProviderConfigured(string provider)
     {
+        // Owner switch (admin Pipeline page). A 503 so the browser moves on to the next provider; it is raised before any
+        // provider call, so it never feeds the circuit breaker.
+        if (!OetLearner.Api.Services.AiPipeline.LiveVoiceRouting.IsEnabled(provider))
+        {
+            throw ApiException.ServiceUnavailable(
+                "live_voice_provider_disabled",
+                $"The {provider} realtime voice provider is switched off.",
+                retryable: true);
+        }
+
         if (!liveVoice.IsConfigured(provider))
         {
             throw ApiException.ServiceUnavailable(

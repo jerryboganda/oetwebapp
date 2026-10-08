@@ -103,7 +103,62 @@ public static class WritingGradeChain
     public static int ReviewApiResourceVersion(int epoch, int pass)
         => 7_000_000 + epoch * 256 + pass * 64;
 
-    internal sealed record Step(WritingGradeHop Hop, string Provider, string Model, int Attempts, int BudgetSeconds);
+    internal sealed record Step(WritingGradeHop Hop, string Provider, string Model, int Attempts, int BudgetSeconds, int Index = 0);
+
+    /// <summary>
+    /// Slot of one attempt of an owner-configured plan (AI Pipeline Control Center). Keyed by the saved position of
+    /// the hop, not by a provider enum, so any order and up to 8 hops fit; each run bumps the epoch first, so a
+    /// reorder can never collide with an earlier run's slots. Disjoint from every other range in this class.
+    /// </summary>
+    public static int ConfiguredResourceVersion(int epoch, int hopIndex, int attempt)
+        => 9_000_000 + epoch * 1024 + hopIndex * 64 + attempt * 16;
+
+    private static WritingGradeHop HopFor(string provider) => provider switch
+    {
+        WritingSubscriptionProviders.Claude => WritingGradeHop.ClaudeMax,
+        WritingSubscriptionProviders.ClaudeApi => WritingGradeHop.ClaudeApi,
+        _ => WritingGradeHop.Codex,
+    };
+
+    /// <summary>
+    /// Runs the owner-saved order. Hops that are disabled or not usable were already left out of
+    /// <paramref name="plan"/> when the run started, so they cost no attempt. An empty plan fails the run
+    /// (retryable): the saved order is never silently replaced by the built-in default.
+    /// </summary>
+    public static Task<T> RunConfiguredAsync<T>(
+        IAiGatewayService gateway,
+        AiGatewayRequest template,
+        OetLearner.Api.Services.AiPipeline.AiPipelinePlan plan,
+        int epoch,
+        Func<AiGatewayResult, T> parse,
+        WritingGradeChainOptions options,
+        TimeProvider clock,
+        ILogger logger,
+        Func<WritingGradeHop, bool>? injectFault,
+        CancellationToken ct)
+    {
+        if (plan.Hops.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Writing grading has no usable provider in the saved order ({string.Join("; ", plan.Skipped)}).");
+        }
+
+        var steps = plan.Hops
+            .Select(h => new Step(HopFor(h.Provider), h.Provider, h.Model, h.Attempts, h.BudgetSeconds, h.Index))
+            .ToList();
+        return RunPlanAsync(
+            gateway,
+            template,
+            steps,
+            (step, attempt) => ConfiguredResourceVersion(epoch, step.Index, attempt),
+            parse,
+            TimeSpan.FromSeconds(options.ChainDeadlineSeconds),
+            clock,
+            logger,
+            "grading",
+            injectFault,
+            ct);
+    }
 
     /// <summary>The run plan. The API hop exists only behind the Max hop (a test host's stub
     /// selector routes L1 elsewhere).</summary>
@@ -169,7 +224,7 @@ public static class WritingGradeChain
             new(
                 WritingGradeHop.Codex,
                 WritingSubscriptionProviders.Codex,
-                WritingSubscriptionProviders.CodexModel,
+                template.Model is { Length: > 0 } m ? m : WritingSubscriptionProviders.CodexModel,
                 Math.Max(1, options.ReviewAttempts),
                 options.ReviewAttemptSeconds),
         };

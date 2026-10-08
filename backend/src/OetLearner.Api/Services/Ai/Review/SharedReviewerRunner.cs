@@ -37,54 +37,112 @@ public static class SharedReviewerRunner
         Func<CancellationToken, Task<T>> codexAttempt,
         Func<CancellationToken, Task<T>> apiFallback,
         ILogger logger,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool codexEnabled = true,
+        bool apiEnabled = true,
+        bool apiFirst = false)
     {
+        // Owner directive 2026-10-09 (AI Pipeline Control Center): each reviewer step has its own switch and the
+        // order can be swapped. Defaults reproduce the previous behaviour exactly (Codex, then the API fallback).
         var started = DateTimeOffset.UtcNow;
         var metrics = ReviewerQueueMetrics.Instance;
         string? fallbackReason = null;
         Exception? codexLast = null;
+        Exception? apiLast = null;
         var codexAttempts = 0;
         var queueWait = TimeSpan.Zero;
 
-        // 1. Bounded FIFO gate wait → straight to the API fallback when saturated.
-        (CodexReviewerPermit? permit, TimeSpan wait) = await TryEnterGateAsync(assessmentType, assessmentId, gate, ct);
-        queueWait = wait;
+        if (!codexEnabled && !apiEnabled)
+            throw new InvalidOperationException("Shared reviewer has no enabled step.");
 
-        using (permit)
+        if (apiFirst && apiEnabled)
         {
-            if (permit is not null)
+            var (ok, value, last) = await RunApiPhaseAsync();
+            if (ok)
             {
-                var (completed, value, last, attempts) = await RunCodexPhaseAsync();
-                codexAttempts = attempts;
-                if (completed)
+                metrics.ReviewCompleted(assessmentType, usedApiFallback: false, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
+                return (value!, new SharedReviewerRunInfo(false, null, options.ApiFallbackProvider, 0, queueWait, DateTimeOffset.UtcNow - started));
+            }
+
+            apiLast = last;
+            fallbackReason = "api_failed";
+        }
+
+        if (codexEnabled)
+        {
+            // Bounded FIFO gate wait, then the Codex phase. The permit is held only for the Codex phase.
+            (CodexReviewerPermit? permit, TimeSpan wait) = await TryEnterGateAsync(assessmentType, assessmentId, gate, ct);
+            queueWait = wait;
+            using (permit)
+            {
+                if (permit is not null)
                 {
-                    metrics.ReviewCompleted(assessmentType, usedApiFallback: false, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
-                    logger.LogInformation(
-                        "reviewer.codex.success assessmentType={AssessmentType} assessmentId={AssessmentId} queueWaitMs={QueueWaitMs} codexAttempts={CodexAttempts} durationMs={DurationMs}",
-                        assessmentType, assessmentId, (long)queueWait.TotalMilliseconds, codexAttempts,
-                        (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
-                    return (value!, new SharedReviewerRunInfo(false, null, "writing-codex-sub", codexAttempts, queueWait, DateTimeOffset.UtcNow - started));
+                    var (completed, value, last, attempts) = await RunCodexPhaseAsync();
+                    codexAttempts = attempts;
+                    if (completed)
+                    {
+                        metrics.ReviewCompleted(assessmentType, usedApiFallback: false, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
+                        logger.LogInformation(
+                            "reviewer.codex.success assessmentType={AssessmentType} assessmentId={AssessmentId} queueWaitMs={QueueWaitMs} codexAttempts={CodexAttempts} durationMs={DurationMs}",
+                            assessmentType, assessmentId, (long)queueWait.TotalMilliseconds, codexAttempts,
+                            (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
+                        return (value!, new SharedReviewerRunInfo(apiFirst && fallbackReason is not null, fallbackReason, "writing-codex-sub", codexAttempts, queueWait, DateTimeOffset.UtcNow - started));
+                    }
+
+                    codexLast = last;
+                    fallbackReason = last is null ? "codex_budget_exhausted" : ReasonOf(last);
+                    if (!apiFirst) metrics.ApiFallbackStarted(assessmentType, fallbackReason);
+                    logger.LogWarning(
+                        "reviewer.codex.fallback assessmentType={AssessmentType} assessmentId={AssessmentId} reason={Reason} codexAttempts={CodexAttempts} errorClass={ErrorClass}",
+                        assessmentType, assessmentId, fallbackReason, codexAttempts, ErrorClassOf(last));
                 }
-
-                codexLast = last;
-                fallbackReason = last is null ? "codex_budget_exhausted" : ReasonOf(last);
-                metrics.ApiFallbackStarted(assessmentType, fallbackReason);
-                logger.LogWarning(
-                    "reviewer.codex.fallback assessmentType={AssessmentType} assessmentId={AssessmentId} reason={Reason} codexAttempts={CodexAttempts} errorClass={ErrorClass}",
-                    assessmentType, assessmentId, fallbackReason, codexAttempts, ErrorClassOf(last));
+                else
+                {
+                    fallbackReason = "gate_saturated";
+                    if (!apiFirst) metrics.ApiFallbackStarted(assessmentType, fallbackReason);
+                    logger.LogWarning(
+                        "reviewer.gate.saturated assessmentType={AssessmentType} assessmentId={AssessmentId} waitMs={WaitMs}",
+                        assessmentType, assessmentId, (long)queueWait.TotalMilliseconds);
+                }
             }
-            else
+        }
+        else
+        {
+            fallbackReason = "codex_disabled";
+        }
+
+        // The API step as the fallback (it never waits on Codex again). Every call goes through the gateway,
+        // so it is always recorded in the usage and cost records.
+        if (!apiFirst && apiEnabled)
+        {
+            var (ok, value, last) = await RunApiPhaseAsync();
+            if (ok)
             {
-                fallbackReason = "gate_saturated";
-                metrics.ApiFallbackStarted(assessmentType, fallbackReason);
-                logger.LogWarning(
-                    "reviewer.gate.saturated assessmentType={AssessmentType} assessmentId={AssessmentId} waitMs={WaitMs}",
-                    assessmentType, assessmentId, (long)queueWait.TotalMilliseconds);
+                metrics.ReviewCompleted(assessmentType, usedApiFallback: true, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
+                logger.LogInformation(
+                    "reviewer.api_fallback.success assessmentType={AssessmentType} assessmentId={AssessmentId} reason={Reason} fallbackProvider={Provider} durationMs={DurationMs}",
+                    assessmentType, assessmentId, fallbackReason, options.ApiFallbackProvider,
+                    (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
+                return (value!, new SharedReviewerRunInfo(true, fallbackReason, options.ApiFallbackProvider, codexAttempts, queueWait, DateTimeOffset.UtcNow - started));
             }
 
-            // 2. API fallback with its own bounded budget — it never waits on Codex again.
+            apiLast = last;
+        }
+
+        metrics.ReviewCompleted(assessmentType, usedApiFallback: apiEnabled, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
+        throw new InvalidOperationException(
+            $"Shared reviewer failed on every enabled step ({fallbackReason}).",
+            codexLast is null && apiLast is null
+                ? null
+                : new AggregateException(
+                    (codexLast is null ? Array.Empty<Exception>() : new[] { codexLast })
+                        .Concat(apiLast is null ? Array.Empty<Exception>() : new[] { apiLast })
+                        .ToArray()));
+
+        async Task<(bool Ok, T? Value, Exception? Last)> RunApiPhaseAsync()
+        {
+            Exception? lastApi = null;
             var apiAttempts = 0;
-            Exception? apiLast = null;
             for (var attempt = 0; attempt < Math.Max(1, options.ApiAttempts); attempt++)
             {
                 apiAttempts++;
@@ -92,32 +150,18 @@ public static class SharedReviewerRunner
                 using var apiLinked = CancellationTokenSource.CreateLinkedTokenSource(ct, apiTimeout.Token);
                 try
                 {
-                    var fallbackValue = await apiFallback(apiLinked.Token);
-                    metrics.ReviewCompleted(assessmentType, usedApiFallback: true, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
-                    logger.LogInformation(
-                        "reviewer.api_fallback.success assessmentType={AssessmentType} assessmentId={AssessmentId} reason={Reason} fallbackProvider={Provider} durationMs={DurationMs}",
-                        assessmentType, assessmentId, fallbackReason, options.ApiFallbackProvider,
-                        (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
-                    return (fallbackValue, new SharedReviewerRunInfo(true, fallbackReason, options.ApiFallbackProvider, codexAttempts, queueWait, DateTimeOffset.UtcNow - started));
+                    return (true, await apiFallback(apiLinked.Token), null);
                 }
                 catch (Exception ex) when (IsFailoverable(ex, ct))
                 {
-                    apiLast = ex;
+                    lastApi = ex;
                     logger.LogWarning(
                         "reviewer.api_fallback.attempt_failed assessmentType={AssessmentType} assessmentId={AssessmentId} attempt={Attempt} errorClass={ErrorClass}",
                         assessmentType, assessmentId, apiAttempts, ErrorClassOf(ex));
                 }
             }
 
-            metrics.ReviewCompleted(assessmentType, usedApiFallback: true, (long)(DateTimeOffset.UtcNow - started).TotalMilliseconds);
-            throw new InvalidOperationException(
-                $"Shared reviewer failed on Codex ({fallbackReason}) and on the API fallback.",
-                codexLast is null && apiLast is null
-                    ? null
-                    : new AggregateException(
-                        (codexLast is null ? Array.Empty<Exception>() : new[] { codexLast })
-                            .Concat(apiLast is null ? Array.Empty<Exception>() : new[] { apiLast })
-                            .ToArray()));
+            return (false, default, lastApi);
         }
 
         async Task<(CodexReviewerPermit? Permit, TimeSpan Wait)> TryEnterGateAsync(

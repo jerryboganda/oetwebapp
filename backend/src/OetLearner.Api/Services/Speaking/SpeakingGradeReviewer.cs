@@ -56,9 +56,19 @@ public static class SpeakingGradeReviewer
         ILogger logger,
         CancellationToken ct,
         string assessmentId = "speaking_session",
-        SharedReviewerOptions? options = null)
+        SharedReviewerOptions? options = null,
+        OetLearner.Api.Services.AiPipeline.AiPipelinePlan? plan = null)
     {
         var shared = options ?? SharedReviewerOptions.Current;
+        // Owner-saved steps: which of Codex / the API step run, their models and their order (absent = legacy two-step).
+        var codexHop = plan?.Hops.FirstOrDefault(h => h.Provider == WritingSubscriptionProviders.Codex);
+        var apiHop = plan?.Hops.FirstOrDefault(h => h.Provider != WritingSubscriptionProviders.Codex);
+        var codexOn = plan is null || codexHop is not null;
+        var apiOn = plan is null || apiHop is not null;
+        var apiFirst = codexHop is not null && apiHop is not null && apiHop.Index < codexHop.Index;
+        var codexModel = string.IsNullOrWhiteSpace(codexHop?.Model) ? WritingSubscriptionProviders.CodexModel : codexHop!.Model;
+        var apiProvider = apiHop?.Provider ?? shared.ApiFallbackProvider;
+        var apiModel = string.IsNullOrWhiteSpace(apiHop?.Model) ? shared.ApiFallbackModel : apiHop!.Model;
         var template = ReviewRequest(primaryRequest);
 
         try
@@ -68,10 +78,13 @@ public static class SpeakingGradeReviewer
                 CodexReviewerGate.Default,
                 "speaking",
                 assessmentId,
-                token => AttemptAsync(gateway, template, primary, WritingSubscriptionProviders.Codex, WritingSubscriptionProviders.CodexModel, token),
-                token => AttemptAsync(gateway, template, primary, shared.ApiFallbackProvider, shared.ApiFallbackModel, token),
+                token => AttemptAsync(gateway, template, primary, WritingSubscriptionProviders.Codex, codexModel, token),
+                token => AttemptAsync(gateway, template, primary, apiProvider, apiModel, token),
                 logger,
-                ct);
+                ct,
+                codexEnabled: codexOn,
+                apiEnabled: apiOn,
+                apiFirst: apiFirst);
 
             return result with { Trace = result.Trace with { Provider = info.FinalProvider, FallbackReason = info.FallbackReason } };
         }

@@ -76,7 +76,7 @@ public sealed class LiveVoicePreviewService(
     {
         var o = options.Value;
         var health = probe.Snapshot(o);
-        var primary = o.ProviderOrder()[0];
+        var primary = o.ProviderOrder().FirstOrDefault() ?? o.LegacyProviderOrder()[0];
         var cells = CellDefinitions
             .Select(c =>
             {

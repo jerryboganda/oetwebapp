@@ -313,6 +313,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         requiredPermissions: [AdminPermission.AiConfig],
       },
       {
+        href: '/admin/ai-pipelines',
+        label: 'AI Pipelines',
+        icon: <Cpu className={iconClassName} />,
+        matchPrefix: '/admin/ai-pipelines',
+        requiredPermissions: [AdminPermission.AiConfig],
+      },
+      {
         href: '/admin/writing-ai',
         label: 'Writing AI Provider',
         icon: <Cpu className={iconClassName} />,
@@ -626,6 +633,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/signup-catalog', title: 'Signup Catalog' },
   { prefix: '/admin/flags', title: 'Feature Flags' },
   { prefix: '/admin/settings', title: 'Runtime Settings' },
+  { prefix: '/admin/ai-pipelines', title: 'AI Pipelines' },
   { prefix: '/admin/audit-logs', title: 'Audit Logs' },
   { prefix: '/admin/documentation-center', title: 'Documentation Center' },
   { prefix: '/admin/launch-readiness', title: 'Launch Readiness' },

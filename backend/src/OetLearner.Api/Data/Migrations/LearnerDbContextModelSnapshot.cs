@@ -1940,6 +1940,95 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("AiPackageCreditTransactions");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.AiPipelineStage", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ChainJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("StageEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("StageKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StageKey")
+                        .IsUnique();
+
+                    b.ToTable("AiPipelineStages");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.AiPipelineStageRevision", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ChainJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ChangedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ChangedByName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<bool>("StageEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("StageKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StageKey", "Version")
+                        .IsUnique();
+
+                    b.ToTable("AiPipelineStageRevisions");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.AiProvider", b =>
                 {
                     b.Property<string>("Id")
