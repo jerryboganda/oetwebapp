@@ -50,6 +50,14 @@ upgrade path. The revised final spec governs where it conflicts with older tier/
 - Credit **debiting** was already correctly scoped to assessment features only
   (`ShouldDebitAiCredit`), so chat never consumed the learner's balance. Only the quota reserve blocked.
 
+## Correction to an earlier figure in this document
+
+Pack 2's provider-busy count on `0482ca9bf` was reported here as **9**. The measured value by exact
+response text is **11** (`uat-pack2-candidate-0482ca9bf.json`). The "9" came from a partial count
+taken while that run was still in flight, and the error was carried forward into later reporting.
+Corrected pair, both by exact text: **11 provider-busy → 6** after the length-retry ladder, with real
+answers **9 → 14**. Anything quoting "9 → 6" should read "11 → 6".
+
 ## UAT status
 
 ### Candidate build: `0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8`
@@ -66,6 +74,19 @@ frozen candidate for the UAT packs; every record below carries this SHA in its `
 | Pack 4 | Not yet run on the candidate (browser-dependent scenarios outstanding). |
 
 ## Open defects on the candidate build
+
+**D-SAMI-005 — seeded learner-facing documentation still describes deleted CI.**
+Two stale claims were found in the in-app product documentation and **fixed** on 2026-10-08:
+`Doc12QaValidation.cs` asserted the deploy pipeline still runs `writing-model-answer-gate`
+(`dotnet test --filter WritingRev8ModelAnswerGateTests`) as a hard release gate — it does not, that
+job was removed with the tests; and `Doc06LearningCompanion.cs` cited the deleted isolation suites
+in the present tense as live proof. Both now state the historical position.
+
+**Still open (deliberate):** `Doc10PlatformArchitecture.cs` references `qa-smoke.yml` and
+`performance.yml` in five places as current CI, and `Doc12QaValidation.cs` still lists historical
+test-file paths in its evidence blocks. Correcting these is a content edit across several seeded
+documents plus a re-seed of the runtime `DocumentationVersions` rows — it belongs in one deliberate
+documentation-refresh pass, not piecemeal.
 
 **D-SAMI-003 — long single-shot reasoning turns are refused as "provider busy". PARTIALLY FIXED.**
 Root cause proven from live logs, not inferred: `OpenCode reached its output limit. The incomplete
