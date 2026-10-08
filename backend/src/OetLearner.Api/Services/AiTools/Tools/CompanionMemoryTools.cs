@@ -239,7 +239,7 @@ public sealed class CompanionConfirmScoresTool(
                 official = true,
                 targetSource = "learner's own stated target (F-005)",
                 met,
-                short = fellShort,
+                @short = fellShort,
                 no_target_on_file = unknown,
                 outcome_by_own_target = isResit ? "short_on_at_least_one" : needTarget ? "incomplete_targets" : "met_all_recorded",
                 journeyClosureHint = isResit
