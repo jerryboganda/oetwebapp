@@ -41,11 +41,13 @@ The platform has five non-negotiable pillars:
 
 ## 3. Brand/persona requirements
 
-Working user-facing persona options are **Jana** (“Talk to Jana”) and **Sami** (“Talk to Sami”). Treat the persona as separate from the legal/master brand so B2B licensing, trademark ownership and valuation can use another master mark if required.
+The user-facing persona is **Sami** (“Talk to Sami”), the code default (`Companion:PersonaName`).
+Treat the persona as separate from the legal/master brand so B2B licensing, trademark ownership and
+valuation can use another master mark if required.
 
 Do not position the product publicly as merely an “AI chatbot”. Preferred concepts: AI Learning Companion, AI Tutor, AI Mentor, Personal Learning Intelligence or AI Learning OS. Ultimate positioning is “Your Personal AI Mentor” only when the premium continuous-management behavior is actually delivered.
 
-Jana/Sami remains a working choice until trademark/domain/app-store/social clearance is complete.
+The persona name remains configurable until trademark/domain/app-store/social clearance is complete; the shipped value is **Sami**.
 
 ## 4. Users, roles and surfaces
 
@@ -568,7 +570,7 @@ Before Stage 3, run a two-week production-quality/cost spike measuring Egyptian 
 
 ## 44. Legal/privacy/trademark/app-store readiness
 
-External gates include UK GDPR/DPA/DPIA, voice consent/retention, subprocessors/DPAs/vendor training, Rule Book confidentiality, future data residency, OET name/material usage, Jana/Sami clearance, Terms of Service, Google Play AI content reporting, Apple review/payment/steering and UK subscription-contract readiness. Code supports required flows; legal conclusions remain external.
+External gates include UK GDPR/DPA/DPIA, voice consent/retention, subprocessors/DPAs/vendor training, Rule Book confidentiality, future data residency, OET name/material usage, Sami persona clearance, Terms of Service, Google Play AI content reporting, Apple review/payment/steering and UK subscription-contract readiness. Code supports required flows; legal conclusions remain external.
 
 ## 45. Risk register engineering implications
 

@@ -4,7 +4,7 @@
 > evidence record for Stage 0 (foundations) plus the first Stage 1 slices. It states what shipped, what was
 > verified and how, and — deliberately — what is still open.
 
-**Date:** 2026-09-06 · **Branch:** `writing/final-production-release` · **Persona:** `Jana` (config key)
+**Date:** 2026-09-06 · **Branch:** `writing/final-production-release` · **Persona:** `Sami` (config key). Historical note: the value in force on this date was the earlier working name, superseded by D-002.
 
 ---
 
@@ -181,7 +181,7 @@ with the same error. No install was attempted because several other sessions wer
 
 TV-002 first beta profession · TV-004/TV-005 retrieval and hallucination thresholds · TV-006/TV-007 Writing and
 Speaking calibration (`companion_score_display` stays OFF) · TV-018 net revenue per credit · TV-023 regional
-pricing · TV-027 GDPR/DPIA · TV-030 Jana/Sami clearance (persona is a config key, not a literal) · TV-032 store
+pricing · TV-027 GDPR/DPIA · TV-030 Sami persona clearance (persona is a config key, not a literal) · TV-032 store
 AI-content reporting · TV-035 kill-switch owner · TV-036 learner-distress escalation owner.
 
 ## 7. Flag states at release

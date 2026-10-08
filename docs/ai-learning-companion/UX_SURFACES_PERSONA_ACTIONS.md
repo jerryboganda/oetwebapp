@@ -6,7 +6,7 @@ The companion should feel like one persistent mentor embedded into the existing 
 
 ## 2. Persona
 
-Use “Talk to Jana” or “Talk to Sami” only as working persona configuration. Keep master/legal brand independent. Persona text/voice/branding changes must not change core logic. Public copy should prefer AI Learning Companion/Tutor/Mentor rather than “chatbot”.
+The user-facing persona is **Sami** (`Companion:PersonaName`, code default `Sami`). Keep master/legal brand independent. Persona text/voice/branding changes must not change core logic. Public copy should prefer AI Learning Companion/Tutor/Mentor rather than “chatbot”. The earlier working name (“Talk to Jana”) is superseded and must not appear in any user-facing surface.
 
 ## 3. Global companion shell
 

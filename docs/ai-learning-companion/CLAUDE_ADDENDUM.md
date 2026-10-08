@@ -8,7 +8,7 @@
 
 # Repository Instructions — AI Learning Companion Program
 
-These instructions apply whenever Claude Code works on the AI Learning Companion / “Talk to Jana” / “Talk to Sami” program in this repository.
+These instructions apply whenever Claude Code works on the AI Learning Companion program (persona **Sami**) in this repository.
 
 ## 1. Mission
 

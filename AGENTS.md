@@ -483,10 +483,10 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
   automation via service-account toolkit; compulsory before any Play Store action.
 - `docs/app-release-playbook.md` — the "cut app releases" procedure across Android,
   iOS, and Windows desktop pathways; compulsory before any release task.
-- `docs/ai-learning-companion/` — AI Learning Companion program (persona "Jana"): spec conversion,
+- `docs/ai-learning-companion/` — AI Learning Companion program (persona **Sami**): spec conversion,
   184-feature traceability, gap analysis and staged plan. Load `CLAUDE_ADDENDUM.md` plus the gap
   analysis before any companion work; reuse existing auth/entitlement/credit/rulebook systems and
-  never invent a `TO VERIFY` value.
+  never invent a `TO VERIFY` value. Load `SAMI-RUN-STATE.md` for gate status.
 - `agent-console/etc/MANUAL.md` — operating manual appended to every Owner Agent Console session;
   load `docs/ops/OWNER-AGENT-CONSOLE.md` + `agent-console/CONTRACT.md` before touching `agent-console/**`.
 - `docs/ops/FLEET.md` — Owner Fleet runbook (SSH-tunnel access, enrollment, credential custody and rotation,

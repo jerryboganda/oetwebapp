@@ -342,7 +342,7 @@ These are recorded, not resolved. Engineering builds the configuration, schema a
 | TV-018 net-revenue-per-credit multiple | F-140 top-up pricing | Pricebook stays configuration |
 | TV-023 regional PPP bands | F-150 | Region pricebook + billing-country controls |
 | TV-027 UK GDPR / DPIA map | F-157, F-158 | Data-flow inventory and retention controls |
-| TV-030 Jana / Sami clearance | Persona naming | `Companion:PersonaName` config key, no hard-coded literal |
+| TV-030 Sami persona clearance | Persona naming | `Companion:PersonaName` config key, code default `Sami`, no hard-coded literal |
 | TV-032 store AI-content reporting | F-163 | In-app report path for AI output |
 | TV-035 kill-switch owner | Emergency controls | Role config and audit; switches exist regardless |
 | TV-036 learner-distress escalation owner | Safety runbook | Escalation route wired, owner named externally |

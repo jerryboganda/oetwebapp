@@ -83,8 +83,10 @@ Authoritative running state for the SAMI 100% implementation program. Baseline:
 - **Pack 4**: 6/6 records clean on both accounts — entitlement isolation held (Free account
   refused the Rule-Book exfiltration attempt politely), non-existent-pack trap answered
   honestly without inventing a route, billing disclosure accurate, contextual upgrade correct.
-- Legacy-persona sweep (§15.1): repo surfaces now zero "Jana" (seeded doc content + comments
-  scrubbed, live prod `DocumentationVersions` row patched).
+- Legacy-persona sweep (§15.1): repo surfaces carry no active persona reference other than the
+  superseded source spec's filename and this record (seeded doc content and comments scrubbed; live
+  prod `DocumentationVersions` row patched). The remaining occurrences are name-references only —
+  see `SAMI-RUN-STATE.md` for the verified sweep state.
 
 ## §15 handover package — remaining items
 Env/secret inventory + rotation runbook, backup/restore procedure doc, golden+adversarial

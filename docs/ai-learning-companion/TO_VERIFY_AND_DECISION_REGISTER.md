@@ -33,7 +33,7 @@
 | TV-027 | GDPR/DPIA applicability/lawful-basis map | Data inventory/privacy controls | Privacy/Legal |
 | TV-028 | Voice recording retention/raw-audio policy | Configurable storage/retention | Privacy/Product |
 | TV-029 | Subprocessor/DPA/vendor-training terms | Vendor register | Privacy/Legal |
-| TV-030 | Jana/Sami trademark/domain/social/app-store clearance | Persona config | Legal/Brand |
+| TV-030 | Sami persona trademark/domain/social/app-store clearance | Persona config | Legal/Brand |
 | TV-031 | OET trademark/material licensing/disclaimer | Disclaimer/content metadata | Legal/IP |
 | TV-032 | Store-specific AI/reporting/payment/steering behavior | Reporting + channel config | Product/Legal at release |
 | TV-033 | Availability SLO | Uptime/latency monitoring | Engineering/Product |

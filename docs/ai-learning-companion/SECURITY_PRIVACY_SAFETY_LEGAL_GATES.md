@@ -74,7 +74,7 @@ Provide in-app report/flag flow for AI content where required and moderation/res
 
 ## 18. Trademark/IP gate
 
-Before public launch: Jana/Sami persona clearance; master brand clearance if separate; OET descriptive/nominative use/disclaimer; rights/licensing for exam-like/official materials; ownership/permission of internal sources. Persona names stay configurable.
+Before public launch: persona-name clearance for **Sami**; master brand clearance if separate; OET descriptive/nominative use/disclaimer; rights/licensing for exam-like/official materials; ownership/permission of internal sources. The persona name stays configurable.
 
 ## 19. Subscription-contract readiness
 

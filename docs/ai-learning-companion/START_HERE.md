@@ -6,7 +6,7 @@ This pack is meant to be copied into the **root of the existing OET With Dr Hesh
 
 1. Make a normal Git checkpoint/branch according to your project's existing rules.
 2. Copy the contents of this pack into the repository root. Merge carefully if the project already has a `CLAUDE.md`; do not erase stronger existing repository rules.
-3. Keep `source/Talk_to_Jana_or_Sami_AI_Master_Specification_v3_FINAL.pdf` as the original source reference. The implementation-ready conversion is under `docs/ai-learning-companion/`.
+3. Keep `source/Talk_to_Jana_or_Sami_AI_Master_Specification_v3_FINAL.pdf` as the historical source reference (superseded — see `DECISION_LOG.md` D-002; the active persona is **Sami**). The implementation-ready conversion is under `docs/ai-learning-companion/`.
 4. Start Claude Code in the repository root.
 5. First run the repository audit prompt: `.claude/commands/ai-companion-audit.md`.
 6. Review the generated `docs/ai-learning-companion/REPO_GAP_ANALYSIS.md`, especially existing modules that must be reused and every `TO VERIFY` blocker.

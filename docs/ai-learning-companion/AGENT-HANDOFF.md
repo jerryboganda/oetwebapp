@@ -223,7 +223,7 @@ without confirming scope with the owner first:
 Open `TO VERIFY` gates (never invent values for these): TV-002 first beta profession ·
 TV-004/005 retrieval + hallucination thresholds · TV-006/007 Writing/Speaking calibration
 (`companion_score_display` stays OFF until resolved) · TV-018 net revenue per credit · TV-023
-regional pricing · TV-027 GDPR/DPIA · TV-030 Jana/Sami name clearance · TV-032 store AI reporting ·
+regional pricing · TV-027 GDPR/DPIA · TV-030 Sami persona name clearance · TV-032 store AI reporting ·
 TV-035 kill-switch owner · TV-036 learner-distress escalation owner.
 
 ### Where the companion lives
@@ -239,8 +239,8 @@ messages/{en,ar}/companion.json                   61 keys, parity verified
 docs/ai-learning-companion/STAGE0_EVIDENCE.md     what shipped and what is still open
 ```
 
-Persona is a **config key** (`Companion:PersonaName`, default `Jana`) — never a literal, because
-TV-030 (trademark/domain/store clearance) is unresolved. Changing the name is a settings edit.
+Persona is a **config key** (`Companion:PersonaName`, code default `Sami`) — never a literal.
+Changing the name is a settings edit.
 
 ---
 

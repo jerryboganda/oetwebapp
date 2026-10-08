@@ -7,7 +7,7 @@
 5. **F-160 WCAG 2.2 AA:** formal feature planning later, but accessibility is global. Stage 1 uses accessible foundations; formal audit follows rollout.
 6. **Provisional AI Credit wallets:** 0/2/8/20 are not production final; gate behind cost approval.
 7. **Illustrative economics:** gross/LTV/CAC examples are planning references, not hard-coded truth.
-8. **Working persona:** Jana/Sami is configurable pending clearance.
+8. **Persona:** **Sami** — the shipped default of the `Companion:PersonaName` config key.
 9. **Numeric score claims:** criterion feedback can ship; numeric Writing/Speaking scores remain calibration-gated.
 10. **Voice:** full live voice/Ultimate promise remains feasibility/economics-gated; fallbacks are first-class.
 

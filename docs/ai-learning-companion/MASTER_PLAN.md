@@ -1,4 +1,4 @@
-# Claude Code Mega Master Plan — AI Learning Companion / “Talk to Jana” or “Talk to Sami”
+# Claude Code Mega Master Plan — AI Learning Companion (persona “Sami”)
 
 > **Execution target:** the existing main OET With Dr Hesham project repository.  
 > **Source of product truth:** `docs/ai-learning-companion/FULL_REQUIREMENTS_TO_IMPLEMENT.md` plus the 184-item traceability matrix.  

@@ -146,7 +146,7 @@ Scoped to **one approved profession** pending TV-002. Course PDFs, videos and wo
 ### S1.3 Prompt composer — replaces the generic learner prompt — **DONE**
 **Changes:** `Services/AiAssistant/SystemPrompts/SystemPromptProvider.cs` gains an async companion path;
 `AiAssistantOrchestrator` uses it for the learner branch.
-Composes: persona (`Companion:PersonaName`, default `Jana`) + authority-labelled evidence + bounded learner
+Composes: persona (`Companion:PersonaName`, code default `Sami`) + authority-labelled evidence + bounded learner
 context + guardrails. Guardrails are explicit: clinical boundary (teach communication, never diagnose or
 prescribe), distress boundary (supportive, never counselling, never link failure to worth, never state pass
 probability), no numeric band while `companion.score_display.enabled` is OFF, retrieved text is **data not
