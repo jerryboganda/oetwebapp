@@ -2,38 +2,46 @@
 
 The SAMI test surfaces live in three layers. All are part of the handover package.
 
-## 1. Automated suites (GitHub Actions — the only compute path)
+## 1. Automated suites — **DO NOT EXIST**
 
-`backend/OetLearner.sln` — 131+ test files. The SAMI-critical suites:
+**Correction (2026-10-08).** An earlier version of this document listed 131+ backend test
+files as part of the handover. **They were deleted on 2026-10-08 under the owner directive
+"NO AUTOMATED QA ANYWHERE — THE OWNER QAs MANUALLY".** The last commit that contained them is
+tagged `last-commit-with-tests` in git; recover them from there if they are ever wanted.
 
-| Suite | Covers |
-|---|---|
-| `Companion/CompanionMemorySpineTests.cs` | memory layers, supersede history, confirm gate, Error DNA ladder, journeys, availability math (Wave 1) |
-| `Companion/CompanionHandoffServiceTests.cs` | handoff summaries from real evidence, lifecycle (F-107/108/123) |
-| `Companion/CompanionMemoryIsolationTests.cs` | per-learner isolation of companion-authored notes |
-| `Companion/CompanionMultiLearnerIsolationTests.cs` | cross-learner prompt isolation |
-| `Companion/CompanionPersonaTests.cs` | persona = Sami; legacy-name guard |
-| `Companion/CompanionExamModeTests.cs` | protected-attempt boundaries (F-155) |
-| `Companion/CompanionLeakDetectorTests*` | proprietary-content defence |
-| `Billing/AiCreditCostServiceTests.cs` | §9.1 price table is live config; baseline seeding; admin upsert |
-| `Writing/WritingErrorDnaFeederTests.cs` | published findings → Error DNA; low-confidence skipped |
-| `Services/AiRouteBenchmarkRunnerTests.cs` | route-benchmark metric math (D-004/D-005 gate) |
-| `Services/CoreAiProviderSeederTests.cs` | OpenCode row defaults (deepseek-v4.1-flash, effort max) |
+There is consequently **no automated regression net for the SAMI surfaces**. The suites named
+in this section previously (memory spine, handoff, isolation, persona, exam-mode, leak
+detector, credit-cost, Error-DNA feeder, route benchmark, provider seeder) are gone, and no
+test, lint or typecheck result may be claimed as evidence anywhere in this handover.
 
-Run them **only on Actions** (`Build images` compiles + the QA lanes execute; local runs are
-forbidden by repo policy).
+**What actually verifies a change now** (all three must be cited together, never one alone):
 
-## 2. Live UAT harness (this programme)
+1. Compilation in the `Build images` GitHub Actions run (`dotnet publish`, `next build`) plus
+   the static guards.
+2. The post-deploy proof the ship watcher prints: `LIVE_SHA_OK`, serving-slot image tags, and
+   `{"checks":{"database":"ok","migrations":"ok",...}}` from `/health/ready`.
+3. The owner's own manual QA.
 
-- Runner: `.tools-state/sami-ops/uat-run.mjs` — SignalR learner client; packs 1/2 scripted,
-  packs 3/4 (attachments, entitlement isolation, account switching) in `uat-pack34.mjs`.
-- Records: `docs/ai-learning-companion/uat/results/uat-execution-*.json` (verbatim responses,
-  §17.2 fields). Consolidated register: `docs/ai-learning-companion/uat/results/UAT-REGISTER.md`.
-- Standardised assets: `docs/ai-learning-companion/uat/TEST-ASSETS.md` (+ HTML score cards,
-  case-notes text file).
-- Accounts: `.tools-state/sami-ops/uat-accounts.json` (uat-a Medicine Full Course + companion;
-  uat-b Free; uat-c Crash Course nursing) — devices trusted, quota overrides raised for the
-  execution window.
+This is a deliberate owner trade-off, not an oversight — but it raises the value of the live
+UAT packs below, because they are now the only behavioural evidence for Sami.
+
+## 2. Live UAT harness
+
+- Runner: `.tools-state/sami-ops/run-pack.mjs` (+ `lib.mjs`) — a SignalR client that signs in,
+  opens a hub connection, drives real turns and captures verbatim responses with §17.2 fields
+  (tool calls included, because action tests are judged on the action, not the text).
+- Packs: `.tools-state/sami-ops/packs/pack{1,2,3}.mjs` — prompts transcribed from SAMI §18-§20.
+- Records: `docs/ai-learning-companion/uat/results/*.json`, one file per pack per build;
+  every record carries the build SHA in its `build` field.
+- Consolidated register: `docs/ai-learning-companion/uat/results/UAT-REGISTER.md`.
+- Standardised assets: `docs/ai-learning-companion/uat/TEST-ASSETS.md`, rendered to real files
+  by `.tools-state/sami-ops/make-assets.mjs` (score cards, reading question clean + blurred,
+  handwriting, sensitive-data trap) plus `make-voice-asset.ps1` (a real WAV voice note). These
+  include `asset-b-case-notes.pdf`, **which did not previously exist** — so Pack 3's whole-PDF
+  scenarios could never have run as written.
+- Accounts: `.tools-state/sami-ops/accounts.local.json` — **gitignored; never commit it.**
+- Four `run-pack` turns are scripted from §17.3; the harness does **not** judge PASS/PARTIAL/FAIL.
+  §17.1 statuses stay with the reviewer.
 
 ## 3. Adversarial coverage (evidence from the executed packs)
 
