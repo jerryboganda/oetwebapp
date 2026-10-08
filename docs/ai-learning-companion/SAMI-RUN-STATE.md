@@ -75,6 +75,24 @@ frozen candidate for the UAT packs; every record below carries this SHA in its `
 
 ## Open defects on the candidate build
 
+**D-SAMI-006 — voice notes were refused although transcription works. FIXED in `CompanionPromptComposer`.**
+Pack 3 on `8614f5298` (Tests 10 and 11) proved the pipeline is sound and the *assistant* broke it:
+the hub transcribed the uploaded WAV perfectly (`VoiceTranscript` returned the sentence verbatim)
+and persisted it inside the learner's message — verified by reading the stored row — and Sami then
+answered "I can't transcribe your voice note — I can't hear audio at all" and "I can't analyse that
+recording… pronunciation, word stress, pace, fillers and pauses are simply not things I can perceive."
+
+Root cause: the system prompt listed **"hear audio"** among the things the assistant cannot do
+(`CompanionPromptComposer`), so the model obeyed the rule literally and denied a feature that had
+already delivered its input. Fixed by narrowing the rule and adding two: supplied input (image,
+document text, voice transcription) is real input and must never be denied; pronunciation/fluency
+still cannot be judged from a transcript, which preserves the SAMI §6.3/§7 boundary that the old
+wording was trying to protect. Retest outstanding — needs a Pack 3 re-run on the fixed build.
+
+This is worth noting as a defect class: **an over-broad safety instruction silently disabled a
+working feature.** The rule was written to stop the model *inventing* a capability; it also stopped
+it *using* one.
+
 **D-SAMI-005 — seeded learner-facing documentation still describes deleted CI.**
 Two stale claims were found in the in-app product documentation and **fixed** on 2026-10-08:
 `Doc12QaValidation.cs` asserted the deploy pipeline still runs `writing-model-answer-gate`

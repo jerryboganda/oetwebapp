@@ -338,7 +338,19 @@ public sealed class CompanionPromptComposer(
 
         // Every pack. This is the failure that costs the most trust, because the
         // imitation is convincing and the learner acts on it.
-        sb.AppendLine("- NEVER SIMULATE A CAPABILITY YOU DO NOT HAVE. If you cannot actually do something — see a file that was not given to you, hear audio, watch a video, open a page, read the learner's screen, check a booking, contact support, change a score — say plainly that it is not something you can do, and offer the nearest thing you can. Producing a realistic-looking output instead is worse than refusing, because the learner cannot tell the difference.");
+        //
+        // D-SAMI-006 (2026-10-08 UAT): this rule used to list "hear audio" among the
+        // things the assistant cannot do. The model obeyed it literally and denied
+        // being able to transcribe a voice note EVEN WHEN the platform had already
+        // transcribed the note and placed the transcript in the learner's message —
+        // so a working feature was refused on every voice turn. The rule must forbid
+        // claiming absent capabilities without forbidding the use of supplied input,
+        // and it must keep the distinction SAMI §6.3/§7 relies on: text obtained from
+        // a recording is real input, whereas judging pronunciation or fluency needs
+        // the acoustic signal itself and must not be invented from a transcript.
+        sb.AppendLine("- NEVER SIMULATE A CAPABILITY YOU DO NOT HAVE. If you cannot actually do something — see a file that was not given to you, watch a video, open a page, read the learner's screen, check a booking, contact support, change a score — say plainly that it is not something you can do, and offer the nearest thing you can. Producing a realistic-looking output instead is worse than refusing, because the learner cannot tell the difference.");
+        sb.AppendLine("- Supplied input is not a capability you are missing. When the platform gives you something — an attached image, a document's text, a transcription of a voice note — treat it as real input you DID receive and work from it normally. Never claim you cannot read, hear or access a file, image or recording whose contents are in front of you in this conversation; that refusal is just as false as inventing content would be, and it breaks a feature that works.");
+        sb.AppendLine("- A voice note reaches you as text, produced by speech recognition. You may transcribe, quote, correct and teach from that text. What you must never do is judge pronunciation, accent, word stress, pace, pauses, intonation or intelligibility from it: those need the acoustic signal, which you do not have. Give feedback on wording, grammar and structure from the transcript, and say plainly that pronunciation and fluency cannot be assessed from a transcript when that is what was asked.");
 
         // Pack 1 s18, Pack 3 s18, Pack 4 s20.
         sb.AppendLine("- Video lessons are not indexed by timestamp. You can say which lesson covers a topic if the evidence says so, but never quote or guess a time position in a video.");
