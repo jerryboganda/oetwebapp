@@ -52,9 +52,40 @@ upgrade path. The revised final spec governs where it conflicts with older tier/
 
 ## UAT status
 
+### Candidate build: `0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8`
+
+Deployed and confirmed serving (`X-Oet-Release` 0482ca9bf, slot blue), `Deploy production` success.
+It contains all four of this run's slices — verified by ancestry check, not assumed. This is the
+frozen candidate for the UAT packs; every record below carries this SHA in its `build` field.
+
 | Pack | State |
 | --- | --- |
-| Pack 1 | `uat/results/uat-pack1-live.json` — 20 records. Tests 01-04 are real answers; 05-20 are the cap refusal, so the pack was unrunnable past Test 04. Re-run required on the fixed build. |
+| Pack 1 | **20/20 real responses** on the candidate — `uat-pack1-candidate-0482ca9bf.json`. 0 cap refusals (was 16 of 20 on `8cd4ad338`), 0 empty, 0 provider-busy, 10 turns performed real tool actions. Baseline comparison: `uat-pack1-live.json`. |
+| Pack 2 | `uat-pack2-candidate-0482ca9bf.json` — 20/20 records captured, but **9 of 20 returned the provider-busy message** (Tests 01, 02, 03, 05, 06, 07, 13, 17, 19) and **one turn stalled** (Test 10). See D-SAMI-003 below. Tool-driven turns (08, 14, 15, 16, 18) succeeded and are substantive. |
+| Pack 3 | Not yet run on the candidate. |
+| Pack 4 | Not yet run on the candidate (browser-dependent scenarios outstanding). |
+
+## Open defects on the candidate build
+
+**D-SAMI-003 — long single-shot reasoning turns are refused as "provider busy".**
+Nine Pack 2 turns returned the learner busy message at a latency of 101-127 s, while turns that
+interleave tool calls completed normally (Test 08 ran 14 tool calls and answered in 319 s). The
+pattern is that a turn whose whole budget is one long model generation fails, and a turn that keeps
+talking to the provider succeeds. It is not quota: cap refusals are 0, and this is the same
+"gateway-busy" signature the pre-fix runs recorded in `PROGRAM-STATUS.md`. Candidate mechanism is a
+wait expiry in the provider lane / platform concurrency gate
+(`AiProviderRegistry.OpenCodeLaneWait` = 90 s, `AiPlatformConcurrencyGate.MaxInFlight` = 5), but the
+mechanism is **not yet proven** and must be diagnosed from live logs before any fix is attempted.
+
+**D-SAMI-004 — a completed answer can be persisted without the completion reaching the client.**
+Pack 2 Test 10: the server stored a full 997-character answer at 05:42:07, but the client never
+received `MessageComplete` and the harness sat on the turn. This is the second, deeper path of
+D-SAMI-001 — the first path (empty completion) is guarded server-side and client-side, and a socket
+drop is now surfaced with a message, but a turn that finishes server-side and is not delivered still
+leaves the learner waiting. Diagnostic: compare the persisted assistant row against the delivered
+events for one affected `threadId`; check whether the output-side leak screen
+(`CompanionLeakDetector.Screen`) replaced the answer or ended the turn as an error without a
+`TurnError` reaching the client.
 | Pack 2 | Definitions ready (`.tools-state/sami-ops/packs/pack2.mjs`). Not yet executed. |
 | Pack 3 | Assets rendered to real files (`.tools-state/sami-ops/assets/`): score cards A and A-v2, reading question clean + blurred, handwriting, sensitive-data trap, and the case-notes PDF that never existed, so the whole-PDF scenarios could not previously run as written. |
 | Pack 4 | Browser-dependent scenarios outstanding (entitlement display, deep links, OCP/device, contextual upgrade). |

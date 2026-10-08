@@ -1,0 +1,856 @@
+[
+  {
+    "testNumber": "Pack 2 - Test 01",
+    "tag": "ONBOARDING",
+    "threadId": "c6e54938f8684eeb8534021d11e6ef45",
+    "setup": null,
+    "prompt": "I am doing OET Medicine. My exam is 25 October 2026 and I need 350 in every sub-test. My latest scores are Listening 310, Reading 300, Writing 340 and Speaking 360. I can study 45 minutes on weekdays and 2 hours each weekend day. I work night shifts Monday and Wednesday. My main problems are Listening Part A spelling, Reading B/C timing, Writing articles and over-explaining in Speaking. I prefer Arabic-English mixed explanations. Build my plan.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 101768,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:20:32.347Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 02",
+    "tag": "NEXT ACTION",
+    "threadId": "c6e54938f8684eeb8534021d11e6ef45",
+    "setup": "SAME CHAT immediately after Test 1.",
+    "prompt": "I have exactly 25 minutes now. What should I do?",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 105224,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:22:17.572Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 03",
+    "tag": "REPLAN",
+    "threadId": "c6e54938f8684eeb8534021d11e6ef45",
+    "setup": "SAME CHAT.",
+    "prompt": "My Wednesday night shift has changed to a 12-hour day shift and I will be exhausted after work. Update this week without simply moving everything to Thursday.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 105435,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:24:03.007Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 04",
+    "tag": "REPLAN",
+    "threadId": "c6e54938f8684eeb8534021d11e6ef45",
+    "setup": "SAME CHAT.",
+    "prompt": "I missed the last two study days completely. Fix my plan from today. I do not want a giant backlog.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [
+      {
+        "id": "call_00_m4wkmj30xorhgej00vj4ge2r",
+        "name": "companion_get_study_plan",
+        "args": "{}",
+        "result": "{\"today\":\"2026-10-08\",\"has_plan\":true,\"placeholder\":false,\"plan_id\":\"plan-763f16373d4644318bc4780929b2082d\",\"version\":8,\"state\":\"completed\",\"weeks\":4,\"minutes_per_day\":85,\"pending_count\":63,\"completed_count\":0,\"upcoming_items\":[],\"goal\":{\"exam_date\":\"2026-12-31\",\"study_hours_per_week\":12,\"weak_subtests\":\"[\\u0022writing\\u0022,\\u0022speaking\\u0022,\\u0022reading\\u0022,\\u0022listening\\u0022]\"},\"url\":\"https://app.oetwithdrhesham.co.uk/study-plan\"}",
+        "isError": false
+      },
+      {
+        "id": "call_00_97lhnx5tgy9gyamwh7f9htb0",
+        "name": "companion_preview_study_plan",
+        "args": "{\"exam_date\": \"2026-12-31\", \"study_hours_per_week\": 12, \"weak_subtests\": [\"writing\", \"speaking\", \"reading\", \"listening\"]}",
+        "result": "{\"can_create\":true,\"today\":\"2026-10-08\",\"total_weeks\":12,\"minutes_per_day\":102,\"tier\":\"free\",\"template_slug\":\"sami-single-subtest\",\"pending_items\":63,\"completed_items\":0,\"learner_added_items\":49,\"approx_task_count\":36,\"plan_exists\":true,\"drops_pending_items\":true}",
+        "isError": false
+      }
+    ],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 264079,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:28:27.086Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 05",
+    "tag": "ANALYTICS",
+    "threadId": "c6e54938f8684eeb8534021d11e6ef45",
+    "setup": "SAME CHAT.",
+    "prompt": "New mock: Listening 330, Reading 315, Writing 350, Speaking 370. Update my weakness profile and my next seven days.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 101548,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:30:08.634Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 06",
+    "tag": "REPLAN",
+    "threadId": "c6e54938f8684eeb8534021d11e6ef45",
+    "setup": "SAME CHAT.",
+    "prompt": "Bad news: I moved my exam two weeks earlier. Rebuild the plan and tell me what changes because of the shorter runway.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 106284,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:31:54.918Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 07",
+    "tag": "REPLAN",
+    "threadId": "c6e54938f8684eeb8534021d11e6ef45",
+    "setup": "SAME CHAT after Test 6. Treat this as another date change.",
+    "prompt": "Now assume I postpone the exam by one month instead. How would the plan change compared with the intensive version?",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 127812,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:34:02.730Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 08",
+    "tag": "MEMORY",
+    "threadId": "c6e54938f8684eeb8534021d11e6ef45",
+    "setup": "SAME CHAT.",
+    "prompt": "Without asking me again, summarise my current top three weaknesses and the evidence you have for each.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "Hi — I'm your OET learning companion (the OET Personal AI Assistant on Dr Hesham's platform) — and sorry about the earlier dead ends, those were a service fault on our side. You asked me to skip the questions and just summarise, so I went straight into your live records. Here's the honest picture.\n\n**Headline: I can't give you three *evidenced* weaknesses yet — because there is no score or error evidence on your record at all.** I'd rather say that than dress up guesses as findings. What I actually checked:\n\n- **Confirmed scores: none.** The system can't even run a score-change analysis for you — there are no confirmed results to compare.\n- **Recurring-errors log: empty** (zero items). Nothing graded means nothing to rank.\n- **Practice history:**\n  - Speaking — 10 submitted items (latest 3 Oct), with no scored result attached.\n  - Listening — 6 sessions started between June and 26 Aug, none ever submitted.\n  - Reading, Writing, Pronunciation — no attempts recorded at all.\n- **Plan goal:** all four sub-tests flagged \"weak\" — that's a planning setting, not evidence; it can't show *what* inside each skill is costing you marks.\n\nNothing from the earlier messages in this thread processed into your account, so there genuinely isn't anything more specific to verify — not from mocks, not from any notes.\n\n**The fix is short:**\n\n1. **Get your results on record.** Your latest numbers can go in any time, and I'll preview exactly what gets stored *before* anything saves — that alone unlocks real analysis.\n2. **Seed one piece of evidence.** A single *submitted* practice set in any skill is the fastest start (I couldn't find a standalone diagnostic page on your access, so any practice area works). The key word is submitted — your unsubmitted listening sessions logged nothing.\n3. **Watch it build here:** [Readiness](https://app.oetwithdrhesham.co.uk/readiness) · [Progress](https://app.oetwithdrhesham.co.uk/progress)\n\nAnd to be clear: I've saved nothing from this chat, and I won't record scores, weaknesses or anything else to your profile without showing you the exact entry and getting your OK first.\n\nP.S. One flag from the check: your saved study time still reads 0 minutes/day, so any plan rebuild would be built on that. When you want it fixed, I'll show you the exact change first.\n\nBottom line: I'm not hiding a list from you — nothing has been measured yet. One real data point changes that, and then your top three gets ranked from facts, not guesses.",
+    "toolCalls": [
+      {
+        "id": "call_00_qjgq4pgeua8y77skjqgp5a84",
+        "name": "companion_get_study_plan",
+        "args": "{}",
+        "result": "{\"today\":\"2026-10-08\",\"has_plan\":true,\"placeholder\":false,\"plan_id\":\"plan-763f16373d4644318bc4780929b2082d\",\"version\":8,\"state\":\"completed\",\"weeks\":4,\"minutes_per_day\":85,\"pending_count\":63,\"completed_count\":0,\"upcoming_items\":[],\"goal\":{\"exam_date\":\"2026-12-31\",\"study_hours_per_week\":12,\"weak_subtests\":\"[\\u0022writing\\u0022,\\u0022speaking\\u0022,\\u0022reading\\u0022,\\u0022listening\\u0022]\"},\"url\":\"https://app.oetwithdrhesham.co.uk/study-plan\"}",
+        "isError": false
+      },
+      {
+        "id": "call_01_zm95v2wfto3ksaxwc5do52lc",
+        "name": "get_user_recent_attempts",
+        "args": "{\"skill\": \"listening\", \"limit\": 10}",
+        "result": "{\"attempts\":[{\"id\":\"la-983b97432ed34843bc1c7698d946b1af\",\"state\":\"inprogress\",\"started_at\":\"2026-08-26T10:44:19.025019+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-46a3b1990b664675afd078e8aa4b553c\",\"state\":\"inprogress\",\"started_at\":\"2026-08-26T10:43:12.504673+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-4d9cfc4b2a454f89acecadca76c29ac4\",\"state\":\"inprogress\",\"started_at\":\"2026-08-26T09:59:56.849055+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-d0f144a53e5346199c4d4904a29cd7f9\",\"state\":\"inprogress\",\"started_at\":\"2026-08-25T22:00:57.743417+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-e91aaae06c5c40ff87ff8ce33a9c1944\",\"state\":\"inprogress\",\"started_at\":\"2026-08-20T18:46:47.428761+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-838bc68b06594c7e8d080176598b4a11\",\"state\":\"inprogress\",\"started_at\":\"2026-06-26T16:07:12.815826+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0}]}",
+        "isError": false
+      },
+      {
+        "id": "call_02_87ablmnhik0z2l7eveq0nb1u",
+        "name": "get_user_recent_attempts",
+        "args": "{\"skill\": \"reading\", \"limit\": 10}",
+        "result": "{\"attempts\":[]}",
+        "isError": false
+      },
+      {
+        "id": "call_03_ovyf9fbag613oeh4si31rf3k",
+        "name": "get_user_recent_attempts",
+        "args": "{\"skill\": \"writing\", \"limit\": 10}",
+        "result": "{\"attempts\":[]}",
+        "isError": false
+      },
+      {
+        "id": "call_04_m0a9k3o9u5yswmy8s5ud0ind",
+        "name": "get_user_recent_attempts",
+        "args": "{\"skill\": \"speaking\", \"limit\": 10}",
+        "result": "{\"attempts\":[{\"id\":\"att_d51efcd8eff44337b165952258137c36\",\"state\":\"submitted\",\"started_at\":\"2026-10-03T22:14:59.318637+00:00\",\"submitted_at\":\"2026-10-03T22:20:07.283326+00:00\",\"elapsed_seconds\":0},{\"id\":\"att_bb3d318068a14b9892beb2dc85d897d3\",\"state\":\"submitted\",\"started_at\":\"2026-10-03T22:09:51.634524+00:00\",\"submitted_at\":\"2026-10-03T22:14:59.318637+00:00\",\"elapsed_seconds\":0},{\"id\":\"att_f1856ebbf4934408b60bfa478a288f2a\",\"state\":\"submitted\",\"started_at\":\"2026-10-03T22:04:58.806919+00:00\",\"submitted_at\":\"2026-10-03T22:07:10.432305+00:00\",\"elapsed_seconds\":123},{\"id\":\"att_f5f7546defec4d7c90040182b8b6cc63\",\"state\":\"submitted\",\"started_at\":\"2026-10-03T18:29:01.569386+00:00\",\"submitted_at\":\"2026-10-03T18:37:32.425554+00:00\",\"elapsed_seconds\":302},{\"id\":\"att_95f41b9bd7fa4ce5aa373e1c2c560c60\",\"state\":\"submitted\",\"started_at\":\"2026-07-04T20:12:18.689331+00:00\",\"submitted_at\":\"2026-07-04T20:20:18.689331+00:00\",\"elapsed_seconds\":0},{\"id\":\"att_1e69ced1f17d4db48d1ab642d49eeea1\",\"state\":\"submitted\",\"started_at\":\"2026-07-04T20:07:16.462892+00:00\",\"submitted_at\":\"2026-07-04T20:12:18.689331+00:00\",\"elapsed_seconds\":0},{\"id\":\"att_d84a0d413d6c4b32aa03a40d11e9dd9e\",\"state\":\"submitted\",\"started_at\":\"2026-07-03T17:31:25.2311+00:00\",\"submitted_at\":\"2026-07-03T17:39:25.2311+00:00\",\"elapsed_seconds\":0},{\"id\":\"att_06bdb8937da443a3a82736f7a4f6e767\",\"state\":\"submitted\",\"started_at\":\"2026-07-03T17:29:06.227936+00:00\",\"submitted_at\":\"2026-07-03T17:37:06.227936+00:00\",\"elapsed_seconds\":0},{\"id\":\"att_320e21d6823b496fba5dfc9e24a4370c\",\"state\":\"submitted\",\"started_at\":\"2026-07-03T17:27:33.161004+00:00\",\"submitted_at\":\"2026-07-03T17:35:33.161004+00:00\",\"elapsed_seconds\":0},{\"id\":\"att_4fd9f8a80d8e40fa9ba24ebdcb4dcc51\",\"state\":\"submitted\",\"started_at\":\"2026-07-03T17:26:34.123318+00:00\",\"submitted_at\":\"2026-07-03T17:34:34.123318+00:00\",\"elapsed_seconds\":0}]}",
+        "isError": false
+      },
+      {
+        "id": "call_05_gwz26nkne59nxjycyooe65ot",
+        "name": "get_user_recent_attempts",
+        "args": "{\"skill\": \"pronunciation\", \"limit\": 10}",
+        "result": "{\"attempts\":[]}",
+        "isError": false
+      },
+      {
+        "id": "call_06_0cqxjw89dfdyxzaipss6o69x",
+        "name": "companion_train_mistakes",
+        "args": "{}",
+        "result": "{\"weakness_count\":0,\"items\":[],\"instruction\":\"There is no recorded error evidence yet \\u2014 say so honestly and offer a short diagnostic instead of inventing weaknesses.\"}",
+        "isError": false
+      },
+      {
+        "id": "call_00_yb0ctnj1jms726e0i55kkx0r",
+        "name": "companion_why_score_change",
+        "args": "{}",
+        "result": "{\"can_explain\":false,\"reason\":\"no_confirmed_scores\",\"instruction\":\"The learner has no confirmed recorded scores yet \\u2014 say so and offer to record their results first.\"}",
+        "isError": false
+      },
+      {
+        "id": "call_01_n21dgu5a1kjg4tyho05m1u6m",
+        "name": "companion_find_destination",
+        "args": "{\"query\": \"diagnostic\", \"limit\": 5}",
+        "result": "{\"destinations\":[]}",
+        "isError": false
+      },
+      {
+        "id": "call_02_qpwjdsu69z2lonfcw6ndh4p4",
+        "name": "companion_find_destination",
+        "args": "{\"query\": \"mock test\", \"limit\": 5}",
+        "result": "{\"destinations\":[{\"id\":\"progress\",\"title\":\"Progress\",\"kind\":\"progress\",\"url\":\"https://app.oetwithdrhesham.co.uk/progress\"},{\"id\":\"readiness\",\"title\":\"Readiness\",\"kind\":\"progress\",\"url\":\"https://app.oetwithdrhesham.co.uk/readiness\"},{\"id\":\"strategies\",\"title\":\"Strategy guides\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/strategies\"},{\"id\":\"test.day\",\"title\":\"Test day\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/test-day\"}]}",
+        "isError": false
+      },
+      {
+        "id": "call_00_k27k13ksrh5pxmpymtyv6en3",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"readiness\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"readiness\",\"title\":\"Readiness\",\"url\":\"https://app.oetwithdrhesham.co.uk/readiness\"}",
+        "isError": false
+      },
+      {
+        "id": "call_01_8b8wk06htlcfze1i3buqm7fo",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"progress\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"progress\",\"title\":\"Progress\",\"url\":\"https://app.oetwithdrhesham.co.uk/progress\"}",
+        "isError": false
+      },
+      {
+        "id": "call_02_dunk902j8w3po3rcoe4k5sli",
+        "name": "companion_find_destination",
+        "args": "{\"limit\": 5, \"query\": \"practice\"}",
+        "result": "{\"destinations\":[{\"id\":\"conversation.practice\",\"title\":\"AI conversation\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/conversation\"},{\"id\":\"grammar.practice\",\"title\":\"Grammar\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/grammar\"},{\"id\":\"listening.practice\",\"title\":\"Listening practice\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/listening\"},{\"id\":\"listening.recalls\",\"title\":\"Listening recalls\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/listening/practice\"},{\"id\":\"pronunciation.practice\",\"title\":\"Pronunciation practice\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/pronunciation\"}]}",
+        "isError": false
+      },
+      {
+        "id": "call_03_5mwuq7oxdgzmo8i6og0g4exa",
+        "name": "companion_find_destination",
+        "args": "{\"limit\": 5, \"query\": \"assessment\"}",
+        "result": "{\"destinations\":[{\"id\":\"ai.packages\",\"title\":\"AI credit packages\",\"kind\":\"commerce\",\"url\":\"https://app.oetwithdrhesham.co.uk/ai-packages\"}]}",
+        "isError": false
+      }
+    ],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 319135,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:39:21.865Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 09",
+    "tag": "NEW CHAT",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "Open a NEW CHAT with the same learner account. Do not paste the old profile again.",
+    "prompt": "What do you remember about my OET preparation, especially my exam goal, study availability and weak areas?",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "I'm your OET Personal AI Assistant — here's exactly what's on your profile right now, no more and no less:\n\n**Exam goal**\n- OET for medicine, exam date **31 December 2026** — that's 84 days from today (8 Oct 2026).\n- Aim on file: build a strong OET foundation and stay ready for exam day.\n- Target country: United Kingdom.\n\n**Study plan**\n- A plan is on file: 4 weeks, built around ~12 study hours/week (~85 min/day).\n- It has **63 items pending and 0 completed** so far.\n- Its focus list flags **all four subtests** (writing, speaking, reading, listening) — so it's broad coverage, not a pinpointed weakness.\n\n**Study availability**\n- On file, every day Monday–Sunday shows **0 minutes** — so I don't actually have a usable schedule saved for you. The 12 h/week in the plan is its built-in target, not your stated availability. Any replanning would work much better with real numbers.\n\n**Weak areas**\n- I have **no individually identified weak areas saved** — no confirmed weaknesses or recorded recurring errors to point at yet. I won't guess at one.\n\nTwo quick ways to fix the gaps:\n\n1. Tell me your realistic study minutes for each day (plus any night shifts, long days, or commute time) — I can then save that to your profile so future planning uses it.\n2. Weak areas get identified from **evidence**, not assumption — a short diagnostic or a practice sub-test would give us something real to target, and I can then build drills from your actual errors.\n\nWhich one do you want to start with?",
+    "toolCalls": [
+      {
+        "id": "call_00_t7ju6in14boakzemgh0p6j5k",
+        "name": "companion_get_study_plan",
+        "args": "{}",
+        "result": "{\"today\":\"2026-10-08\",\"has_plan\":true,\"placeholder\":false,\"plan_id\":\"plan-763f16373d4644318bc4780929b2082d\",\"version\":8,\"state\":\"completed\",\"weeks\":4,\"minutes_per_day\":85,\"pending_count\":63,\"completed_count\":0,\"upcoming_items\":[],\"goal\":{\"exam_date\":\"2026-12-31\",\"study_hours_per_week\":12,\"weak_subtests\":\"[\\u0022writing\\u0022,\\u0022speaking\\u0022,\\u0022reading\\u0022,\\u0022listening\\u0022]\"},\"url\":\"https://app.oetwithdrhesham.co.uk/study-plan\"}",
+        "isError": false
+      }
+    ],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 28711,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:39:50.812Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 10",
+    "tag": "CONTINUITY",
+    "threadId": "0f268110c43845659714ddb42d9e3609",
+    "setup": "Use the SAME ACCOUNT on another supported device/platform. Do not repeat the profile.",
+    "prompt": "Continue my preparation from where I left off. What is my next planned action and why?",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "Hi! I'm your OET Personal AI Assistant — your learning companion for OET prep. I checked where you left off, so here's the direct answer.\n\n**Your next action: a 45-minute Writing focus practice.** Why this one: it's a plan item that's overdue since 27 August, it targets your plan's weakest area, and it still fits your 85 minutes — it's the single highest-value task for you right now.\n\n**Where you stand:** your last activity (a Speaking session on 3 October) is already marked finished, so there's nothing mid-way to resume. Your plan currently has no upcoming items scheduled — 63 items sit pending in it.\n\nWant to start it? → [Open Writing focus practice](https://app.oetwithdrhesham.co.uk/study-plan)\n\n**For after this session:** when you're ready, I can rebuild your plan for the run-in to 31 Dec — the preview shows **12 weeks, 102 min/day, about 36 tasks**, and it would **drop your 63 pending items (49 of which you added yourself)**. Nothing changes until you agree — just say the word.",
+    "toolCalls": [
+      {
+        "id": "call_10af329d5cf94861ba0bc682",
+        "name": "companion_get_study_plan",
+        "args": "{}",
+        "result": "{\"today\":\"2026-10-08\",\"has_plan\":true,\"placeholder\":false,\"plan_id\":\"plan-763f16373d4644318bc4780929b2082d\",\"version\":8,\"state\":\"completed\",\"weeks\":4,\"minutes_per_day\":85,\"pending_count\":63,\"completed_count\":0,\"upcoming_items\":[],\"goal\":{\"exam_date\":\"2026-12-31\",\"study_hours_per_week\":12,\"weak_subtests\":\"[\\u0022writing\\u0022,\\u0022speaking\\u0022,\\u0022reading\\u0022,\\u0022listening\\u0022]\"},\"url\":\"https://app.oetwithdrhesham.co.uk/study-plan\"}",
+        "isError": false
+      },
+      {
+        "id": "call_4a00000fb21546fb9ef075ea",
+        "name": "companion_continue_last_activity",
+        "args": "{}",
+        "result": "{\"found\":true,\"subtest\":\"speaking\",\"unfinished\":false,\"started_at\":\"2026-10-03T22:14:59.318637+00:00\",\"url\":\"https://app.oetwithdrhesham.co.uk/speaking\"}",
+        "isError": false
+      },
+      {
+        "id": "call_69d3a3eca58441cd8e36bfba",
+        "name": "companion_next_best_action",
+        "args": "{\"minutes_available\":85}",
+        "result": "{\"today\":\"2026-10-08\",\"action\":{\"title\":\"writing focus practice\",\"subtest\":\"writing\",\"minutes\":45,\"kind\":\"plan_item\",\"target_url\":\"https://app.oetwithdrhesham.co.uk/study-plan\"},\"why\":\"This plan item is overdue from 2026-08-27; it targets your plan\\u0027s weakest area and still fits your 85 minutes.\",\"instruction\":\"State the ONE chosen action and why, then offer to open/start it. Do not present a long menu.\"}",
+        "isError": false
+      },
+      {
+        "id": "call_f79bc4a9f99f435eaadd15df",
+        "name": "companion_preview_study_plan",
+        "args": "{\"exam_date\":\"2026-12-31\",\"study_hours_per_week\":12,\"weak_subtests\":[\"writing\", \"speaking\", \"reading\", \"listening\"]}",
+        "result": "{\"can_create\":true,\"today\":\"2026-10-08\",\"total_weeks\":12,\"minutes_per_day\":102,\"tier\":\"free\",\"template_slug\":\"sami-single-subtest\",\"pending_items\":63,\"completed_items\":0,\"learner_added_items\":49,\"approx_task_count\":36,\"plan_exists\":true,\"drops_pending_items\":true}",
+        "isError": false
+      }
+    ],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 136675,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:42:07.715Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 11",
+    "tag": "PREFERENCE",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "For the next 30 minutes, explain everything in English only and keep answers short. Do not change my permanent language preference unless I ask you to.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "Got it — English only, short answers. Nothing will be saved to your profile, so your permanent language setting stays exactly as it is; this applies just to our chat for now.\n\nWhat would you like to work on in these 30 minutes? Options:\n\n- **Speaking** — quick role-play (I stay in character patient/colleague until you say \"pause\")\n- **Writing** — work through a referral letter approach\n- **Reading/Listening** — a practice task, then we review\n- **Planner** — sort your study availability so your plan becomes usable\n\nPick one and we start immediately.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 4421,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:42:12.136Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 12",
+    "tag": "ACTION",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "Save this to my notes: \"In my Writing, I need to check articles before singular countable nouns.\" Add it to my next Writing review.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "Here's exactly what I'll record — please confirm and I'll save both:\n\n**Note to save** (title: \"Writing: check articles before singular countable nouns\")\n> \"In my Writing, I need to check articles before singular countable nouns.\"\n\n**Plan item**: \"Writing review: articles before singular countable nouns\" — subtest: Writing, 15 min. Reason: revisit this self-identified error before your next Writing task.\n\nOne thing: I can't see a scheduled \"Writing review\" in your plan right now, so this will be a new item. Which day should I slot it in — or shall I set it for tomorrow?\n\nReply \"yes, tomorrow\" (or give a day) and I'll save both in one go. Your language preference stays untouched.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 36078,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:42:48.214Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 13",
+    "tag": "VOCAB",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "Add \"exacerbation\" to my vocabulary, with meaning, pronunciation, a common collocation and one OET-style example. Then schedule it for review based on my learning profile.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 116334,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:44:44.549Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 14",
+    "tag": "MEMORY CTRL",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "Remove my permanent preference for Arabic-English mixed explanations. Keep my scores, exam date, study history and errors. Show me what will change before you do it.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "Straight answer first: **I can't remove or edit that preference myself.** My tools don't read or change account preferences, so I have no before/after to show for it. Nothing here touches your scores, exam date, study history or errors — and I won't touch them.\n\n**Where to change it directly:** the platform's page for account options is Account settings — open it here: https://app.oetwithdrhesham.co.uk/settings. I can't see what's on it from my side, so check it there first.\n\n**If you'd rather log it from here** — nothing has been saved yet; this is exactly what would change:\n\n1. **Save a note**\n   - Title: \"Language preference: English only\"\n   - Body: \"Learner asked to remove the permanent Arabic-English mixed explanation preference. Going forward, explain in English only.\"\n   - Effect: adds one private note. (A note records the change — it doesn't delete the original setting, so Account settings or support is still the route for that.)\n2. **Support handoff** — sends this: \"Learner asks to remove the permanent Arabic-English mixed explanation preference; keep scores, exam date, study history and errors unchanged.\" Or contact them yourself: https://app.oetwithdrhesham.co.uk/support\n\nUntil it's sorted, I'll keep our chats English-only as you asked.\n\nStill open from earlier: your articles note + Writing review item (need a day from you), and the \"exacerbation\" vocab card — that attempt hit a technical error; say the word and I'll retry.\n\nReply \"note\", \"handoff\", or both — or give me different wording.",
+    "toolCalls": [
+      {
+        "id": "call_00_u531y0bh4xkmg6e16uygs3rq",
+        "name": "companion_find_destination",
+        "args": "{\"query\": \"language preference\", \"limit\": 5}",
+        "result": "{\"destinations\":[{\"id\":\"account.settings\",\"title\":\"Account settings\",\"kind\":\"account\",\"url\":\"https://app.oetwithdrhesham.co.uk/settings\"}]}",
+        "isError": false
+      },
+      {
+        "id": "call_01_cjmr4bygg5xplokdh9pz63x4",
+        "name": "companion_find_destination",
+        "args": "{\"query\": \"account settings\", \"limit\": 5}",
+        "result": "{\"destinations\":[{\"id\":\"account.settings\",\"title\":\"Account settings\",\"kind\":\"account\",\"url\":\"https://app.oetwithdrhesham.co.uk/settings\"},{\"id\":\"register\",\"title\":\"Create an account\",\"kind\":\"account\",\"url\":\"https://app.oetwithdrhesham.co.uk/register\"},{\"id\":\"devices\",\"title\":\"Devices\",\"kind\":\"account\",\"url\":\"https://app.oetwithdrhesham.co.uk/settings\"},{\"id\":\"sign.in\",\"title\":\"Sign in\",\"kind\":\"account\",\"url\":\"https://app.oetwithdrhesham.co.uk/sign-in\"},{\"id\":\"support\",\"title\":\"Support\",\"kind\":\"support\",\"url\":\"https://app.oetwithdrhesham.co.uk/support\"}]}",
+        "isError": false
+      },
+      {
+        "id": "call_00_hyg6oeoop1kk87me93let39j",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"account.settings\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"account.settings\",\"title\":\"Account settings\",\"url\":\"https://app.oetwithdrhesham.co.uk/settings\"}",
+        "isError": false
+      },
+      {
+        "id": "call_01_f0de7naopnutfmk083byt6fd",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"support\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"support\",\"title\":\"Support\",\"url\":\"https://app.oetwithdrhesham.co.uk/support\"}",
+        "isError": false
+      }
+    ],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 103585,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:46:28.134Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 15",
+    "tag": "ERROR DNA",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "Train me on my own repeated mistakes. Give me a short mixed drill using the errors you actually have evidence for, not errors you are guessing I might make.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "Good instinct — evidence only. Here's the honest result:\n\nI ran the drill builder, and it came back **empty — by design**. Your profile has **no recorded recurring-error evidence yet**, so there is nothing I can honestly train you on, and I won't invent weaknesses you haven't shown.\n\nThe drill draws only from errors already logged from your own practice attempts. With none on record, it returns zero items rather than guessing.\n\n**Fastest way to create real evidence** — do one short session, then ask me again and I'll build the mixed drill from what actually shows up:\n\n- **Grammar practice** — https://app.oetwithdrhesham.co.uk/grammar\n- **Reading drills** — https://app.oetwithdrhesham.co.uk/reading/drills\n\nOne session is enough to put your first genuine error data on file.\n\nStill open from earlier: your articles note + Writing review item (need a day from you), and the \"exacerbation\" vocab card retry — say the word.",
+    "toolCalls": [
+      {
+        "id": "call_00_d9y0wvqnal8gxzg1qzvsvpe0",
+        "name": "companion_train_mistakes",
+        "args": "{}",
+        "result": "{\"weakness_count\":0,\"items\":[],\"instruction\":\"There is no recorded error evidence yet \\u2014 say so honestly and offer a short diagnostic instead of inventing weaknesses.\"}",
+        "isError": false
+      },
+      {
+        "id": "call_00_3satyyk4bxd7pbdr3kpjqogs",
+        "name": "companion_find_destination",
+        "args": "{\"query\": \"diagnostic test\", \"limit\": 5}",
+        "result": "{\"destinations\":[{\"id\":\"progress\",\"title\":\"Progress\",\"kind\":\"progress\",\"url\":\"https://app.oetwithdrhesham.co.uk/progress\"},{\"id\":\"readiness\",\"title\":\"Readiness\",\"kind\":\"progress\",\"url\":\"https://app.oetwithdrhesham.co.uk/readiness\"},{\"id\":\"strategies\",\"title\":\"Strategy guides\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/strategies\"},{\"id\":\"test.day\",\"title\":\"Test day\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/test-day\"}]}",
+        "isError": false
+      },
+      {
+        "id": "call_00_4jd9o3houtj9bqnu2ldccaur",
+        "name": "companion_find_destination",
+        "args": "{\"query\": \"practice tasks\", \"limit\": 8}",
+        "result": "{\"destinations\":[{\"id\":\"conversation.practice\",\"title\":\"AI conversation\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/conversation\"},{\"id\":\"grammar.practice\",\"title\":\"Grammar\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/grammar\"},{\"id\":\"listening.practice\",\"title\":\"Listening practice\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/listening\"},{\"id\":\"listening.recalls\",\"title\":\"Listening recalls\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/listening/practice\"},{\"id\":\"pronunciation.practice\",\"title\":\"Pronunciation practice\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/pronunciation\"},{\"id\":\"reading.drills\",\"title\":\"Reading drills\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/reading/drills\"},{\"id\":\"reading.practice\",\"title\":\"Reading practice\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/reading\"},{\"id\":\"speaking.practice\",\"title\":\"Speaking practice\",\"kind\":\"practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/speaking\"}]}",
+        "isError": false
+      },
+      {
+        "id": "call_00_qy8k1i58e6uby7qx6dczpoz0",
+        "name": "companion_find_destination",
+        "args": "{\"limit\": 5, \"query\": \"mock test\"}",
+        "result": "{\"destinations\":[{\"id\":\"progress\",\"title\":\"Progress\",\"kind\":\"progress\",\"url\":\"https://app.oetwithdrhesham.co.uk/progress\"},{\"id\":\"readiness\",\"title\":\"Readiness\",\"kind\":\"progress\",\"url\":\"https://app.oetwithdrhesham.co.uk/readiness\"},{\"id\":\"strategies\",\"title\":\"Strategy guides\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/strategies\"},{\"id\":\"test.day\",\"title\":\"Test day\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/test-day\"}]}",
+        "isError": false
+      },
+      {
+        "id": "call_01_uqra4q6j5c7usnw9le7ztph0",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"grammar.practice\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"grammar.practice\",\"title\":\"Grammar\",\"url\":\"https://app.oetwithdrhesham.co.uk/grammar\"}",
+        "isError": false
+      },
+      {
+        "id": "call_02_8hxww0hhdv3udwdm717bqlpr",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"reading.drills\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"reading.drills\",\"title\":\"Reading drills\",\"url\":\"https://app.oetwithdrhesham.co.uk/reading/drills\"}",
+        "isError": false
+      }
+    ],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 50695,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:47:18.829Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 16",
+    "tag": "FINGERPRINT",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "I often change an answer at the last second. Can you tell from my history whether this is actually hurting me, and if you do not have enough data yet, how will you measure it?",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "**Short answer: I can't tell yet — and I won't guess.** Here's what your records actually show:\n\n- **Reading:** no attempts at all.\n- **Listening:** 6 attempts started (June–August), none finished or submitted — so no answers and no scores were recorded.\n- **Error evidence:** still zero logged, so there's no track record of any kind to analyse.\n\nEven a *submitted* attempt would only hold a score and date — it wouldn't show how your answers changed from first pick to final pick. So this specific habit needs its own capture.\n\nPlainly: I also have **no verified OET source** on whether last-second changes help or hurt, so I'm not handing you a \"never change\" rule. What I can give you is a way to measure it on your own performance:\n\n**How we'd measure it**\n1. In practice, tally every question where you change an answer: **original → final**, then after scoring mark which was correct. Two counts: **saves** (wrong→right) and **costs** (right→wrong).\n2. Don't read anything into it until you have ~10+ changed answers across a few sessions — below that it's noise.\n3. Then read the net: saves minus costs. Clearly negative = it's hurting you; positive = helping; near zero = not a real factor, so adopt one consistent policy and stop burning time deliberating.\n\n**Where:** [Reading drills](https://app.oetwithdrhesham.co.uk/reading/drills) and [Listening practice](https://app.oetwithdrhesham.co.uk/listening). Start by finishing one of those unfinished Listening attempts end-to-end, so scored data begins to exist.\n\nBring me the tally and — with your OK — I can log it as a note so future reviews use it.\n\n*Still open from earlier: the articles note + Writing review day, and the \"exacerbation\" card retry.*",
+    "toolCalls": [
+      {
+        "id": "call_00_rt8j93946tau5eisvb9ex97f",
+        "name": "get_user_recent_attempts",
+        "args": "{\"skill\": \"reading\", \"limit\": 10}",
+        "result": "{\"attempts\":[]}",
+        "isError": false
+      },
+      {
+        "id": "call_01_v2hd1vekn8dyoryaaycvh9lm",
+        "name": "get_user_recent_attempts",
+        "args": "{\"skill\": \"listening\", \"limit\": 10}",
+        "result": "{\"attempts\":[{\"id\":\"la-983b97432ed34843bc1c7698d946b1af\",\"state\":\"inprogress\",\"started_at\":\"2026-08-26T10:44:19.025019+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-46a3b1990b664675afd078e8aa4b553c\",\"state\":\"inprogress\",\"started_at\":\"2026-08-26T10:43:12.504673+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-4d9cfc4b2a454f89acecadca76c29ac4\",\"state\":\"inprogress\",\"started_at\":\"2026-08-26T09:59:56.849055+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-d0f144a53e5346199c4d4904a29cd7f9\",\"state\":\"inprogress\",\"started_at\":\"2026-08-25T22:00:57.743417+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-e91aaae06c5c40ff87ff8ce33a9c1944\",\"state\":\"inprogress\",\"started_at\":\"2026-08-20T18:46:47.428761+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0},{\"id\":\"la-838bc68b06594c7e8d080176598b4a11\",\"state\":\"inprogress\",\"started_at\":\"2026-06-26T16:07:12.815826+00:00\",\"submitted_at\":null,\"elapsed_seconds\":0}]}",
+        "isError": false
+      },
+      {
+        "id": "call_02_eja9j9chea7mztzp7xv0cof8",
+        "name": "companion_train_mistakes",
+        "args": "{}",
+        "result": "{\"weakness_count\":0,\"items\":[],\"instruction\":\"There is no recorded error evidence yet \\u2014 say so honestly and offer a short diagnostic instead of inventing weaknesses.\"}",
+        "isError": false
+      },
+      {
+        "id": "call_03_1s9unjiq64v5y2votehhdepv",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"reading.drills\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"reading.drills\",\"title\":\"Reading drills\",\"url\":\"https://app.oetwithdrhesham.co.uk/reading/drills\"}",
+        "isError": false
+      },
+      {
+        "id": "call_04_09pohsqjm5p4bsh1ba7ckc1l",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"listening.practice\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"listening.practice\",\"title\":\"Listening practice\",\"url\":\"https://app.oetwithdrhesham.co.uk/listening\"}",
+        "isError": false
+      }
+    ],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 73309,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:48:32.138Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 17",
+    "tag": "INTENSIVE",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "Assume my exam is now seven days away. Give me a realistic emergency plan using my current weakness profile and available time. Tell me what NOT to spend time on.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 115060,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:50:27.198Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 18",
+    "tag": "EXAM EVE",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "My exam is tomorrow morning. What should I do tonight and tomorrow before the test? I am tempted to learn a completely new Reading strategy.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "**Straight answer: don't do it.** Learning a brand-new Reading strategy tonight is the single highest-risk move you could make. It feels like progress, but a strategy only pays off once it's automatic — overnight it can't become automatic. It will just compete with the method you already have and leave you second-guessing yourself mid-paper (\"wait, was I supposed to skim this?\"). Tonight, protecting what you've got beats adding anything new.\n\n**Tonight**\n- At most one short, light pass over material you've already done — then stop. Nothing new.\n- Sort logistics: route, alarm, breakfast, what you're taking. For what's allowed at the venue, follow the official instructions you were sent — I don't have verified OET exam-day rules on my side.\n- Sleep on time. That's the highest-value item tonight.\n\n**Tomorrow before the test**\n- Use the approach you already have — one method, no switching mid-paper.\n- The last-second answer-changing habit you flagged earlier: don't deliberate over it. Pick one default and keep moving.\n- Keep pacing steady; don't rush the reading to \"save time.\"\n\n**Don't spend time on**\n- New strategies or tricks (Reading especially) · new vocabulary lists · a full mock test · rebuilding your whole method.\n\nThere's no verified weak-spot record in your profile, so there is nothing evidence-based left to cram tonight — which reinforces the same point: consolidate, rest, show up steady.\n\nThe platform's [Test day](https://app.oetwithdrhesham.co.uk/test-day) page covers the practical side.\n\nOne honesty note: my records still show your exam as 31 Dec 2026 — if tomorrow is genuinely it, tell me afterwards and we'll sort the records then. Either way: sleep well, and good luck tomorrow morning if it's real. (The articles note and \"exacerbation\" card can wait until after — nothing needed from you tonight.)",
+    "toolCalls": [
+      {
+        "id": "call_00_yj8a7uvrmh5v0fovjvq81eei",
+        "name": "companion_find_destination",
+        "args": "{\"query\": \"test day exam day preparation\", \"limit\": 5}",
+        "result": "{\"destinations\":[{\"id\":\"test.day\",\"title\":\"Test day\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/test-day\"},{\"id\":\"strategies\",\"title\":\"Strategy guides\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/strategies\"},{\"id\":\"exam.guide\",\"title\":\"Exam guide\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/exam-guide\"},{\"id\":\"onboarding\",\"title\":\"Getting started\",\"kind\":\"learning\",\"url\":\"https://app.oetwithdrhesham.co.uk/onboarding\"},{\"id\":\"goals\",\"title\":\"Goals\",\"kind\":\"progress\",\"url\":\"https://app.oetwithdrhesham.co.uk/goals\"}]}",
+        "isError": false
+      },
+      {
+        "id": "call_00_d3o71hbl9vis3p1chqbw4iio",
+        "name": "companion_open_destination",
+        "args": "{\"destination_id\": \"test.day\"}",
+        "result": "{\"allowed\":true,\"destination_id\":\"test.day\",\"title\":\"Test day\",\"url\":\"https://app.oetwithdrhesham.co.uk/test-day\"}",
+        "isError": false
+      }
+    ],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 60195,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:51:27.393Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 19",
+    "tag": "RESIT",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "My official result is back. I met my target in Listening, Reading and Speaking, but Writing is still below target. Build a Writing-only recovery plan without making me restart the whole course.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 110046,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:53:17.440Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  },
+  {
+    "testNumber": "Pack 2 - Test 20",
+    "tag": "JOURNEY",
+    "threadId": "149e9f22f88a45cf8e9754245b60b6d1",
+    "setup": "SAME CHAT.",
+    "prompt": "Start a new OET resit journey for Writing, but keep my previous OET journey so later I can compare what changed and what interventions actually helped me.",
+    "promptSource": "SAMI PDF §17-§22 verbatim",
+    "attachments": {
+      "images": 0,
+      "document": null,
+      "audio": null
+    },
+    "context": null,
+    "actualResponse": "The AI provider service is busy at the moment. Please try again later after a few minutes.",
+    "toolCalls": [],
+    "citations": [],
+    "voiceTranscript": null,
+    "terminal": "MessageComplete",
+    "errorCode": null,
+    "errorMessage": null,
+    "latencyMs": 112034,
+    "build": "0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8",
+    "capturedAt": "2026-10-08T00:55:09.474Z",
+    "status": null,
+    "problemIdentified": null,
+    "fixApplied": null,
+    "retestResult": null,
+    "evidenceOrDefectId": null
+  }
+]
