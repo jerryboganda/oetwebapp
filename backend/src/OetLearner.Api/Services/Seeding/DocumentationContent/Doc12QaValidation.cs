@@ -33,25 +33,27 @@ internal static class Doc12QaValidation
                 "(EV-QA-003). The repository's own governance layer states the rule these enforce directly: every " +
                 "owner-flagged defect type becomes a permanent injection test in the relevant fixture before further " +
                 "letters are written, and if correct clinical wording exposes a validator weakness, the validator is " +
-                "fixed rather than the letter reworded to dodge the check (EV-QA-004). The production deploy pipeline " +
-                "itself runs one of these as a hard release gate before any web/API image is built: `writing-model-answer-gate` in " +
-                "`build-images.yml` runs `dotnet test ... --filter 'FullyQualifiedName~WritingRev8ModelAnswerGateTests'` " +
-                "and the build step will not proceed if it fails (EV-QA-005)."),
+                "fixed rather than the letter reworded to dodge the check (EV-QA-004). " +
+                "IMPORTANT, corrected 8 Oct 2026: the deploy pipeline no longer runs any test gate. Until 8 Oct 2026 " +
+                "`writing-model-answer-gate` in `build-images.yml` ran `dotnet test ... --filter " +
+                "'FullyQualifiedName~WritingRev8ModelAnswerGateTests'` and blocked the build on failure; that job was " +
+                "removed together with all test code, so the writing rule pack is now enforced only when a human runs " +
+                "the validator. EV-QA-005 below records the historical state, not a current guarantee."),
             new DocumentationSectionBlock(
-                "Adversarial and security boundary tests",
-                "Beyond the Writing regression fixtures, the suite includes named adversarial and security-boundary " +
+                "Adversarial and security boundary tests (historical; deleted 8 Oct 2026)",
+                "Before the test code was deleted, the suite included named adversarial and security-boundary " +
                 "test classes covering scoring integrity and the AI Learning Companion specifically. " +
-                "`M2AdversarialChallengerTests.cs` and `M2AdversarialScoringAndAiGatewayTests.cs` target score-" +
+                "`M2AdversarialChallengerTests.cs` and `M2AdversarialScoringAndAiGatewayTests.cs` targeted score-" +
                 "conversion tables and objective-scoring paths for adversarial inputs (EV-QA-006). For the companion, " +
-                "confirmed test classes include `CompanionRetrievalSecurityTests`, `CompanionOutputGuardTests`, " +
+                "the classes that existed were `CompanionRetrievalSecurityTests`, `CompanionOutputGuardTests`, " +
                 "`CompanionDestinationSecurityTests`, `CompanionLearnerToolBoundaryTests`, `CompanionExamModeTests`, " +
                 "`CompanionMemoryIsolationTests`, `CompanionMultiLearnerIsolationTests`, `CompanionPackageScopeTests`, " +
                 "`CompanionVersionPrecedenceTests`, `CompanionContaminationAuditTests`, `CompanionCorpusGuardTests` " +
-                "and `CompanionKillSwitchTests` (EV-QA-007). Stated plainly: no file in the suite is named for " +
-                "classic \"prompt injection\" phrasing specifically. The functionally equivalent protections that do " +
-                "exist and are tested are entitlement-before-retrieval filtering, an output-side leak/canary screen, " +
-                "cross-learner memory isolation, and exam-mode boundary enforcement — each with its own targeted " +
-                "regression class rather than one generic adversarial suite."),
+                "and `CompanionKillSwitchTests` (EV-QA-007). Stated plainly: no file in that suite was named for " +
+                "classic \"prompt injection\" phrasing specifically. The functionally equivalent protections remain in " +
+                "the product — entitlement-before-retrieval filtering, an output-side leak/canary screen, " +
+                "cross-learner memory isolation, and exam-mode boundary enforcement — but with the tests gone they " +
+                "are no longer regression-guarded, and only the manual UAT packs exercise them."),
             new DocumentationSectionBlock(
                 "Golden benchmark sets for AI-graded and AI-assisted features",
                 "Versioned golden benchmark corpora exist under `docs/benchmarks/` as JSON files, each declaring a " +

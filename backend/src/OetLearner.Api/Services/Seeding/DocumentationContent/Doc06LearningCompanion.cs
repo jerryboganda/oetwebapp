@@ -54,8 +54,10 @@ internal static class Doc06LearningCompanion
                 "JSON file with no user-identifying fields in the payload itself (EV-COMPANION-007). Rows are scoped " +
                 "by both id and user id on every delete, so a note id belonging to a different learner reads as " +
                 "not-found rather than a successful cross-account delete — an isolation property that " +
-                "`CompanionMemoryIsolationTests` and `CompanionMultiLearnerIsolationTests` exercise directly " +
-                "(EV-COMPANION-008)."),
+                "`CompanionMemoryIsolationTests` and `CompanionMultiLearnerIsolationTests` exercised directly " +
+                "(EV-COMPANION-008). Those two suites, and every other automated test in this repository, were " +
+                "deleted on 8 Oct 2026 by owner directive; the isolation property still holds in the code, but it is " +
+                "no longer verified automatically — it is confirmed by manual QA."),
             new DocumentationSectionBlock(
                 "Knowledge grounding: entitlement-safe retrieval over an indexed corpus",
                 "The companion's knowledge base is a real, migrated data model — `CompanionSource`, `CompanionChunk` " +
