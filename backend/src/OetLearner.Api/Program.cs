@@ -3578,9 +3578,6 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-app.Run();
-
-static bool HasAdminPermission(AuthorizationHandlerContext ctx, params string[] anyOf)
 // AI Pipeline Control Center: creates any MISSING stage row from the built-in default (insert-only, so a saved owner
 // decision is never overwritten). The live voice row starts from the environment order in force today. Non-fatal.
 {
@@ -3601,6 +3598,9 @@ static bool HasAdminPermission(AuthorizationHandlerContext ctx, params string[] 
     }
 }
 
+app.Run();
+
+static bool HasAdminPermission(AuthorizationHandlerContext ctx, params string[] anyOf)
 {
     var perms = ctx.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
     return OetLearner.Api.Security.AdminPermissionEvaluator.HasAny(perms, anyOf);
