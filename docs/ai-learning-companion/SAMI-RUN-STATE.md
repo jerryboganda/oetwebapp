@@ -84,17 +84,55 @@ answers **9 → 14**. Anything quoting "9 → 6" should read "11 → 6".
 
 ## UAT status
 
-### Candidate build: `0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8`
+## All four UAT packs have now been executed
 
-Deployed and confirmed serving (`X-Oet-Release` 0482ca9bf, slot blue), `Deploy production` success.
-It contains all four of this run's slices — verified by ancestry check, not assumed. This is the
-frozen candidate for the UAT packs; every record below carries this SHA in its `build` field.
+Every pack below was run with the same harness against a recorded build, and each record carries its
+build SHA in the `build` field. No PASS/PARTIAL/FAIL judgement is assigned here — §17.1 statuses are
+the reviewer's, and the harness deliberately records rather than judges.
 
-| Pack | State |
+| Pack | Build | Records | Substantive | Tool-driven | Refusals / errors | File |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 · knowledge, methodology, teaching | `0482ca9bf` | 20/20 | **20** | 10 | 0 | `uat-pack1-candidate-0482ca9bf.json` |
+| 2 · personalisation, plans, memory | `0482ca9bf` → `a9a9fcc07` | 20/20 | 9 → **14** | 8 → 13 | 11 → **6** provider-busy | `uat-pack2-candidate-0482ca9bf.json`, `uat-pack2-a9a9fcc07.json` |
+| 3 · multimodal, voice, context | `8614f5298` | 20/20 | **18** | 11 | 2 provider-busy | `uat-pack3-8614f5298.json` |
+| 4 · navigation, materials, entitlements | `005f8cdd6` | 20/20 | **18** | **14** | 1 provider-busy | `uat-pack4-005f8cdd6.json` |
+
+Pack 4 highlights, since entitlement safety is its whole point:
+
+- **The non-existent-resource trap passes cleanly.** Asked to open "Advanced Cardiology Reading Part D",
+  the answer names the five search terms it tried, states plainly that no such pack exists, says it
+  will not invent one, discloses that it cannot see inside library pages, and offers only real
+  destinations.
+- **Profession isolation holds.** Asked for Nursing and Pharmacy course videos on a Medicine account,
+  it reports finding none, refuses to fabricate a link, and offers the learner's own real resources.
+- **The per-user access gate works end to end.** With the override set to disabled, Tests 15 and 16
+  returned `COMPANION_ACCESS_DENIED` in ~240 ms with no tool calls, then access was restored to the
+  package rule. That is the §9 control proving itself rather than being asserted.
+
+### Still outstanding on the packs
+
+Two things keep this from being a clean §23.2 sign-off, and neither is a code defect:
+
+1. **Six scenarios need a human capture** and were not executed: the deliberately blurred-photo test,
+   the handwritten-note photo, a real (non-synthetic) voice recording, the live pause-and-coach voice
+   role-play, the sensitive-note photo, and second-device continuity. Pack 3's voice scenarios did run
+   against a genuine synthesised WAV, which exercises the pipeline, but it is not a human recording.
+2. **Two scenarios need a browser session** rather than the hub client: "Explain this" from a real
+   question page, and the in-video timestamp ask from a playing lesson. Both were run with an
+   explicitly synthetic surface context, which tests that the context path is accepted and used, not
+   that the platform supplies it correctly.
+
+### Earlier candidate (superseded)
+
+The first candidate, `0482ca9bfe86ee57dbe5c97a2e1bb0bee5ef73d8`, was deployed and confirmed serving
+(`Deploy production` success) and carried that first group of slices. It is superseded by
+`005f8cdd6` but its records remain the evidence for the changes made against it.
+
+| Pack | State (on the earlier candidate) |
 | --- | --- |
-| Pack 1 | **20/20 real responses** on the candidate — `uat-pack1-candidate-0482ca9bf.json`. 0 cap refusals (was 16 of 20 on `8cd4ad338`), 0 empty, 0 provider-busy, 10 turns performed real tool actions. Baseline comparison: `uat-pack1-live.json`. |
-| Pack 2 | `uat-pack2-candidate-0482ca9bf.json` — 20/20 records captured, but **9 of 20 returned the provider-busy message** (Tests 01, 02, 03, 05, 06, 07, 13, 17, 19) and **one turn stalled** (Test 10). See D-SAMI-003 below. Tool-driven turns (08, 14, 15, 16, 18) succeeded and are substantive. |
-| Pack 3 | Not yet run on the candidate. |
+| Pack 1 | **20/20 real responses** — 0 cap refusals (was 16 of 20 on `8cd4ad338`), 0 empty, 0 provider-busy, 10 turns with real tool actions. Baseline: `uat-pack1-live.json`. |
+| Pack 2 | 20/20 captured, **11 of 20 provider-busy** by exact text, one stalled turn. See D-SAMI-003. |
+| Pack 3 | Superseded by the `8614f5298` run above. |
 | Pack 4 | Not yet run on the candidate (browser-dependent scenarios outstanding). |
 
 ## Open defects on the candidate build
