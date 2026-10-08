@@ -265,7 +265,7 @@ internal static class WritingSourcePresenceEngine
                     var proof = string.Empty;
                     var supported = parts[0] == "d"
                         ? DateSupported(parts[1], sentence, lines, dobClaim, letterEvents, labels, sourceWords, out proof)
-                        : MeasureSupported(parts[1], parts[2], sentence, lines, letterEvents, labels, sourceWords, out proof);
+                        : MeasureSupported(parts[1], parts[2], sentence, lines, letterEvents, labels, out proof);
                     if (!supported) return false;
                     if (!proofs.Contains(proof)) proofs.Add(proof);
                 }
@@ -398,9 +398,12 @@ internal static class WritingSourcePresenceEngine
                     var (label, events) = SourceInfo(lines, i, sourceHit.Index, sourceHit.Length, 1);
                     if (!LabelAgrees(label, letterLabel)) continue;
                     if (!label.Contains("dob") && !events.SetEquals(letterEvents)) continue;
+                    // Whose date it is: a relative's date never proves the patient's.
+                    var lineWords = LineWords(lines, i);
+                    if (lineWords.Overlaps(RelationStems) && !letterLabel.Overlaps(RelationStems)) continue;
                     // The words around the date must be on THIS source line (or its heading), not merely somewhere in the notes;
                     // a DOB line is checked against the whole notes (the Re: line names live on another line).
-                    if (!ClauseExplained(sentence, hit.Index, hit.Length, label.Contains("dob") ? sourceWords : LineWords(lines, i))) continue;
+                    if (!ClauseExplained(sentence, hit.Index, hit.Length, label.Contains("dob") ? sourceWords : lineWords)) continue;
                     labels.UnionWith(label);
                     proof = lines[i].Trim();
                     found = true;
@@ -421,7 +424,6 @@ internal static class WritingSourcePresenceEngine
         string[] lines,
         HashSet<string> letterEvents,
         HashSet<string> labels,
-        HashSet<string> sourceWords,
         out string proof)
     {
         proof = string.Empty;
@@ -443,10 +445,15 @@ internal static class WritingSourcePresenceEngine
 
                 foreach (var (index, length) in spots)
                 {
+                    // A source value that is qualified (">90°", "~90°", "-10°", "90°+") is a different fact from a plain one.
+                    if (IsQualifiedInSource(lines[i], index, length)) continue;
                     var (label, events) = SourceInfo(lines, i, index, length, unit == "deg" ? 2 : 1);
                     if (!LabelAgrees(label, letterLabel) || !events.SetEquals(letterEvents)) continue;
+                    // Whose value it is: a relative's weight or blood pressure never proves the patient's.
+                    var lineWords = LineWords(lines, i);
+                    if (lineWords.Overlaps(RelationStems) && !letterLabel.Overlaps(RelationStems)) continue;
                     // Every identity word of the letter's clause must be on THIS source line (or its heading).
-                    if (!ClauseExplained(sentence, hit.Index, hit.Length, LineWords(lines, i))) continue;
+                    if (!ClauseExplained(sentence, hit.Index, hit.Length, lineWords)) continue;
                     labels.UnionWith(label);
                     proof = lines[i].Trim();
                     found = true;
@@ -460,18 +467,32 @@ internal static class WritingSourcePresenceEngine
         return true;
     }
 
-    /// <summary>The stemmed words of a source line plus its heading line (the nearest digit-free line above).</summary>
+    /// <summary>The stemmed words of a source line plus its heading line (the nearest digit-free line above, when it is
+    /// a heading: it ends with a colon or is at most three words - a narrative line above is not a heading).</summary>
     private static HashSet<string> LineWords(string[] lines, int lineIndex)
     {
         var words = new HashSet<string>(AlphaToken.Matches(lines[lineIndex]).Select(m => Stem(m.Value)), StringComparer.Ordinal);
         for (var j = lineIndex - 1; j >= 0; j--)
         {
             if (lines[j].Trim().Length == 0) continue;
-            if (!lines[j].Any(char.IsDigit)) words.UnionWith(AlphaToken.Matches(lines[j]).Select(m => Stem(m.Value)));
+            if (!lines[j].Any(char.IsDigit) && IsHeading(lines[j])) words.UnionWith(AlphaToken.Matches(lines[j]).Select(m => Stem(m.Value)));
             break;
         }
 
         return words;
+    }
+
+    private static bool IsHeading(string line)
+        => line.TrimEnd().EndsWith(':') || AlphaToken.Matches(line).Count <= 3;
+
+    /// <summary>True when the source value has a qualifier right next to it: a comparison or approximation symbol or a sign
+    /// before it, or a plus after it.</summary>
+    private static bool IsQualifiedInSource(string line, int index, int length)
+    {
+        var before = line[..index].TrimEnd();
+        if (before.Length > 0 && (before[^1] is '<' or '>' or '≤' or '≥' or '≈' or '~' or '±' or '-' or '+')) return true;
+        var after = line[(index + length)..].TrimStart();
+        return after.StartsWith('+');
     }
 
     /// <summary>The source label is fully covered by the letter's clause, the letter names no side or joint the source label
@@ -558,7 +579,7 @@ internal static class WritingSourcePresenceEngine
             else
             {
                 // A heading that names a joint or a side still binds the value beneath it ("Knee:" over "Active flexion 90°").
-                words.AddRange(headingWords.Where(w => w is "right" or "left" || AnatomyStems.Contains(w)));
+                words.AddRange(headingWords.Where(w => w is "right" or "left" || AnatomyStems.Contains(w) || RelationStems.Contains(w)));
             }
         }
 
@@ -601,26 +622,40 @@ internal static class WritingSourcePresenceEngine
     /// break after it. Words after the value are dropped altogether when another number follows in the clause, because
     /// they then label that next value ("Hip flexion was 90° knee flexion 120°").
     /// </summary>
-    private static string ClauseText(string text, int index, int length)
+    private static string ClauseText(string text, int index, int length) => ClauseParts(text, index, length).Text;
+
+    /// <summary>The clause text, and the part of the clause that was set aside because a number sits between it and the
+    /// value (it labels that other number, but a stray number in it must still be checked).</summary>
+    private static (string Text, string Dropped) ClauseParts(string text, int index, int length)
     {
         var before = text[..index];
         var breaks = ClauseBreak.Matches(before);
-        var start = breaks.Count > 0 ? breaks[breaks.Count - 1].Index + breaks[breaks.Count - 1].Length : 0;
+        var clauseStart = breaks.Count > 0 ? breaks[breaks.Count - 1].Index + breaks[breaks.Count - 1].Length : 0;
+        var start = clauseStart;
         var lastDigit = before.LastIndexOfAny(Digits);
         if (lastDigit >= start) start = lastDigit + 1;
         var after = text[(index + length)..];
         var next = ClauseBreak.Match(after);
         var end = next.Success ? next.Index : after.Length;
         var following = after[..end];
-        if (following.IndexOfAny(Digits) >= 0) following = string.Empty;
-        return before[start..] + " " + following;
+        var dropped = before[clauseStart..start];
+        if (following.IndexOfAny(Digits) >= 0)
+        {
+            dropped += " " + following;
+            following = string.Empty;
+        }
+
+        return (before[start..] + " " + following, dropped);
     }
 
     /// <summary>Every identity word in the letter's clause around a value is explained by the notes (a "target", "marked" or
-    /// "estimated" qualifier the notes never state keeps the finding).</summary>
+    /// "estimated" qualifier the notes never state keeps the finding), and no unexplained number sits in that clause
+    /// ("for 3 years").</summary>
     private static bool ClauseExplained(string text, int index, int length, HashSet<string> sourceWords)
     {
-        foreach (Match m in AlphaToken.Matches(ClauseText(text, index, length)))
+        var (clause, dropped) = ClauseParts(text, index, length);
+        if (HasStrayDigits(AgePhrase.Replace(dropped, " "))) return false;
+        foreach (Match m in AlphaToken.Matches(clause))
         {
             var word = m.Value;
             if ((word.Length < 2 && word is not ("r" or "l")) || word == "dob" || Neutral.Contains(word)) continue;

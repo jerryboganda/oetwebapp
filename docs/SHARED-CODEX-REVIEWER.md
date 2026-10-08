@@ -120,9 +120,11 @@ degree sign / degrees, R / right, label and value on separate lines).
   every word the notes explain, with no unexplained number; the proof holds for EVERY occurrence of the quote; the
   value is in the notes with the SAME label (side, joint, DOB, measurement) and the SAME event (admission,
   discharge, active, passive ...); and the message names nothing beyond that label. A value recorded for another
-  side, joint or event is a real error and is kept. Known limits (all keep the finding): unit conversion, two-digit
-  years in written dates, a letter that omits a side the notes state, a side-only or event-qualified source label,
-  abbreviations outside the vital-sign map.
+  side, joint or event is a real error and is kept, as are ages and durations, a qualified value (">90°", "~90°",
+  "-10°", "90°+"), a relative's value, and any qualifier or abbreviation the notes line does not carry. Known limits
+  (all keep the finding): unit conversion, two-digit years in written dates, a century mismatch in a four-digit year,
+  a letter that omits a side the notes state, a side-only or event-qualified source label, a letter that adds an
+  unrelated clause after "and"/"or", abbreviations outside the vital-sign map.
 - `WritingSourcePresence.ValueLookup` is the non-suppressing sibling: when the strict proof is not met it shows the
   reviewer the source lines that carry the same value, so the model judges attribution with evidence.
 - `WritingReviewApplier.Apply` removes such grader/reviewer findings before the verdict loop (and refuses to add
