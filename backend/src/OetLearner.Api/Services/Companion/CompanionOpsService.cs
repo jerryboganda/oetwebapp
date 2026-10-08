@@ -52,8 +52,17 @@ public sealed class CompanionOpsService(LearnerDbContext db, TimeProvider clock)
     public async Task<IReadOnlyList<CompanionFeatureQualityRow>> QualityAsync(int days, int take, CancellationToken ct)
     {
         var since = clock.GetUtcNow().AddDays(-Math.Clamp(days, 1, 90));
+        // The feature-code alternation MUST be parenthesised. Without it `&&` binds
+        // tighter than `||`, so this read as
+        //   (CreatedAt >= since && StartsWith("companion")) || StartsWith("ai_assistant")
+        // and every ai_assistant row bypassed the date window — the operator picked a
+        // 1/7/30/90-day range and silently got all-time figures for the learner
+        // assistant. Companion turns are in fact recorded under `ai_assistant.learner`
+        // (AiAssistantOrchestrator.GetFeatureCode), so the affected rows are the
+        // majority, not an edge case.
         var rows = await db.AiUsageRecords.AsNoTracking()
-            .Where(r => r.CreatedAt >= since && r.FeatureCode.StartsWith("companion") || r.FeatureCode.StartsWith("ai_assistant"))
+            .Where(r => r.CreatedAt >= since
+                        && (r.FeatureCode.StartsWith("companion") || r.FeatureCode.StartsWith("ai_assistant")))
             .GroupBy(r => r.FeatureCode)
             .Select(g => new
             {

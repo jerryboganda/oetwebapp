@@ -106,6 +106,11 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/voice-design': [AdminPermission.AiConfig],
   '/admin/companion': [AdminPermission.AiConfig],
   '/admin/companion/access': [AdminPermission.AiConfig],
+  // SAMI §13.2 operator dashboards (F-127/F-128/F-129) — same AI-config
+  // permission as the companion access surface they sit beside.
+  '/admin/companion/quality': [AdminPermission.AiConfig],
+  '/admin/companion/content-gaps': [AdminPermission.AiConfig],
+  '/admin/companion/teaching-gaps': [AdminPermission.AiConfig],
   // Owner Agent Console — additionally owner-only (nav hidden unless
   // GET /v1/owner-agent/me says isOwner; the API enforces the allow-list).
   '/admin/agent-console': [AdminPermission.SystemAdmin],
@@ -173,6 +178,10 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/ai-assistant/threads/:param': [AdminPermission.AiConfig],
   '/admin/companion': [AdminPermission.AiConfig],
   '/admin/companion/access': [AdminPermission.AiConfig],
+  // SAMI §13.2 operator dashboards (F-127/F-128/F-129).
+  '/admin/companion/quality': [AdminPermission.AiConfig],
+  '/admin/companion/content-gaps': [AdminPermission.AiConfig],
+  '/admin/companion/teaching-gaps': [AdminPermission.AiConfig],
   '/admin/ai-config': [AdminPermission.AiConfig],
   '/admin/ai-providers': [AdminPermission.AiConfig],
   '/admin/ai-providers/ubag': [AdminPermission.AiConfig],
@@ -184,6 +193,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/agent-console/settings': [AdminPermission.SystemAdmin],
   '/admin/agent-console/history': [AdminPermission.SystemAdmin],
   '/admin/agent-console/:param': [AdminPermission.SystemAdmin],
+  '/admin/ai-pipelines': [AdminPermission.AiConfig],
   '/admin/writing-ai': [AdminPermission.AiConfig],
   '/admin/audit-logs': [AdminPermission.AuditLogs],
   '/admin/documentation-center': [AdminPermission.SystemAdmin],
@@ -193,7 +203,6 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/billing': [AdminPermission.BillingRead],
   '/admin/billing/pricing': [AdminPermission.BillingRead],
   '/admin/business-intelligence': [AdminPermission.QualityAnalytics],
-  '/admin/ai-pipelines': [AdminPermission.AiConfig],
   '/admin/bulk-operations': [AdminPermission.SystemAdmin],
   '/admin/calibration/speaking': [AdminPermission.ReviewOps],
   '/admin/community': [AdminPermission.SystemAdmin],

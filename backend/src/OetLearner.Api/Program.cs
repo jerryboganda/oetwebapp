@@ -3221,6 +3221,9 @@ app.MapTypeSafeAdminEndpoints();
 app.MapUserStateCacheAdminEndpoints();
 app.MapCompanionKnowledgeAdminEndpoints();
 app.MapCompanionAccessAdminEndpoints();
+// SAMI §13.2 operator dashboards (F-127 quality, F-128 content gap, F-129 teaching gap):
+// read-only aggregates over existing telemetry, no new storage.
+app.MapCompanionAdminDashboardEndpoints();
 app.MapCompanionLearnerEndpoints();
 app.MapAiMeEndpoints();
 OetLearner.Api.Endpoints.AiAssistantEndpoints.MapAiAssistantEndpoints(app);

@@ -17,6 +17,7 @@ import {
   FileQuestion,
   Flag,
   FolderOpen,
+  Gauge,
   Headphones,
   MessageSquare,
   LayoutDashboard,
@@ -340,6 +341,31 @@ export const adminNavGroups: AdminNavGroup[] = [
         matchPrefix: '/admin/companion',
         requiredPermissions: [AdminPermission.AiConfig],
       },
+      // SAMI §13.2 operator dashboards (F-127/F-128/F-129). Listed separately
+      // rather than nested under the access page: they answer a different
+      // question (what the companion got wrong, and what it had no source for)
+      // from the same permission surface.
+      {
+        href: '/admin/companion/quality',
+        label: 'Companion Quality (F-127)',
+        icon: <Gauge className={iconClassName} />,
+        matchPrefix: '/admin/companion/quality',
+        requiredPermissions: [AdminPermission.AiConfig],
+      },
+      {
+        href: '/admin/companion/content-gaps',
+        label: 'Companion Content Gaps (F-128)',
+        icon: <FileQuestion className={iconClassName} />,
+        matchPrefix: '/admin/companion/content-gaps',
+        requiredPermissions: [AdminPermission.AiConfig],
+      },
+      {
+        href: '/admin/companion/teaching-gaps',
+        label: 'Companion Teaching Gaps (F-129)',
+        icon: <TrendingUp className={iconClassName} />,
+        matchPrefix: '/admin/companion/teaching-gaps',
+        requiredPermissions: [AdminPermission.AiConfig],
+      },
       {
         href: '/admin/notifications',
         label: 'Notifications',
@@ -608,6 +634,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/ai-providers/typesafe', title: 'TypeSafe / Jev' },
   { prefix: '/admin/ai-providers', title: 'AI Providers' },
   { prefix: '/admin/ai-usage', title: 'AI/API Usage & Billing' },
+  { prefix: '/admin/ai-pipelines', title: 'AI Pipelines' },
   { prefix: '/admin/writing-ai', title: 'Writing AI Provider' },
   { prefix: '/admin/ai-analytics', title: 'AI Analytics' },
   { prefix: '/admin/voice-design', title: 'Voice Design' },
@@ -633,7 +660,6 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/signup-catalog', title: 'Signup Catalog' },
   { prefix: '/admin/flags', title: 'Feature Flags' },
   { prefix: '/admin/settings', title: 'Runtime Settings' },
-  { prefix: '/admin/ai-pipelines', title: 'AI Pipelines' },
   { prefix: '/admin/audit-logs', title: 'Audit Logs' },
   { prefix: '/admin/documentation-center', title: 'Documentation Center' },
   { prefix: '/admin/launch-readiness', title: 'Launch Readiness' },
