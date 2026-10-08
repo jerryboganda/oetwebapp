@@ -210,7 +210,7 @@ public sealed class CompanionConfirmScoresTool(
             };
 
             var met = new List<string>();
-            var short_ = new List<object>();
+            var fellShort = new List<object>();
             var unknown = new List<string>();
             foreach (var (subtest, score) in scores)
             {
@@ -222,10 +222,10 @@ public sealed class CompanionConfirmScoresTool(
                     continue;
                 }
                 if (score.Value >= target.Value) met.Add(subtest);
-                else short_.Add(new { subtest, score = score.Value, target = target.Value, gap = target.Value - score.Value });
+                else fellShort.Add(new { subtest, score = score.Value, target = target.Value, gap = target.Value - score.Value });
             }
 
-            var isResit = short_.Count > 0;
+            var isResit = fellShort.Count > 0;
             var needTarget = unknown.Count > 0;
 
             var guidance = isResit
@@ -239,7 +239,7 @@ public sealed class CompanionConfirmScoresTool(
                 official = true,
                 targetSource = "learner's own stated target (F-005)",
                 met,
-                short = short_,
+                short = fellShort,
                 no_target_on_file = unknown,
                 outcome_by_own_target = isResit ? "short_on_at_least_one" : needTarget ? "incomplete_targets" : "met_all_recorded",
                 journeyClosureHint = isResit
