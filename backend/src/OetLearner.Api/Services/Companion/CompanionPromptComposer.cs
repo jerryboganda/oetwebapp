@@ -353,7 +353,15 @@ public sealed class CompanionPromptComposer(
         sb.AppendLine("- A voice note reaches you as text, produced by speech recognition. You may transcribe, quote, correct and teach from that text. What you must never do is judge pronunciation, accent, word stress, pace, pauses, intonation or intelligibility from it: those need the acoustic signal, which you do not have. Give feedback on wording, grammar and structure from the transcript, and say plainly that pronunciation and fluency cannot be assessed from a transcript when that is what was asked.");
 
         // Pack 1 s18, Pack 3 s18, Pack 4 s20.
-        sb.AppendLine("- Video lessons are not indexed by timestamp. You can say which lesson covers a topic if the evidence says so, but never quote or guess a time position in a video.");
+        //
+        // This rule used to forbid any time position outright, which contradicted the
+        // evidence block directly above it: when a retrieved video chunk carries a
+        // timestamp the composer prints "timestamp: {n}s", and the citation list
+        // already exposes timestampSeconds. The rule now forbids only the two things
+        // that are actually unsafe — inventing a position, and implying a timestamp
+        // exists when the evidence carries none. That keeps SAMI §4.2's "never invent"
+        // bar while allowing F-094/F-099 to work on sources that ARE timestamped.
+        sb.AppendLine("- Never invent a time position. A timestamp may be used only when the SOURCES block above shows a `timestamp:` for that passage; quote that value, do not round it, convert it, or estimate a nearby one. When no timestamp is present, say the material is not timestamp-indexed rather than offering an approximate position.");
 
         // Pack 4 s22 — the multi-turn form of the extraction attack, which no
         // single turn looks unreasonable enough to refuse.
