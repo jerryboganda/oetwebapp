@@ -171,6 +171,8 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'request_action_unsupported',
   // Medication-frequency source fidelity (2026-10-09): source-gated, Model Answer Critical.
   'medication_frequency_source_mismatch',
+  // Completed versus planned actions (2026-10-09): Model Answer only, source-gated.
+  'completed_action_unsupported',
 ]);
 
 /** Writing rules with a deterministic detector (frozen, see above). */

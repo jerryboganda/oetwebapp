@@ -162,6 +162,8 @@ public static class WritingRuleProvenance
             // Model Answer Critical. For a candidate it is a coaching note at most: the grader judges the
             // MEANING of a frequency against the original case notes, never an automatic score penalty.
             ["medication_frequency_source_mismatch"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.CoachingOnly),
+            // Model Answer only (no candidate meaning): a pending action presented as completed.
+            ["completed_action_unsupported"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.NotApplicable),
 
             // --- Owner Clarifications Addendum TWO (14 Sep 2026), OA2-01..OA2-20 ---
             // OA2-20 is the firewall: the strict canonical requirements in this

@@ -114,7 +114,7 @@ public static class WritingReportDigest
         }
 
         Add("linker", "linker_comma_and_case", "linker_however_punctuation", "linker_in_addition_punctuation", "linker_therefore_punctuation", "linker_avoid_words", "linker_density", "intro_adverbial_comma");
-        Add("request", "no_duplicated_request", "closure_request_paragraph", "closure_mentions_patient_request_if_flagged", "request_action_unsupported", "canonical_contact_template", "closure_contact_offer", "closure_contains_management");
+        Add("request", "no_duplicated_request", "closure_request_paragraph", "closure_mentions_patient_request_if_flagged", "request_action_unsupported", "completed_action_unsupported", "canonical_contact_template", "closure_contact_offer", "closure_contains_management");
         Add("purpose", "intro_contains_purpose", "intro_opens_i_am_writing_to", "intro_purpose_vague", "urgent_intro_contains_urgent", "discharge_intro_template", "discharge_function_missed", "letter_type_function_mismatch", "cancer_suspected_flagged_urgent", "closure_mentions_review_if_required");
         Add("patient_naming", "body_forbidden_phrase_the_patient", "body_uses_last_name_only", "paragraph_start_patient_name", "relationship_label_patient_reference", "minor_naming_convention", "patient_title_mismatch");
         Add("re_line", "re_line_age_dob", "re_line_full_name", "re_line_dob_priority", "re_line_age_when_no_dob", "re_line_identity_unsupported", "dob_colon_format", "dob_age_forbidden_phrase", "age_not_duplicated_in_intro", "age_dob_inconsistent");

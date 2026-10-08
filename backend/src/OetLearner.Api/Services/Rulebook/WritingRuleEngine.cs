@@ -157,6 +157,8 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<Wr
         "request_action_unsupported",
         // Medication-frequency source fidelity (owner directive, 9 Oct 2026): source-gated, Model Answer Critical.
         "medication_frequency_source_mismatch",
+        // Completed versus planned actions (owner directive, 9 Oct 2026): Model Answer only, source-gated.
+        "completed_action_unsupported",
     };
 
     // Severity defaults for the always-on builtin battery below. Values are
@@ -305,6 +307,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<Wr
         ["address_content_unsupported"] = RuleSeverity.Major,
         ["request_action_unsupported"] = RuleSeverity.Critical,
         ["medication_frequency_source_mismatch"] = RuleSeverity.Critical,
+        ["completed_action_unsupported"] = RuleSeverity.Critical,
     };
 
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
@@ -745,6 +748,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<Wr
         "address_content_unsupported" => DetectSaG7AddressContentUnsupported,
         "request_action_unsupported" => DetectCmaRequestActionUnsupported,
         "medication_frequency_source_mismatch" => DetectMedicationFrequencySourceMismatch,
+        "completed_action_unsupported" => DetectCompletedActionUnsupported,
         _ => null,
     };
 
