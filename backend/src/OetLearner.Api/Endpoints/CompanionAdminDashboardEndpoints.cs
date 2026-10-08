@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Companion;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -753,6 +754,7 @@ public static class CompanionAdminDashboardEndpoints
                     e.MasteryScore,
                     e.ReviewCount,
                     e.NextReviewAt,
+                    e.FirstSeenAt,
                     e.LastSeenAt,
                     e.SourceKind,
                     e.UserId,
@@ -767,7 +769,7 @@ public static class CompanionAdminDashboardEndpoints
                 var bySource = members
                     .GroupBy(m => m.SourceKind ?? "unknown")
                     .Select(g => new CompanionTeachingGapSource(g.Key, g.Count()))
-                    .OrderByDescending(g => g.Count)
+                    .OrderByDescending(g => g.Rows)
                     .ToList();
 
                 patterns.Add(new CompanionTeachingGapPattern(
