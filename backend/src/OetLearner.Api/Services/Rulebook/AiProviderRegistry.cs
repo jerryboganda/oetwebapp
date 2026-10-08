@@ -317,55 +317,100 @@ public sealed class RegistryBackedProvider(
         // SAMI UAT finding (2026-10-07): max-effort turns exceed the ~100s non-streamed
         // HttpClient timeout and the gateway's ~120s edge read cap. Streaming keeps the
         // connection alive. An accepted stream is never automatically replayed.
-        if (openCode && OetLearner.Api.Services.Ai.OpenCodeStreamingCall.IsStreamingEnabled())
+        //
+        // SAMI UAT finding (2026-10-08, D-SAMI-003): raising the budget once on a
+        // length-truncation is the difference between an answer and a refusal. Nine of
+        // twenty Pack 2 turns died as "provider busy" because effort=max reasoning
+        // consumed the whole 16_384-token floor and returned finish_reason=length with no
+        // answer. Turns that interleaved tool calls stayed under the floor and were fine,
+        // which made it look like a capacity problem rather than a budget one.
+        for (var attempt = 0; ; attempt++)
         {
-            var streamed = await OetLearner.Api.Services.Ai.OpenCodeStreamingCall.CompleteStreamingAsync(
-                client, payload, request, ct);
-            if (streamed is not null)
+            if (openCode) maxTokens = Math.Max(request.MaxTokens ?? 4096, OpenCodeMinMaxTokens);
+            payload[AiProviderPayloadBuilder.MaxTokensParameter(model)] = maxTokens;
+
+            try
             {
-                return streamed;
+                if (openCode && OetLearner.Api.Services.Ai.OpenCodeStreamingCall.IsStreamingEnabled())
+                {
+                    var streamed = await OetLearner.Api.Services.Ai.OpenCodeStreamingCall.CompleteStreamingAsync(
+                        client, payload, request, ct);
+                    if (streamed is not null)
+                    {
+                        return streamed;
+                    }
+                }
+
+                using var response = await client.PostAsync(
+                    "chat/completions",
+                    new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+                    ct);
+
+                var body = await response.Content.ReadAsStringAsync(ct);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var status = (int)response.StatusCode;
+                    if (openCode)
+                    {
+                        // The body is parsed into allow-listed tokens plus a redacted, capped text and never
+                        // enters the exception Message; the class (quota/auth/rate/...) drives usage records.
+                        var providerError = AiProviderErrorParser.Parse(
+                            AiProviderErrorDialect.OpenAi,
+                            status,
+                            body,
+                            response.Headers,
+                            apiKey,
+                            retainProviderText: true);
+                        throw new AiProviderHttpException("OpenCode", status, response.ReasonPhrase, providerError.RetryAfter, providerError);
+                    }
+
+                    throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure(
+                        ubagFacade ? "UBAG provider" : "AI provider",
+                        status,
+                        response.ReasonPhrase,
+                        ExtractUbagErrorDetail(body)));
+                }
+
+                using var doc = JsonDocument.Parse(body);
+                return ReadNonStreamedCompletion(doc.RootElement, request, ubagFacade, openCode);
+            }
+            catch (InvalidOperationException ex) when (openCode && attempt == 0 && IsOutputLengthFailure(ex))
+            {
+                // Exactly one raise. A second truncation at double the floor is a genuine
+                // runaway generation, and the caller still gets the honest failure.
+                maxTokens = Math.Max(maxTokens * 2, OpenCodeMinMaxTokens * 2);
             }
         }
+    }
 
-        using var response = await client.PostAsync(
-            "chat/completions",
-            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
-            ct);
+    /// <summary>
+    /// Classifies a length-truncation so the caller can raise the output budget once.
+    /// Matches only our own truncation messages — never a generic
+    /// <see cref="InvalidOperationException"/>, so a real provider fault is not retried.
+    /// </summary>
+    private static bool IsOutputLengthFailure(InvalidOperationException ex)
+    {
+        var message = ex.Message;
+        return message.Contains("output limit", StringComparison.OrdinalIgnoreCase)
+               || message.Contains("output tokens", StringComparison.OrdinalIgnoreCase);
+    }
 
-        var body = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            var status = (int)response.StatusCode;
-            if (openCode)
-            {
-                // The body is parsed into allow-listed tokens plus a redacted, capped text and never
-                // enters the exception Message; the class (quota/auth/rate/...) drives usage records.
-                var providerError = AiProviderErrorParser.Parse(
-                    AiProviderErrorDialect.OpenAi,
-                    status,
-                    body,
-                    response.Headers,
-                    apiKey,
-                    retainProviderText: true);
-                throw new AiProviderHttpException("OpenCode", status, response.ReasonPhrase, providerError.RetryAfter, providerError);
-            }
-
-            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure(
-                ubagFacade ? "UBAG provider" : "AI provider",
-                status,
-                response.ReasonPhrase,
-                ExtractUbagErrorDetail(body)));
-        }
-
-        using var doc = JsonDocument.Parse(body);
-        var root = doc.RootElement;
+    /// <summary>
+    /// Turns a non-streamed chat-completions body into a completion, or throws the same
+    /// faults the streaming path throws so both routes behave identically.
+    /// </summary>
+    private static AiProviderCompletion ReadNonStreamedCompletion(
+        JsonElement root, AiProviderRequest request, bool ubagFacade, bool openCode)
+    {
         AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, ubagFacade ? "UBAG provider" : "AI provider", out var choice, out var message);
         var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
         // Tool calls are read BEFORE the empty-text check: a normal tool-calling reply has
         // content:null, and only "no text AND no tool calls" is an empty completion.
         var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
         if (openCode && choice.TryGetProperty("finish_reason", out var finishLimit) && finishLimit.GetString() == "length")
+        {
             throw new InvalidOperationException("OpenCode reached its output limit. No automatic replay was attempted.");
+        }
         if (string.IsNullOrWhiteSpace(text) && toolCalls is null)
         {
             var emptyFinish = choice.TryGetProperty("finish_reason", out var emptyFinishEl) && emptyFinishEl.ValueKind == JsonValueKind.String
