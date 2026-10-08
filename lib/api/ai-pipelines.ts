@@ -130,3 +130,120 @@ export function restorePipelineDefault(
 export function runPipelineSelfCheck(live: boolean): Promise<SelfCheckResponse> {
   return apiClient.post<SelfCheckResponse>(`${base}/self-check?live=${live ? 'true' : 'false'}`);
 }
+
+// ── Phase 2: usage/cost overview, subscriptions, credits ──────────────────
+// Every USD figure the overview returns is INTERNALLY TRACKED (our rate-card
+// estimate over AiUsageRecords); subscription figures come from our own
+// sidecars. Nothing here is provider-verified — the UI must keep saying so.
+
+export type OverviewWindow = 'today' | '7d' | '30d' | 'all';
+
+export interface PipelineBucketUsage {
+  bucket: string;
+  calls: number;
+  successes: number;
+  costUsd: number;
+}
+
+export interface PipelineProviderUsage {
+  providerId: string;
+  calls: number;
+  successes: number;
+  failures: number;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+  stages: PipelineBucketUsage[];
+}
+
+export interface PipelineCostPerUnit {
+  count: number;
+  totalUsd: number;
+  avgUsd: number | null;
+}
+
+export interface PipelineLiveVoiceUsage {
+  provider: string;
+  sessions: number;
+}
+
+export interface PipelineClaudeMaxSnapshot {
+  utilizationPct: number | null;
+  resetsAt: string | null;
+  /** reported = our sidecar's counter; estimated = computed from usage rows; unknown = sidecar down. */
+  source: string;
+  weeklyTokensUsed: number;
+  weeklyTokenCap: number;
+  writingTokens7d: number;
+  speakingTokens7d: number;
+}
+
+export interface PipelineReviewerQueueItem {
+  assessmentType: string;
+  arrived: number;
+  inFlight: number;
+  codexTotal: number;
+  codexSuccess: number;
+  codexQuota: number;
+  codexTimeout: number;
+  apiFallbacks: number;
+  completed: number;
+  lastFallbackReason: string | null;
+}
+
+export interface PipelineCodexReviewerSnapshot {
+  source: string;
+  requestsThisWeek: number;
+  inputTokensThisWeek: number;
+  outputTokensThisWeek: number;
+  utilizationPct: number | null;
+  weekStartedAt: string | null;
+  queue: PipelineReviewerQueueItem[];
+}
+
+export interface PipelineCreditGrantView {
+  id: string;
+  providerCode: string;
+  grantUsd: number;
+  startsAt: string;
+  note: string | null;
+  spentSinceStartUsd: number;
+  /** null when spend already exceeds the grant (shown as exhausted, not negative). */
+  remainingUsd: number | null;
+  createdByAdminName: string;
+  createdAt: string;
+}
+
+export interface PipelineOverview {
+  window: OverviewWindow;
+  windowStart: string | null;
+  generatedAt: string;
+  providers: PipelineProviderUsage[];
+  stageTotals: PipelineBucketUsage[];
+  writingLetter: PipelineCostPerUnit;
+  speakingAssessment: PipelineCostPerUnit;
+  reviewerRun: PipelineCostPerUnit;
+  liveVoiceSessions: PipelineLiveVoiceUsage[];
+  claudeMax: PipelineClaudeMaxSnapshot;
+  codexReviewer: PipelineCodexReviewerSnapshot;
+  credits: PipelineCreditGrantView[];
+}
+
+export function fetchPipelineOverview(window: OverviewWindow = '7d'): Promise<PipelineOverview> {
+  return apiClient.get<PipelineOverview>(`${base}/overview?window=${encodeURIComponent(window)}`);
+}
+
+export interface CreditGrantInput {
+  providerCode: string;
+  grantUsd: number;
+  startsAt?: string;
+  note?: string;
+}
+
+export function createCreditGrant(input: CreditGrantInput): Promise<{ id: string }> {
+  return apiClient.post<{ id: string }>(`${base}/credit-grants`, input);
+}
+
+export function deleteCreditGrant(id: string): Promise<void> {
+  return apiClient.delete<void>(`${base}/credit-grants/${encodeURIComponent(id)}`);
+}

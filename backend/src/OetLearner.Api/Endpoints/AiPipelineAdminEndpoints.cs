@@ -240,6 +240,102 @@ public static class AiPipelineAdminEndpoints
             return Results.Ok(new { ranAt = DateTimeOffset.UtcNow, live = live == true, results });
         }).RequireRateLimiting("PerUserWrite");
 
+        // Phase 2 (owner directive 2026-10-09): usage/cost + subscription + credit payload behind the
+        // dashboard sections of the same page. Internally tracked figures only — see
+        // AiPipelineOverviewService. Cached server-side for 60s per window.
+        group.MapGet("/overview", async (IAiPipelineOverviewService overview, string? window, CancellationToken ct) =>
+            Results.Ok(await overview.BuildAsync(window, ct)));
+
+        group.MapGet("/credit-grants", async (IAiPipelineOverviewService overview, CancellationToken ct) =>
+            Results.Ok(new { credits = (await overview.BuildAsync(null, ct)).Credits }));
+
+        group.MapPost("/credit-grants", async (
+            CreditGrantDto dto,
+            LearnerDbContext db,
+            HttpContext http,
+            IAiPipelineOverviewService overview,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(dto.ProviderCode))
+                return new ApiErrorResult(400, "ai_credit_provider_required", "Provider is required.");
+            if (dto.GrantUsd <= 0)
+                return new ApiErrorResult(400, "ai_credit_amount_invalid", "The credit amount must be positive.");
+
+            var providerCode = dto.ProviderCode.Trim().ToLowerInvariant();
+            if (!await db.AiProviders.AsNoTracking().AnyAsync(p => p.Code == providerCode, ct))
+                return new ApiErrorResult(400, "ai_credit_provider_unknown", $"Provider '{providerCode}' does not exist. Add it under Providers and keys first.");
+
+            var now = DateTimeOffset.UtcNow;
+            var actor = Actor(http);
+            var grant = new AiCreditGrant
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ProviderCode = providerCode,
+                GrantUsd = dto.GrantUsd,
+                StartsAt = dto.StartsAt ?? now,
+                Note = string.IsNullOrWhiteSpace(dto.Note) ? null : dto.Note!.Trim()[..Math.Min(512, dto.Note!.Trim().Length)],
+                CreatedByAdminId = actor.Id,
+                CreatedByAdminName = actor.Name,
+                CreatedAt = now,
+            };
+            db.AiCreditGrants.Add(grant);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = actor.Id,
+                ActorName = actor.Name,
+                Action = "AiCreditGrantCreated",
+                ResourceType = "AiConfig",
+                ResourceId = grant.Id,
+                Details = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    provider = grant.ProviderCode,
+                    grantUsd = grant.GrantUsd,
+                    startsAt = grant.StartsAt,
+                    note = grant.Note,
+                }, AiPipelineJson.Options),
+            });
+            await db.SaveChangesAsync(ct);
+
+            // Drop the 60s cache so the panel shows the new grant immediately.
+            overview.InvalidateCache();
+            return Results.Ok(new { grant.Id, grant.ProviderCode, grant.GrantUsd, grant.StartsAt });
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapDelete("/credit-grants/{id}", async (
+            string id,
+            LearnerDbContext db,
+            HttpContext http,
+            IAiPipelineOverviewService overview,
+            CancellationToken ct) =>
+        {
+            var grant = await db.AiCreditGrants.FirstOrDefaultAsync(g => g.Id == id, ct);
+            if (grant is null) return Results.NotFound();
+            var now = DateTimeOffset.UtcNow;
+            var actor = Actor(http);
+            db.AiCreditGrants.Remove(grant);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = actor.Id,
+                ActorName = actor.Name,
+                Action = "AiCreditGrantDeleted",
+                ResourceType = "AiConfig",
+                ResourceId = grant.Id,
+                Details = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    provider = grant.ProviderCode,
+                    grantUsd = grant.GrantUsd,
+                    startsAt = grant.StartsAt,
+                }, AiPipelineJson.Options),
+            });
+            await db.SaveChangesAsync(ct);
+            overview.InvalidateCache();
+            return Results.NoContent();
+        }).RequireRateLimiting("PerUserWrite");
+
         return app;
     }
 
@@ -265,4 +361,6 @@ public static class AiPipelineAdminEndpoints
     public sealed record RollbackDto(int ToVersion, int ExpectedVersion, string? Reason);
 
     public sealed record RestoreDto(int ExpectedVersion, string? Reason);
+
+    public sealed record CreditGrantDto(string ProviderCode, decimal GrantUsd, DateTimeOffset? StartsAt, string? Note);
 }

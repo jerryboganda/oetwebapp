@@ -2529,6 +2529,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.WritingQaFault>();
 // Claude-5x→Codex selector behind the six writing feature codes.
 builder.Services.AddSingleton<OetLearner.Api.Services.Writing.IWritingSubscriptionQuotaService,
     OetLearner.Api.Services.Writing.WritingSubscriptionQuotaService>();
+// AI Pipeline Control Center phase 2 (owner directive 2026-10-09): codex sidecar gauge + usage/cost overview.
+builder.Services.AddSingleton<OetLearner.Api.Services.Writing.ICodexSubscriptionQuotaService,
+    OetLearner.Api.Services.Writing.CodexSubscriptionQuotaService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.AiPipeline.IAiPipelineOverviewService,
+    OetLearner.Api.Services.AiPipeline.AiPipelineOverviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubscriptionSelector,
     OetLearner.Api.Services.Writing.WritingSubscriptionSelector>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
