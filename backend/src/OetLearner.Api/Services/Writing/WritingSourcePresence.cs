@@ -87,7 +87,7 @@ internal static class WritingSourcePresenceEngine
         @"jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
 
     private static readonly Regex LatexDegree = new(@"\^?\s*\{?\\circ\}?", Opts);
-    private static readonly Regex DegreeCelsiusSign = new(@"°\s*c(?![a-z])", Opts);
+    private static readonly Regex DegreeCelsiusSign = new(@"°[ \t]*c(?![a-z])", Opts);
     private static readonly Regex DegreeCelsiusWord = new(@"deg(?:rees?)?\.?\s*(?:c|celsius)(?![a-z])", Opts);
     private static readonly Regex DegreeWord = new(@"\bdegrees?\b", Opts);
     private static readonly Regex DobToken = new(@"\b(?:d\s?\.?\s?o\s?\.?\s?b|date\s+of\s+birth|birth\s*date|born)\b\.?", Opts);
@@ -147,13 +147,24 @@ internal static class WritingSourcePresenceEngine
     private static readonly Regex AgePhrase = new(@"\baged\s+\d{1,3}\b|\b\d{1,3}[\s-]*(?:years?|yrs?)[\s-]*old\b|\b\d{1,3}\s*y\.?o\.?(?!\w)", Opts);
     private static readonly Regex AgeWords = new(@"\b(?:age|ages|aged|old|years?|yrs?|y\.?o\.?)(?!\w)", Opts);
 
+    // An age or a duration/interval word anywhere in the message, or in the quote outside a DOB claim's age phrase, is a
+    // claim about something this class does not prove: the finding stays.
+    private static readonly Regex AgeOrDuration = new(
+        @"\b(?:aged?|old|years?|yrs?|y\.?o\.?|months?|weeks?|days?|hours?|decades?|once|twice|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred)(?!\w)",
+        Opts);
+
+    // A qualifier symbol changes the meaning of a value ("<90°", "~90°", "90°+") and is invisible to every other check.
+    // A minus sign directly before a digit (-10°) is a different value from 10°.
+    private static readonly Regex QualifierSymbol = new(@"[<>≤≥≈~±]|\d\s*(?:deg|degc|mmhg|bpm|kg|cm|mm)\s*\+|(?<![\w)])-\d", Opts);
+
     private static readonly Regex AlphaToken = new(@"[a-z]+", Opts);
     private static readonly Regex HorizontalSpace = new(@"[ \t]+", Opts);
     private static readonly Regex MmHg = new(@"\bmm\s*hg\b", Opts);
 
-    // A clause ends at punctuation or a connector; a colon is NOT a break ("DOB: 28 February 1968" keeps its label).
+    // A clause ends at punctuation or a connector; a colon is NOT a break ("DOB: 28 February 1968" keeps its label), and
+    // neither is "and"/"or" ("hip and knee flexion were 90°" names both joints; a following number empties the after-words).
     private static readonly Regex ClauseBreak = new(
-        @"[,;.()]|\b(?:and|but|while|whilst|whereas|then|which|although|though|with|or|vs|versus|than|also|plus|yet|so)\b", Opts);
+        @"[,;.()]|\b(?:but|while|whilst|whereas|then|which|although|though|with|vs|versus|than|also|plus|yet|so)\b", Opts);
     private static readonly Regex TrailingSide = new(@"^\s*\(\s*(?<s>right|left|rt|lt|r|l)\s*\)", Opts);
 
     private static readonly char[] LabelDelimiters = [',', ';', '(', ')', '[', ']'];
@@ -164,14 +175,13 @@ internal static class WritingSourcePresenceEngine
     // (not, without, increased, decreased) are deliberately NOT here: they change the meaning.
     private static readonly HashSet<string> Neutral = new(
         ("the and for are was were has had have with from that this which who whom but also been being then than into onto while "
-        + "her his she him they them their there here its our per via one two three may can could would should will shall does did doing "
+        + "her his she him he we us me my they them their there here its our per via does did doing re "
         + "of in on at to is by as or an so if it be "
         + "limited reduced restricted measured recorded noted documented reported found showed shows revealed demonstrated observed "
         + "assessed assessment examination exam range motion movement rom reading level value values result results "
-        + "aged old year years born dear patient patients mrs miss mr ms dr doctor presented presents presenting stated states "
+        + "aged dear patient patients mrs miss mr ms dr doctor presented presents presenting stated states "
         + "mentioned regarding "
-        + "january february march april june july august september october november december "
-        + "jan feb mar apr jun jul aug sep sept oct nov dec deg degc mmhg bpm kg cm mm mg mcg ml iu units unit").Split(' '),
+        + "deg degc mmhg bpm kg cm mm mg mcg ml iu units unit").Split(' '),
         StringComparer.Ordinal);
 
     // The vocabulary of an absence claim itself: it may appear in the message without being a fact the notes must carry.
@@ -180,7 +190,13 @@ internal static class WritingSourcePresenceEngine
         ("not never nowhere anywhere case notes note appear invented invent fabricated fabricate record documented document "
         + "present found listed list included include given give supported support traceable evidence basis source detail details "
         + "fact value figure claim letter candidate date dates birth also actually really seem unsupported untraceable "
-        + "absent missing made mention state contain show provide specify report").Split(' ').Select(Stem),
+        + "absent missing made mention state contain show provide specify report do no up nor any").Split(' ').Select(Stem),
+        StringComparer.Ordinal);
+
+    // Whose value it is: a relative's weight, blood pressure or date of birth is not the patient's.
+    private static readonly HashSet<string> RelationStems = new(
+        ("mother father husband wife son daughter partner spouse sister brother parent child sibling grandmother grandfather")
+            .Split(' ').Select(Stem),
         StringComparer.Ordinal);
 
     // A heading above a value ("Knee:" over "Active flexion 90°") names the joint, so it must agree with the letter.
@@ -218,22 +234,29 @@ internal static class WritingSourcePresenceEngine
             var qn = Normalise(q);
             var msg = Normalise(message);
 
+            // An age phrase in the Re: line of a DOB claim is not part of the claim; every other age, duration or
+            // number-word, and every qualifier symbol (<, ~, 90°+), keeps the finding.
+            var dobClaim = DobWord.IsMatch(msg);
+            var quoteChecked = dobClaim ? AgePhrase.Replace(qn, " ") : qn;
+            if (AgeOrDuration.IsMatch(quoteChecked) || AgeOrDuration.IsMatch(msg)) return false;
+            if (QualifierSymbol.IsMatch(quoteChecked) || QualifierSymbol.IsMatch(msg)) return false;
+
             // The facts the claim is about: those in the quote and those the message names. Anything that is not a date,
             // a range of movement or a vital sign (a dose, a percentage ...) is not provable here.
             var facts = FactsOf(qn);
             facts.UnionWith(FactsOf(msg));
             if (facts.Count == 0 || facts.Any(f => !IsProvable(f))) return false;
-            if (HasStrayDigits(qn) || HasStrayDigits(msg)) return false;
+            if (HasStrayDigits(quoteChecked) || HasStrayDigits(msg)) return false;
 
             var sourceWords = new HashSet<string>(AlphaToken.Matches(source).Select(m => Stem(m.Value)), StringComparer.Ordinal);
-            if (!WordsExplained(qn, sourceWords)) return false;
+            if (!WordsExplained(DateAny.Replace(quoteChecked, " "), sourceWords)) return false;
 
-            var dobClaim = DobWord.IsMatch(msg);
             var labels = new HashSet<string>(StringComparer.Ordinal);
             var proofs = new List<string>();
             foreach (var raw in sentences)
             {
                 var sentence = Normalise(raw);
+                if (QualifierSymbol.IsMatch(sentence)) return false;
                 if (!facts.IsSubsetOf(FactsOf(sentence))) return false;
                 var letterEvents = EventTagsOf(sentence);
                 foreach (var fact in facts)
@@ -249,7 +272,7 @@ internal static class WritingSourcePresenceEngine
             }
 
             // The message may name only what the proven source label names (a side, a joint, a measurement, DOB).
-            if (!MessageNamesOnly(msg, labels)) return false;
+            if (!MessageNamesOnly(DateAny.Replace(msg, " "), labels)) return false;
 
             var joined = string.Join(" | ", proofs);
             evidence = joined.Length > 200 ? joined[..200] : joined;
@@ -317,7 +340,7 @@ internal static class WritingSourcePresenceEngine
         foreach (Match m in AlphaToken.Matches(quoteNormalised))
         {
             var word = m.Value;
-            if (word.Length < 3 || word == "dob" || Neutral.Contains(word)) continue;
+            if (word.Length < 2 || word == "dob" || Neutral.Contains(word)) continue;
             if (!sourceWords.Contains(Stem(word))) return false;
         }
 
@@ -327,8 +350,7 @@ internal static class WritingSourcePresenceEngine
     /// <summary>A number that is not part of a proved date or measurement (a duration, a count, a dose) keeps the finding.</summary>
     private static bool HasStrayDigits(string text)
     {
-        var s = AgePhrase.Replace(text, " ");
-        s = DateAny.Replace(s, " ");
+        var s = DateAny.Replace(text, " ");
         s = NumUnit.Replace(s, " ");
         return s.IndexOfAny(Digits) >= 0;
     }
@@ -339,7 +361,7 @@ internal static class WritingSourcePresenceEngine
         foreach (Match m in AlphaToken.Matches(messageNormalised))
         {
             var word = m.Value;
-            if (word.Length < 3 && word is not ("r" or "l")) continue;
+            if (word.Length < 2 && word is not ("r" or "l")) continue;
             if (word == "dob" || Neutral.Contains(word)) continue;
             var stem = Stem(word);
             if (CueStems.Contains(stem) || labels.Contains(stem)) continue;
@@ -366,7 +388,6 @@ internal static class WritingSourcePresenceEngine
         // Every place the letter states this date must be backed by a source date with the same label.
         foreach (var hit in inLetter)
         {
-            if (!ClauseExplained(sentence, hit.Index, hit.Length, sourceWords)) return false;
             var letterLabel = ClauseWords(sentence, hit.Index, hit.Length);
             if (dobClaim) letterLabel.Add("dob");
             var found = false;
@@ -377,6 +398,9 @@ internal static class WritingSourcePresenceEngine
                     var (label, events) = SourceInfo(lines, i, sourceHit.Index, sourceHit.Length, 1);
                     if (!LabelAgrees(label, letterLabel)) continue;
                     if (!label.Contains("dob") && !events.SetEquals(letterEvents)) continue;
+                    // The words around the date must be on THIS source line (or its heading), not merely somewhere in the notes;
+                    // a DOB line is checked against the whole notes (the Re: line names live on another line).
+                    if (!ClauseExplained(sentence, hit.Index, hit.Length, label.Contains("dob") ? sourceWords : LineWords(lines, i))) continue;
                     labels.UnionWith(label);
                     proof = lines[i].Trim();
                     found = true;
@@ -406,7 +430,6 @@ internal static class WritingSourcePresenceEngine
 
         foreach (var hit in inLetter)
         {
-            if (!ClauseExplained(sentence, hit.Index, hit.Length, sourceWords)) return false;
             var letterLabel = ClauseWords(sentence, hit.Index, hit.Length);
             var found = false;
             for (var i = 0; i < lines.Length && !found; i++)
@@ -422,6 +445,8 @@ internal static class WritingSourcePresenceEngine
                 {
                     var (label, events) = SourceInfo(lines, i, index, length, unit == "deg" ? 2 : 1);
                     if (!LabelAgrees(label, letterLabel) || !events.SetEquals(letterEvents)) continue;
+                    // Every identity word of the letter's clause must be on THIS source line (or its heading).
+                    if (!ClauseExplained(sentence, hit.Index, hit.Length, LineWords(lines, i))) continue;
                     labels.UnionWith(label);
                     proof = lines[i].Trim();
                     found = true;
@@ -435,12 +460,27 @@ internal static class WritingSourcePresenceEngine
         return true;
     }
 
-    /// <summary>The source label is fully covered by the letter's clause and the letter names no side the source does
-    /// not. A source value with no usable label proves nothing.</summary>
+    /// <summary>The stemmed words of a source line plus its heading line (the nearest digit-free line above).</summary>
+    private static HashSet<string> LineWords(string[] lines, int lineIndex)
+    {
+        var words = new HashSet<string>(AlphaToken.Matches(lines[lineIndex]).Select(m => Stem(m.Value)), StringComparer.Ordinal);
+        for (var j = lineIndex - 1; j >= 0; j--)
+        {
+            if (lines[j].Trim().Length == 0) continue;
+            if (!lines[j].Any(char.IsDigit)) words.UnionWith(AlphaToken.Matches(lines[j]).Select(m => Stem(m.Value)));
+            break;
+        }
+
+        return words;
+    }
+
+    /// <summary>The source label is fully covered by the letter's clause, the letter names no side or joint the source label
+    /// does not, and a DOB claim meets a DOB label. A source value with no usable label proves nothing.</summary>
     private static bool LabelAgrees(HashSet<string> sourceLabel, HashSet<string> letterLabel)
     {
         if (sourceLabel.Count == 0 || !sourceLabel.IsSubsetOf(letterLabel)) return false;
         if (letterLabel.Contains("dob") && !sourceLabel.Contains("dob")) return false;
+        if (letterLabel.Any(w => AnatomyStems.Contains(w) && !sourceLabel.Contains(w))) return false;
         return SidesOf(letterLabel).IsSubsetOf(SidesOf(sourceLabel));
     }
 
@@ -474,20 +514,31 @@ internal static class WritingSourcePresenceEngine
         }
 
         // "Vitals: Temp 37.8" - a colon that has label words after it ends the section prefix; "Knee: 90" keeps "Knee".
+        // The prefix still binds the value when it names a side, a joint, a relative or an event ("R knee: flexion 90").
+        var prefix = string.Empty;
         var colon = before.LastIndexOf(':');
-        if (colon > cut && AlphaToken.IsMatch(before[(colon + 1)..])) cut = colon;
+        if (colon > cut && AlphaToken.IsMatch(before[(colon + 1)..]))
+        {
+            cut = colon;
+            prefix = before[..colon];
+        }
 
         var segment = cut >= 0 ? before[(cut + 1)..] : before;
         var breaks = ClauseBreak.Matches(segment);
         if (breaks.Count > 0) segment = segment[(breaks[breaks.Count - 1].Index + breaks[breaks.Count - 1].Length)..];
 
         var words = ContentWords(segment);
+        if (prefix.Length > 0)
+        {
+            words.AddRange(ContentWords(prefix).Where(w => w is "right" or "left" || AnatomyStems.Contains(w) || RelationStems.Contains(w)));
+        }
+
         var afterRaw = line[(index + length)..];
         var tailEnd = afterRaw.IndexOfAny(Digits);
         var tail = tailEnd >= 0 ? afterRaw[..tailEnd] : afterRaw;
         var side = TrailingSide.Match(afterRaw);
         if (side.Success) words.Add(Stem(side.Groups["s"].Value));
-        var events = EventTagsOf(segment + " " + tail);
+        var events = EventTagsOf(prefix + " " + segment + " " + tail);
 
         var heading = string.Empty;
         for (var j = lineIndex - 1; j >= 0; j--)
@@ -514,7 +565,12 @@ internal static class WritingSourcePresenceEngine
         events.UnionWith(EventTagsOf(heading));
 
         var label = new HashSet<string>(words, StringComparer.Ordinal);
-        if (label.Contains("dob")) label = new HashSet<string>(["dob"], StringComparer.Ordinal);
+        // A DOB line reduces to DOB (the names on it are checked against the Re: line elsewhere), but never loses whose DOB it is.
+        if (label.Contains("dob"))
+        {
+            label = new HashSet<string>(label.Where(w => w == "dob" || RelationStems.Contains(w)), StringComparer.Ordinal);
+        }
+
         if (label.Count(w => w is not ("right" or "left")) < minimumWords) label.Clear();
         return (label, events);
     }
@@ -567,7 +623,7 @@ internal static class WritingSourcePresenceEngine
         foreach (Match m in AlphaToken.Matches(ClauseText(text, index, length)))
         {
             var word = m.Value;
-            if ((word.Length < 3 && word is not ("r" or "l")) || word == "dob" || Neutral.Contains(word)) continue;
+            if ((word.Length < 2 && word is not ("r" or "l")) || word == "dob" || Neutral.Contains(word)) continue;
             if (!sourceWords.Contains(Stem(word))) return false;
         }
 
@@ -635,7 +691,7 @@ internal static class WritingSourcePresenceEngine
         {
             if (CanonNumber(m.Groups["n"].Value) != number) continue;
             var withUnit = NumUnit.Match(line[m.Index..]);
-            if (withUnit.Success && withUnit.Index == 0 && !withUnit.Groups["u"].Value.StartsWith("deg", StringComparison.OrdinalIgnoreCase)) continue;
+            if (withUnit.Success && withUnit.Index == 0 && !string.Equals(withUnit.Groups["u"].Value, "deg", StringComparison.OrdinalIgnoreCase)) continue;
             list.Add((m.Index, m.Length));
         }
 
