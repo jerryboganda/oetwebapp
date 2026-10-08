@@ -169,6 +169,8 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'address_content_unsupported',
   // Cross-model audit (2026-09-17, OA6-02): Model Answer only.
   'request_action_unsupported',
+  // Medication-frequency source fidelity (2026-10-09): source-gated, Model Answer Critical.
+  'medication_frequency_source_mismatch',
 ]);
 
 /** Writing rules with a deterministic detector (frozen, see above). */

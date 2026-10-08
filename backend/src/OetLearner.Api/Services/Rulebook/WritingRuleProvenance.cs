@@ -158,6 +158,11 @@ public static class WritingRuleProvenance
             // Model Answer only, so never score-bearing for a candidate.
             ["request_action_unsupported"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.CoachingOnly),
 
+            // --- Medication-frequency source fidelity (9 Oct 2026) ---
+            // Model Answer Critical. For a candidate it is a coaching note at most: the grader judges the
+            // MEANING of a frequency against the original case notes, never an automatic score penalty.
+            ["medication_frequency_source_mismatch"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.CoachingOnly),
+
             // --- Owner Clarifications Addendum TWO (14 Sep 2026), OA2-01..OA2-20 ---
             // OA2-20 is the firewall: the strict canonical requirements in this
             // block (background paragraph position, the exact contact template,

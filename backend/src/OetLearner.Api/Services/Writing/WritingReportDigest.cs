@@ -124,7 +124,7 @@ public static class WritingReportDigest
         Add("sign_off", "signoff_designation_present", "signoff_no_invented_name", "yours_sincerely_capitalisation", "yours_sincerely_vs_faithfully", "role_salutation_matches_task", "salutation_last_name_only", "salutation_re_adjacent", "salutation_re_same_line");
         Add("spacing", "blank_line_after_re_line", "blank_line_between_paragraphs", "blank_before_closing_phrase", "date_blank_line_sandwich", "letter_paragraph_count", "min_body_paragraphs", "visit_paragraphization_check", "background_paragraph_placement", "letter_structure_order");
         Add("register", "emotional_wording", "judgmental_labels", "register_colloquial", "no_contractions", "no_asap_in_letter", "non_medical_no_jargon");
-        Add("medication", "medication_list_punctuation", "medication_passive_grammar", "medication_frequency_conflict");
+        Add("medication", "medication_list_punctuation", "medication_passive_grammar", "medication_frequency_conflict", "medication_frequency_source_mismatch");
         return map;
     }
 

@@ -155,6 +155,8 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<Wr
         "address_content_unsupported",
         // Cross-model audit (17 Sep 2026, OA6-02): Model-Answer-only id.
         "request_action_unsupported",
+        // Medication-frequency source fidelity (owner directive, 9 Oct 2026): source-gated, Model Answer Critical.
+        "medication_frequency_source_mismatch",
     };
 
     // Severity defaults for the always-on builtin battery below. Values are
@@ -302,6 +304,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<Wr
         ["re_line_age_when_no_dob"] = RuleSeverity.Major,
         ["address_content_unsupported"] = RuleSeverity.Major,
         ["request_action_unsupported"] = RuleSeverity.Critical,
+        ["medication_frequency_source_mismatch"] = RuleSeverity.Critical,
     };
 
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
@@ -741,6 +744,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<Wr
         "re_line_age_when_no_dob" => DetectSaG7ReLineAgeWhenNoDob,
         "address_content_unsupported" => DetectSaG7AddressContentUnsupported,
         "request_action_unsupported" => DetectCmaRequestActionUnsupported,
+        "medication_frequency_source_mismatch" => DetectMedicationFrequencySourceMismatch,
         _ => null,
     };
 
@@ -1426,19 +1430,36 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<Wr
         if (!rule.Params.HasValue || !rule.Params.Value.TryGetProperty("map", out var mapEl)) yield break;
         var severity = input.IsModelAnswer ? ModeSeverity(input, rule.Severity) : RuleSeverity.Minor;
         var verb = input.IsModelAnswer ? "Translate" : "Consider translating";
-        foreach (var prop in mapEl.EnumerateObject())
+        // The rule's own map plus the owner glossary extras (QD, QOD, ... — 9 Oct 2026) that no rulebook map lists.
+        var entries = mapEl.EnumerateObject().Select(p => (Name: p.Name, English: p.Value.GetString() ?? "")).ToList();
+        foreach (var extra in ClinicalAbbreviationGlossary.ExpansionExtras)
+        {
+            if (!entries.Any(e => string.Equals(e.Name, extra.Token, StringComparison.OrdinalIgnoreCase)))
+                entries.Add((extra.Token, extra.English));
+        }
+        foreach (var (name, english) in entries)
         {
             // Optometry writes OD / OS / OU for the right eye, left eye and both eyes. Reading
             // those as "once a day" would fail a correct optometry letter, so the eye abbreviations
             // stand down for that profession — the frequency tokens (prn, bd, tds, ...) still apply.
-            if (IsEyeLateralityToken(prop.Name) && input.Profession == ExamProfession.Optometry) continue;
-            var re = new Regex($@"(?<![A-Za-z]){Regex.Escape(prop.Name)}(?![A-Za-z])", RegexOptions.IgnoreCase);
-            var m = re.Match(s.Body);
-            if (m.Success)
+            var isOd = IsEyeLateralityToken(name);
+            if (isOd && input.Profession == ExamProfession.Optometry) continue;
+            // A token is never the start of a longer dotted one ("q.d" inside "q.d.s", "o.d" inside "q.o.d"):
+            // QD, QDS, QID and QOD are different instructions and must never be read as each other.
+            var re = new Regex($@"(?<![A-Za-z])(?<![A-Za-z]\.){Regex.Escape(name)}(?![A-Za-z])(?!\.[A-Za-z])", RegexOptions.IgnoreCase);
+            Match? m = null;
+            foreach (Match candidate in re.Matches(s.Body))
+            {
+                // OD beside an eye cue is the right eye (oculus dexter), not "once a day".
+                if (isOd && ClinicalAbbreviationGlossary.IsEyeContext(s.Body, candidate.Index)) continue;
+                m = candidate;
+                break;
+            }
+            if (m is not null)
                 yield return new LintFinding(rule.Id, severity,
-                    $"{verb} the prescription abbreviation \"{prop.Name}\" into plain English (\"{prop.Value.GetString()}\").",
+                    $"{verb} the prescription abbreviation \"{name}\" into plain English (\"{english}\").",
                     Quote: m.Value, Start: m.Index, End: m.Index + m.Length,
-                    FixSuggestion: prop.Value.GetString());
+                    FixSuggestion: english);
         }
         // "q6h" / "q 8 h" style shorthand is not a fixed token list, so it is matched by shape.
         foreach (Match m in LatinEveryNHoursRe.Matches(s.Body))
@@ -1457,7 +1478,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader, ILogger<Wr
     // Only "od" is ambiguous: omni die (once a day) in a prescription, oculus dexter (right eye) in
     // optometry. "os"/"ou" are eye terms only and are not in the frequency map at all.
     private static bool IsEyeLateralityToken(string token) =>
-        token.Equals("od", StringComparison.OrdinalIgnoreCase);
+        token.Replace(".", "").Equals("od", StringComparison.OrdinalIgnoreCase);
 
     private static string SpellSmallNumber(string digits) => digits switch
     {

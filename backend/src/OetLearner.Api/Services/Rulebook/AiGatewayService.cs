@@ -1904,6 +1904,9 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             sb.AppendLine(ctx.Task == AiTaskMode.GenerateContent
                 ? WritingRev8HouseStyle.ModelAnswerCanonicalRules
                 : WritingRev8HouseStyle.CandidateGradingRules);
+            // Owner directive 9 Oct 2026: one shared clinical glossary + source-truth rules for the generator,
+            // semantic validator (GenerateContent), grader (Score) and reviewer (ReviewWriting) alike.
+            sb.AppendLine(ClinicalAbbreviationGlossary.PromptSection(ctx.Task == AiTaskMode.GenerateContent));
         }
         sb.AppendLine();
     }

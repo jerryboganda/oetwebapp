@@ -226,6 +226,7 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["address_content_unsupported"] = Layout,
             // Cross-model audit (17 Sep 2026, OA6) — Model Answer only.
             ["request_action_unsupported"] = Content,
+            ["medication_frequency_source_mismatch"] = Content,
         };
 
     /// <summary>

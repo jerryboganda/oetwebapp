@@ -122,8 +122,41 @@ The 180–200-word body cap means selection is a tested skill: **do NOT copy eve
 | HARD GLOBAL RULE: one functional request, never in both the introduction and the closure (OA6-01, judged by request concept, not wording) | intro "request follow-up of close contacts" + closure "contact close family and friends, ..."; intro "request your ongoing care pending outpatient endocrinological review" + closure "monitor Mrs Meadows's symptoms and electrolytes until her endocrinologist's appointment"; intro "for regular wound dressing" + closure "... for dressing changes"; intro "request your psychiatric assessment" + closure "confirm the diagnosis and provide further management" | the closure carries one DISTINCT source-supported step: "advise Ms Garcia's close contacts on prompt medical attention and observation, and consider chemoprophylaxis"; "encourage Mrs Meadows to attend her endocrinologist's appointment"; "visit Ms Sorocco daily for the first week and then once or twice weekly"; "provide further management"; "clarify the possible diagnosis" and "arrange bronchoscopy and biopsy to establish the diagnosis" remain correct |
 | The closure requests only what the case notes plan (OA6-02) | "monitor Mrs Meadows's symptoms and electrolytes" when no case-note line plans that monitoring (a recorded result such as "Electrolytes: low sodium, high potassium" is not a plan) | request an action the notes plan: "arrange ... haemoglobin testing and INR monitoring" when the notes say "Haemoglobin should be checked" / "Refer to Queensland Medical Laboratory for INR monitoring" |
 | A tablet count before the strength is one medication item (OA5 row + parser fix, 17 Sep 2026) | (validator used to read "two" as a drug name) | "Glipizide, two 5 mg tablets each morning, was continued." |
+| QD and QOD are never written as abbreviations (owner, 9 Oct 2026; medication safety: QD is misread as QID) | "indapamide, 2.5 mg QD" / "warfarin, 5 mg q.o.d." | "indapamide, 2.5 mg once daily" / "warfarin, 5 mg every other day" |
+| A medication frequency equals the case notes' frequency, by meaning (owner, 9 Oct 2026; Daniels) | the scan reads "Indapamide 2.5mg 1q.d." (once daily) and the answer says "indapamide, 2.5 mg four times daily" | "indapamide, 2.5 mg once daily". QD = once daily, QID = QDS = four times daily, QOD = every other day, Q6H = every six hours (NOT four times daily) |
 
 Grounding note: premium wording still grounds — "fatigue, stress and lethargy" maps to case notes saying "tired, stressed and sluggish" (proven in production). Grounding is sentence-level traceability, not verbatim copying.
+
+## 4A. CLINICAL ABBREVIATIONS AND SOURCE TRUTH (owner directive, 9 Oct 2026)
+
+One permanent glossary, `ClinicalAbbreviationGlossary` (`Services/Rulebook/ClinicalAbbreviationGlossary.cs`), serves the Model Answer generator and validator, the candidate grader and the reviewer. `AiGatewayService` appends its `PromptSection` (guardrail 12) to every Writing system prompt, so no assessor depends on conversational memory. Capitalisation, dots and spacing vary (QD = Q.D. = q.d. = qd); two tokens are never fuzzy-matched to each other.
+
+| Frequency | Meaning | | Administration | Meaning |
+|---|---|---|---|---|
+| QD / q.d. (quaque die) | once daily | | AC (ante cibum) | before meals |
+| QID / q.i.d. (quater in die) | four times daily | | PC (post cibum) | after meals (also "presenting complaint") |
+| QDS (quater die sumendum) | four times daily | | PO (per os) | orally |
+| QOD / q.o.d. (quaque altera die) | every other day | | SL | sublingually |
+| OD / o.d. (omni die) | once daily, **or right eye** | | IV | intravenously |
+| BD / BID | twice daily | | IM | intramuscularly |
+| TDS / TID | three times daily | | SC | subcutaneously |
+| OM / mane | every morning | | | |
+| nocte | every night | | | |
+| HS / qHS | at bedtime | | | |
+| PRN (pro re nata) | as needed | | | |
+| STAT (statim) | immediately | | | |
+| SOS (si opus sit) | if necessary | | | |
+| Q4H / Q6H / Q8H | every four / six / eight hours | | | |
+
+1. **Never confuse** QD (once daily), QID and QDS (four times daily) and QOD (every other day). An interval (Q6H) is not a count (QDS).
+2. **OD depends on context:** omni die beside an oral dose; oculus dexter in ophthalmology/optometry or beside eye drops, OS or OU. The validator treats OD next to an eye cue as laterality (no frequency, no Latin finding); an undecided OD is reported, never guessed.
+3. **Original case notes are the primary source of truth** for medicine, dose, frequency and route; history and diagnoses; symptoms, findings and results; dates and timelines; allergies and adverse reactions; actions completed versus still required; recipient and purpose. A Model Answer never overrides them, and a grader never penalises a clinically correct candidate wording that merely differs from the Model Answer. When the extracted note list and the original page disagree, the original page wins and the discrepancy is reported.
+4. **Completed versus required:** "Notify the patient's doctor" is a pending action; "the patient's doctor has already been notified" is a completed one. Never turn one into the other and never invent an action the notes do not record (prompt-level for the generator, semantic validator, grader and reviewer; there is no deterministic detector for this).
+5. **Unclear or poorly scanned abbreviation:** never guess (QD is not QID because of a faint scan or an OCR slip). Check the page image/PDF; if unresolved, say so for owner review. The Daniels slip was exactly this: the scan reads `1q.d.` and the transcribed note said "four times daily".
+6. **Detectors:** `medication_frequency_source_mismatch` (Model Answer Critical, source-gated on the canonical case notes; a candidate lane, if a caller ever supplies notes, gets a Minor coaching note only) and `latin_abbreviations_translated` (now also qd, q.d., o.d., qod, q.o.d., qhs, sos; never reads "q.d" inside "q.d.s" or "o.d" inside "q.o.d"; skips OD beside an eye cue). Meaning, not spelling: every frequency the notes give a medicine counts, and a letter is wrong only when its frequency matches none of them; once daily / every morning / at night / at bedtime are one family but morning versus night conflict. Ceiling: only the first frequency after a medicine mention is judged, brand/generic pairs are matched by the same word only, and the total daily dose in "1500 mg daily divided every eight hours" is not a frequency.
+7. **Not bumped on purpose:** `ValidatorVersion` was NOT changed (a bump hides every stored Model Answer until re-import). The detector applies to every new validation, import and revalidation; the stored answers were audited once (Sept 21 production snapshot, 224 answers: one mismatch, Pharmacy "ADR report re Mrs Daniels", whose answer must be repaired to "once daily" and re-imported with `includeSemantic: false`).
+
+Owner manual QA matrix for this rule (no automated QA exists, see AGENTS.md): case notes `Indapamide 2.5mg 1q.d.` with the letter "four times daily" must be held, "once daily" must pass; the same for QID/QDS ("four times daily" passes, "once daily" is held), QOD ("every other day" passes, "daily" is held), BD ("twice daily"), TDS ("three times daily"), PRN ("as needed"), `1noct` ("at night"), and a medication table line `Nitrazepam 5mg 1noct`. A letter that contains "QD" or "q.o.d." must be held by `latin_abbreviations_translated`.
 
 ## 5. DETECTOR ↔ RULE MAP (as of 17 Sep 2026, cross-model audit — validator `writing-rules.cross-profession.2026-09-18.1`)
 
@@ -168,7 +201,8 @@ Grounding note: premium wording still grounds — "fatigue, stress and lethargy"
 | Note-form medication voice | `medication_passive_grammar` |
 | Smoking/drinks daily frequency | `lifestyle_frequency_precision` |
 | Colloquial/vague/judgmental wording (incl. "for a long time", "appeared anxious") | `register_colloquial` — **no case-notes exemption by design** |
-| Latin abbreviations (incl. nocte, mane) | `latin_abbreviations_translated` |
+| Latin abbreviations (incl. nocte, mane; QD, QOD, o.d., qhs, sos since 9 Oct 2026) | `latin_abbreviations_translated` |
+| Medication frequency equals the case notes' frequency (9 Oct 2026, section 4A) | `medication_frequency_source_mismatch` (Model Answer Critical; source-gated; `WritingRuleEngine.MedicationFrequency.cs`) |
 | Dose/list syntax (ranges, ratios, semicolons) | `medication_list_punctuation` + `MedicationItemRe` |
 | Minor/adult naming (age attribution) | `WritingPatientAgeExtractor` (relatives' ages never classify the patient); for Model Answers the DOB-derived age at the letter date decides (0-17 child, 18 adult) before any naming detector runs, and `minor_naming_convention` also flags a titled child reference in the body |
 | OA3-01 introduction full-name freedom | `body_uses_last_name_only` (intro free; post-introduction recurrence fires) |
