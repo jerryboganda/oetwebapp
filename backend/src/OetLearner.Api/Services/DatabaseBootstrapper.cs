@@ -760,7 +760,7 @@ public static class DatabaseBootstrapper
     }
 
     private static string QuoteIdentifier(string identifier)
-        => $"\"{identifier.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+        => "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 
     private static string? GetQualifiedTableName(IEntityType? entityType)
     {
