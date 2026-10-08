@@ -38,7 +38,16 @@ public sealed record CompanionScoreProposal(
     int? Speaking,
     DateOnly? TestDate,
     string Source,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    /// <summary>
+    /// F-077. True when these are the learner's OFFICIAL result rather than a mock or
+    /// a practice score. This is the difference between two very different turns: a
+    /// mock updates the trend, whereas an official result closes the journey and
+    /// decides whether a resit plan is needed. Defaults to false so an unlabelled
+    /// import is never silently treated as official — that would let a practice score
+    /// retire a real exam journey.
+    /// </summary>
+    bool IsOfficial = false);
 
 /// <summary>
 /// SAMI Wave 1 memory/planning tools. Every write tool goes through the confirm-before-save
@@ -61,7 +70,8 @@ public sealed class CompanionRecordScoresTool(
         "writing":{"type":"integer","minimum":100,"maximum":500},
         "speaking":{"type":"integer","minimum":100,"maximum":500},
         "test_date":{"type":"string","maxLength":10},
-        "source":{"type":"string","enum":["learner_reported","screenshot","result_pdf","admin"],"maxLength":24}
+        "source":{"type":"string","enum":["learner_reported","screenshot","result_pdf","admin"],"maxLength":24},
+        "is_official":{"type":"boolean","description":"True only when these are the learner's OFFICIAL OET result, not a mock or practice score. An official result closes the current journey and decides whether a resit plan is needed."}
       },
       "additionalProperties":false
     }
@@ -91,10 +101,12 @@ public sealed class CompanionRecordScoresTool(
         }
         var source = args.TryGetProperty("source", out var srcEl) && srcEl.ValueKind == JsonValueKind.String
             ? srcEl.GetString()! : "learner_reported";
+        var isOfficial = args.TryGetProperty("is_official", out var offEl)
+                         && offEl.ValueKind == JsonValueKind.True;
 
         var proposal = new CompanionScoreProposal(
             ctx.ThreadId!, ctx.TurnId!, listening, reading, writing, speaking, testDate, source,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow, isOfficial);
         store.Store(ctx.UserId!, ctx.ThreadId!, proposal);
 
         return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
@@ -107,6 +119,7 @@ public sealed class CompanionRecordScoresTool(
                 writing = proposal.Writing,
                 speaking = proposal.Speaking,
                 test_date = proposal.TestDate?.ToString("yyyy-MM-dd"),
+                is_official = proposal.IsOfficial,
                 source = proposal.Source,
             },
             instruction = "Tell the learner exactly what you extracted and ask them to confirm before anything is saved. Only call companion_confirm_scores after they explicitly agree.",
@@ -143,12 +156,17 @@ public sealed class CompanionConfirmScoresTool(
                 "the learner must confirm in a later message before scores are saved");
 
         var saved = new List<string>();
+        // F-077. An OFFICIAL result is a different event from a mock: it is the one that
+        // closes a journey and decides whether a resit is needed. Recorded with its own
+        // kind so later reads can tell "my mock was 340" from "my real result was 340",
+        // which is the distinction the whole result-day answer rests on.
+        var kind = proposal.IsOfficial ? "official_result" : "score";
         async Task SaveSubtestAsync(string subtest, int? score)
         {
             if (score is null) return;
-            await memory.RecordAsync(ctx.UserId!, CompanionMemoryLayers.Learning, "score", subtest,
-                $"{subtest} score {score.Value}{(proposal.TestDate is { } d ? $" on {d:yyyy-MM-dd}" : "")} (source: {proposal.Source})",
-                JsonSerializer.Serialize(new { score = score.Value, testDate = proposal.TestDate, source = proposal.Source }),
+            await memory.RecordAsync(ctx.UserId!, CompanionMemoryLayers.Learning, kind, subtest,
+                $"{subtest} {(proposal.IsOfficial ? "OFFICIAL result" : "score")} {score.Value}{(proposal.TestDate is { } d ? $" on {d:yyyy-MM-dd}" : "")} (source: {proposal.Source})",
+                JsonSerializer.Serialize(new { score = score.Value, testDate = proposal.TestDate, source = proposal.Source, official = proposal.IsOfficial }),
                 "chat", ctx.ThreadId, DateTimeOffset.UtcNow, ct);
             saved.Add($"{subtest}={score.Value}");
         }
@@ -167,12 +185,80 @@ public sealed class CompanionConfirmScoresTool(
         proposals.Consume(ctx.UserId!, ctx.ThreadId!);
         var journey = await journeys.GetCurrentAsync(ctx.UserId!, ct);
 
+        // F-077 / F-078. On an OFFICIAL result, compare each score to the learner's OWN
+        // stated target and report the comparison. Deliberately no pass mark is invented:
+        // when the learner never set a target for a sub-test the verdict is "no target on
+        // file", not a defaulted threshold, because a fabricated official requirement is
+        // exactly what SAMI §4.2 forbids. The three buckets are therefore met / short /
+        // unknown, and the plan guidance differs for each.
+        object? result = null;
+        if (proposal.IsOfficial)
+        {
+            var targets = new Dictionary<string, int?>
+            {
+                ["listening"] = context.TargetListeningScore,
+                ["reading"] = context.TargetReadingScore,
+                ["writing"] = context.TargetWritingScore,
+                ["speaking"] = context.TargetSpeakingScore,
+            };
+            var scores = new Dictionary<string, int?>
+            {
+                ["listening"] = proposal.Listening,
+                ["reading"] = proposal.Reading,
+                ["writing"] = proposal.Writing,
+                ["speaking"] = proposal.Speaking,
+            };
+
+            var met = new List<string>();
+            var short_ = new List<object>();
+            var unknown = new List<string>();
+            foreach (var (subtest, score) in scores)
+            {
+                if (score is null) continue;
+                var target = targets[subtest];
+                if (target is null)
+                {
+                    unknown.Add(subtest);
+                    continue;
+                }
+                if (score.Value >= target.Value) met.Add(subtest);
+                else short_.Add(new { subtest, score = score.Value, target = target.Value, gap = target.Value - score.Value });
+            }
+
+            var isResit = short_.Count > 0;
+            var needTarget = unknown.Count > 0;
+
+            var guidance = isResit
+                ? "The learner fell short on at least one sub-test against their own target. Do NOT restart the whole course: build a recovery plan focused only on the short sub-tests, reusing their existing history and tutor feedback. Say plainly which sub-tests are short and by how many points."
+                : needTarget
+                    ? "Every recorded sub-test met its target where a target exists, but at least one sub-test has NO target on file, so you cannot call the overall outcome. Ask for the missing target(s) and say plainly that you will not assume one."
+                    : "Every recorded sub-test met the learner's own target. Say so plainly, and note that only a regulator or the exam board can confirm the official outcome — do not promise a pass.";
+
+            result = new
+            {
+                official = true,
+                targetSource = "learner's own stated target (F-005)",
+                met,
+                short = short_,
+                no_target_on_file = unknown,
+                outcome_by_own_target = isResit ? "short_on_at_least_one" : needTarget ? "incomplete_targets" : "met_all_recorded",
+                journeyClosureHint = isResit
+                    ? "A resit journey is warranted. Preserve the current journey so the learner can still compare what changed, then start a new one focused on the short sub-tests (companion_start_journey with focus_subtests)."
+                    : "Consider closing the current journey as passed once the learner agrees; do not close it silently.",
+                instruction = guidance,
+            };
+        }
+
         return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
         {
             status = "saved",
             saved,
+            isOfficial = proposal.IsOfficial,
             journey = new { id = journey.Id, label = journey.Label },
-            instruction = "Confirm what was saved, then explain what this means for the learner's priorities and plan.",
+            result,
+            instruction = proposal.IsOfficial
+                ? "Confirm what was saved, give the learner the comparison against their own target, then act on the result guidance."
+                : "Confirm what was saved, then explain what this means for the learner's priorities and plan.",
         }));
     }
 }

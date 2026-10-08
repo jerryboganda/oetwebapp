@@ -52,6 +52,23 @@ public sealed record CompanionTurnContext
 
     public string? TargetGrade { get; init; }
 
+    /// <summary>
+    /// Per-sub-test target scores from the learner's goal (F-005), e.g. 350 each.
+    ///
+    /// <para>
+    /// These exist so a result-day verdict can be computed from the learner's OWN
+    /// stated target rather than a generic pass mark, and so the companion never has
+    /// to ask "what were you aiming for?" about something already on file. A null
+    /// means the learner never set a target for that sub-test; the caller must treat
+    /// that as unknown rather than assuming a threshold, because inventing one would
+    /// be a fabricated official requirement (SAMI §4.2).
+    /// </para>
+    /// </summary>
+    public int? TargetListeningScore { get; init; }
+    public int? TargetReadingScore { get; init; }
+    public int? TargetWritingScore { get; init; }
+    public int? TargetSpeakingScore { get; init; }
+
     public string? TargetCountry { get; init; }
 
     /// <summary>`anonymous` | `free` | `trial` | `paid`.</summary>
