@@ -129,6 +129,9 @@ public static class ClinicalAbbreviationGlossary
     // "1500 mg daily divided every 8 hours": "daily" is the total daily dose, not the dosing frequency.
     private static readonly Regex TotalDailyDoseRe = new(@"^\s*,?\s*(?:in\s+)?(?:divided|split)", Opts);
 
+    // "weaned by 5 mg weekly": a rate of change, not a dosing frequency.
+    private static readonly Regex RateOfChangeRe = new(@"\bby\s+\d+(?:\.\d+)?\s*(?:mg|mcg|µg|g|IU|units?|mL|ml)\s*$", Opts);
+
     // OD is "right eye" beside an eye cue ("latanoprost 0.005% eye drops OD nocte"), never once daily there.
     private static readonly Regex EyeCueRe = new(
         @"\b(?:eyes?|ocular|ophthalm\w*|optom\w*|intra-?ocular|IOP|glaucoma|OS|OU|visual\s+acuity|spectacles?|intravitreal|latanoprost|timolol|brimonidine)\b", Opts);
@@ -166,6 +169,8 @@ public static class ClinicalAbbreviationGlossary
             foreach (Match m in re.Matches(text))
             {
                 var end = m.Index + m.Length;
+                var before = Math.Max(0, m.Index - 25);
+                if (RateOfChangeRe.IsMatch(text.Substring(before, m.Index - before))) continue;
                 if (key == OnceDaily && TotalDailyDoseRe.IsMatch(text.Substring(end, Math.Min(25, text.Length - end)))) continue;
                 all.Add(new FrequencyMention(key, m.Value, m.Index, m.Length, false));
             }

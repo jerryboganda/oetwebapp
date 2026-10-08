@@ -42,7 +42,7 @@ public sealed partial class WritingRuleEngine
 
     // The letter side also ends at a clause boundary, so the next clause's frequency never leaks in.
     private static readonly Regex MfClauseCut = new(
-        @"\b(?:was|were|has|have|had|is|are|and|but|before|after|until|then|later|when|while|being|which|who|whom)\b",
+        @"\b(?:was|were|has|have|had|is|are|will|would|should|can|could|may|and|but|before|after|until|then|later|when|while|being|which|who|whom|weaned|weaning|tapered|tapering|reduced|increased|decreased|switched|changed|stopped|ceased|discontinued)\b",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private const int MfWindowLength = 70;
