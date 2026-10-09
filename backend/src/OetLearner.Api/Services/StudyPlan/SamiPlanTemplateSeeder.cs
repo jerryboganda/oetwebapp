@@ -706,7 +706,10 @@ public class SamiPlanTemplateSeeder(LearnerDbContext db, ILogger<SamiPlanTemplat
             var isReadiness = w >= 8;
             var isPeak = w == 11;
 
-            var daily = new StudyPlanTemplateSlot[][];
+            // Assigned in full by every branch below, so no initializer is needed here.
+            // (`new StudyPlanTemplateSlot[][]` would be CS1586: array creation must have a
+            // size or an initializer.)
+            StudyPlanTemplateSlot[][] daily;
             if (isPeak)
             {
                 daily =
