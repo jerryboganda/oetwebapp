@@ -2536,6 +2536,14 @@ builder.Services.AddSingleton<OetLearner.Api.Services.AiPipeline.IAiPipelineOver
     OetLearner.Api.Services.AiPipeline.AiPipelineOverviewService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubscriptionSelector,
     OetLearner.Api.Services.Writing.WritingSubscriptionSelector>();
+// Subscription-account rotation (owner directive 2026-10-10): one container per account; the pool
+// permutes the hops of one engine group per run by remaining quota and never writes the saved order.
+builder.Services.Configure<OetLearner.Api.Services.AiPipeline.SubscriptionAccountPoolOptions>(
+    builder.Configuration.GetSection("SubscriptionPool"));
+builder.Services.AddSingleton<OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool,
+    OetLearner.Api.Services.AiPipeline.SubscriptionAccountPool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider,
+    OetLearner.Api.Services.AiPipeline.SubscriptionAccountStateProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubmissionService,
     OetLearner.Api.Services.Writing.WritingSubmissionService>();
 // Result-visibility config + learner-facing gated feedback (spec §15.2/§15.3, WS-B4 Section D/E).

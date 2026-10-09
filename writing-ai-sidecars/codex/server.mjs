@@ -11,13 +11,30 @@
 // persistence is unverified.
 
 import { createSidecarServer } from '../shared/http.mjs';
-import { AuthExpiredError, Mutex, cliError, errorText, loginProbe, parseJsonLines, runCli } from '../shared/engine.mjs';
+import {
+  AuthExpiredError,
+  Mutex,
+  SubscriptionUsageTracker,
+  cliError,
+  errorText,
+  isAccountFailure,
+  loginProbe,
+  parseJsonLines,
+  parseQuotaResetHint,
+  runCli,
+} from '../shared/engine.mjs';
 
 // Owner 2026-10-02: GPT-6.1 Sol High. The backend always sends the model; this is only the default.
 const MODEL = process.env.WRITING_CODEX_MODEL || 'gpt-6.1-sol';
 const EFFORT = (process.env.WRITING_CODEX_EFFORT || 'high').toLowerCase();
 const TIMEOUT_MS = Number(process.env.WRITING_CLI_TIMEOUT_MS || 300000);
 const mutex = new Mutex();
+// This container is ONE ChatGPT Business account (owner directive 2026-10-10): its own credential
+// volume and its own counters. The backend rotates between the accounts from these numbers.
+const accountUsage = new SubscriptionUsageTracker({
+  fiveHourCap: Number(process.env.WRITING_CODEX_5H_TOKEN_CAP || 0),
+  weeklyCap: Number(process.env.WRITING_CODEX_WEEKLY_TOKEN_CAP || 0),
+});
 
 /** `codex login status` prints "Logged in using ChatGPT" (exit 0) or "Not logged in" (exit 1), a
  * local auth-file read. Anything else is unknown (null), never false. */
@@ -29,13 +46,6 @@ export function parseCodexLoginStatus({ code, stdout, stderr }) {
 }
 
 const login = loginProbe('codex', ['login', 'status'], parseCodexLoginStatus);
-
-const state = {
-  weekStartedAt: Date.now(),
-  requestsThisWeek: 0,
-  inputTokensThisWeek: 0,
-  outputTokensThisWeek: 0,
-};
 
 function buildPrompt(body) {
   const parts = [];
@@ -88,6 +98,8 @@ async function complete(body, { signal } = {}) {
         result.code !== 0 ? `codex exited ${result.code}` : 'codex error',
         errorText(result.stderr, ...errors),
       );
+      const failure = isAccountFailure(err);
+      if (failure !== null) accountUsage.noteFailure(failure, parseQuotaResetHint(err.message));
       if (err instanceof AuthExpiredError) login.failed();
       throw err;
     }
@@ -113,11 +125,9 @@ async function complete(body, { signal } = {}) {
     if (!text.trim()) throw new Error('codex returned empty completion');
 
     const inputTokens = Number(usage?.input_tokens ?? usage?.inputTokens ?? 0) || 0;
-    const outputTokens = Number(usage?.output_tokens ?? usage?.outputTokens ?? usage?.completion_tokens ?? 0) || 0;
+    const outputTokens = Number(usage?.output_tokens ?? usage?.completion_tokens ?? 0) || 0;
 
-    state.requestsThisWeek += 1;
-    state.inputTokensThisWeek += inputTokens;
-    state.outputTokensThisWeek += outputTokens;
+    accountUsage.record(inputTokens, outputTokens);
 
     // OpenAI chat.completion shape.
     return {
@@ -137,21 +147,26 @@ async function complete(body, { signal } = {}) {
   }, { signal });
 }
 
-async function usage() {
-  const cap = Number(process.env.WRITING_CODEX_WEEKLY_TOKEN_CAP || 0);
-  const used = state.inputTokensThisWeek + state.outputTokensThisWeek;
-  const utilisation = cap > 0 ? Math.min(1, used / cap) : null;
+async function usageSnapshot() {
+  const snapshot = accountUsage.snapshot();
+  const weekly = snapshot.windows.find((w) => w.label === 'weekly');
+  const cap = weekly?.cap ?? null;
   return {
     engine: 'codex',
     model: MODEL,
     effort: EFFORT,
-    source: 'estimated',
-    weekStartedAt: new Date(state.weekStartedAt).toISOString(),
-    requestsThisWeek: state.requestsThisWeek,
-    inputTokensThisWeek: state.inputTokensThisWeek,
-    outputTokensThisWeek: state.outputTokensThisWeek,
-    weeklyTokenCap: cap > 0 ? cap : null,
-    utilisation,
+    source: 'estimated', // subscription CLIs expose no official allowance counter
+    account: process.env.WRITING_ACCOUNT_LABEL || 'codex-primary',
+    requestsThisWeek: weekly?.requests ?? 0,
+    inputTokensThisWeek: weekly?.inputTokens ?? 0,
+    outputTokensThisWeek: weekly?.outputTokens ?? 0,
+    weeklyTokenCap: cap,
+    utilisation: weekly?.usedPct ?? null,
+    weekStartedAt: weekly?.windowStartedAt ?? null,
+    windows: snapshot.windows,
+    lastQuotaErrorAt: snapshot.lastQuotaErrorAt,
+    lastQuotaErrorKind: snapshot.lastQuotaErrorKind,
+    lastQuotaErrorResetsAt: snapshot.lastQuotaErrorResetsAt,
   };
 }
 
@@ -159,7 +174,7 @@ createSidecarServer({
   engineName: 'codex',
   completionPath: '/v1/chat/completions',
   onCompletion: complete,
-  onUsage: usage,
+  onUsage: usageSnapshot,
   lane: mutex,
   login,
   port: Number(process.env.PORT || 8080),

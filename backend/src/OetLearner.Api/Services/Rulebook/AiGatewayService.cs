@@ -63,7 +63,8 @@ public sealed class AiGatewayService(
     OetLearner.Api.Services.Ai.IAiCircuitBreakerStore? circuitBreaker = null,
     ILogger<AiGatewayService>? logger = null,
     ITypeSafeJudgmentService? judgments = null,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? judgmentOptions = null)
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? judgmentOptions = null,
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool? subscriptionAccountPool = null)
     : IAiGatewayService, IAiGatewayCoreExecutor
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
@@ -1342,6 +1343,17 @@ public sealed class AiGatewayService(
 
             var providerText = AiProviderErrorParser.SanitizeMessage(
                 providerError?.Message ?? (typed is null ? ex.Message : null), apiKey, headOnly: false);
+
+            // Subscription-account rotation (owner directive 2026-10-10): a real quota/auth answer from a
+            // subscription sidecar parks THAT account until its reset, so the next run starts on another
+            // account of the same engine group. Only the class and the provider code are used.
+            if (errorClass is AiProviderErrorClass.QuotaExhausted or AiProviderErrorClass.Auth
+                && subscriptionAccountPool is not null
+                && OetLearner.Api.Services.AiPipeline.SubscriptionAccountGroups.GroupOf(providerCode) is not null)
+            {
+                subscriptionAccountPool.NoteAccountFailure(providerCode, DateTimeOffset.UtcNow);
+            }
+
             // Operator action needed (billing, credential, request shape) is Error; transient classes are Warning.
             var operatorActionNeeded = errorClass is AiProviderErrorClass.QuotaExhausted
                 or AiProviderErrorClass.Auth

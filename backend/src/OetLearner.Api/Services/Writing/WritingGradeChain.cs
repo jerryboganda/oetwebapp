@@ -201,11 +201,13 @@ public static class WritingGradeChain
             ct);
 
     /// <summary>
-    /// One pass of the secondary Writing reviewer: a ONE-route plan on the Codex subscription (GPT-6.1 Sol),
-    /// never the paid API and never Max (the reviewer is not a grade hop). Same per-attempt budgets, typed
-    /// failure handling and slot discipline as <see cref="RunAsync{T}"/>; the pass is bounded by the
-    /// smaller of <see cref="WritingGradeChainOptions.ReviewDeadlineSeconds"/> and <paramref name="stageBudget"/>.
+    /// One pass of the secondary Writing reviewer: a ONE-route plan on a Codex subscription account
+    /// (GPT-6.1 Sol), never the paid API and never Max (the reviewer is not a grade hop). Same per-attempt
+    /// budgets, typed failure handling and slot discipline as <see cref="RunAsync{T}"/>; the pass is bounded by
+    /// the smaller of <see cref="WritingGradeChainOptions.ReviewDeadlineSeconds"/> and <paramref name="stageBudget"/>.
     /// Parsing happens inside the attempt, so an unreadable reply fails the attempt over like any failure.
+    /// <paramref name="providerCode"/>, <paramref name="attempts"/> and <paramref name="budgetSeconds"/> come from
+    /// the reviewer's Codex-account hop when the stage names several accounts (owner directive 2026-10-10).
     /// </summary>
     public static Task<T> RunReviewAsync<T>(
         IAiGatewayService gateway,
@@ -217,16 +219,20 @@ public static class WritingGradeChain
         TimeSpan stageBudget,
         TimeProvider clock,
         ILogger logger,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? providerCode = null,
+        int? attempts = null,
+        int? budgetSeconds = null)
     {
+        var provider = string.IsNullOrWhiteSpace(providerCode) ? WritingSubscriptionProviders.Codex : providerCode;
         var plan = new List<Step>
         {
             new(
                 WritingGradeHop.Codex,
-                WritingSubscriptionProviders.Codex,
+                provider,
                 template.Model is { Length: > 0 } m ? m : WritingSubscriptionProviders.CodexModel,
-                Math.Max(1, options.ReviewAttempts),
-                options.ReviewAttemptSeconds),
+                attempts is > 0 ? attempts.Value : Math.Max(1, options.ReviewAttempts),
+                budgetSeconds is > 0 ? budgetSeconds.Value : options.ReviewAttemptSeconds),
         };
         var ceiling = TimeSpan.FromSeconds(options.ReviewDeadlineSeconds);
         return RunPlanAsync(

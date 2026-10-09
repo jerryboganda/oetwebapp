@@ -54,7 +54,11 @@ public sealed class WritingGradeReviewer(
     TimeProvider clock,
     ILogger<WritingGradeReviewer> logger,
     // AI Pipeline Control Center: owner-saved order and switches of the reviewer stage. Optional LAST parameter.
-    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null) : IWritingGradeReviewer
+    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null,
+    // Subscription-account rotation (owner directive 2026-10-10): permutes the Codex accounts of the
+    // reviewer plan per run by remaining quota. Optional LAST parameters, absent = the saved order runs as saved.
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool? accountPool = null,
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null) : IWritingGradeReviewer
 {
     /// <summary>FeatureFlags row, Enabled = false turns the reviewer Off (absent row = on while the Codex row is active).</summary>
     public const string ReviewerFlagKey = "writing_ai_reviewer";
@@ -355,14 +359,22 @@ public sealed class WritingGradeReviewer(
         }
 
         var shared = SharedReviewerOptions.Current;
-        // Owner-saved reviewer steps: which of Codex / the API step run, their models and their order.
+        // Owner-saved reviewer steps: which of the Codex accounts / the API step run, their models and
+        // their order. Subscription-account rotation (owner directive 2026-10-10) permutes the Codex
+        // accounts of this plan in memory, best-remaining-quota first, and writes nothing back.
         var reviewPlan = pipelineStore is null ? null : await pipelineStore.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.WritingReview, ct);
-        var codexHop = reviewPlan?.Hops.FirstOrDefault(h => h.Provider == WritingSubscriptionProviders.Codex);
-        var apiHop = reviewPlan?.Hops.FirstOrDefault(h => h.Provider != WritingSubscriptionProviders.Codex);
-        var codexOn = reviewPlan is null || codexHop is not null;
+        if (reviewPlan is not null && accountPool is not null && accountState is not null)
+        {
+            reviewPlan = await accountPool.OrderAsync(accountState, reviewPlan, ct);
+        }
+        var codexHops = SharedReviewerRunner.SubscriptionCodexHops(reviewPlan);
+        var apiHop = reviewPlan?.Hops.FirstOrDefault(h => OetLearner.Api.Services.AiPipeline.SubscriptionAccountGroups.GroupOf(h.Provider) is null);
+        var codexOn = reviewPlan is null || codexHops.Count > 0;
         var apiOn = reviewPlan is null || apiHop is not null;
-        var apiFirst = codexHop is not null && apiHop is not null && apiHop.Index < codexHop.Index;
-        var codexModel = string.IsNullOrWhiteSpace(codexHop?.Model) ? WritingSubscriptionProviders.CodexModel : codexHop!.Model;
+        var apiFirst = codexHops.Count > 0 && apiHop is not null && apiHop.Index < codexHops[0].Index;
+        var codexModel = codexHops.Count > 0 && !string.IsNullOrWhiteSpace(codexHops[0].Model)
+            ? codexHops[0].Model!
+            : WritingSubscriptionProviders.CodexModel;
         var apiProvider = apiHop?.Provider ?? WritingSubscriptionProviders.ClaudeApi;
         var apiModel = string.IsNullOrWhiteSpace(apiHop?.Model) ? WritingSubscriptionProviders.ClaudeModel : apiHop!.Model;
         var (runResult, _) = await SharedReviewerRunner.RunAsync(
@@ -370,17 +382,42 @@ public sealed class WritingGradeReviewer(
             CodexReviewerGate.Default,
             "writing",
             request.SubmissionId.ToString("N"),
-            async token => await WritingGradeChain.RunReviewAsync(
-                gateway,
-                template with { Model = codexModel },
-                request.GradeEpoch,
-                pass,
-                ParseResult,
-                _chain,
-                remaining,
-                clock,
-                logger,
-                token),
+            async token =>
+            {
+                if (codexHops.Count == 0) throw new InvalidOperationException("The reviewer stage has no Codex account step.");
+                Exception? lastHop = null;
+                foreach (var hop in codexHops)
+                {
+                    try
+                    {
+                        return await WritingGradeChain.RunReviewAsync(
+                            gateway,
+                            template with { Model = string.IsNullOrWhiteSpace(hop.Model) ? codexModel : hop.Model },
+                            request.GradeEpoch,
+                            pass,
+                            ParseResult,
+                            _chain,
+                            remaining,
+                            clock,
+                            logger,
+                            token,
+                            hop.Provider,
+                            hop.Attempts,
+                            hop.BudgetSeconds);
+                    }
+                    catch (Exception ex) when (WritingGradeChain.IsFailoverable(ex, token))
+                    {
+                        // One account out of quota (or down): the next Codex account runs inside this same
+                        // phase, then the runner's API fallback takes over if every account failed.
+                        lastHop = ex;
+                        logger.LogWarning(
+                            "Writing reviewer hop {Provider} failed ({ErrorType}); trying the next Codex account.",
+                            hop.Provider, ex.GetType().Name);
+                    }
+                }
+
+                throw lastHop ?? new InvalidOperationException("Every Codex account failed for this review pass.");
+            },
             async token =>
             {
                 // The review cap from the same provider row: never Max, never a new integration. The API fallback

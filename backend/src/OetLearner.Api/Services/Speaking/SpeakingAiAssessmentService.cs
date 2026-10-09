@@ -42,7 +42,11 @@ public sealed partial class SpeakingAiAssessmentService(
     ITypeSafeJudgmentService? judgments = null,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
     // AI Pipeline Control Center: owner-saved provider order for grading and the reviewer. Optional LAST parameter.
-    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null)
+    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null,
+    // Subscription-account rotation (owner directive 2026-10-10): permutes the hops of one engine group
+    // per run by remaining quota. Optional LAST parameters, absent = the saved order runs as saved.
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool? accountPool = null,
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null)
 {
     // v3 (4 Oct 2026): the system prompt now carries the official OET band descriptors and the
     // "rules guide, never deduct" principles; the model is no longer asked for a readiness band
@@ -521,7 +525,8 @@ Scoring rules:
                 // gateway's mock_assessment_forbidden backstop if a future caller ever bypasses the guard.
                 AssessmentContext = input.Context,
             };
-            aiResult = await SpeakingGradeChain.CompleteAsync(aiGateway, gradeRequest, gradingOptions?.Value, pipelineStore, logger, ct);
+            aiResult = await SpeakingGradeChain.CompleteAsync(
+                aiGateway, gradeRequest, gradingOptions?.Value, pipelineStore, logger, ct, accountPool, accountState);
         }
         catch (PromptNotGroundedException)
         {
@@ -547,6 +552,10 @@ Scoring rules:
         SpeakingReviewTrace review;
         // Owner-saved reviewer stage (admin Pipeline page): its own switch, steps and order. Absent store = legacy behaviour.
         var reviewPlan = pipelineStore is null ? null : await pipelineStore.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.SpeakingReview, ct);
+        if (reviewPlan is not null && accountPool is not null && accountState is not null)
+        {
+            reviewPlan = await accountPool.OrderAsync(accountState, reviewPlan, ct);
+        }
         if (ParseAssessment(aiResult.Completion) is null || reviewPlan is { StageEnabled: false } or { Hops.Count: 0 })
         {
             completion = aiResult.Completion;

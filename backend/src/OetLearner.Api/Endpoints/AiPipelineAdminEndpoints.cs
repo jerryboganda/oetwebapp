@@ -246,6 +246,154 @@ public static class AiPipelineAdminEndpoints
         group.MapGet("/overview", async (IAiPipelineOverviewService overview, string? window, CancellationToken ct) =>
             Results.Ok(await overview.BuildAsync(window, ct)));
 
+        // Subscription-account rotation (owner directive 2026-10-10): per-account state + the audited
+        // controls (switch threshold, per-account drain). Neither control may write the saved order.
+        group.MapGet("/accounts", (ISubscriptionAccountPool pool) =>
+        {
+            var policy = pool.Policy;
+            return Results.Ok(new
+            {
+                policy = new
+                {
+                    switchPercent = policy.SwitchPercent,
+                    cooldownFloorMinutes = (int)policy.CooldownFloor.TotalMinutes,
+                    refreshSeconds = (int)policy.RefreshTtl.TotalSeconds,
+                },
+                lastRefreshedAt = pool.LastRefreshedAt,
+                accounts = pool.Accounts.Select(a => new
+                {
+                    a.ProviderCode,
+                    a.Group,
+                    a.Name,
+                    standing = a.Standing.ToString().ToLowerInvariant(),
+                    a.StandingReason,
+                    windows = a.Windows.Select(w => new
+                    {
+                        w.Label,
+                        w.UsedTokens,
+                        w.Cap,
+                        usedPct = w.UsedPct is { } pct ? Math.Round(pct * 100.0, 1) : (double?)null,
+                        w.ResetsAt,
+                        w.WindowStartedAt,
+                    }),
+                    a.LastQuotaErrorAt,
+                    a.LastQuotaErrorKind,
+                    a.CooldownUntil,
+                    a.SampledAt,
+                    a.Reachable,
+                }),
+            });
+        });
+
+        group.MapPut("/accounts/threshold", async (
+            ThresholdDto dto,
+            LearnerDbContext db,
+            HttpContext http,
+            ISubscriptionAccountPool pool,
+            OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider accountState,
+            CancellationToken ct) =>
+        {
+            var percent = Math.Clamp(dto.SwitchPercent, 50, 100);
+            var now = DateTimeOffset.UtcNow;
+            var actor = Actor(http);
+            // Stored on the switch-percent flag's RolloutPercentage: an absent or disabled row keeps 95.
+            var flag = await db.FeatureFlags.FirstOrDefaultAsync(
+                f => f.Key == OetLearner.Api.Services.AiPipeline.SubscriptionAccountStateProvider.SwitchPercentFlagKey, ct);
+            if (flag is null)
+            {
+                flag = new FeatureFlag
+                {
+                    Id = $"FLG-{Guid.NewGuid():N}"[..12],
+                    Name = "Subscription account rotation switch threshold",
+                    Key = OetLearner.Api.Services.AiPipeline.SubscriptionAccountStateProvider.SwitchPercentFlagKey,
+                    FlagType = FeatureFlagType.Operational,
+                    Owner = "Owner",
+                    CreatedAt = now,
+                };
+                db.FeatureFlags.Add(flag);
+            }
+
+            flag.Enabled = true;
+            flag.RolloutPercentage = (int)percent;
+            flag.Description = "Percent of a subscription account's rolling 5-hour or weekly cap at which the runtime prefers another account of the same engine group.";
+            flag.UpdatedAt = now;
+
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = actor.Id,
+                ActorName = actor.Name,
+                Action = "SubscriptionPoolThresholdUpdated",
+                ResourceType = "AiConfig",
+                ResourceId = "subscription-pool",
+                Details = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    switchPercent = percent,
+                    reason = dto.Reason,
+                }, AiPipelineJson.Options),
+            });
+            await db.SaveChangesAsync(ct);
+            await pool.RefreshAsync(accountState, ct);
+            return Results.Ok(new { policy = new { switchPercent = pool.Policy.SwitchPercent } });
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapPut("/accounts/drain", async (
+            DrainAccountDto dto,
+            LearnerDbContext db,
+            HttpContext http,
+            ISubscriptionAccountPool pool,
+            CancellationToken ct) =>
+        {
+            var code = (dto.ProviderCode ?? string.Empty).Trim().ToLowerInvariant();
+            if (OetLearner.Api.Services.AiPipeline.SubscriptionAccountGroups.GroupOf(code) is null)
+                return new ApiErrorResult(400, "subscription_account_unknown", $"'{code}' is not a subscription account of a known engine group.");
+
+            var now = DateTimeOffset.UtcNow;
+            var actor = Actor(http);
+            var key = OetLearner.Api.Services.AiPipeline.SubscriptionAccountStateProvider.DrainFlagPrefix + code;
+            var flag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Key == key, ct);
+            if (flag is null)
+            {
+                flag = new FeatureFlag
+                {
+                    Id = $"FLG-{Guid.NewGuid():N}"[..12],
+                    Name = $"Drain subscription account {code}",
+                    Key = key,
+                    FlagType = FeatureFlagType.Operational,
+                    Owner = "Owner",
+                    CreatedAt = now,
+                };
+                db.FeatureFlags.Add(flag);
+            }
+
+            flag.Enabled = dto.Drain;
+            flag.RolloutPercentage = 0;
+            flag.Description = "Drained accounts are parked at the end of their engine group: grading and reviews prefer the healthy accounts first, and a drained account is only used once the others fail.";
+            flag.UpdatedAt = now;
+
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = actor.Id,
+                ActorName = actor.Name,
+                Action = dto.Drain ? "SubscriptionAccountDrained" : "SubscriptionAccountUndrained",
+                ResourceType = "AiConfig",
+                ResourceId = code,
+                Details = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    provider = code,
+                    drained = dto.Drain,
+                    reason = dto.Reason,
+                }, AiPipelineJson.Options),
+            });
+            await db.SaveChangesAsync(ct);
+            var state = http.RequestServices.GetRequiredService<OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider>();
+            await pool.RefreshAsync(state, ct);
+            return Results.Ok(new { providerCode = code, drained = dto.Drain, standing = pool.Accounts.FirstOrDefault(a => a.ProviderCode == code)?.Standing });
+        }).RequireRateLimiting("PerUserWrite");
+
         group.MapGet("/credit-grants", async (IAiPipelineOverviewService overview, CancellationToken ct) =>
             Results.Ok(new { credits = (await overview.BuildAsync(null, ct)).Credits }));
 
@@ -363,4 +511,8 @@ public static class AiPipelineAdminEndpoints
     public sealed record RestoreDto(int ExpectedVersion, string? Reason);
 
     public sealed record CreditGrantDto(string ProviderCode, decimal GrantUsd, DateTimeOffset? StartsAt, string? Note);
+
+    public sealed record DrainAccountDto(string ProviderCode, bool Drain, string? Reason);
+
+    public sealed record ThresholdDto(double SwitchPercent, string? Reason);
 }

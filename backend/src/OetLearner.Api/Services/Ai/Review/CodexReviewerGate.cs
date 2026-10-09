@@ -35,7 +35,7 @@ public sealed class CodexReviewerPermit : IDisposable
 /// </summary>
 public sealed class CodexReviewerGate
 {
-    public static CodexReviewerGate Default { get; } = new(capacity: 2, maxQueueWaitSeconds: 45);
+    public static CodexReviewerGate Default { get; } = new(capacity: 3, maxQueueWaitSeconds: 45);
 
     private readonly object _lock = new();
     private readonly Queue<Waiter> _waiters = new();

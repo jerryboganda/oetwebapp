@@ -300,6 +300,38 @@ other agent, host or user, and the primary-VPS rule above stands: **the primary 
   never a workflow or CI job) and that first demonstrates byte-exact parity and then beats the .NET baseline by at least 30% p95 or 40% CPU per job.
   A benchmark never proves a release.
 
+### Subscription-quota rotation among accounts of the SAME class (owner directive 2026-10-10; HARD ENFORCED)
+
+The owner runs multiple Claude Max accounts and multiple ChatGPT Business Codex accounts
+(`oet-writing-claude`, `oet-writing-claude-2`, `oet-writing-claude-3`, `oet-writing-codex`,
+`oet-writing-codex-2`, `oet-writing-codex-3`, each with its own credential volume). When one
+account's quota is nearly spent — default 95 % of its rolling 5-hour or weekly window, an
+owner-configured estimate per account — work moves automatically to another account **of the
+same subscription class** (another Claude Max account for Max work, another ChatGPT Business
+account for Codex work) and back when that window resets.
+
+- **The class rule is unchanged.** Max always on means a Claude Max subscription serves each
+  functionality first, every run. The Anthropic API and Codex stay in-run fallbacks only, reached
+  solely after EVERY Max account has actually errored. No computed state moves a non-Max class
+  ahead of Max, switches Max off, or removes Max from a plan.
+- **What rotation may do:** permute the hop order *within one engine group*
+  (`writing-claude-sub*` among themselves, `writing-codex-sub*` among themselves) for one run,
+  in memory, from the configured estimate plus the last real quota error. It may park an account
+  at the end of its group. It never removes a hop, never re-enables a hop an admin disabled, and
+  never writes the order: `Services/AiPipeline/AiPipelineStore.cs` stays the single writer of
+  `AiPipelineStages`, and the saved plan, version and revision history stay byte-identical.
+- **Reactive first, estimate second.** A typed `quota_exhausted` / `auth` answer fails over inside
+  the run exactly as before (`WritingGradeChain`, `SharedReviewerRunner`); the estimate only
+  avoids predictable switches and the burned attempt they cost. A real quota error parks that one
+  account until its reset time.
+- **Visibility and control.** Every run logs which account served each hop and why.
+  `/admin/ai-pipelines` shows per-account 5-hour/weekly utilisation, state
+  (serving / parked / cooldown / drained) and the last quota error; `PUT /v1/admin/ai/pipelines/
+  accounts` sets the switch threshold and drains one account (both audited). Claude/Max figures
+  are estimates (`source: estimated`); Codex reports real `account/rateLimits` percentages when the
+  sidecar can read them. The static guards (Max-first defaults, single-writer order, no quota
+  routing in `WritingSubscriptionSelector`) pass unchanged.
+
 ## OET Writing Model Answers — COMPULSORY (owner directives 2026-09-13 + 2026-09-14)
 
 Before ANY Writing task, Model Answer, or Writing validator work, load

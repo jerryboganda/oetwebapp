@@ -1,10 +1,17 @@
-# Writing AI sidecars (owner directive 2026-09-29).
+# Writing AI subscription sidecars (owner directive 2026-09-29; account pool 2026-10-10).
 #
-# Two hardened wrappers that expose the already-authenticated Claude Code and
-# Codex subscription CLIs as tiny internal HTTP facades, so the .NET AI
-# provider registry can route the six writing features through the DEDICATED
-# Claude Max 5x subscription (primary) and the Codex subscription (fallback)
-# without any API keys.
+# Hardened wrappers that expose the already-authenticated Claude Code and Codex
+# subscription CLIs as tiny internal HTTP facades, so the .NET AI provider
+# registry can route grading and the shared reviewer through the Claude Max
+# subscriptions (primary) and the Codex subscriptions (fallback) without any
+# API keys.
+#
+# One container per ACCOUNT (owner directive 2026-10-10): three Claude Max
+# accounts (`oet-writing-claude`, `-2`, `-3`) and three ChatGPT Business Codex
+# accounts (`oet-writing-codex`, `-2`, `-3`). All accounts of one engine run the
+# SAME image; only the credential volume and the per-account quota caps differ.
+# Every account is its own serial lane, so the runtime picks the account with
+# the most quota left (backend `SubscriptionAccountPool`).
 #
 # Own compose project (never part of `oetwebsite`), so main Build & Deploy runs
 # never recreate it. Deploy with:
@@ -12,13 +19,20 @@
 #     -f /opt/oetwebapp/docker-compose.writing-ai.yml up -d --no-build --wait
 #
 # NEVER `docker compose down -v` this project: the volumes hold the engine
-# sign-ins. The Claude sidecar SHARES the agent-console's oet_agent_home volume
-# (the dedicated 5x login lives there; sharing the single credential copy avoids
-# OAuth refresh-token rotation conflicts between two copies). Codex gets its own
-# volume because its requirements policy differs from the agent console's.
+# sign-ins, and losing one means a new device-code login for that account. The
+# FIRST Claude sidecar SHARES the agent-console's oet_agent_home volume (the
+# dedicated 5x login lives there; sharing that single credential copy avoids
+# OAuth refresh-token rotation conflicts between two copies). Accounts 2 and 3
+# have their OWN volumes because they are different logins. Codex accounts each
+# have their own volume because their requirements policy differs from the
+# agent console's.
 
 name: oet-writing-ai
 
+# 512 MB each: a sidecar is one Node facade plus one CLI child at a time. A CLI
+# that outgrows it is OOM-killed by the kernel (oom_score_adj 700 keeps the
+# victim the sidecar, never Postgres or the API); raise one account only if
+# `docker logs oet-writing-*` shows an OOM kill.
 x-sidecar-hardening: &sidecar-hardening
   pull_policy: missing
   restart: unless-stopped
@@ -27,8 +41,8 @@ x-sidecar-hardening: &sidecar-hardening
   cap_drop: [ALL]
   security_opt:
     - no-new-privileges:true
-  mem_limit: 2g
-  memswap_limit: 2g
+  mem_limit: 512m
+  memswap_limit: 512m
   cpus: 1.0
   pids_limit: 256
   oom_score_adj: 700
@@ -44,7 +58,7 @@ x-sidecar-hardening: &sidecar-hardening
       max-size: 20m
       max-file: "5"
 
-# Lane bounds, identical for both sidecars (writing-ai-sidecars/shared/engine.mjs). A full queue or a
+# Lane bounds, identical for every sidecar (writing-ai-sidecars/shared/engine.mjs). A full queue or a
 # 7-minute wait answers that one request 503 lane_busy; nothing ever switches a sidecar off.
 x-lane-env: &lane-env
   WRITING_CLI_TIMEOUT_MS: ${WRITING_CLI_TIMEOUT_MS:-300000}
@@ -54,6 +68,7 @@ x-lane-env: &lane-env
   WRITING_LANE_CONCURRENCY: ${WRITING_LANE_CONCURRENCY:-1}
 
 services:
+  # ── Claude Max accounts ────────────────────────────────────────────────────────────────────────
   writing-claude:
     <<: *sidecar-hardening
     image: ${WRITING_CLAUDE_IMAGE:?Set WRITING_CLAUDE_IMAGE in writing-ai.env}
@@ -68,10 +83,11 @@ services:
       WRITING_CLAUDE_MODEL: ${WRITING_CLAUDE_MODEL:-claude-opus-5-5}
       WRITING_CLAUDE_EFFORT: ${WRITING_CLAUDE_EFFORT:-high}
       WRITING_CLAUDE_WEEKLY_TOKEN_CAP: ${WRITING_CLAUDE_WEEKLY_TOKEN_CAP:-0}
+      WRITING_CLAUDE_5H_TOKEN_CAP: ${WRITING_CLAUDE_5H_TOKEN_CAP:-0}
       # Reach the vendor through the shared egress allowlist proxy.
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
       HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
-      NO_PROXY: oet-writing-claude,oet-writing-codex,localhost,127.0.0.1
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
     volumes:
       # Shared with oet-agent-console: the dedicated Max 5x credential home.
       - oet_agent_home:/home/agent
@@ -82,10 +98,64 @@ services:
       # Reuse the agent-console egress network so outbound traffic goes through
       # the existing allowlist CONNECT proxy (api.anthropic.com et al.).
       - oet_agent_net
-      # API-facing control network: oet-api resolves the sidecar hostnames
-      # (oet-writing-claude / oet-writing-codex) here.
+      # API-facing control network: oet-api resolves the sidecar hostnames here.
       - oet_agent_ctl
 
+  writing-claude-2:
+    <<: *sidecar-hardening
+    image: ${WRITING_CLAUDE_2_IMAGE:?Set WRITING_CLAUDE_2_IMAGE in writing-ai.env}
+    container_name: oet-writing-claude-2
+    hostname: oet-writing-claude-2
+    environment:
+      <<: *lane-env
+      NODE_ENV: production
+      TZ: UTC
+      PORT: "8080"
+      CLAUDE_CONFIG_DIR: /home/agent/.claude
+      WRITING_CLAUDE_MODEL: ${WRITING_CLAUDE_2_MODEL:-claude-opus-5-5}
+      WRITING_CLAUDE_EFFORT: ${WRITING_CLAUDE_2_EFFORT:-high}
+      WRITING_CLAUDE_WEEKLY_TOKEN_CAP: ${WRITING_CLAUDE_2_WEEKLY_TOKEN_CAP:-0}
+      WRITING_CLAUDE_5H_TOKEN_CAP: ${WRITING_CLAUDE_2_5H_TOKEN_CAP:-0}
+      HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
+      HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+    volumes:
+      # Own credential home: a DIFFERENT Max account than the primary sidecar.
+      - oet_writing_claude_home_2:/home/agent
+      - writing_claude_tmp_2:/tmp
+    networks:
+      - oet_writing_net
+      - oet_agent_net
+      - oet_agent_ctl
+
+  writing-claude-3:
+    <<: *sidecar-hardening
+    image: ${WRITING_CLAUDE_3_IMAGE:?Set WRITING_CLAUDE_3_IMAGE in writing-ai.env}
+    container_name: oet-writing-claude-3
+    hostname: oet-writing-claude-3
+    environment:
+      <<: *lane-env
+      NODE_ENV: production
+      TZ: UTC
+      PORT: "8080"
+      CLAUDE_CONFIG_DIR: /home/agent/.claude
+      WRITING_CLAUDE_MODEL: ${WRITING_CLAUDE_3_MODEL:-claude-opus-5-5}
+      WRITING_CLAUDE_EFFORT: ${WRITING_CLAUDE_3_EFFORT:-high}
+      WRITING_CLAUDE_WEEKLY_TOKEN_CAP: ${WRITING_CLAUDE_3_WEEKLY_TOKEN_CAP:-0}
+      WRITING_CLAUDE_5H_TOKEN_CAP: ${WRITING_CLAUDE_3_5H_TOKEN_CAP:-0}
+      HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
+      HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+    volumes:
+      # Own credential home: a THIRD Max account.
+      - oet_writing_claude_home_3:/home/agent
+      - writing_claude_tmp_3:/tmp
+    networks:
+      - oet_writing_net
+      - oet_agent_net
+      - oet_agent_ctl
+
+  # ── ChatGPT Business / Codex accounts ──────────────────────────────────────────────────────────
   writing-codex:
     <<: *sidecar-hardening
     image: ${WRITING_CODEX_IMAGE:?Set WRITING_CODEX_IMAGE in writing-ai.env}
@@ -100,14 +170,69 @@ services:
       WRITING_CODEX_MODEL: ${WRITING_CODEX_MODEL:-gpt-6.1-sol}
       WRITING_CODEX_EFFORT: ${WRITING_CODEX_EFFORT:-high}
       WRITING_CODEX_WEEKLY_TOKEN_CAP: ${WRITING_CODEX_WEEKLY_TOKEN_CAP:-0}
+      WRITING_CODEX_5H_TOKEN_CAP: ${WRITING_CODEX_5H_TOKEN_CAP:-0}
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
       HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
-      NO_PROXY: oet-writing-claude,oet-writing-codex,localhost,127.0.0.1
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
     volumes:
-      # Dedicated Codex credential home (NOT shared with the agent console —
-      # see header). One-time device-code login on first deploy.
+      # Primary Codex credential home (NOT shared with the agent console — see
+      # header). One-time device-code login on first deploy.
       - oet_writing_codex_home:/home/agent
       - writing_codex_tmp:/tmp
+    networks:
+      - oet_writing_net
+      - oet_agent_net
+      - oet_agent_ctl
+
+  writing-codex-2:
+    <<: *sidecar-hardening
+    image: ${WRITING_CODEX_2_IMAGE:?Set WRITING_CODEX_2_IMAGE in writing-ai.env}
+    container_name: oet-writing-codex-2
+    hostname: oet-writing-codex-2
+    environment:
+      <<: *lane-env
+      NODE_ENV: production
+      TZ: UTC
+      PORT: "8080"
+      CODEX_HOME: /home/agent/.codex
+      WRITING_CODEX_MODEL: ${WRITING_CODEX_2_MODEL:-gpt-6.1-sol}
+      WRITING_CODEX_EFFORT: ${WRITING_CODEX_2_EFFORT:-high}
+      WRITING_CODEX_WEEKLY_TOKEN_CAP: ${WRITING_CODEX_2_WEEKLY_TOKEN_CAP:-0}
+      WRITING_CODEX_5H_TOKEN_CAP: ${WRITING_CODEX_2_5H_TOKEN_CAP:-0}
+      HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
+      HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+    volumes:
+      # Own credential home: a SECOND ChatGPT Business account.
+      - oet_writing_codex_home_2:/home/agent
+      - writing_codex_tmp_2:/tmp
+    networks:
+      - oet_writing_net
+      - oet_agent_net
+      - oet_agent_ctl
+
+  writing-codex-3:
+    <<: *sidecar-hardening
+    image: ${WRITING_CODEX_3_IMAGE:?Set WRITING_CODEX_3_IMAGE in writing-ai.env}
+    container_name: oet-writing-codex-3
+    hostname: oet-writing-codex-3
+    environment:
+      <<: *lane-env
+      NODE_ENV: production
+      TZ: UTC
+      PORT: "8080"
+      CODEX_HOME: /home/agent/.codex
+      WRITING_CODEX_MODEL: ${WRITING_CODEX_3_MODEL:-gpt-6.1-sol}
+      WRITING_CODEX_EFFORT: ${WRITING_CODEX_3_EFFORT:-high}
+      WRITING_CODEX_WEEKLY_TOKEN_CAP: ${WRITING_CODEX_3_WEEKLY_TOKEN_CAP:-0}
+      WRITING_CODEX_5H_TOKEN_CAP: ${WRITING_CODEX_3_5H_TOKEN_CAP:-0}
+      HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
+      HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+    volumes:
+      # Own credential home: a THIRD ChatGPT Business account.
+      - oet_writing_codex_home_3:/home/agent
+      - writing_codex_tmp_3:/tmp
     networks:
       - oet_writing_net
       - oet_agent_net
@@ -117,7 +242,7 @@ networks:
   oet_writing_net:
     driver: bridge
     internal: false
-  # External: created by docker-compose.agent-console.yml. Lets both sidecars
+  # External: created by docker-compose.agent-console.yml. Lets every sidecar
   # reach the shared egress proxy (oet-agent-egress) instead of opening a new
   # internet route.
   oet_agent_net:
@@ -137,5 +262,18 @@ volumes:
     name: oet-agent-console_oet_agent_home
   oet_writing_codex_home:
     name: oet_writing_codex_home
+  # One credential volume per EXTRA account (created by `up -d`; never shared).
+  oet_writing_claude_home_2:
+    name: oet_writing_claude_home_2
+  oet_writing_claude_home_3:
+    name: oet_writing_claude_home_3
+  oet_writing_codex_home_2:
+    name: oet_writing_codex_home_2
+  oet_writing_codex_home_3:
+    name: oet_writing_codex_home_3
   writing_claude_tmp:
+  writing_claude_tmp_2:
+  writing_claude_tmp_3:
   writing_codex_tmp:
+  writing_codex_tmp_2:
+  writing_codex_tmp_3:

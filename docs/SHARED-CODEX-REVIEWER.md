@@ -71,7 +71,7 @@ that would idle capacity — and no separate queue per type.
 
 | Key | Env | Default | Meaning |
 | --- | --- | --- | --- |
-| `Reviewer:Shared:MaxConcurrency` | `Reviewer__Shared__MaxConcurrency` or `CODEX_REVIEWER_MAX_CONCURRENCY` | 2 | Simultaneous Codex reviews (per process; both types share it). |
+| `Reviewer:Shared:MaxConcurrency` | `Reviewer__Shared__MaxConcurrency` or `CODEX_REVIEWER_MAX_CONCURRENCY` | 3 | Simultaneous Codex reviews (per process; both types share it). Three Codex accounts = three serial sidecar lanes, so the gate matches them. |
 | `Reviewer:Shared:MaxQueueWaitSeconds` | `Reviewer__Shared__MaxQueueWaitSeconds` | 45 | Longest FIFO wait before the API fallback takes the job. |
 | `Reviewer:Shared:CodexAttempts` | … | 2 | Codex attempts per review pass. |
 | `Reviewer:Shared:CodexAttemptSeconds` | … | 300 | Per-attempt budget. |

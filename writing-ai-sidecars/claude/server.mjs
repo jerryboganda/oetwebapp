@@ -15,12 +15,30 @@
 // caches) is outside those switches. The Codex sidecar is different: see codex/server.mjs.
 
 import { createSidecarServer } from '../shared/http.mjs';
-import { AuthExpiredError, Mutex, cliError, errorText, loginProbe, parseJsonLines, runCli } from '../shared/engine.mjs';
+import {
+  AuthExpiredError,
+  Mutex,
+  SubscriptionUsageTracker,
+  cliError,
+  errorText,
+  isAccountFailure,
+  loginProbe,
+  parseJsonLines,
+  parseQuotaResetHint,
+  runCli,
+} from '../shared/engine.mjs';
 
 const MODEL = process.env.WRITING_CLAUDE_MODEL || 'claude-opus-5-5';
 const EFFORT = (process.env.WRITING_CLAUDE_EFFORT || 'high').toLowerCase();
 const TIMEOUT_MS = Number(process.env.WRITING_CLI_TIMEOUT_MS || 300000);
 const mutex = new Mutex();
+// This container is ONE Claude Max account (owner directive 2026-10-10): its own credential home
+// and its own counters. The primary sidecar's home is shared with the agent console, so its
+// counters see only the sidecar's own traffic — a lower bound of the account's real usage.
+const accountUsage = new SubscriptionUsageTracker({
+  fiveHourCap: Number(process.env.WRITING_CLAUDE_5H_TOKEN_CAP || 0),
+  weeklyCap: Number(process.env.WRITING_CLAUDE_WEEKLY_TOKEN_CAP || 0),
+});
 
 /** `claude auth status` (see agent-console/src/auth/claude.ts): JSON on stdout, exit 0 signed in /
  * 1 signed out, e.g. {"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max",...}. Only an
@@ -43,36 +61,6 @@ const login = loginProbe('claude', ['auth', 'status'], parseClaudeAuthStatus);
 //   { type:"result", subtype:"success", is_error:false, result:"<text>",
 //     modelUsage:{ <model>:{ costUSD, contextWindow, ... } } }
 // The facade reads `result` for text and sums modelUsage for tokens/cost.
-
-// Weekly allowance tracking. The subscription CLI does not expose a raw
-// "tokens remaining" counter, so we track request counts + token usage
-// reported in the result events and combine with a conservative operator-set
-// weekly token budget (WRITING_CLAUDE_WEEKLY_TOKEN_CAP) to derive utilisation.
-const state = {
-  weekStartedAt: weekStart(new Date()),
-  requestsThisWeek: 0,
-  inputTokensThisWeek: 0,
-  outputTokensThisWeek: 0,
-  lastResetCheck: Date.now(),
-};
-
-function weekStart(d) {
-  const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  // ISO week start (Monday 00:00 UTC) — matches Anthropic's weekly window closely enough for allowance tracking.
-  const day = (x.getUTCDay() + 6) % 7;
-  x.setUTCDate(x.getUTCDate() - day);
-  return x.getTime();
-}
-
-function rollWeekIfNeeded() {
-  const now = Date.now();
-  if (now - state.weekStartedAt >= 7 * 24 * 3600 * 1000) {
-    state.weekStartedAt = weekStart(new Date());
-    state.requestsThisWeek = 0;
-    state.inputTokensThisWeek = 0;
-    state.outputTokensThisWeek = 0;
-  }
-}
 
 function buildPrompt(body) {
   const parts = [];
@@ -141,6 +129,8 @@ async function complete(body, { signal } = {}) {
           result.code !== 0 ? `claude exited ${result.code}` : 'claude error',
           errorText(result.stderr, failed?.result, failed?.error, final ? null : result.stdout),
         );
+        const failure = isAccountFailure(err);
+        if (failure !== null) accountUsage.noteFailure(failure, parseQuotaResetHint(err.message));
         if (err instanceof AuthExpiredError) login.failed();
         throw err;
       }
@@ -161,10 +151,7 @@ async function complete(body, { signal } = {}) {
     const out = await attempt(EFFORT);
     if (!out.text.trim()) throw new Error('claude returned empty completion');
 
-    rollWeekIfNeeded();
-    state.requestsThisWeek += 1;
-    state.inputTokensThisWeek += out.inputTokens;
-    state.outputTokensThisWeek += out.outputTokens;
+    accountUsage.record(out.inputTokens, out.outputTokens);
 
     // Anthropic Messages shape.
     return {
@@ -181,24 +168,27 @@ async function complete(body, { signal } = {}) {
   }, { signal });
 }
 
-async function usage() {
-  rollWeekIfNeeded();
-  const cap = Number(process.env.WRITING_CLAUDE_WEEKLY_TOKEN_CAP || 0);
-  const used = state.inputTokensThisWeek + state.outputTokensThisWeek;
-  const utilisation = cap > 0 ? Math.min(1, used / cap) : null;
-  const resetsAt = new Date(state.weekStartedAt + 7 * 24 * 3600 * 1000).toISOString();
+async function usageSnapshot() {
+  const snapshot = accountUsage.snapshot();
+  const weekly = snapshot.windows.find((w) => w.label === 'weekly');
+  const cap = weekly?.cap ?? null;
   return {
     engine: 'claude',
     model: MODEL,
     effort: EFFORT,
     source: 'estimated', // subscription CLIs don't expose raw allowance counters
-    weekStartedAt: new Date(state.weekStartedAt).toISOString(),
-    resetsAt,
-    requestsThisWeek: state.requestsThisWeek,
-    inputTokensThisWeek: state.inputTokensThisWeek,
-    outputTokensThisWeek: state.outputTokensThisWeek,
-    weeklyTokenCap: cap > 0 ? cap : null,
-    utilisation, // 0..1 when a cap is configured, else null (backend falls back to its own estimate)
+    account: process.env.WRITING_ACCOUNT_LABEL || 'claude-primary',
+    requestsThisWeek: weekly?.requests ?? 0,
+    inputTokensThisWeek: weekly?.inputTokens ?? 0,
+    outputTokensThisWeek: weekly?.outputTokens ?? 0,
+    weeklyTokenCap: cap,
+    utilisation: weekly?.usedPct ?? null, // 0..1 when a cap is configured, else null
+    weekStartedAt: weekly?.windowStartedAt ?? null,
+    resetsAt: weekly?.resetsAt ?? null,
+    windows: snapshot.windows,
+    lastQuotaErrorAt: snapshot.lastQuotaErrorAt,
+    lastQuotaErrorKind: snapshot.lastQuotaErrorKind,
+    lastQuotaErrorResetsAt: snapshot.lastQuotaErrorResetsAt,
   };
 }
 
@@ -206,7 +196,7 @@ createSidecarServer({
   engineName: 'claude',
   completionPath: '/v1/messages',
   onCompletion: complete,
-  onUsage: usage,
+  onUsage: usageSnapshot,
   lane: mutex,
   login,
   port: Number(process.env.PORT || 8080),

@@ -37,6 +37,7 @@ import {
 import {
   createCreditGrant,
   deleteCreditGrant,
+  drainSubscriptionAccount,
   fetchPipelineHistory,
   fetchPipelineOverview,
   fetchPipelines,
@@ -44,6 +45,7 @@ import {
   rollbackPipelineStage,
   runPipelineSelfCheck,
   savePipelineStage,
+  setSubscriptionPoolThreshold,
   type CreditGrantInput,
   type OverviewWindow,
   type PipelineHopInput,
@@ -51,6 +53,7 @@ import {
   type PipelineProvider,
   type PipelineRevision,
   type PipelineStage,
+  type PipelineSubscriptionAccountView,
   type PipelinesResponse,
   type SelfCheckResponse,
 } from '@/lib/api/ai-pipelines';
@@ -151,6 +154,11 @@ export default function AiPipelinesPage() {
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [grantForm, setGrantForm] = useState<{ providerCode: string; amount: string; note: string }>({ providerCode: '', amount: '', note: '' });
   const [grantBusy, setGrantBusy] = useState(false);
+
+  // Subscription-account rotation (owner directive 2026-10-10): one container per account, the runtime
+  // picks the account with the most quota left inside each engine group.
+  const [accountsBusy, setAccountsBusy] = useState<string | null>(null);
+  const [thresholdDraft, setThresholdDraft] = useState<string>('95');
 
   const loadOverview = useCallback(async (window: OverviewWindow) => {
     try {
@@ -318,6 +326,38 @@ export default function AiPipelinesPage() {
   }
 
   // ── Phase 2 actions: credits + key management ──────────────────────────
+  async function drainAccount(account: PipelineSubscriptionAccountView, drain: boolean) {
+    const label = account.name ?? account.providerCode;
+    setAccountsBusy(account.providerCode);
+    try {
+      await drainSubscriptionAccount(account.providerCode, drain);
+      toast.success(`${label} ${drain ? 'drained' : 'restored'}. The next grading run and review follow the change.`);
+      await loadOverview(overviewWindow);
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setAccountsBusy(null);
+    }
+  }
+
+  async function applyThreshold() {
+    const percent = Number(thresholdDraft);
+    if (!Number.isFinite(percent) || percent < 50 || percent > 100) {
+      toast.error('Enter a switch threshold between 50 and 100 percent.');
+      return;
+    }
+    setAccountsBusy('threshold');
+    try {
+      await setSubscriptionPoolThreshold(percent);
+      toast.success(`New runs prefer a healthy account below ${percent}% of a window.`);
+      await loadOverview(overviewWindow);
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setAccountsBusy(null);
+    }
+  }
+
   async function addGrant() {
     const amount = Number(grantForm.amount);
     if (!grantForm.providerCode || !Number.isFinite(amount) || amount <= 0) {
@@ -872,6 +912,61 @@ export default function AiPipelinesPage() {
       </SettingsSection>
 
       <SettingsSection
+        id="accounts"
+        title="Subscription accounts"
+        description="One container per subscription account (owner directive 2026-10-10). Each engine group rotates between its own accounts: at the switch threshold of a rolling 5-hour or weekly window — and immediately after a real quota error — the next run starts on the account with the most quota left. The saved provider order above is never rewritten, and a Claude Max subscription is always the first thing a run tries."
+        actions={
+          <div className="flex flex-wrap items-end gap-2">
+            <Input
+              label="Switch at"
+              type="number"
+              min={50}
+              max={100}
+              value={thresholdDraft}
+              onChange={(e) => setThresholdDraft(e.target.value)}
+              className="w-28"
+            />
+            <Button size="sm" disabled={accountsBusy !== null} onClick={() => void applyThreshold()}>
+              {accountsBusy === 'threshold' ? 'Saving…' : 'Apply'}
+            </Button>
+          </div>
+        }
+      >
+        {!overview ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-2xs text-admin-fg-muted">
+              <Badge variant={overview.subscriptionPool.switchPercent >= 90 ? 'danger' : 'warning'}>
+                switch at {overview.subscriptionPool.switchPercent}%
+              </Badge>
+              <span>Quota failures park one account for {overview.subscriptionPool.cooldownFloorMinutes} minutes or until its own reset time.</span>
+              <span>State refreshed every {overview.subscriptionPool.refreshSeconds}s.</span>
+            </div>
+
+            {overview.subscriptionAccounts.length === 0 ? (
+              <Card>
+                <CardContent className="p-4 text-sm text-admin-fg-muted">
+                  No subscription account reported state yet. The sidecars publish their counters once they are deployed.
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-3">
+                {overview.subscriptionAccounts.map((account) => (
+                  <SubscriptionAccountCard
+                    key={account.providerCode}
+                    account={account}
+                    busy={accountsBusy === account.providerCode}
+                    onDrain={(next) => void drainAccount(account, next)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </SettingsSection>
+
+      <SettingsSection
         id="credits"
         title="Credits & grants"
         description="Enter promotional credits or top-ups when they arrive (e.g. $200 Anthropic API credits). Remaining = grant minus internally-tracked spend on that provider since the grant start. Providers do not expose prepaid balances over an API, so this figure is computed, not read from the provider."
@@ -1130,6 +1225,85 @@ function UsageSourceBadge({ source }: { source: string }) {
   if (source === 'reported') return <Badge variant="success">Reported by our bridge</Badge>;
   if (source === 'estimated') return <Badge variant="warning">Estimated internally</Badge>;
   return <Badge variant="muted">Unknown</Badge>;
+}
+
+/**
+ * One subscription account of the rotation (owner directive 2026-10-10): where it stands in its engine
+ * group, its own window counters, and the drain switch. Honesty rule: every figure is the sidecar's own
+ * estimate unless a percent exists for that window — consumer subscriptions publish no usage API.
+ */
+function SubscriptionAccountCard({
+  account,
+  busy,
+  onDrain,
+}: {
+  account: PipelineSubscriptionAccountView;
+  busy: boolean;
+  onDrain: (drain: boolean) => void;
+}) {
+  const standingBadge = {
+    serving: <Badge variant="success">Serving</Badge>,
+    parked: <Badge variant="warning">Parked — over threshold</Badge>,
+    cooldown: <Badge variant="danger">Cooldown — quota error</Badge>,
+    drained: <Badge variant="muted">Drained by admin</Badge>,
+  }[account.standing];
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-semibold text-admin-fg-strong">{account.name ?? account.providerCode}</p>
+          {standingBadge}
+        </div>
+        <p className="text-2xs text-admin-fg-muted">
+          {account.group === 'claude-max' ? 'Claude Max' : 'ChatGPT Business / Codex'} · <code>{account.providerCode}</code>
+        </p>
+
+        {!account.reachable && (
+          <p className="text-2xs text-admin-fg-muted">Sidecar not answering: this account keeps its saved position and the usual failover cover for it.</p>
+        )}
+
+        <div className="space-y-2">
+          {account.windows.map((usageWindow) => (
+            <div key={usageWindow.label} className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-admin-fg-muted">{usageWindow.label === '5h' ? 'Rolling 5 hours' : 'This week'}</span>
+                {usageWindow.usedPct !== null && <span className="tabular-nums text-admin-fg-muted">{usageWindow.usedPct.toFixed(0)}%</span>}
+              </div>
+              <QuotaBar
+                pct={usageWindow.usedPct}
+                used={usageWindow.usedTokens}
+                cap={usageWindow.cap}
+                unitLabel="tokens"
+              />
+              <p className="text-2xs text-admin-fg-muted">
+                {usageWindow.cap === null
+                  ? 'No operator cap for this window, so no estimate is possible — rotation reacts to real quota errors here.'
+                  : `resets ${usageWindow.resetsAt ? new Date(usageWindow.resetsAt).toLocaleString() : '—'}`}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {account.lastQuotaErrorAt && (
+          <p className="text-2xs text-admin-fg-muted">
+            Last quota error {new Date(account.lastQuotaErrorAt).toLocaleString()}
+            {account.cooldownUntil ? ` · parked until ${new Date(account.cooldownUntil).toLocaleString()}` : ''}
+          </p>
+        )}
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-admin-fg-muted">Drain this account</span>
+          <Switch
+            checked={account.standing === 'drained'}
+            onCheckedChange={onDrain}
+            disabled={busy}
+            aria-label={`${account.name ?? account.providerCode} drained`}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 /** Weekly allowance bar: percentage when a cap exists, raw counter otherwise. */

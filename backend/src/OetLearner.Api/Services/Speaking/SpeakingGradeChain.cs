@@ -91,12 +91,20 @@ public static class SpeakingGradeChain
         SpeakingGradingOptions? options,
         OetLearner.Api.Services.AiPipeline.IAiPipelineStore? store,
         ILogger logger,
-        CancellationToken ct)
+        CancellationToken ct,
+        // Subscription-account rotation (owner directive 2026-10-10): same hops, permuted inside each
+        // engine group per run. Optional: absent = the saved order runs exactly as saved.
+        OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool? accountPool = null,
+        OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null)
     {
         if (store is null)
             return await CompleteAsync(gateway, template, options, logger, ct);
 
         var plan = await store.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.SpeakingGrade, ct);
+        if (accountPool is not null && accountState is not null)
+        {
+            plan = await accountPool.OrderAsync(accountState, plan, ct);
+        }
         logger.LogInformation(
             "Speaking grading plan: version {Version} ({Source}), hops [{Hops}], skipped [{Skipped}].",
             plan.Version, plan.Source, string.Join(", ", plan.Hops.Select(h => h.Provider)), string.Join("; ", plan.Skipped));

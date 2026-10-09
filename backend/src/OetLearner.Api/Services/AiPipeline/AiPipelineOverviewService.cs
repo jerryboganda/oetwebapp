@@ -55,6 +55,39 @@ public sealed record PipelineCodexReviewerSnapshot(
     DateTimeOffset? WeekStartedAt,
     IReadOnlyList<PipelineReviewerQueueItem> Queue);
 
+/// <summary>One usage window of one subscription account (5-hour rolling or weekly).</summary>
+public sealed record PipelineSubscriptionAccountWindow(
+    string Label,
+    long UsedTokens,
+    long? Cap,
+    double? UsedPct,
+    DateTimeOffset? ResetsAt);
+
+/// <summary>
+/// One subscription account as the rotation sees it (owner directive 2026-10-10): which engine group,
+/// where it stands in that group's order and why, and its own counters. All figures are the sidecar's
+/// estimates unless the CLI reported a real number; <see cref="PipelineSubscriptionAccountView.Reachable"/>
+/// false means no information at all, never "out of quota".
+/// </summary>
+public sealed record PipelineSubscriptionAccountView(
+    string ProviderCode,
+    string Group,
+    string? Name,
+    string Standing,
+    string? StandingReason,
+    IReadOnlyList<PipelineSubscriptionAccountWindow> Windows,
+    DateTimeOffset? LastQuotaErrorAt,
+    string? LastQuotaErrorKind,
+    DateTimeOffset? CooldownUntil,
+    DateTimeOffset SampledAt,
+    bool Reachable);
+
+/// <summary>The rotation policy the runtime is using right now.</summary>
+public sealed record SubscriptionPoolPolicyView(
+    double SwitchPercent,
+    int CooldownFloorMinutes,
+    int RefreshSeconds);
+
 public sealed record PipelineCreditGrantView(
     string Id,
     string ProviderCode,
@@ -84,7 +117,9 @@ public sealed record PipelineOverview(
     IReadOnlyList<PipelineLiveVoiceUsage> LiveVoiceSessions,
     PipelineClaudeMaxSnapshot ClaudeMax,
     PipelineCodexReviewerSnapshot CodexReviewer,
-    IReadOnlyList<PipelineCreditGrantView> Credits);
+    IReadOnlyList<PipelineCreditGrantView> Credits,
+    IReadOnlyList<PipelineSubscriptionAccountView> SubscriptionAccounts,
+    SubscriptionPoolPolicyView SubscriptionPool);
 
 public interface IAiPipelineOverviewService
 {
@@ -104,6 +139,7 @@ public sealed class AiPipelineOverviewService(
     IServiceScopeFactory scopeFactory,
     IWritingSubscriptionQuotaService claudeQuota,
     ICodexSubscriptionQuotaService codexQuota,
+    ISubscriptionAccountPool accountPool,
     TimeProvider clock,
     ILogger<AiPipelineOverviewService> logger) : IAiPipelineOverviewService
 {
@@ -155,6 +191,11 @@ public sealed class AiPipelineOverviewService(
         var claudeMax = await ClaudeMaxAsync(providers, now, ct);
         var codex = await CodexAsync(ct);
         var credits = await CreditsAsync(ct);
+        var accounts = await SubscriptionAccountsAsync(ct);
+        var policy = new SubscriptionPoolPolicyView(
+            accountPool.Policy.SwitchPercent,
+            (int)accountPool.Policy.CooldownFloor.TotalMinutes,
+            (int)accountPool.Policy.RefreshTtl.TotalSeconds);
 
         logger.LogDebug(
             "AI pipeline overview built (window={Window}): {Providers} providers, {Calls} calls, ${Cost}.",
@@ -172,7 +213,42 @@ public sealed class AiPipelineOverviewService(
             LiveVoiceSessions: liveVoice,
             ClaudeMax: claudeMax,
             CodexReviewer: codex,
-            Credits: credits);
+            Credits: credits,
+            SubscriptionAccounts: accounts,
+            SubscriptionPool: policy);
+    }
+
+    /// <summary>
+    /// The rotation's own view of every subscription account. Refreshing here also keeps the pool warm
+    /// for the next grading run; a probe failure degrades to an empty list (the run path is unaffected).
+    /// </summary>
+    private async Task<IReadOnlyList<PipelineSubscriptionAccountView>> SubscriptionAccountsAsync(CancellationToken ct)
+    {
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var state = scope.ServiceProvider.GetRequiredService<ISubscriptionAccountStateProvider>();
+            await accountPool.RefreshAsync(state, ct);
+            return accountPool.Accounts.Select(a => new PipelineSubscriptionAccountView(
+                a.ProviderCode,
+                a.Group,
+                a.Name,
+                a.Standing.ToString().ToLowerInvariant(),
+                a.StandingReason,
+                a.Windows.Select(w => new PipelineSubscriptionAccountWindow(
+                    w.Label, w.UsedTokens, w.Cap, w.UsedPct is { } pct ? Math.Round(pct * 100.0, 1) : null, w.ResetsAt))
+                    .ToList(),
+                a.LastQuotaErrorAt,
+                a.LastQuotaErrorKind,
+                a.CooldownUntil,
+                a.SampledAt,
+                a.Reachable)).ToList();
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Subscription account probe failed; the dashboard shows no accounts.");
+            return [];
+        }
     }
 
     // One grouped query over the window: (provider, feature) → calls/tokens/cost. Everything else

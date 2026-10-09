@@ -13,8 +13,10 @@ public sealed class SharedReviewerOptions
     /// <summary>Flat env var that overrides <see cref="MaxConcurrency"/> (applied at startup).</summary>
     public const string MaxConcurrencyEnvVar = "CODEX_REVIEWER_MAX_CONCURRENCY";
 
-    /// <summary>Maximum simultaneous Codex reviewer jobs across Writing AND Speaking (per process).</summary>
-    public int MaxConcurrency { get; set; } = 2;
+    /// <summary>Maximum simultaneous Codex reviewer jobs across Writing AND Speaking (per process).
+    /// Owner directive 2026-10-10: three Codex accounts = three serial sidecar lanes, so the gate matches
+    /// them. The hard bound is still each sidecar's own lane (one CLI run per account).</summary>
+    public int MaxConcurrency { get; set; } = 3;
 
     /// <summary>How long a job may wait for a Codex slot before the API fallback takes it. Never blocks until a quota reset.</summary>
     public int MaxQueueWaitSeconds { get; set; } = 45;

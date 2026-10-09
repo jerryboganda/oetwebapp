@@ -60,13 +60,17 @@ public static class SpeakingGradeReviewer
         OetLearner.Api.Services.AiPipeline.AiPipelinePlan? plan = null)
     {
         var shared = options ?? SharedReviewerOptions.Current;
-        // Owner-saved steps: which of Codex / the API step run, their models and their order (absent = legacy two-step).
-        var codexHop = plan?.Hops.FirstOrDefault(h => h.Provider == WritingSubscriptionProviders.Codex);
-        var apiHop = plan?.Hops.FirstOrDefault(h => h.Provider != WritingSubscriptionProviders.Codex);
-        var codexOn = plan is null || codexHop is not null;
+        // Owner-saved steps: which Codex accounts / the API step run, their models and their order (absent =
+        // legacy two-step). Subscription-account rotation (owner directive 2026-10-10) may have permuted
+        // the Codex accounts of this plan in memory before it got here; the first Codex account that answers wins.
+        var codexHops = SharedReviewerRunner.SubscriptionCodexHops(plan);
+        var apiHop = plan?.Hops.FirstOrDefault(h => OetLearner.Api.Services.AiPipeline.SubscriptionAccountGroups.GroupOf(h.Provider) is null);
+        var codexOn = plan is null || codexHops.Count > 0;
         var apiOn = plan is null || apiHop is not null;
-        var apiFirst = codexHop is not null && apiHop is not null && apiHop.Index < codexHop.Index;
-        var codexModel = string.IsNullOrWhiteSpace(codexHop?.Model) ? WritingSubscriptionProviders.CodexModel : codexHop!.Model;
+        var apiFirst = codexHops.Count > 0 && apiHop is not null && apiHop.Index < codexHops[0].Index;
+        var codexModel = codexHops.Count > 0 && !string.IsNullOrWhiteSpace(codexHops[0].Model)
+            ? codexHops[0].Model!
+            : WritingSubscriptionProviders.CodexModel;
         var apiProvider = apiHop?.Provider ?? shared.ApiFallbackProvider;
         var apiModel = string.IsNullOrWhiteSpace(apiHop?.Model) ? shared.ApiFallbackModel : apiHop!.Model;
         var template = ReviewRequest(primaryRequest);
@@ -78,7 +82,35 @@ public static class SpeakingGradeReviewer
                 CodexReviewerGate.Default,
                 "speaking",
                 assessmentId,
-                token => AttemptAsync(gateway, template, primary, WritingSubscriptionProviders.Codex, codexModel, token),
+                async token =>
+                {
+                    if (codexHops.Count == 0) throw new InvalidOperationException("The reviewer stage has no Codex account step.");
+                    Exception? lastHop = null;
+                    foreach (var hop in codexHops)
+                    {
+                        try
+                        {
+                            return await AttemptAsync(
+                                gateway,
+                                template,
+                                primary,
+                                hop.Provider,
+                                string.IsNullOrWhiteSpace(hop.Model) ? codexModel : hop.Model,
+                                token);
+                        }
+                        catch (Exception ex) when (SpeakingGradeChain.IsFailoverable(ex, token))
+                        {
+                            // One account out of quota (or down): the next Codex account runs inside this
+                            // same phase, then the runner's API fallback takes over.
+                            lastHop = ex;
+                            logger.LogWarning(
+                                "Speaking reviewer hop {Provider} failed ({ErrorType}); trying the next Codex account.",
+                                hop.Provider, ex.GetType().Name);
+                        }
+                    }
+
+                    throw lastHop ?? new InvalidOperationException("Every Codex account failed for this review.");
+                },
                 token => AttemptAsync(gateway, template, primary, apiProvider, apiModel, token),
                 logger,
                 ct,

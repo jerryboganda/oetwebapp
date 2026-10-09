@@ -23,6 +23,20 @@ public sealed record SharedReviewerRunInfo(
 public static class SharedReviewerRunner
 {
     /// <summary>
+    /// The Codex-account steps of a resolved reviewer plan, in the order the runtime should try them
+    /// (subscription-account rotation, owner directive 2026-10-10). A plan with no Codex step at all
+    /// yields an empty list and the caller runs only its API fallback.
+    /// </summary>
+    public static IReadOnlyList<OetLearner.Api.Services.AiPipeline.AiPipelineResolvedHop> SubscriptionCodexHops(
+        OetLearner.Api.Services.AiPipeline.AiPipelinePlan? plan)
+        => plan is null
+            ? []
+            : plan.Hops
+                .Where(h => OetLearner.Api.Services.AiPipeline.SubscriptionAccountGroups.GroupOf(h.Provider)
+                    == OetLearner.Api.Services.AiPipeline.SubscriptionAccountGroups.Codex)
+                .ToList();
+
+    /// <summary>
     /// Runs <paramref name="codexAttempt"/> through the shared gate and <paramref name="apiFallback"/> on any
     /// bounded-policy exhaustion. Control-plane refusals (local quota, budget, feature policy, grounding,
     /// mock ban) and the caller's own cancellation are never failed over. Transient provider failures

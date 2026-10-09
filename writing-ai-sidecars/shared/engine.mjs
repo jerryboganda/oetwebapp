@@ -278,3 +278,172 @@ export function parseJsonLines(text) {
   }
   return out;
 }
+
+// ─── Subscription usage windows (owner directive 2026-10-10) ────────────────────────────────────
+//
+// One ACCOUNT per sidecar, so the counters below are that account's own traffic through this
+// container — a lower bound of its real subscription usage (the agent console and other clients
+// burn the same allowance and are invisible here). That is why every number is `estimated`: only
+// the CLI's own quota error proves an account is out.
+//
+// Two windows are tracked because consumer subscriptions have both:
+//   * a rolling 5-hour window (burst protection), which frees as samples age out;
+//   * a weekly window (ISO week Monday 00:00 UTC), like Anthropic's.
+// A window only demotes an account when an operator-set cap is configured (env *_TOKEN_CAP);
+// without a cap its usedPct is null and the runtime keeps the account in its saved order.
+
+/** ISO week start (Monday 00:00 UTC) — matches Anthropic's weekly window closely enough. */
+export function isoWeekStart(d) {
+  const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = (x.getUTCDay() + 6) % 7;
+  x.setUTCDate(x.getUTCDate() - day);
+  return x.getTime();
+}
+
+const FIVE_HOURS_MS = 5 * 60 * 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+const MINUTE_MS = 60000;
+
+/**
+ * When the account's quota comes back, best-effort from the CLI's error text. The container runs
+ * with TZ=UTC, so a bare clock time ("resets at 5pm") is read as UTC. Returns epoch ms or null:
+ * an unreadable hint is null and the backend falls back to its own cooldown floor.
+ */
+export function parseQuotaResetHint(text) {
+  if (!text) return null;
+  const tail = String(text).slice(-600);
+  const now = Date.now();
+  // "2026-10-10 15:45" / "2026-10-10T15:45:00Z"
+  const iso = /(\d{4}-\d{2}-\d{2})[T ](\d{1,2}):(\d{2})(?::\d{2})?/.exec(tail);
+  if (iso) {
+    const at = Date.parse(`${iso[1]}T${iso[2].padStart(2, '0')}:${iso[3]}:00Z`);
+    if (!Number.isNaN(at) && at > now - MINUTE_MS) return at;
+  }
+  // "resets at 5pm" / "try again at 5:45 pm" (UTC: the container pins TZ=UTC).
+  const clock = /\b(?:at|by)\s+(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?\b/i.exec(tail);
+  if (clock) {
+    let hour = Number(clock[1]) % 12;
+    if (clock[3].toLowerCase() === 'p') hour += 12;
+    const base = new Date(now + 24 * 60 * MINUTE_MS);
+    let at = Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), base.getUTCDate(), hour, Number(clock[2] ?? 0));
+    if (at <= now) at += 24 * 60 * MINUTE_MS;
+    return at;
+  }
+  // "try again in 30 minutes" / "in 2 hours"
+  const rel = /\bin\s+(\d{1,4})\s*(minutes?|mins?|hours?|hrs?)\b/i.exec(tail);
+  if (rel) return now + Number(rel[1]) * (/^h/i.test(rel[2]) ? 60 * MINUTE_MS : MINUTE_MS);
+  return null;
+}
+
+/**
+ * Per-account usage windows plus the account's last quota/auth failure. In-memory only: a restart
+ * resets the counters (the sidecar never persists them), which the honest `estimated` source says
+ * out loud. Neither a counter nor a failure here ever changes what the sidecar accepts.
+ */
+export class SubscriptionUsageTracker {
+  #fiveHourCap;
+  #weeklyCap;
+  #samples = []; // { at, input, output } within the rolling 5h window
+  #weekStartedAt = isoWeekStart(new Date());
+  #weekRequests = 0;
+  #weekInput = 0;
+  #weekOutput = 0;
+  #lastErrorAt = null;
+  #lastErrorKind = null;
+  #lastErrorResetsAt = null;
+
+  constructor({ fiveHourCap = 0, weeklyCap = 0 } = {}) {
+    this.#fiveHourCap = Number(fiveHourCap) > 0 ? Number(fiveHourCap) : 0;
+    this.#weeklyCap = Number(weeklyCap) > 0 ? Number(weeklyCap) : 0;
+  }
+
+  /** One completed request on this account. */
+  record(inputTokens, outputTokens, at = Date.now()) {
+    this.#rollWeek(at);
+    const input = Number(inputTokens) || 0;
+    const output = Number(outputTokens) || 0;
+    this.#samples.push({ at, input, output });
+    this.#weekRequests += 1;
+    this.#weekInput += input;
+    this.#weekOutput += output;
+    this.#prune(at);
+  }
+
+  /** A typed quota/auth failure on this account; `hintAt` is a parsed reset time, when the CLI gave one. */
+  noteFailure(kind, hintAt = null, at = Date.now()) {
+    this.#lastErrorAt = at;
+    this.#lastErrorKind = kind;
+    this.#lastErrorResetsAt = hintAt && hintAt > at ? hintAt : null;
+  }
+
+  /** The windows for GET /usage. Caps of 0 report null usedPct (no estimate for that window). */
+  snapshot(at = Date.now()) {
+    this.#rollWeek(at);
+    this.#prune(at);
+    const fiveCutoff = at - FIVE_HOURS_MS;
+    let fiveInput = 0;
+    let fiveOutput = 0;
+    let fiveRequests = 0;
+    let oldest = null;
+    for (const sample of this.#samples) {
+      if (sample.at <= fiveCutoff) continue;
+      fiveInput += sample.input;
+      fiveOutput += sample.output;
+      fiveRequests += 1;
+      if (oldest === null || sample.at < oldest) oldest = sample.at;
+    }
+    const weekTokens = this.#weekInput + this.#weekOutput;
+    return {
+      windows: [
+        {
+          label: '5h',
+          usedTokens: fiveInput + fiveOutput,
+          inputTokens: fiveInput,
+          outputTokens: fiveOutput,
+          requests: fiveRequests,
+          cap: this.#fiveHourCap > 0 ? this.#fiveHourCap : null,
+          usedPct: this.#fiveHourCap > 0 ? Math.min(1, (fiveInput + fiveOutput) / this.#fiveHourCap) : null,
+          // Capacity starts freeing when our oldest sample leaves the window: a LOWER bound on the
+          // real reset, since other clients' usage is invisible here.
+          resetsAt: oldest !== null ? new Date(oldest + FIVE_HOURS_MS).toISOString() : null,
+        },
+        {
+          label: 'weekly',
+          usedTokens: weekTokens,
+          inputTokens: this.#weekInput,
+          outputTokens: this.#weekOutput,
+          requests: this.#weekRequests,
+          cap: this.#weeklyCap > 0 ? this.#weeklyCap : null,
+          usedPct: this.#weeklyCap > 0 ? Math.min(1, weekTokens / this.#weeklyCap) : null,
+          windowStartedAt: new Date(this.#weekStartedAt).toISOString(),
+          resetsAt: new Date(this.#weekStartedAt + WEEK_MS).toISOString(),
+        },
+      ],
+      lastQuotaErrorAt: this.#lastErrorAt === null ? null : new Date(this.#lastErrorAt).toISOString(),
+      lastQuotaErrorKind: this.#lastErrorKind,
+      lastQuotaErrorResetsAt: this.#lastErrorResetsAt === null
+        ? null
+        : new Date(this.#lastErrorResetsAt).toISOString(),
+    };
+  }
+
+  #prune(at) {
+    const cutoff = at - FIVE_HOURS_MS;
+    while (this.#samples.length > 0 && this.#samples[0].at <= cutoff) this.#samples.shift();
+  }
+
+  #rollWeek(at) {
+    if (at - this.#weekStartedAt < WEEK_MS) return;
+    this.#weekStartedAt = isoWeekStart(new Date(at));
+    this.#weekRequests = 0;
+    this.#weekInput = 0;
+    this.#weekOutput = 0;
+  }
+}
+
+/** True when a typed engine error should be recorded as this account's quota/auth failure. */
+export function isAccountFailure(err) {
+  if (err?.quotaExceeded === true || err instanceof QuotaExceededError) return 'quota';
+  if (err instanceof AuthExpiredError) return 'auth';
+  return null;
+}

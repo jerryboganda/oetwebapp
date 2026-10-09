@@ -127,7 +127,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
     // compiling and behaves exactly as before (absent = no review).
     IWritingGradeReviewer? gradeReviewer = null,
     // AI Pipeline Control Center: the owner-saved provider order. Optional LAST parameter, absent = the legacy selector path.
-    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null) : IWritingSubmissionEvaluationPipeline
+    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null,
+    // Subscription-account rotation (owner directive 2026-10-10): permutes the hops of one engine group
+    // per run by remaining quota. Optional LAST parameters, absent = the saved order runs as saved.
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool? accountPool = null,
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null) : IWritingSubmissionEvaluationPipeline
 {
     private readonly WritingGradeChainOptions _chainOptions = gradeChainOptions?.Value ?? new WritingGradeChainOptions();
 
@@ -2128,6 +2132,12 @@ private async Task AttachTaskModelAnswerAsync(
                 // The owner-saved order (admin Pipeline page) is read once per run, uncached. It is the only
                 // source of the order; nothing observed during a run can change it.
                 var plan = await pipelineStore.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.WritingGrade, ct);
+                if (accountPool is not null && accountState is not null)
+                {
+                    // Same hops, rotated inside each subscription engine group by remaining quota
+                    // (in-memory, per run; the saved order is never written).
+                    plan = await accountPool.OrderAsync(accountState, plan, ct);
+                }
                 logger.LogInformation(
                     "Writing grading plan for submission {SubmissionId}: version {Version} ({Source}), hops [{Hops}], skipped [{Skipped}].",
                     submission.Id, plan.Version, plan.Source,
