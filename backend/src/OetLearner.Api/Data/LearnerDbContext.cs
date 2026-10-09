@@ -1523,6 +1523,10 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // W10 — provider benchmark runs that gate route switches.
         OnModelCreatingAiProviderBenchmarks(modelBuilder);
 
+        // AI Pipeline Control Center (saved stage order, revisions, credit
+        // grants). Partial class in LearnerDbContext.AiPipeline.cs.
+        OnModelCreatingAiPipeline(modelBuilder);
+
         // Admin Documentation Center — evidence-grade platform documentation for
         // immigration/innovation review. Partial class in
         // LearnerDbContext.DocumentationCenter.cs.
@@ -1734,6 +1738,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiProviderBenchmarks.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiProviderBenchmarks(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AiPipeline.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingAiPipeline(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.DocumentationCenter.cs (partial).
