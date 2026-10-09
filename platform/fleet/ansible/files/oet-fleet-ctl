@@ -421,9 +421,12 @@ def start_agent(values, digest):
         if missing:
             raise Failed("trust is enabled but the node certificate files are missing: put-certs first")
         trust_args = [
-            # The only host mount and the only inbound port the fleet ever creates; the listener inside
-            # presents the node certificate and validates dialers against the manager CA.
+            # The only host mount and the only inbound ports the fleet ever creates; the listener inside
+            # presents the node certificate and validates dialers against the manager CA. 443 is published
+            # alongside 7443 because UpCloud trial-mode provider firewalls allow only 22/80/443/ICMP and are
+            # immutable — the allocation endpoint for such helpers is host:443.
             "--publish", "7443:7443",
+            "--publish", "443:7443",
             "--volume", CERT_DIR + ":/certs/ubag:ro",
         ]
     docker("rm", "-f", CONTAINER, check=False)
