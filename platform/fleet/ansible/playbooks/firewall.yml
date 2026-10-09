@@ -62,11 +62,6 @@
                   ip6 nexthdr icmpv6 accept
                   tcp dport {{ fleet_target_port }} ip saddr { {{ fleet_allowed_v4 | join(', ') }} } accept
                   {{ fleet_allow_v6_rule }}
-                  {% if 443 in fleet_dial_ports %}
-                  # Trial-firewall workaround (UpCloud trial firewalls allow only 22/80/443/ICMP and are
-                  # immutable): dials arrive on 443 and are redirected to the listener on 7443.
-                  tcp dport 443 redirect to :7443
-                  {% endif %}
                   {% for port in fleet_dial_ports %}
                   # UBAG dial plane: the mTLS listener behind it refuses everything without the node certificate.
                   tcp dport {{ port }} accept
@@ -124,12 +119,16 @@
           when: (fleet_dial_ports | default([])) | length > 0
           ansible.builtin.shell: |
             port="$(echo '{{ fleet_dial_ports | join(" ") }}' | awk '{print $1}')"
-            if timeout 6 bash -c "echo > /dev/tcp/127.0.0.1/$port" 2>/dev/null; then
-              echo "self-test: 127.0.0.1:$port answers (published and listening)"
+            probe="$port"
+            if [ "$probe" = "7443" ] && docker port oet-fleet-agent 443/tcp >/dev/null 2>&1; then
+              probe="443"
+            fi
+            if timeout 6 bash -c "echo > /dev/tcp/127.0.0.1/$probe" 2>/dev/null; then
+              echo "self-test: 127.0.0.1:$probe answers (published and listening)"
             else
               refused=0
-              timeout 3 bash -c "echo > /dev/tcp/127.0.0.1/$port" 2>/dev/null || refused=$?
-              echo "self-test: 127.0.0.1:$port no answer (rc=$refused) — container publish or listener down"
+              timeout 3 bash -c "echo > /dev/tcp/127.0.0.1/$probe" 2>/dev/null || refused=$?
+              echo "self-test: 127.0.0.1:$probe no answer (rc=$refused) — container publish or listener down"
             fi
           register: fleet_dial_selftest
           changed_when: false
