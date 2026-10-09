@@ -126,45 +126,7 @@ public static class AiAssistantEndpoints
             return saved ? Results.NoContent() : Results.NotFound();
         }).RequireRateLimiting("PerUserWrite");
 
-private static async Task<Dictionary<string, AiProviderModelCapability>> LoadProbeMapAsync(
-        LearnerDbContext db, string providerCode, CancellationToken ct)
-    {
-        var rows = await db.AiProviderModelCapabilities.AsNoTracking()
-            .Where(c => c.ProviderCode == providerCode)
-            .ToListAsync(ct);
-        return rows.ToDictionary(c => c.Model, StringComparer.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
-    /// Is this model safe to OFFER on an assistant surface, given what the live probe observed?
-    ///
-    /// <para>
-    /// Two different filters, deliberately:
-    /// </para>
-    /// <list type="number">
-    /// <item><b>Tools and streaming are required.</b> Every assistant turn ships a toolset and the UI
-    /// renders incremental tokens, so a model that cannot do either is not a model this surface can
-    /// use.</item>
-    /// <item><b>Vision is required, because the surfaces ACCEPT image attachments.</b> Measured against
-    /// a real key on 2026-10-09: <c>glm-4.5-flash</c> returns <c>400</c> on an <c>image_url</c> content
-    /// part — vision lives in the <c>v</c> variants (<c>glm-4.5v</c>, <c>glm-4.6v</c>), not in the plain
-    /// Flash line. Offering it would 400 on every image turn; failover would rescue the turn but the
-    /// user would still see the delay.</item>
-    /// </list>
-    ///
-    /// <para>
-    /// <b>A model with no probe row is allowed through.</b> Requiring a probe would empty every picker
-    /// until an admin pressed the button, which is a worse failure than offering an unverified model
-    /// that still fails over. Unknown means "not yet established", not "incapable" — the opposite of
-    /// the rule the FEATURE ROUTE gate uses, and deliberately so: a route is an owner's standing
-    /// decision, whereas a picker entry is just a suggestion.
-    /// </para>
-    /// </summary>
-    private static bool IsOfferableAssistantModel(AiProviderModelCapability? capability)
-        => capability is null
-           || (capability.SupportsTools && capability.SupportsStreaming && capability.SupportsVision);
-
-        // Catalogs, never mixed: Claude (Anthropic API), UBAG (browser), Z.AI (GLM) and, for
+    // Catalogs, never mixed: Claude (Anthropic API), UBAG (browser), Z.AI (GLM) and, for
         // learners only and only while its provider row is active, OpenCode.
         // `claude_web` is a UBAG browser target, not an Anthropic model.
         group.MapGet("/models", async (
@@ -173,6 +135,7 @@ private static async Task<Dictionary<string, AiProviderModelCapability>> LoadPro
             HttpContext ctx,
             CancellationToken ct = default) =>
         {
+            var probeMap = await LoadProbeMapAsync(db, ZaiProviderDefaults.ProviderCode, ct);
             if (GetUserRole(ctx.User) == ApplicationUserRoles.Learner)
             {
                 // The learner's list is the curated Z.AI catalog, offered only while that row is
@@ -183,7 +146,6 @@ private static async Task<Dictionary<string, AiProviderModelCapability>> LoadPro
                     (learnerZaiRow?.AllowedModelsCsv ?? string.Empty)
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                     StringComparer.OrdinalIgnoreCase);
-var probed = await LoadProbeMapAsync(db, ZaiProviderDefaults.ProviderCode, ct);
                 var learnerModels = learnerZaiRow is null || string.IsNullOrWhiteSpace(learnerZaiRow.ApiKeyHint)
                     ? Array.Empty<string>()
                     : AssistantModelCatalog.LearnerModels
@@ -191,7 +153,7 @@ var probed = await LoadProbeMapAsync(db, ZaiProviderDefaults.ProviderCode, ct);
                         // column), so it must NOT be read as "nothing is allowed".
                         .Where(m => learnerZaiAllowed.Count == 0 || learnerZaiAllowed.Contains(m))
                         .Where(m => IsOfferableAssistantModel(
-                            probed.TryGetValue(m, out var cap) ? cap : null))
+                            probeMap.TryGetValue(m, out var learnerCap) ? learnerCap : null))
                         .ToArray();
                 return Results.Ok(new
                 {
@@ -219,7 +181,6 @@ var probed = await LoadProbeMapAsync(db, ZaiProviderDefaults.ProviderCode, ct);
             // picker never advertises a model the admin has not actually set up. Free-to-call ids are
             // included; the label in the picker says which they are.
             var zaiRow = await providerRegistry.FindByCodeAsync(ZaiProviderDefaults.ProviderCode, ct);
-            var probed = await LoadProbeMapAsync(db, ZaiProviderDefaults.ProviderCode, ct);
             if (zaiRow is not null && !string.IsNullOrWhiteSpace(zaiRow.ApiKeyHint))
             {
                 var zaiAllowed = new HashSet<string>(
@@ -229,7 +190,7 @@ var probed = await LoadProbeMapAsync(db, ZaiProviderDefaults.ProviderCode, ct);
                 var zaiModels = AssistantModelCatalog.ZaiModels
                     .Where(m => zaiAllowed.Count == 0 || zaiAllowed.Contains(m))
                     .Where(m => IsOfferableAssistantModel(
-                        probed.TryGetValue(m, out var cap) ? cap : null))
+                        probeMap.TryGetValue(m, out var staffCap) ? staffCap : null))
                     .ToArray();
                 if (zaiModels.Length > 0)
                 {
@@ -908,6 +869,39 @@ var probed = await LoadProbeMapAsync(db, ZaiProviderDefaults.ProviderCode, ct);
             return null;
         }
     }
+
+    private static async Task<Dictionary<string, AiProviderModelCapability>> LoadProbeMapAsync(
+        LearnerDbContext db, string providerCode, CancellationToken ct)
+    {
+        var rows = await db.AiProviderModelCapabilities.AsNoTracking()
+            .Where(c => c.ProviderCode == providerCode)
+            .ToListAsync(ct);
+        return rows.ToDictionary(c => c.Model, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Is this model safe to OFFER on an assistant surface, given what the live probe observed?
+    ///
+    /// <para>
+    /// Two filters, deliberately. <b>Tools and streaming are required</b>: every assistant turn ships a
+    /// toolset and the UI renders incremental tokens. <b>Vision is required because the surfaces
+    /// ACCEPT image attachments</b> — measured against a real key on 2026-10-09, <c>glm-4.5-flash</c>
+    /// returns <c>400</c> on an <c>image_url</c> part, because vision lives in the <c>v</c> variants
+    /// (<c>glm-4.5v</c>, <c>glm-4.6v</c>), not in the plain Flash line. Offering it would 400 on every
+    /// image turn; failover would rescue the turn, but the user would still eat the delay.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>A model with no probe row is allowed through.</b> Requiring a probe would empty every picker
+    /// until an admin pressed the button, which is worse than offering an unverified model that still
+    /// fails over. Unknown means "not yet established", not "incapable" — deliberately the opposite of
+    /// the FEATURE ROUTE gate, which fails closed on unprobed models, because a route is a standing
+    /// owner decision whereas a picker entry is only a suggestion.
+    /// </para>
+    /// </summary>
+    private static bool IsOfferableAssistantModel(AiProviderModelCapability? capability)
+        => capability is null
+           || (capability.SupportsTools && capability.SupportsStreaming && capability.SupportsVision);
 
     /// <summary>True while the OpenCode provider row exists and an admin has it active.</summary>
     private static async Task<string[]> GetOpenCodeModelsAsync(IAiProviderRegistry providerRegistry, CancellationToken ct)
