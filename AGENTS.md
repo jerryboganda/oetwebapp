@@ -101,6 +101,13 @@ The owner tests the live product by hand and reports bugs; the agent fixes them 
 - **Owner-confirmed carve-out (2026-10-09, AI Pipeline Control Center):** an on-demand, in-app **Pipeline self-check** (admin button, runs on the server, never in CI), a provider-usage reconciliation report and manual production scripts under `scripts/qa/` are allowed as product evidence. CI still runs no tests of any kind.
 - **Owner-confirmed carve-out (2026-10-09, Writing validator self-check):** an on-demand, admin-only "Validator self-check" on the Admin > Writing hub (`POST /v1/admin/writing/validator-self-check`, `WritingValidatorSelfCheck`) runs golden clinical-abbreviation cases (QD/QID/QDS/QOD/BD/TDS/PRN, scan and table forms, OD vs right eye, completed vs pending actions) through the deployed Model Answer validator on the server. It never runs in CI, writes nothing and calls no AI provider.
 - **Owner-confirmed carve-out (2026-10-09, AI provider capability probe):** an on-demand, admin-only **capability probe** on `/admin/ai-providers` (`POST /v1/admin/ai/providers/{code}/probe-capabilities`, `AiProviderCapabilityProbe`) calls a provider's live endpoint with its own stored key to record what each model *actually* supports (tools, images, documents, JSON mode, streaming, embeddings, thinking). It exists because vendor documentation cannot be trusted for this — Z.AI's own OpenAPI schema and model page contradict each other about `response_format`. It runs only on an admin click, never on a schedule and never in CI. CI still runs no tests of any kind.
+- **Z.AI measured state (2026-10-09, owner directive).** The key authenticates (`GET /models` 200) but the
+  account returns **`429 / code 1113 "Insufficient balance or no resource package"`** on every paid model,
+  including the default `glm-5.3-flash`; only the free tier runs. For the same key, `response_format:
+  json_object` was **proven working** on `glm-4.5-flash`, and forced thinking was **proven empirically**
+  (`max_tokens=32` returns empty content with `finish_reason=length`; `512` returns the answer). The row
+  therefore stays **inactive, keyless and auto-select OFF** until the account is funded and the probe has
+  been run. Do not enable it before both. Evidence and the ordered enablement steps: `docs/ops/ZAI-PROVIDER.md` §7-§9.
 - **Standing product rules still bind** (Max never off, the $0 Writing rule, Writing house style, scoring and rulebook
   invariants, the Speaking Provisional label ...). With no CI test enforcing them, agents follow them by reading the rules.
 

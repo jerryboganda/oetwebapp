@@ -213,33 +213,94 @@ chatbot must not depend on that.
 
 ---
 
-## 7. Known risks — read before flipping anything on
+## 7. What has actually been measured against this key
 
-1. **`response_format` may be unavailable** on `glm-5.3-flash`. If the probe says no, every
-   JSON-gated feature code refuses Z.AI. Those features stay on Claude, or use prompt-based JSON with
-   a validating retry. This is the single most likely finding to change part of the design.
-2. **Forced thinking cannot be disabled**, and reasoning bills as output tokens. Seeded at `low`;
-   alert-only monitoring. If volume proves uncomfortable, move to a non-forced model — at the cost of
-   image turns.
-3. **GLM tool-call correctness is unmeasured here.** `SafetyGuard` gates what is *permitted*, not
+Measured 2026-10-09 by direct probe of `https://api.z.ai/api/paas/v4` with the owner's own key,
+before enabling anything. Facts, not documentation:
+
+| Check | Result |
+|---|---|
+| Key validity (`GET /models`) | **200.** The key authenticates. |
+| Catalogue returned | 11 ids: `glm-4.5`, `glm-4.5-air`, `glm-4.6`, `glm-4.7`, `glm-5`, `glm-5-turbo`, `glm-5.1`, `glm-5.2`, `glm-5.3`, `glm-5.3-flash`, `glm-5.3-flashx` |
+| `glm-5.3-flash` (the default) | **429, code 1113 — "Insufficient balance or no resource package. Please recharge."** |
+| `glm-4.5-flash` (free tier) | **Runs.** Paid models cannot be used until the account is funded. |
+| `GET /models` is not exhaustive | `glm-4.5-flash` runs but is **absent** from the catalogue; `glm-4.7-flash` is absent but was accepted (transient overload `1305`), not rejected as unknown. |
+
+### Forced thinking — confirmed empirically, not assumed
+
+`glm-4.5-flash`, same request, only the token budget varied:
+
+```
+max_tokens=32    content=""      reasoning_chars=138  finish_reason=length
+max_tokens=512   content="ready" reasoning_chars=718  finish_reason=stop
+```
+
+The model spends the budget thinking and then returns **empty content with `finish_reason=length`**.
+That is indistinguishable from a bad key, which is exactly the trap `RequiresThinkingBudget` in
+`AiProviderConnectionTester` exists to avoid — the connection tester grants a real 512-token thinking
+budget rather than the 1 token that would report a working key as broken.
+
+### `response_format` — works, on the model that could be tested
+
+`glm-4.5-flash` with `response_format: {type: "json_object"}` returned `{"ok":true}` — accepted, and
+the content really was JSON. **Z.AI's OpenAPI schema is therefore incomplete rather than correct**,
+which is the concrete reason the probe exists and the reason this table is the routing authority
+instead of the spec.
+
+**Still unverified for `glm-5.3-flash` specifically**, because the balance block prevented the call.
+Re-run **Probe capabilities** after funding; it settles it per model and nothing else will.
+
+---
+
+## 8. Known risks — read before enabling anything
+
+1. **The account has no balance.** Every paid model — including `glm-5.3-flash`, the owner-directed
+   default — is refused with `1113`. Z.AI cannot be switched on until it is funded. Only the free
+   tier runs today.
+2. **`glm-5.3-flash`'s `response_format` support is unconfirmed.** Proven working on
+   `glm-4.5-flash`; if it turns out to be unsupported on 5.3-FLASH, every JSON-gated feature code
+   refuses Z.AI and those stay on Claude. The probe answers this in one click once funded.
+3. **Forced thinking cannot be disabled**, and reasoning bills as output tokens. Confirmed above.
+   Seeded at `reasoning_effort=low`; alert-only monitoring.
+4. **GLM tool-call correctness is unmeasured here.** `SafetyGuard` gates what is *permitted*, not
    whether the model executes correctly. The admin chatbot keeps its mutating toolset by owner
    decision, which is a real risk, not a solved one.
-4. **Z.AI rate limits are unconfirmed.** RPM/TPM for pay-as-you-go could not be verified. Z.AI needs
-   its own concurrency lane and circuit breaker sized after real numbers; today it shares the
-   generic platform-key path.
-5. **Data residency.** Learner prompts — which can include a learner's own draft Writing letter and
+5. **Z.AI rate limits are unconfirmed.** RPM/TPM for pay-as-you-go could not be verified. Z.AI rides
+   the shared platform-key gate today rather than a vendor-specific lane; size one after real numbers.
+6. **Data residency.** Learner prompts — which can include a learner's own draft Writing letter and
    the clinical detail they typed — go to Zhipu AI. The owner accepted this on 2026-10-09 with Z.AI's
    terms unverified. Re-read them before the learner unpin.
 
 ---
 
-## 8. Rollback
+## 9. Enabling it, in order
+
+The key is **not** in the system. The row ships inactive, keyless and auto-select off.
+
+1. `/admin/ai-providers` → the **Z.AI (GLM)** row → paste the key → **Save**.
+2. **Test** — green means the key and the endpoint are good. It will report *failed* while the balance
+   is empty, and that failure is about funds, not credentials.
+3. **Probe capabilities** — records what each model actually does and settles `response_format` for
+   `glm-5.3-flash`. Do this before any routing.
+4. Tick **Active**.
+5. Decide **Automatic selection**. Leave it OFF: GLM is reached where a route points at it, which is
+   what you want, and OFF is what guarantees adding it changed nothing you did not choose.
+6. `/admin/ai-assistant/config` to set the learner/staff defaults; the catalog default is
+   `glm-5.3-flash`.
+
+Rollback at any point: turn auto-selection off, clear the feature routes pointing at `z-ai`, or set the
+row inactive. No deploy is required for any of these.
+
+---
+
+## 10. Rollback
 
 The provider is inert by default, so rollback is mostly subtraction:
 
-- Turn `ParticipatesInAutoSelection` off → nothing unrouted can reach it.
+- Turn **Automatic selection** off → nothing unrouted can reach it.
 - Clear the `AiFeatureRoutes` rows pointing at `z-ai`.
-- Remove the GLM hop from the four pipeline stages (owner-set order lives in `AiPipelineStore`).
-- Set `is_active = false` on the row, or deactivate from the admin screen.
-- Code rollback: `gh workflow run production-deploy.yml -f sha=<previous-sha>` — the migration is
-  additive and its `Down` drops only the new table and column.
+- Deactivate the row (or clear the key) from `/admin/ai-providers`.
+- Remove the GLM hop from the four pipeline stages — the owner-set order lives in `AiPipelineStore`,
+  so do it from `/admin/ai-pipelines`, never by editing `AiPipelineStages` in code.
+- Code rollback: `gh workflow run production-deploy.yml -f sha=<previous-sha>`. The migration is
+  additive and its `Down` drops only the new table and the new column.
