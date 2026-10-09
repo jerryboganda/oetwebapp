@@ -6,9 +6,10 @@
 # subscriptions (primary) and the Codex subscriptions (fallback) without any
 # API keys.
 #
-# One container per ACCOUNT (owner directive 2026-10-10): three Claude Max
-# accounts (`oet-writing-claude`, `-2`, `-3`) and three ChatGPT Business Codex
-# accounts (`oet-writing-codex`, `-2`, `-3`). All accounts of one engine run the
+# One container per ACCOUNT (owner directive 2026-10-10; Claude pool trimmed
+# to two on 2026-10-09): two Claude Max accounts (`oet-writing-claude`,
+# `-2`) and three ChatGPT Business Codex accounts (`oet-writing-codex`, `-2`,
+# `-3`). All accounts of one engine run the
 # SAME image; only the credential volume and the per-account quota caps differ.
 # Every account is its own serial lane, so the runtime picks the account with
 # the most quota left (backend `SubscriptionAccountPool`).
@@ -87,7 +88,7 @@ services:
       # Reach the vendor through the shared egress allowlist proxy.
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
       HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
-      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
     volumes:
       # Shared with oet-agent-console: the dedicated Max 5x credential home.
       - oet_agent_home:/home/agent
@@ -118,38 +119,11 @@ services:
       WRITING_CLAUDE_5H_TOKEN_CAP: ${WRITING_CLAUDE_2_5H_TOKEN_CAP:-0}
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
       HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
-      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
     volumes:
       # Own credential home: a DIFFERENT Max account than the primary sidecar.
       - oet_writing_claude_home_2:/home/agent
       - writing_claude_tmp_2:/tmp
-    networks:
-      - oet_writing_net
-      - oet_agent_net
-      - oet_agent_ctl
-
-  writing-claude-3:
-    <<: *sidecar-hardening
-    image: ${WRITING_CLAUDE_3_IMAGE:?Set WRITING_CLAUDE_3_IMAGE in writing-ai.env}
-    container_name: oet-writing-claude-3
-    hostname: oet-writing-claude-3
-    environment:
-      <<: *lane-env
-      NODE_ENV: production
-      TZ: UTC
-      PORT: "8080"
-      CLAUDE_CONFIG_DIR: /home/agent/.claude
-      WRITING_CLAUDE_MODEL: ${WRITING_CLAUDE_3_MODEL:-claude-opus-5-5}
-      WRITING_CLAUDE_EFFORT: ${WRITING_CLAUDE_3_EFFORT:-high}
-      WRITING_CLAUDE_WEEKLY_TOKEN_CAP: ${WRITING_CLAUDE_3_WEEKLY_TOKEN_CAP:-0}
-      WRITING_CLAUDE_5H_TOKEN_CAP: ${WRITING_CLAUDE_3_5H_TOKEN_CAP:-0}
-      HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
-      HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
-      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
-    volumes:
-      # Own credential home: a THIRD Max account.
-      - oet_writing_claude_home_3:/home/agent
-      - writing_claude_tmp_3:/tmp
     networks:
       - oet_writing_net
       - oet_agent_net
@@ -173,7 +147,7 @@ services:
       WRITING_CODEX_5H_TOKEN_CAP: ${WRITING_CODEX_5H_TOKEN_CAP:-0}
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
       HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
-      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
     volumes:
       # Primary Codex credential home (NOT shared with the agent console — see
       # header). One-time device-code login on first deploy.
@@ -201,7 +175,7 @@ services:
       WRITING_CODEX_5H_TOKEN_CAP: ${WRITING_CODEX_2_5H_TOKEN_CAP:-0}
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
       HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
-      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
     volumes:
       # Own credential home: a SECOND ChatGPT Business account.
       - oet_writing_codex_home_2:/home/agent
@@ -228,7 +202,7 @@ services:
       WRITING_CODEX_5H_TOKEN_CAP: ${WRITING_CODEX_3_5H_TOKEN_CAP:-0}
       HTTPS_PROXY: ${WRITING_EGRESS_PROXY:-}
       HTTP_PROXY: ${WRITING_EGRESS_PROXY:-}
-      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
+      NO_PROXY: oet-writing-claude,oet-writing-claude-2,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3,localhost,127.0.0.1
     volumes:
       # Own credential home: a THIRD ChatGPT Business account.
       - oet_writing_codex_home_3:/home/agent
@@ -265,15 +239,12 @@ volumes:
   # One credential volume per EXTRA account (created by `up -d`; never shared).
   oet_writing_claude_home_2:
     name: oet_writing_claude_home_2
-  oet_writing_claude_home_3:
-    name: oet_writing_claude_home_3
   oet_writing_codex_home_2:
     name: oet_writing_codex_home_2
   oet_writing_codex_home_3:
     name: oet_writing_codex_home_3
   writing_claude_tmp:
   writing_claude_tmp_2:
-  writing_claude_tmp_3:
   writing_codex_tmp:
   writing_codex_tmp_2:
   writing_codex_tmp_3:

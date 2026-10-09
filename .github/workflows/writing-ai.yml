@@ -137,10 +137,11 @@ jobs:
             docker compose --env-file "$env_file" -f "$WRITING_COMPOSE_FILE" "$@"
           }
 
-          # One container per subscription account (owner directive 2026-10-10). All accounts of one
-          # engine run the SAME image tag; only the credential volume and quota caps differ.
-          services=(writing-claude writing-claude-2 writing-claude-3 writing-codex writing-codex-2 writing-codex-3)
-          image_env=(WRITING_CLAUDE_IMAGE WRITING_CLAUDE_2_IMAGE WRITING_CLAUDE_3_IMAGE WRITING_CODEX_IMAGE WRITING_CODEX_2_IMAGE WRITING_CODEX_3_IMAGE)
+          # One container per subscription account (owner directive 2026-10-10; Claude pool
+          # trimmed to two on 2026-10-09). All accounts of one engine run the SAME image tag;
+          # only the credential volume and quota caps differ.
+          services=(writing-claude writing-claude-2 writing-codex writing-codex-2 writing-codex-3)
+          image_env=(WRITING_CLAUDE_IMAGE WRITING_CLAUDE_2_IMAGE WRITING_CODEX_IMAGE WRITING_CODEX_2_IMAGE WRITING_CODEX_3_IMAGE)
           for i in "${!services[@]}"; do
             case "${services[$i]}" in
               writing-claude*) export "${image_env[$i]}=$WRITING_CLAUDE_IMAGE" ;;

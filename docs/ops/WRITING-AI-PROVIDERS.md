@@ -2,8 +2,9 @@
 
 **Status:** authoritative operations runbook for the final Writing AI provider setup.
 
-**Account pool (owner directive 2026-10-10):** every subscription engine runs **one container per
-account** — three Claude Max accounts (`oet-writing-claude`, `-2`, `-3`) and three ChatGPT Business
+**Account pool (owner directive 2026-10-10; Claude pool trimmed to two on 2026-10-09):** every
+subscription engine runs **one container per
+account** — two Claude Max accounts (`oet-writing-claude`, `-2`) and three ChatGPT Business
 accounts (`oet-writing-codex`, `-2`, `-3`), each with its own credential volume and its own serial
 lane. Each sidecar publishes its own rolling 5-hour and weekly counters (`GET /usage`), and the
 backend pool (`Services/AiPipeline/SubscriptionAccountPool.cs`) puts the account with the most quota
@@ -55,7 +56,6 @@ grade per letter.
 |---|---|---|---|
 | Claude Max (primary) | `oet-writing-claude` | `oet-agent-console_oet_agent_home` — **shared with the agent console** | One credential copy only, to avoid OAuth refresh-token rotation conflicts. The console must be re-logged-in with the personal account to fully free this account's allowance. |
 | Claude Max account 2 | `oet-writing-claude-2` | `oet_writing_claude_home_2` (**own**) | Dedicated 5x login: `docker exec -it -u 10002 oet-writing-claude-2 claude auth login` (device code). |
-| Claude Max account 3 | `oet-writing-claude-3` | `oet_writing_claude_home_3` (**own**) | Same as account 2. |
 | ChatGPT Business (primary) | `oet-writing-codex` | `oet_writing_codex_home` (**dedicated, not shared**) | The agent console's `/etc/codex/requirements.toml` forces `approval_policy=UnlessTrusted`, which hangs headless `codex exec`; the sidecars run `--ignore-user-config` so each can use its own login. |
 | ChatGPT Business account 2 | `oet-writing-codex-2` | `oet_writing_codex_home_2` (**own**) | One-time `codex login --device-auth` as the second business account. |
 | ChatGPT Business account 3 | `oet-writing-codex-3` | `oet_writing_codex_home_3` (**own**) | Same as account 2. |
@@ -71,7 +71,7 @@ device-code login for that account. Content is never persisted outside the CLI's
 ## 1A. Account pool, in one page
 
 - **Containers:** three per engine, same image, 512 MB memory limit each (`memswap_limit` too), one
-  CLI run at a time (lane concurrency 1). Three accounts = three parallel lanes.
+  CLI run at a time (lane concurrency 1). Two Claude accounts = two parallel Claude lanes; three Codex accounts = three parallel Codex lanes.
 - **Counters:** `GET http://oet-writing-<engine>[-n]:8080/usage` returns `windows[]`
   (`label: 5h | weekly`, `usedTokens`, `cap`, `usedPct`, `resetsAt`), `lastQuotaErrorAt`,
   `lastQuotaErrorKind`, `lastQuotaErrorResetsAt`. A window with `cap: null` has no estimate and never
@@ -130,7 +130,7 @@ device-code login for that account. Content is never persisted outside the CLI's
    ```
 4. **One-time logins, one per account** (owner-run; the primary Claude reuses the existing 5x login):
    ```bash
-   for engine in claude-2 claude-3; do
+   for engine in claude-2; do
      docker exec -it -u 10002 oet-writing-$engine claude auth login    # device code, as that Max account
    done
    for engine in codex codex-2 codex-3; do
@@ -143,7 +143,7 @@ device-code login for that account. Content is never persisted outside the CLI's
    is the OAuth refresh-token conflict the volumes exist to prevent.
 5. **Smoke every account:**
    ```bash
-   for engine in claude claude-2 claude-3; do
+   for engine in claude claude-2; do
      docker exec -u 10002 oet-writing-$engine claude -p "Reply with exactly: OK"
    done
    for engine in codex codex-2 codex-3; do
@@ -160,7 +160,7 @@ device-code login for that account. Content is never persisted outside the CLI's
 ## 3. Backend wiring
 
 - **Provider rows** are seeded idempotently by `WritingSubscriptionProviderSeeder`: one row per
-  account (`writing-claude-sub`, `writing-claude-sub-2`, `writing-claude-sub-3`, `writing-codex-sub`,
+  account (`writing-claude-sub`, `writing-claude-sub-2`, `writing-codex-sub`,
   `writing-codex-sub-2`, `writing-codex-sub-3`), pointing at
   `http://oet-writing-<engine>[-n]:8080`. The account rows are seeded **inactive**: an account becomes
   usable when an admin enables its row (or adds it as a hop on `/admin/ai-pipelines`, which resolves
@@ -170,7 +170,7 @@ device-code login for that account. Content is never persisted outside the CLI's
   `docker-compose.production.yml` defaults to exactly this, and the VPS `.env.production` can carry
   the list while the repo default is updated in the same commit:
   ```
-  OET_INTERNAL_AI_HOSTS=ubag-vps-gateway-1,oet-writing-claude,oet-writing-claude-2,oet-writing-claude-3,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3
+  OET_INTERNAL_AI_HOSTS=ubag-vps-gateway-1,oet-writing-claude,oet-writing-claude-2,oet-writing-codex,oet-writing-codex-2,oet-writing-codex-3
   ```
   Without this the SSRF guard refuses the plain-HTTP internal base URLs.
 - **Keyless rows:** the seeded rows store the literal marker `subscription-sidecar` (not
@@ -328,7 +328,7 @@ switch threshold.
 - **Claude accounts:** the primary's credential lives in `oet_agent_home`; re-auth via the agent
   console connect flow (it owns that volume), or
   `docker exec -it -u 10002 oet-writing-claude claude auth login`. Accounts 2 and 3:
-  `docker exec -it -u 10002 oet-writing-claude-2 claude auth login` (and `-3`).
+  `docker exec -it -u 10002 oet-writing-claude-2 claude auth login`.
 - **Codex accounts:** `docker exec -it -u 10002 oet-writing-codex codex login --device-auth`
   (and `oet-writing-codex-2`, `oet-writing-codex-3`). Each has its own volume, so each needs its own
   device-code flow.
