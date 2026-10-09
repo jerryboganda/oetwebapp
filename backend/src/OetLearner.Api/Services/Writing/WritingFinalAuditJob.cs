@@ -90,6 +90,7 @@ internal static class WritingFinalAuditSpec
         new("7436a118-c943-478d-b8ef-626565204522", "pack 54", [("\nRe: Ms Ling Wu\n", "\nRe: Ling Wu, DOB: 1 March 1996\n"), ("Ms Wu's", "Ling's"), ("Ms Wu", "Ling")]),
         new("75134963-0c27-4481-b9f5-2b1786421781", "pack 55", [("\n\n8 July 2017\n\nDear Admissions Officer,", "\n\n11 July 2017\n\nDear Admissions Officer,"), ("Today, endoscopy, biopsy and barium swallow confirmed", "On 8 July, endoscopy, biopsy and barium swallow confirmed")]),
         new("7b09ff8d-9448-49c5-9fb3-e232bc0e20d5", "pack 57", [("\nRe: Ms Nina Sharman\n", "\nRe: Ms Nina Sharman, DOB: 9 February 1951\n")]),
+        new("8dc5d15f-8eef-437d-80f8-f3985ca3b76b", "pack 61", [("\nEC1 1BB\n", "\n")]),
         new("9489ce12-1555-4dce-958d-d648e0218e74", "pack 64", [(", requiring significant assistance.", ".")]),
         new("95f2ea74-0f4e-4424-af68-ced741716552", "pack 66", [("There is no history of such infection, IV drug use or overseas travel.", "Her partner has no IV drug use or recent overseas travel."), ("She has been on the oral contraceptive pill for twelve months.", "She has taken the contraceptive pill for twelve months."), ("her last sexual contact was fourteen days ago", "her last sexual contact was fourteen days before presentation")]),
         new("a3d1b730-604c-4af7-82ef-cf1c40015bac", "pack 74", [("\n\n22 April 2015\n\nDear", "\n\nDear"), ("The wound was re-dressed on 19 April 2015.", "The wound was re-dressed on 19 April."), ("re-dress Ms Norris's wound today.", "re-dress Ms Norris's wound on 22 April.")]),
@@ -108,6 +109,7 @@ internal static class WritingFinalAuditSpec
         new("8ce14aa5-d564-401a-86dc-e0039e7ae437", "pack 180", [(" Insulin, 50 IU and a statin, 40 mg, were continued.", "")]),
         new("dced34e1-ab84-43e3-af54-3e124d08d5b8", "pack 194", [("I advised smoking cessation and discussed likely investigations.", "Smoking cessation and likely investigations will be discussed.")]),
         new("065df5a5-52e3-48e4-bc6c-df726f8d4084", "pack 198", [("I would be grateful if you could monitor Mrs Jackson's pregnancy and discuss her delivery options.", "I would be grateful if you could discuss Mrs Jackson's home delivery request with her.")]),
+        new("2b8f3297-873e-47e3-bbb8-7fa2f80b5208", "pack 206", [("Mrs Betty Weston", "Ms Betty Weston"), ("Mrs Weston", "Ms Weston")]),
     ];
 
     internal static readonly PdfProbe[] PdfProbes =
