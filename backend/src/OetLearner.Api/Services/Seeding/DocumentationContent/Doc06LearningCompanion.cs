@@ -50,7 +50,9 @@ internal static class Doc06LearningCompanion
                 "companion writes on the learner's behalf are tagged with the writing feature code, and " +
                 "`CompanionLearnerEndpoints` exposes them back to the learner: `GET /v1/companion/memory` lists them, " +
                 "`DELETE /v1/companion/memory/notes/{id}` and `.../bookmarks/{id}` remove one at a time, `DELETE " +
-                "/v1/companion/memory` resets all of it, and `GET /v1/companion/memory/export` returns a downloadable " +
+                "/v1/companion/memory` resets the learner's companion data — notes, bookmarks, structured learning " +
+                "memory and Error DNA — and reports how many rows of each it removed, and `GET /v1/companion/memory/export` " +
+                "returns a downloadable " +
                 "JSON file with no user-identifying fields in the payload itself (EV-COMPANION-007). Rows are scoped " +
                 "by both id and user id on every delete, so a note id belonging to a different learner reads as " +
                 "not-found rather than a successful cross-account delete — an isolation property that " +

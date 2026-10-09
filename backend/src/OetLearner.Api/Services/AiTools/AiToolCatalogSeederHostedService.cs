@@ -81,6 +81,12 @@ public sealed class AiToolCatalogSeederHostedService(
         "companion_why_score_change",
         "companion_weekly_report",
         "companion_learning_fingerprint",
+        // `search_recall_set` was defined, DI-registered and allowlisted, but absent from this
+        // grant list, so `AiFeatureToolGrant` never reached it and the learner turn could never
+        // resolve it. It is a read-only search of the learner's OWN recall set
+        // (AiToolCategory.Read), which is exactly the evidence the companion is meant to cite
+        // for vocabulary questions, and the recall-set content is already indexed as a source.
+        "search_recall_set",
     ];
 
     /// <summary>

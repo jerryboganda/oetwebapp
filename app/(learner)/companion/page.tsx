@@ -210,7 +210,13 @@ export default function CompanionPage() {
             </div>
 
             <AiAssistantInput
-              onSend={(content) => void sendMessage(content, COMPANION_SURFACE)}
+              // This previously dropped the second parameter, so an image or document the
+              // learner attached here never reached the server: the vision path is wired all
+              // the way from AiAssistantHub down to the provider, and the floating panel
+              // forwards attachments correctly, but this page discarded them before
+              // sendMessage(content, context?, attachments?). Attaching a score-report
+              // screenshot on the companion page therefore failed silently.
+              onSend={(content, attachments) => void sendMessage(content, COMPANION_SURFACE, attachments)}
               onCancel={() => void cancelTurn()}
               isStreaming={isStreaming}
               disabled={!isConnected}

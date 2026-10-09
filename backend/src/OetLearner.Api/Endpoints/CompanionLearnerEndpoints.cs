@@ -492,7 +492,33 @@ public static class CompanionLearnerEndpoints
                         && CompanionFeatureCodes.Contains(b.CreatedByFeatureCode))
             .ExecuteDeleteAsync(ct);
 
-        return Results.Ok(new { notesDeleted = notes, bookmarksDeleted = bookmarks });
+        // ── Derived companion data (owner-visible defect, 2026-10-09) ──
+        //
+        // This endpoint previously deleted only notes and bookmarks and then reported success,
+        // which was wrong in two ways. It left the two stores that actually hold what the
+        // companion has learned about a person — structured learning memory and Error DNA —
+        // completely untouched, and the Documentation Center claimed the endpoint "resets all
+        // of it". A learner exercising their deletion right was told their companion memory had
+        // been reset while the derived profile survived.
+        //
+        // Both are user-scoped rows with no shared dependents, so a direct scoped delete is the
+        // honest implementation. Error DNA previously had no delete path anywhere, which is why
+        // this is not merely a partial-cleanup bug: there was no other way to remove it.
+        var memories = await db.CompanionMemoryEntries
+            .Where(m => m.UserId == userId)
+            .ExecuteDeleteAsync(ct);
+
+        var errorDna = await db.ErrorDnaEntries
+            .Where(e => e.UserId == userId)
+            .ExecuteDeleteAsync(ct);
+
+        return Results.Ok(new
+        {
+            notesDeleted = notes,
+            bookmarksDeleted = bookmarks,
+            memoriesDeleted = memories,
+            errorDnaDeleted = errorDna,
+        });
     }
 
     private static string ResolvePersona(IConfiguration configuration)

@@ -158,8 +158,22 @@ export async function downloadCompanionMemory(): Promise<void> {
   }
 }
 
-export function resetCompanionMemory(): Promise<{ notesDeleted: number; bookmarksDeleted: number }> {
-  return apiRequest<{ notesDeleted: number; bookmarksDeleted: number }>('/v1/companion/memory', {
+/**
+ * Resets the learner's companion data and reports what was removed.
+ *
+ * The response covers derived data as well as notes and bookmarks: structured learning
+ * memory and Error DNA are deleted too, and each count is returned so a caller can show the
+ * learner exactly what was erased rather than just asserting success.
+ */
+export interface CompanionMemoryResetResult {
+  notesDeleted: number;
+  bookmarksDeleted: number;
+  memoriesDeleted: number;
+  errorDnaDeleted: number;
+}
+
+export function resetCompanionMemory(): Promise<CompanionMemoryResetResult> {
+  return apiRequest<CompanionMemoryResetResult>('/v1/companion/memory', {
     method: 'DELETE',
   });
 }
