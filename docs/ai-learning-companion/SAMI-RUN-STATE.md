@@ -52,8 +52,39 @@ upgrade path. The revised final spec governs where it conflicts with older tier/
 
 ## Session progress since the first candidate (2026-10-08 → 09)
 
-Newest live build at the time of writing: **`005f8cdd6`** (`Build images` and `Deploy production`
-both green). It carries everything below; each item says which pack or check exercises it.
+Newest live build at the time of writing: **`d98b53dfb`**. Everything below is in it — verified by
+ancestry against the live `X-Oet-Release`, not assumed.
+
+### F-077 / F-078 result-day assistant — built and VERIFIED end to end
+
+The gap was that the companion could record a score but had no idea whether it was an **official**
+result or a mock, so "my result is back, what now?" got a generic score-update answer. Every score was
+written as kind `score`, making a mock and a real result indistinguishable.
+
+What shipped: an `is_official` flag on the score proposal (defaulting to **false**, so a practice score
+can never retire a real exam journey), a distinct `official_result` memory kind, four per-sub-test
+targets exposed on the turn context from `LearnerGoal`, and a verdict computed on confirmation against
+the learner's **own** target.
+
+Live probe (`probe-resultday.mjs`, thread `6a92349141d64e7f8ba4b45ee60a2eb8`), staged as Listening
+380 / Reading 340 / Writing 330 / Speaking 390 against a stated target of 350. The tool returned:
+
+- `met: ["listening","speaking"]`
+- `short: [{reading, 340, target 350, gap 10}, {writing, 330, target 350, gap 20}]`
+- `no_target_on_file: []`, `outcome_by_own_target: "short_on_at_least_one"`
+
+and the learner-facing reply rendered exactly that, added the change versus the previous sitting
+(Listening +60, Reading +45, Speaking +20, Writing −20), proposed a **new** journey focused only on the
+short sub-tests rather than a whole-course restart, confirmed the old journey stays readable for
+comparison, and did **not** claim a pass. The probe's own checks: `mentions official: true`,
+`compares to target: true`, `names short subtest: true`, `invented a pass claim: false`.
+
+Two refusals inside that verdict are deliberate and required by SAMI §4.2, not omissions: no pass mark
+is ever invented (a sub-test with no target reports `no_target_on_file` rather than a defaulted
+threshold), and the outcome is never called a pass — only the regulator or board can confirm it.
+
+F-078's plan template (`sami-single-subtest`, "Single-Subtest Resit Recovery") already existed from
+Wave 1; this change is what feeds it a real shortfall.
 
 | Item | State | Note |
 | --- | --- | --- |
