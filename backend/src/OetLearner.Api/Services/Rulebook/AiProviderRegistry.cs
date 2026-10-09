@@ -197,7 +197,14 @@ public sealed class RegistryBackedProvider(
         // OpenCode sends reasoning_effort only when its own row sets one: the env default is tuned
         // for other vendors' models and must not leak onto the gateway.
         var reasoningEffort = openCode ? rowReasoningEffort : rowReasoningEffort ?? options.Value.ReasoningEffort;
-        Task<AiProviderCompletion> Invoke() => CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
+
+        // The probed capability for the model we are about to call. Resolved ONCE here because three
+        // decisions depend on it (streaming, response_format, max_tokens) and the previous arrangement
+        // could not make the streaming decision at all — it needed the answer before it was fetched.
+        var capability = await registry.FindCapabilityAsync(request.ProviderCode, request.Model, ct);
+        var supportsStreaming = openCode || capability?.SupportsStreaming == true;
+
+        Task<AiProviderCompletion> Invoke() => CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, capability, supportsStreaming, request, ct);
         if (openCode)
         {
             var completed = await RunOnOpenCodeLaneAsync(Invoke, ct);
@@ -298,7 +305,9 @@ public sealed class RegistryBackedProvider(
     }
 
     private async Task<AiProviderCompletion> CallOpenAiCompatibleAsync(
-        string baseUrl, string apiKey, string? reasoningEffort, AiProviderRequest request, CancellationToken ct)
+        string baseUrl, string apiKey, string? reasoningEffort,
+        AiProviderModelCapability? capability, bool supportsStreaming,
+        AiProviderRequest request, CancellationToken ct)
     {
         if (request.OnBeforeInference is { } authorize) await authorize(ct);
         var unsafeBaseUrlReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
@@ -387,6 +396,10 @@ public sealed class RegistryBackedProvider(
         // HttpClient timeout and the gateway's ~120s edge read cap. Streaming keeps the
         // connection alive. An accepted stream is never automatically replayed.
         //
+        // Owner directive 2026-10-09: the gate is now the PROBED capability, not the OpenCode
+        // host. A long reasoning turn hits the same wall on any vendor, and the buffered fallback
+        // is what made the learner chatbot stall and then dump the whole answer at once.
+        //
         // SAMI UAT finding (2026-10-08, D-SAMI-003): raising the budget once on a
         // length-truncation is the difference between an answer and a refusal. Nine of
         // twenty Pack 2 turns died as "provider busy" because effort=max reasoning
@@ -400,10 +413,10 @@ public sealed class RegistryBackedProvider(
 
             try
             {
-                if (openCode && OetLearner.Api.Services.Ai.OpenCodeStreamingCall.IsStreamingEnabled())
+                if (supportsStreaming && OetLearner.Api.Services.Ai.StreamingChatCompletionsCall.IsStreamingEnabled())
                 {
-                    var streamed = await OetLearner.Api.Services.Ai.OpenCodeStreamingCall.CompleteStreamingAsync(
-                        client, payload, request, ct);
+                    var streamed = await OetLearner.Api.Services.Ai.StreamingChatCompletionsCall.CompleteStreamingAsync(
+                        client, payload, request, providerLabel, sendStreamOptions: openCode, ct);
                     if (streamed is not null)
                     {
                         return streamed;
@@ -564,6 +577,9 @@ public sealed class RegistryBackedProvider(
         if (m.Contains("openai-o1") || m.Contains("openai-o3") || m.Contains("openai-o4")) return true;
         if (m.StartsWith("o1") || m.StartsWith("o3") || m.StartsWith("o4")) return true;
         if (m.Contains("gpt-5")) return true;
+        // GPT-6 family (owner directive 2026-10-09: the grading fallback runs gpt-6.1-sol at HIGH —
+        // without this branch reasoning_effort was never sent and the API applied its own default).
+        if (m.Contains("gpt-6")) return true;
         if (m.Contains("thinking")) return true;
         // Z.AI GLM (owner directive 2026-10-09). Without this branch no glm-* model matched, so
         // `reasoning_effort` was never sent and Z.AI applied its own DEFAULT of "max" on every turn —
