@@ -79,6 +79,7 @@ public sealed class AiToolCatalogSeederHostedService(
         "companion_request_handoff",
         "companion_upgrade",
         "companion_why_score_change",
+        "companion_weekly_report",
     ];
 
     /// <summary>

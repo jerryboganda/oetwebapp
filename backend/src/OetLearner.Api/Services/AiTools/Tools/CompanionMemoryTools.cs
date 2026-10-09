@@ -683,3 +683,178 @@ public sealed class CompanionWhyScoreChangeTool(
         }
     }
 }
+
+/// <summary>
+/// F-085 — the weekly progress report.
+///
+/// <para>
+/// Reports what the learner actually did in the last seven days against what their plan
+/// asked for, from <c>StudyPlanItem</c> rows. Every number here is a count or a sum of
+/// stored columns; nothing is estimated, and a learner with no plan or no items gets an
+/// explicit "nothing to report yet" rather than a fabricated week of zeroes, which would
+/// read as a week of failure.
+/// </para>
+///
+/// <para>
+/// Two comparisons are deliberately reported separately. <b>Completion</b> is against the
+/// plan's own ask. <b>Time</b> is against the learner's declared availability — and only
+/// when that availability exists, because comparing actual minutes to an availability
+/// nobody ever recorded would invent the denominator.
+/// </para>
+/// </summary>
+public sealed class CompanionWeeklyReportTool(
+    ICompanionContextResolver contexts,
+    LearnerDbContext db,
+    TimeProvider clock) : IAiToolExecutor
+{
+    public string Code => "companion_weekly_report";
+    public string Description => "Report the learner's last seven days: plan items completed, missed and still due, minutes studied against the plan and against their declared availability, and which sub-tests the week actually went to. Reports only what the plan data supports.";
+    public AiToolCategory Category => AiToolCategory.Read;
+    public string JsonSchemaArgs => "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
+
+    public async Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(ctx.UserId)) return CompanionToolGuards.NoUser();
+        var context = await contexts.ResolveAsync(ctx.UserId!, new CompanionContextEnvelope(), ct);
+        if (!context.ActionsEnabled) return CompanionToolGuards.ActionsOff();
+        return await BuildAsync(ctx.UserId!, context, ct);
+    }
+
+    private async Task<AiToolExecutionResult> BuildAsync(string userId, CompanionTurnContext context, CancellationToken ct)
+    {
+        var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var weekStart = today.AddDays(-6);
+
+        // The learner's active plan. A learner may have none, or only an inactive one.
+        var plan = await db.StudyPlans.AsNoTracking()
+            .Where(p => p.UserId == userId && p.IsActive)
+            .OrderByDescending(p => p.CreatedAt)
+            .Select(p => new { p.Id })
+            .FirstOrDefaultAsync(ct);
+
+        if (plan is null)
+        {
+            return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
+            {
+                can_report = false,
+                reason = "no_active_plan",
+                instruction = "There is no active study plan on this account, so there is no week to report against. Say that plainly and offer to build a plan — do not describe a week of study that was never planned.",
+            }));
+        }
+
+        var items = await db.StudyPlanItems.AsNoTracking()
+            .Where(i => i.StudyPlanId == plan.Id && i.DueDate >= weekStart && i.DueDate <= today)
+            .Select(i => new
+            {
+                i.Title,
+                i.SubtestCode,
+                i.DurationMinutes,
+                i.Status,
+                i.DueDate,
+                i.CompletedAt,
+                i.ActualMinutesSpent,
+            })
+            .ToListAsync(ct);
+
+        if (items.Count == 0)
+        {
+            return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
+            {
+                can_report = false,
+                reason = "no_items_this_week",
+                week_start = weekStart.ToString("yyyy-MM-dd"),
+                week_end = today.ToString("yyyy-MM-dd"),
+                instruction = "The plan holds no items for the last seven days, so there is nothing to report. Say exactly that rather than presenting an empty week as a failure.",
+            }));
+        }
+
+        var completed = items.Where(i => i.Status == StudyPlanItemStatus.Completed).ToList();
+        var missed = items.Where(i => i.Status == StudyPlanItemStatus.NotStarted && i.DueDate < today).ToList();
+        var stillDue = items.Where(i => i.Status != StudyPlanItemStatus.Completed
+                                        && i.Status != StudyPlanItemStatus.Skipped
+                                        && i.DueDate >= today).ToList();
+        var skipped = items.Where(i => i.Status == StudyPlanItemStatus.Skipped).ToList();
+
+        var plannedMinutes = items.Sum(i => i.DurationMinutes);
+        // Prefer the learner's own reported time when present; fall back to the item's
+        // planned duration only for items they actually completed, so an unstarted item
+        // cannot inflate "time studied".
+        var studiedMinutes = completed.Sum(i => i.ActualMinutesSpent ?? i.DurationMinutes);
+
+        var bySubtest = items
+            .GroupBy(i => i.SubtestCode)
+            .Select(g => new
+            {
+                subtest = g.Key,
+                items = g.Count(),
+                completed = g.Count(i => i.Status == StudyPlanItemStatus.Completed),
+                planned_minutes = g.Sum(i => i.DurationMinutes),
+            })
+            .OrderByDescending(x => x.items)
+            .ToList();
+
+        // Time-against-availability is only meaningful when availability was declared.
+        var declaredPerDay = await db.CompanionAvailabilities.AsNoTracking()
+            .Where(a => a.UserId == userId)
+            .Select(a => a.DailyMinutesJson)
+            .FirstOrDefaultAsync(ct);
+
+        int? declaredMinutesForWeek = null;
+        var availabilityDeclared = false;
+        if (!string.IsNullOrWhiteSpace(declaredPerDay))
+        {
+            try
+            {
+                var perDay = JsonSerializer.Deserialize<List<int>>(declaredPerDay);
+                if (perDay is { Count: 7 })
+                {
+                    // Align the stored week to the same seven days being reported, so the
+                    // denominator describes this week rather than a generic one.
+                    declaredMinutesForWeek = 0;
+                    for (var offset = 0; offset < 7; offset++)
+                    {
+                        var day = weekStart.AddDays(offset);
+                        declaredMinutesForWeek += perDay[(int)day.DayOfWeek];
+                    }
+                    availabilityDeclared = declaredMinutesForWeek > 0;
+                }
+            }
+            catch (JsonException)
+            {
+                // Unreadable availability is treated as not declared rather than as zero.
+            }
+        }
+
+        return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
+        {
+            can_report = true,
+            week_start = weekStart.ToString("yyyy-MM-dd"),
+            week_end = today.ToString("yyyy-MM-dd"),
+            completion = new
+            {
+                items_in_week = items.Count,
+                completed = completed.Count,
+                missed = missed.Count,
+                still_due = stillDue.Count,
+                skipped = skipped.Count,
+                completion_rate = items.Count > 0
+                    ? Math.Round(100.0 * completed.Count / items.Count, 1)
+                    : (double?)null,
+            },
+            time = new
+            {
+                planned_minutes = plannedMinutes,
+                studied_minutes = studiedMinutes,
+                studied_minutes_basis = "learner-reported minutes where present, else the item's planned minutes for completed items only",
+                declared_minutes_this_week = declaredMinutesForWeek,
+                availability_declared = availabilityDeclared,
+            },
+            by_subtest = bySubtest,
+            completed_items = completed.Select(i => new { i.Title, i.SubtestCode, due = i.DueDate.ToString("yyyy-MM-dd") }).Take(12),
+            missed_items = missed.Select(i => new { i.Title, i.SubtestCode, due = i.DueDate.ToString("yyyy-MM-dd") }).Take(12),
+            instruction = availabilityDeclared
+                ? "Report the week plainly: what was completed, what was missed, where the time went. Compare minutes to the learner's declared availability, and if they missed items, ask what got in the way rather than assuming low motivation. Do not invent a reason the plan data does not show."
+                : "Report the week plainly: what was completed, what was missed, where the time went. Availability has NOT been declared, so do not compare their minutes to any target and do not imply they fell short of one — offer to record their real availability instead.",
+        }));
+    }
+}

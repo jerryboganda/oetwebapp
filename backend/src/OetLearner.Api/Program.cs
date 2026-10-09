@@ -2320,6 +2320,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.CompanionWhyScoreChangeTool>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionWeeklyReportTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.CompanionRequestHandoffTool>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.CompanionUpgradeTool>();
