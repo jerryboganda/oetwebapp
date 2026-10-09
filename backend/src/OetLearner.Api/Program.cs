@@ -137,6 +137,10 @@ builder.Services.Configure<UserStateCacheOptions>(builder.Configuration.GetSecti
 builder.Services.AddSingleton<UserStateCache>();
 builder.Services.AddSingleton<UserStateInvalidationInterceptor>();
 builder.Services.AddHostedService<UserStateCacheSwitchWorker>();
+// TEMPORARY (owner directive 9 Oct 2026, remove once Writing is closed): one-off Writing Model Answer final audit job and
+// its read-only status. See Services/Writing/WritingFinalAuditJob.cs.
+builder.Services.AddSingleton<OetLearner.Api.Services.Writing.WritingFinalAuditStatus>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Writing.WritingFinalAuditJob>();
 
 builder.Services.AddDbContext<LearnerDbContext>((serviceProvider, options) =>
 {
@@ -3045,6 +3049,9 @@ app.UseClientVersionGate();
 app.UseWebSockets();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "OET Learner API", timestamp = DateTimeOffset.UtcNow, check = "live" }))
+    .AllowAnonymous();
+// TEMPORARY: result of the one-off Writing final audit (scenario ids and rule ids only, no names or letter text).
+app.MapGet("/health/writing-final-audit", (OetLearner.Api.Services.Writing.WritingFinalAuditStatus status) => Results.Ok(status.Snapshot))
     .AllowAnonymous();
 app.MapGet("/health/ready", async (
     LearnerDbContext db,

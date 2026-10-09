@@ -1361,7 +1361,7 @@ public sealed class WritingTaskModelAnswerService(
             // Senior Assessor Release Audit (16 Sep 2026): the generator is
             // told to date the letter on scenario.TodayDate, so the gate
             // enforces the same date (letter_date_unsupported, G6a).
-            TodayDate: scenario.TodayDate,
+            TodayDate: WritingScenarioSourceExceptions.TodayDate(scenario.Id, scenario.TodayDate),
             Profession: profession,
             IsModelAnswer: true,
             // Owner decision (19 Sep 2026): with no day-level date in the source the letter date is
