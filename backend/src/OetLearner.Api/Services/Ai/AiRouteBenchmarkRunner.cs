@@ -67,10 +67,11 @@ public sealed partial class AiRouteBenchmarkRunner(
     {
         var (incumbentProviderCode, incumbentModel) = await ResolveIncumbentRouteAsync(featureCode, providerCode, model, ct);
 
-        var candidateCases = await ExecuteCorpusAsync(providerCode, model, ct);
+        var cases = CasesForFeature(featureCode);
+        var candidateCases = await ExecuteCorpusAsync(providerCode, model, cases, ct);
         var incumbentCases = incumbentProviderCode is null
             ? []
-            : await ExecuteCorpusAsync(incumbentProviderCode, incumbentModel ?? "", ct);
+            : await ExecuteCorpusAsync(incumbentProviderCode, incumbentModel ?? "", cases, ct);
 
         var metrics = ComputeMetrics(candidateCases, incumbentCases);
         var evaluation = approval.Evaluate(approval.Classify(featureCode), metrics);
@@ -139,7 +140,7 @@ public sealed partial class AiRouteBenchmarkRunner(
     }
 
     private async Task<IReadOnlyList<AiRouteBenchmarkCaseOutcome>> ExecuteCorpusAsync(
-        string providerCode, string model, CancellationToken ct)
+        string providerCode, string model, IReadOnlyList<AiRouteBenchmarkCase> cases, CancellationToken ct)
     {
         var provider = await ResolveProviderForCodeAsync(providerCode, ct);
         var (per1kPrompt, per1kCompletion) = await ResolvePricingAsync(providerCode, ct);
@@ -150,7 +151,7 @@ public sealed partial class AiRouteBenchmarkRunner(
         }
 
         var outcomes = new List<AiRouteBenchmarkCaseOutcome>();
-        foreach (var testCase in Corpus)
+        foreach (var testCase in cases)
         {
             try
             {
@@ -282,6 +283,18 @@ public sealed partial class AiRouteBenchmarkRunner(
         }
         return false;
     }
+
+    /// <summary>The corpus cases that apply to one feature (owner decision 2026-10-09): the corpus was
+    /// authored for the Sami companion chat route, and only that feature dispatches tools. Grading and
+    /// reviewer stages are text-in/text-out and are measured on the grounded + schema cases alone —
+    /// running the tool cases against a feature that can never dispatch a tool would fail every
+    /// subscription sidecar (their facades return plain text by design) on a capability the route is
+    /// never asked to perform. Every executed case is still measured mechanically; nothing is waived
+    /// for a feature that does dispatch tools.</summary>
+    internal static IReadOnlyList<AiRouteBenchmarkCase> CasesForFeature(string featureCode)
+        => featureCode.StartsWith("ai_assistant", StringComparison.OrdinalIgnoreCase)
+            ? Corpus
+            : Corpus.Where(c => c.Kind != "tool").ToList();
 
     /// <summary>
     /// Deterministic measurement corpus for the learner chat route. The grounded cases carry their
