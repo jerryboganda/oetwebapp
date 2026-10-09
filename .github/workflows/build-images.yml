@@ -227,7 +227,18 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.changes.outputs.reuse_matrix) }}
     steps:
-      - uses: docker/setup-buildx-action@v3
+      # NO setup-buildx-action here, deliberately. This job only calls
+      # `docker buildx imagetools create/inspect`, which is a registry-to-registry
+      # manifest operation and never contacts a builder. The setup step existed to
+      # create a builder this job does not use, and its one side effect was pulling
+      # moby/buildkit from Docker Hub as a single unretried request - which is
+      # exactly how this job was failing during the 2026-10-09 Docker Hub outage.
+      # Removed the fragile dependency rather than retrying around it.
+      - name: Assert the buildx CLI is present (imagetools needs no builder)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker buildx version
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -289,6 +300,7 @@ jobs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/prewarm-buildkit
       - uses: docker/setup-buildx-action@v3
         with:
           cleanup: ${{ runner.environment != 'github-hosted' }}
@@ -437,6 +449,7 @@ jobs:
           path: output/api-release
           if-no-files-found: error
           retention-days: 90
+      - uses: ./.github/actions/prewarm-buildkit
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -464,6 +477,7 @@ jobs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/prewarm-buildkit
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -491,6 +505,7 @@ jobs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/prewarm-buildkit
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -517,6 +532,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/prewarm-buildkit
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:

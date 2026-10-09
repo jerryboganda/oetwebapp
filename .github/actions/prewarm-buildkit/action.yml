@@ -1,0 +1,31 @@
+name: Pre-warm buildkit
+description: >
+  Pull the buildkit builder image with bounded retries BEFORE setup-buildx-action runs.
+  setup-buildx-action's default docker-container driver pulls moby/buildkit from
+  Docker Hub as a single unretried request in the step that creates the builder, and
+  one slow or dropped response from auth.docker.io fails the entire build with a
+  "context deadline exceeded" that has nothing to do with the code. Pulling it here,
+  with retries, means setup-buildx finds the image already present and the fragile
+  request never happens. If every attempt fails this action still succeeds, because
+  setup-buildx-action will make its own attempt as before — this can only improve
+  reliability, never turn a passing build into a failing one.
+
+runs:
+  using: composite
+  steps:
+    - name: Pull buildkit with retries
+      shell: bash
+      run: |
+        set -uo pipefail
+        image="moby/buildkit:buildx-stable-1"
+        for attempt in 1 2 3 4 5; do
+          if docker pull "$image"; then
+            echo "buildkit available locally after attempt $attempt"
+            exit 0
+          fi
+          wait=$(( attempt * 10 ))
+          echo "::warning::buildkit pull attempt $attempt failed; retrying in ${wait}s"
+          sleep "$wait"
+        done
+        echo "::warning::buildkit pull did not succeed after 5 attempts; falling back to setup-buildx-action's own pull"
+        exit 0
