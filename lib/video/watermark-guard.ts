@@ -29,7 +29,13 @@ function isIntact(node: HTMLElement): boolean {
 export function useWatermarkGuard(rootRef: RefObject<HTMLElement | null>, onTamper: () => void): void {
   const tamperedRef = useRef(false);
   const onTamperRef = useRef(onTamper);
-  onTamperRef.current = onTamper;
+
+  // Keeps the ref pointing at the latest callback without assigning during render.
+  // This effect is declared first on purpose: it commits before the observer effect
+  // below, so onTamperRef.current is already current by the time the observer can fire.
+  useEffect(() => {
+    onTamperRef.current = onTamper;
+  }, [onTamper]);
 
   useEffect(() => {
     const node = rootRef.current;
