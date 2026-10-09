@@ -124,6 +124,55 @@ The row is seeded with `reasoningEffort = low`, the only real lever available. S
 | `LiveVoice` | **never** — realtime speech, which GLM does not do |
 | OCR, STT, TTS, phoneme, PDF-extraction, embeddings | refused at route-save time by the capability gate |
 
+### The learner is unpinned
+
+The learner's model and provider used to be **hardcoded** (`deepseek-v4.1-flash` on `opencode`), so
+nothing in the database, the environment or any admin screen could change the chatbot every real
+learner uses. That is now a **default**, not a pin:
+
+1. a thread's chosen model,
+2. else the admin default saved at `/admin/ai-assistant/config`,
+3. else `AssistantModelCatalog.LearnerDefaultModel` (`glm-5.3-flash` on `z-ai`).
+
+What did **not** change is the learner's *entitlement*. The learner's model list is still the narrow
+curated catalog (`AssistantModelCatalog.IsLearnerSelectable`), kept separate from the staff list so a
+future widening of the staff picker cannot quietly widen what a learner may choose. Unpinning is about
+who serves the turn, not about access.
+
+### Failover
+
+The assistant previously resolved exactly **one** provider and returned nothing when it was
+unreachable, which made the default the only provider. Chains are now per-role:
+
+| Role | Chain |
+|---|---|
+| Learner | Z.AI → `opencode` (`deepseek-v4.1-flash`) → Anthropic |
+| Staff | Z.AI / saved route → Anthropic → `opencode` |
+
+The order differs because the entitlement differs: a learner is never moved onto a staff-grade
+provider, whereas a failed staff request can afford the longer walk. Each candidate is resolved before
+use, so a fallback only appears if it is genuinely reachable, and every **attempt** writes its own
+failure record — a permanently broken first provider is visible in `/admin/ai-usage` instead of being
+invisible behind a successful second hop.
+
+The "answered by X" label is emitted **after** a call succeeds, because the provider that serves the
+turn is not known until then. Emitting it during routing would label a failed-over turn with the
+provider that failed.
+
+### Streaming
+
+Streaming used to be gated on the **OpenCode host**, so every other provider silently took the
+buffered path — and the assistant then *faked* streaming by slicing the buffered answer into 80-char
+bursts, so a learner watched a visible stall followed by a wall of text. The gate is now the probed
+`SupportsStreaming` flag, and `OpenCodeStreamingCall` is the generically-named
+`StreamingChatCompletionsCall`.
+
+Z.AI has no `stream_options` parameter at all, so it is never sent; usage arrives on the final SSE
+chunk regardless, which is how the parser reads it.
+
+The assistant still emits its answer in 80-char slices once the call completes — that is pacing, not a
+transport problem, and it is now the only part of the path that is simulated.
+
 ### Ordering rules that are not negotiable
 
 - GLM must appear **after** `MaxProvider` in the built-in `WritingGrade` / `SpeakingGrade` order.

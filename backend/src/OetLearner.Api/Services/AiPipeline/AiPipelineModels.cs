@@ -104,8 +104,32 @@ public static class AiPipelineDefaults
     public const string MaxProvider = "writing-claude-sub";
     public const string ClaudeApiProvider = "anthropic";
     public const string CodexProvider = "writing-codex-sub";
+
+    /// <summary>
+    /// Z.AI / GLM — the owner's LAST-RESORT hop (owner directive 2026-10-09).
+    ///
+    /// <para>
+    /// <b>Placement is not negotiable and is mechanically enforced.</b> It is always AFTER
+    /// <see cref="MaxProvider"/>, so Max still serves every run and GLM is reached only once Max, the
+    /// Anthropic API and Codex have all failed on that submission. Putting it first makes
+    /// <c>verify-pipeline-contract.mjs:633-639</c> fail the build: that guard requires the built-in
+    /// <c>WritingGrade</c> and <c>SpeakingGrade</c> order to start with Max, which is the static
+    /// expression of the "Max never off" rule.
+    /// </para>
+    ///
+    /// <para>
+    /// Not present in <c>LiveVoice</c>: that stage is realtime speech and GLM has no realtime speech
+    /// pipeline. A hop there would be a stage that cannot work.
+    /// </para>
+    /// </summary>
+    public const string ZaiProvider = "z-ai";
+
     public const string ClaudeModel = "claude-opus-5-5";
     public const string CodexModel = "gpt-6.1-sol";
+
+    /// <summary>GLM's multimodal default. Multimodal because a pipeline call can carry an excerpt,
+    /// and JSON-capable because every grading/review hop parses a typed DTO.</summary>
+    public const string ZaiModel = "glm-5.3-flash";
 
     public static IReadOnlyList<AiPipelineHop> For(string stageKey) => stageKey switch
     {
@@ -114,6 +138,7 @@ public static class AiPipelineDefaults
             new(MaxProvider, ClaudeModel, true, 2, 420),
             new(ClaudeApiProvider, ClaudeModel, true, 1, 150),
             new(CodexProvider, CodexModel, true, 2, 420),
+            new(ZaiProvider, ZaiModel, true, 1, 180),
         ],
         AiPipelineStageKeys.SpeakingGrade =>
         [
@@ -121,11 +146,13 @@ public static class AiPipelineDefaults
             // Owner correction 9 Oct 2026: the API hop is the approved claude-opus-5-5, never sonnet-5
             // (the initial seed predated the pipeline API-first flip).
             new(ClaudeApiProvider, ClaudeModel, true, 1, 900),
+            new(ZaiProvider, ZaiModel, true, 1, 300),
         ],
         AiPipelineStageKeys.WritingReview or AiPipelineStageKeys.SpeakingReview =>
         [
             new(CodexProvider, CodexModel, true, 2, 240),
             new(ClaudeApiProvider, ClaudeModel, true, 1, 240),
+            new(ZaiProvider, ZaiModel, true, 1, 180),
         ],
         AiPipelineStageKeys.LiveVoice =>
         [

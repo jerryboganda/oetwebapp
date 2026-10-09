@@ -80,18 +80,25 @@ public sealed class AiAssistantGateway(
         // Resolve provider + model via feature routing. A thread model
         // override is provider-aware: Claude API ids stay on anthropic,
         // UBAG browser ids (duckai_web, claude_web, …) stay on ubag,
-        // OpenCode ids stay on opencode.
+        // Z.AI ids stay on z-ai, OpenCode ids stay on opencode.
         var route = await routeResolver.ResolveAsync(featureCode, ct);
-        // Learner policy applies to defaults and historical pins as well as new selections.
         var isLearner = featureCode == AiFeatureCodes.AiAssistantLearner;
-        var requestedModel = isLearner ? AssistantModelCatalog.LearnerModel : modelOverride ?? route?.Model;
-        var requestedProviderCode = isLearner ? OpenCodeProviderDefaults.ProviderCode : AssistantModelCatalog.ProviderCodeForModel(requestedModel)
-            ?? route?.ProviderCode;
 
-        // OpenCode failures never surface their cause to the learner (owner wording, no fallback
-        // provider); the specific class goes to the usage record only.
-        var isOpenCode = IsOpenCodeCode(requestedProviderCode);
-        if (isOpenCode && featureCode != AiFeatureCodes.AiAssistantLearner && featureCode != AiFeatureCodes.AiAssistantAdmin
+        // Owner directive 2026-10-09: the learner is UNPINNED. Both the model and its provider used
+        // to be hardcoded here, so no admin screen could change the chatbot every real learner uses.
+        // An admin default saved on /admin/ai-assistant/config now wins, and the catalog default is
+        // only the fallback. The learner's MODEL catalog is still deliberately narrow (see
+        // AssistantModelCatalog.IsLearnerSelectable) — unpinning is about who serves the turn, not
+        // about widening the learner's entitlement.
+        var requestedModel = modelOverride ?? route?.Model
+            ?? (isLearner ? AssistantModelCatalog.LearnerDefaultModel : null);
+        var requestedProviderCode = AssistantModelCatalog.ProviderCodeForModel(requestedModel)
+            ?? route?.ProviderCode
+            ?? (isLearner ? AssistantModelCatalog.LearnerDefaultProviderCode : null);
+
+        // OpenCode models are only offered on the learner and staff assistants.
+        var primaryIsOpenCode = IsOpenCodeCode(requestedProviderCode);
+        if (primaryIsOpenCode && featureCode != AiFeatureCodes.AiAssistantLearner && featureCode != AiFeatureCodes.AiAssistantAdmin
             && featureCode != AiFeatureCodes.AiAssistantExpert)
         {
             await RecordFailureAsync(
@@ -111,39 +118,15 @@ public sealed class AiAssistantGateway(
             yield break;
         }
 
-        var resolvedProvider = await ResolveProviderAsync(requestedProviderCode, requestedModel, ct);
-        var providerCode = resolvedProvider?.ProviderCode ?? requestedProviderCode ?? string.Empty;
-        var model = resolvedProvider?.Model ?? requestedModel ?? string.Empty;
-        var provider = resolvedProvider?.Provider;
+        // NOTE (owner directive 2026-10-09): the single-provider resolution and its
+        // "no_provider" early return used to live here. Both are gone — provider resolution is now
+        // the failover chain's job, and "answered by X" can no longer be emitted up front because
+        // the provider that ends up serving the turn is not known until a call succeeds. Emitting it
+        // here would label a failed-over turn with the provider that FAILED.
 
-        if (provider == null)
-        {
-            await RecordFailureAsync(
-                featureCode,
-                userId,
-                providerCode,
-                model,
-                AiCallOutcome.GatewayRefused,
-                "no_provider",
-                "No AI provider is configured.",
-                requestSystemPrompt: null,
-                requestUserPrompt: messages.LastOrDefault(m => m.Role == "user")?.Content,
-                startedAt,
-                stopwatch,
-                CancellationToken.None);
-            yield return new LlmTextChunk(isOpenCode
-                ? featureCode == AiFeatureCodes.AiAssistantLearner ? OpenCodeProviderDefaults.LearnerBusyMessage
-                    : "Direct OpenCode gateway is unavailable. Check the active provider, allowed model and credential in /admin/ai-providers."
-                : "No AI provider is configured. Please contact an administrator.");
-            yield break;
-        }
-
-        // Flush the served-model chunk as soon as routing is known, ahead of
-        // every text chunk below (including the early-refusal messages) so
-        // the UI can show "answered by X" before any text streams. The later
-        // completion-based emission (below) corrects this with the honest
-        // provider-reported model if it ever differs from what was routed.
-        yield return new LlmServedModel(model, providerCode);
+        string providerCode = string.Empty;
+        string model = string.Empty;
+        var isOpenCode = false;
 
         AiQuotaDecision? quotaDecision = null;
         if (quotaService is not null && !IsIncludedCompanionChat(featureCode))
@@ -295,8 +278,8 @@ public sealed class AiAssistantGateway(
             yield break;
         }
 
-        // Build provider request with explicit messages + tools (skip gateway tool loop)
-        var systemMsg = messages.FirstOrDefault(m => m.Role == "system");
+// Build provider request with explicit messages + tools (skip gateway tool loop)
+        var systemPrompt = messages.FirstOrDefault(m => m.Role == "system");
         var lastUser = messages.LastOrDefault(m => m.Role == "user");
 
         // Document text rides in the prompt so even text-only providers (incl.
@@ -315,21 +298,36 @@ public sealed class AiAssistantGateway(
         var effectiveImages = (imageAttachments is { Count: > 0 } ? imageAttachments : lastUser?.ImageAttachments)
             ?? Array.Empty<AiProviderImageAttachment>();
 
-        var request = new AiProviderRequest
+        // Owner directive 2026-10-09: REAL FAILOVER.
+        //
+        // This gateway resolved exactly ONE provider and, when it was unreachable, recorded
+        // no_provider and returned nothing. That made whichever provider happened to be the default
+        // the ONLY provider — precisely the wrong property for the surface with the most users and
+        // the weakest entitlement to a failure.
+        //
+        // Chains are per-role on purpose. A learner already has a working fallback, so a Z.AI outage
+        // costs that learner nothing. Staff can afford a longer chain because a failed admin request
+        // is recoverable — and because routing LEARNER traffic to a provider learners are not
+        // entitled to would be wrong regardless of availability.
+        var chain = await BuildAssistantFailoverChainAsync(featureCode, isLearner, requestedProviderCode, requestedModel, ct);
+        if (chain.Count == 0)
         {
-            ProviderCode = providerCode,
-            Model = model,
-            SystemPrompt = systemMsg?.Content ?? "",
-            UserPrompt = userPrompt,
-            Temperature = 0.7,
-            MaxTokens = 4096,
-            Messages = chatMessages,
-            Tools = tools,
-            ToolChoice = tools.Count > 0 ? "auto" : null,
-            ImageAttachments = effectiveImages,
-            DocumentAttachment = documentAttachment,
-            SessionKey = conversationKey,
-        };
+            await RecordFailureAsync(
+                featureCode, userId, requestedProviderCode, requestedModel,
+                AiCallOutcome.GatewayRefused, "no_provider", "No AI provider is configured.",
+                requestSystemPrompt: null, requestUserPrompt: messages.LastOrDefault(m => m.Role == "user")?.Content,
+                startedAt, stopwatch, CancellationToken.None, policyTrace: quotaDecision?.PolicyTrace);
+            yield return new LlmTextChunk(isLearner
+                ? OpenCodeProviderDefaults.LearnerBusyMessage
+                : "No AI provider is configured. Please contact an administrator.");
+            yield break;
+        }
+
+        AiProviderCompletion? completion = null;
+        string? errorMessage = null;
+        providerCode = chain[0].ProviderCode;
+        model = chain[0].Model;
+        isOpenCode = IsOpenCodeCode(providerCode);
 
         // UBAG's browser facade cannot serve tool calls (see
         // RegistryBackedProvider.CallOpenAiCompatibleAsync) — every assistant
@@ -357,8 +355,6 @@ public sealed class AiAssistantGateway(
             yield break;
         }
 
-        AiProviderCompletion? completion = null;
-        string? errorMessage = null;
         DirectAiOperationLease? lease = null;
         if (directRecorder is not null)
         {
@@ -391,8 +387,8 @@ public sealed class AiAssistantGateway(
                     AiCallOutcome.GatewayRefused,
                     "assistant_unavailable",
                     $"AI assistant is unavailable ({lease.Reason}).",
-                    request.SystemPrompt,
-                    request.UserPrompt,
+                    systemMsg?.Content ?? "",
+                userPrompt,
                     startedAt,
                     stopwatch,
                     CancellationToken.None,
@@ -402,70 +398,95 @@ public sealed class AiAssistantGateway(
             }
         }
 
-        try
+        for (var attempt = 0; attempt < chain.Count; attempt++)
         {
-            if (directRecorder is not null && lease is not null)
+            var candidate = chain[attempt];
+            var candidateIsOpenCode = IsOpenCodeCode(candidate.ProviderCode);
+            var isLastCandidate = attempt == chain.Count - 1;
+
+            // Rebuilt per candidate rather than mutated: ProviderCode and Model are init-only, and
+            // silently sending the primary's model id to a different vendor is exactly the class of
+            // bug the closed model catalog exists to prevent.
+            var candidateRequest = new AiProviderRequest
             {
-                completion = await DirectAiOperationReconciler.RunAsync(
-                    directRecorder,
-                    lease,
-                    providerCode,
-                    async () => await CompleteOnceAsync(provider, request, rejectEmpty: isOpenCode, ct),
-                    ct);
-            }
-            else
+                ProviderCode = candidate.ProviderCode,
+                Model = candidate.Model,
+                SystemPrompt = systemMsg?.Content ?? "",
+                UserPrompt = userPrompt,
+                Temperature = 0.7,
+                MaxTokens = 4096,
+                Messages = chatMessages,
+                Tools = tools,
+                ToolChoice = tools.Count > 0 ? "auto" : null,
+                ImageAttachments = effectiveImages,
+                DocumentAttachment = documentAttachment,
+                SessionKey = conversationKey,
+            };
+
+            try
             {
-                completion = await CompleteOnceAsync(provider, request, rejectEmpty: isOpenCode, ct);
+                if (directRecorder is not null && lease is not null)
+                {
+                    completion = await DirectAiOperationReconciler.RunAsync(
+                        directRecorder,
+                        lease,
+                        candidate.ProviderCode,
+                        async () => await CompleteOnceAsync(candidate.Provider, candidateRequest, rejectEmpty: candidateIsOpenCode, ct),
+                        ct);
+                }
+                else
+                {
+                    completion = await CompleteOnceAsync(candidate.Provider, candidateRequest, rejectEmpty: candidateIsOpenCode, ct);
+                }
+
+                providerCode = candidate.ProviderCode;
+                model = candidate.Model;
+                isOpenCode = candidateIsOpenCode;
+                errorMessage = null;
+                break;
             }
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            await RecordFailureAsync(
-                featureCode,
-                userId,
-                providerCode,
-                model,
-                AiCallOutcome.Cancelled,
-                "cancelled",
-                "Assistant request was cancelled.",
-                request.SystemPrompt,
-                request.UserPrompt,
-                startedAt,
-                stopwatch,
-                CancellationToken.None,
-                policyTrace: quotaDecision?.PolicyTrace);
-            throw;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "AI Assistant provider call failed for {FeatureCode}", featureCode);
-            var emptyCompletion = ex is EmptyCompletionException;
-            var errorCode = emptyCompletion ? "provider_empty_completion" : AiGatewayService.ClassifyError(ex);
-            await RecordFailureAsync(
-                featureCode,
-                userId,
-                providerCode,
-                model,
-                AiCallOutcome.ProviderError,
-                errorCode,
-                emptyCompletion
-                    ? "Provider returned an empty completion."
-                    : AiGatewayService.SanitiseProviderErrorMessage(ex, errorCode),
-                request.SystemPrompt,
-                request.UserPrompt,
-                startedAt,
-                stopwatch,
-                CancellationToken.None,
-                policyTrace: quotaDecision?.PolicyTrace);
-            errorMessage = isOpenCode
-                ? featureCode == AiFeatureCodes.AiAssistantLearner ? OpenCodeProviderDefaults.LearnerBusyMessage
-                    : $"Direct OpenCode gateway failed ({errorCode}). Check provider readiness in /admin/ai-providers and retry explicitly."
-                : "I encountered an error communicating with the AI service. Please try again.";
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                await RecordFailureAsync(
+                    featureCode, userId, candidate.ProviderCode, candidate.Model,
+                    AiCallOutcome.Cancelled, "cancelled", "Assistant request was cancelled.",
+                    systemMsg?.Content ?? "", userPrompt, startedAt, stopwatch, CancellationToken.None,
+                    policyTrace: quotaDecision?.PolicyTrace);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                var emptyCompletion = ex is EmptyCompletionException;
+                var errorCode = emptyCompletion ? "provider_empty_completion" : AiGatewayService.ClassifyError(ex);
+
+                logger.LogWarning(ex,
+                    "AI Assistant provider {ProviderCode} failed for {FeatureCode} ({ErrorCode}); {Remaining} fallback(s) remain.",
+                    candidate.ProviderCode, featureCode, errorCode, chain.Count - attempt - 1);
+
+                // Recorded per ATTEMPT so /admin/ai-usage shows the whole chain rather than only the
+                // last hop — a permanently broken first provider would otherwise be invisible.
+                await RecordFailureAsync(
+                    featureCode, userId, candidate.ProviderCode, candidate.Model,
+                    AiCallOutcome.ProviderError, errorCode,
+                    emptyCompletion
+                        ? "Provider returned an empty completion."
+                        : AiGatewayService.SanitiseProviderErrorMessage(ex, errorCode),
+                    systemMsg?.Content ?? "", userPrompt, startedAt, stopwatch, CancellationToken.None,
+                    policyTrace: quotaDecision?.PolicyTrace);
+
+                if (isLastCandidate)
+                {
+                    errorMessage = isLearner
+                        ? OpenCodeProviderDefaults.LearnerBusyMessage
+                        : $"The AI service is unavailable ({errorCode}). Check provider readiness in /admin/ai-providers.";
+                }
+            }
         }
 
-        if (errorMessage != null)
+        if (errorMessage != null || completion is null)
         {
-            yield return new LlmTextChunk(errorMessage);
+            yield return new LlmTextChunk(errorMessage
+                ?? "I encountered an error communicating with the AI service. Please try again.");
             yield break;
         }
 
@@ -495,8 +516,8 @@ public sealed class AiAssistantGateway(
                     FeatureCode: featureCode,
                     RulebookVersion: null,
                     PromptTemplateId: null,
-                    SystemPrompt: request.SystemPrompt,
-                    UserPrompt: request.UserPrompt,
+                    SystemPrompt: systemMsg?.Content ?? "",
+                    UserPrompt: userPrompt,
                     StartedAt: startedAt);
 
                 persistedUsageRecordId = await usageRecorder.RecordSuccessAsync(
@@ -580,6 +601,18 @@ public sealed class AiAssistantGateway(
             }
         }
 
+        // Honest per-message provenance for the orchestrator: prefer what the provider says it
+        // served, else the model we actually routed to.
+        //
+        // Emitted ONCE, here, and only now that a call has succeeded. It used to be emitted as soon
+        // as routing was known, which was correct when there was exactly one candidate and is wrong
+        // the moment there are several: a turn that failed over would have been labelled with the
+        // provider that FAILED. The tool-call branch below returns early, so the label is emitted
+        // before that branch too — otherwise a tool turn carried no provenance at all.
+        var servedModel = completion!.ServedModel;
+        if (string.IsNullOrWhiteSpace(servedModel)) servedModel = model;
+        yield return new LlmServedModel(servedModel, providerCode);
+
         // Check for tool calls in the response
         if (completion!.ToolCalls is { Count: > 0 })
         {
@@ -589,12 +622,6 @@ public sealed class AiAssistantGateway(
             }
             yield break;
         }
-
-        // Stamp honest per-message provenance for the orchestrator: prefer
-        // what the provider says it served, else the routed request model.
-        var servedModel = completion!.ServedModel;
-        if (string.IsNullOrWhiteSpace(servedModel)) servedModel = model;
-        yield return new LlmServedModel(servedModel, providerCode);
 
         // Yield text response in chunks for streaming feel
         var content = completion!.Text ?? "";
@@ -702,6 +729,79 @@ public sealed class AiAssistantGateway(
     private static bool IsIncludedCompanionChat(string featureCode)
         => string.Equals(featureCode, AiFeatureCodes.AiAssistantLearner, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.CompanionChat, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The ordered list of providers this turn may actually use, primary first (owner directive
+    /// 2026-10-09).
+    ///
+    /// <para>
+    /// Each entry is put through <see cref="ResolveProviderAsync"/>, so a fallback only appears if it
+    /// is genuinely reachable — active, credentialed, with a compatible dialect. A chain that lists
+    /// an unreachable provider would burn a round trip discovering that on the one turn a learner can
+    /// least afford to lose.
+    /// </para>
+    ///
+    /// <para>
+    /// Deduplicated by provider code, because several GLM ids are offered by more than one vendor and
+    /// resolving the same row twice would retry a known-bad provider.
+    /// </para>
+    /// </summary>
+    private async Task<List<ResolvedAssistantProvider>> BuildAssistantFailoverChainAsync(
+        string featureCode, bool isLearner, string? primaryProviderCode, string? primaryModel, CancellationToken ct)
+    {
+        // (providerCode, model) pairs, in the order this role is entitled to try them.
+        var candidates = new List<(string? Code, string? Model)>();
+
+        void Add(string? code, string? model)
+        {
+            if (string.IsNullOrWhiteSpace(code)) return;
+            candidates.Add((code!.Trim(), string.IsNullOrWhiteSpace(model) ? null : model!.Trim()));
+        }
+
+        Add(primaryProviderCode, primaryModel);
+
+        // Learner: Z.AI -> the OpenCode gateway (the model the learner chatbot used before this
+        // change, and a proven-working fallback) -> Anthropic.
+        // Staff: Z.AI/route -> Anthropic -> OpenCode.
+        //
+        // The order differs because the entitlement differs: a learner must never be silently moved
+        // onto a staff-grade provider, whereas a failed staff request can afford the longer walk.
+        if (isLearner)
+        {
+            Add(OpenCodeProviderDefaults.ProviderCode, OpenCodeProviderDefaults.DefaultModel);
+            Add(AssistantModelCatalog.AnthropicProviderCode, CoreAiProviderSeeder.AnthropicDefaultModel);
+        }
+        else
+        {
+            Add(AssistantModelCatalog.AnthropicProviderCode, CoreAiProviderSeeder.AnthropicDefaultModel);
+            Add(OpenCodeProviderDefaults.ProviderCode, OpenCodeProviderDefaults.DefaultModel);
+        }
+
+        var chain = new List<ResolvedAssistantProvider>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (code, model) in candidates)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!seen.Add(code)) continue;
+
+            // A learner must never be routed to UBAG: the browser facade cannot serve tools and is a
+            // staff-grade surface. ResolveProviderAsync would find it, so it is excluded here.
+            if (isLearner && string.Equals(code, "ubag", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var resolved = await ResolveProviderAsync(code, model, ct);
+            if (resolved is null) continue;
+
+            // UBAG is in no learner's chain and no staff chain worth serving a tool turn through; the
+            // caller's tool guard already refuses it, but keeping it out of the chain avoids the
+            // wasted attempt entirely.
+            if (string.Equals(resolved.ProviderCode, "ubag", StringComparison.OrdinalIgnoreCase)) continue;
+
+            chain.Add(resolved);
+        }
+
+        return chain;
+    }
 
     private async Task<ResolvedAssistantProvider?> ResolveProviderAsync(string? providerCode, string? requestedModel, CancellationToken ct)
     {

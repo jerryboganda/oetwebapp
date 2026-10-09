@@ -346,12 +346,15 @@ public sealed class RegistryBackedProvider(
         // ("Unsupported parameter", like max_tokens), so they are omitted for them.
         var openAiReasoning = AiProviderPayloadBuilder.IsOpenAiReasoningModel(model);
 
-        // Vendor request limits (owner directive 2026-10-09). Z.AI rejects these outright with a 400,
-        // so the values are resolved here rather than at each call site. The capability row is the
-        // probe's recorded answer for THIS model on THIS provider; it is absent for every provider
-        // that has not been probed, in which case the helpers preserve today's behaviour.
-        var capability = await registry.FindCapabilityAsync(request.ProviderCode, model, ct);
+// Vendor request limits (owner directive 2026-10-09). Z.AI rejects these outright with a 400,
+        // so the values are resolved here rather than at each call site. `capability` was resolved
+        // once by CompleteAsync so the streaming decision could be made before this call.
         maxTokens = AiProviderPayloadBuilder.ClampMaxTokens(maxTokens, baseUrl, capability, model);
+
+        // Names the vendor in a streaming failure. OpenCode first because that is the historic
+        // wording operators have seen; every other provider gets its own name so a Z.AI outage is
+        // not reported as an OpenCode one.
+        var providerLabel = openCode ? "OpenCode" : (request.ProviderCode ?? "the AI provider");
 
         var payload = new Dictionary<string, object?>
         {

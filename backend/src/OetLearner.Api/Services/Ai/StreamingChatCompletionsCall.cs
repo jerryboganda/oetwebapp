@@ -6,29 +6,57 @@ using OetLearner.Api.Services.Rulebook;
 namespace OetLearner.Api.Services.Ai;
 
 /// <summary>
-/// Streaming chat-completions call for the OpenCode gateway (SAMI UAT finding,
-/// 2026-10-07): max-effort reasoning turns legitimately exceed the ~100s
-/// non-streamed HttpClient timeout and the gateway's ~120s edge read cap on
-/// non-streamed responses. Streaming keeps the connection alive with deltas, so
-/// reasoning of any length completes. Parses OpenAI SSE: content deltas,
-/// tool-call deltas and finish_reason. A failed or incomplete stream is never replayed.
+/// Streaming chat-completions call for any OpenAI-SSE provider whose LIVE PROBE said it streams.
+///
+/// <para>
+/// Origin: the OpenCode gateway (SAMI UAT finding, 2026-10-07) — max-effort reasoning turns
+/// legitimately exceed the ~100s non-streamed HttpClient timeout and the gateway's ~120s edge read
+/// cap on non-streamed responses. Streaming keeps the connection alive with deltas, so reasoning of
+/// any length completes.
+/// </para>
+///
+/// <para>
+/// Now used by any provider, because the same wall applies to any long reasoning turn. The
+/// previous gate was the OpenCode HOST, which meant every other provider silently took the buffered
+/// path — and the assistant then <em>faked</em> streaming by slicing the buffered answer into 80-char
+/// bursts, so a learner watched a wall of text arrive at once after a visible stall. Gating on the
+/// probed <c>SupportsStreaming</c> flag instead means the behaviour follows what the endpoint was
+/// observed to do.
+/// </para>
+///
+/// <para>
+/// Parses OpenAI SSE: content deltas, tool-call deltas and finish_reason. A failed or incomplete
+/// stream is never replayed.
+/// </para>
 /// </summary>
-public static class OpenCodeStreamingCall
+public static class StreamingChatCompletionsCall
 {
+    /// <summary>Master switch, retained under its original name for existing deployments.</summary>
     public static bool IsStreamingEnabled() =>
         Environment.GetEnvironmentVariable("AiOpenAiCompatible__OpenCodeStreaming") is not "false";
 
+    /// <param name="providerLabel">Provider name used in error messages, so a failure names the
+    /// vendor that actually failed rather than always saying "OpenCode".</param>
+    /// <param name="sendStreamOptions">
+    /// Whether to send <c>stream_options.include_usage</c>. Not universal: Z.AI has no
+    /// <c>stream_options</c> parameter at all, and sending one is at best ignored and at worst a
+    /// 400. Usage is read from the last chunk regardless, which is how Z.AI delivers it, so this can
+    /// safely be false.
+    /// </param>
     public static async Task<AiProviderCompletion?> CompleteStreamingAsync(
         HttpClient client,
         Dictionary<string, object?> payload,
         AiProviderRequest request,
+        string providerLabel,
+        bool sendStreamOptions,
         CancellationToken ct)
     {
         var streamPayload = new Dictionary<string, object?>(payload)
         {
             ["stream"] = true,
-            ["stream_options"] = new { include_usage = true },
         };
+        if (sendStreamOptions) streamPayload["stream_options"] = new { include_usage = true };
+
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "chat/completions")
         {
             Content = new StringContent(JsonSerializer.Serialize(streamPayload), Encoding.UTF8, "application/json"),
@@ -40,11 +68,11 @@ public static class OpenCodeStreamingCall
             var body = await response.Content.ReadAsStringAsync(ct);
             var error = AiProviderErrorParser.Parse(AiProviderErrorDialect.OpenAi, (int)response.StatusCode,
                 body, response.Headers, client.DefaultRequestHeaders.Authorization?.Parameter, retainProviderText: true);
-            throw new AiProviderHttpException("OpenCode", (int)response.StatusCode, response.ReasonPhrase, error.RetryAfter, error);
+            throw new AiProviderHttpException(providerLabel, (int)response.StatusCode, response.ReasonPhrase, error.RetryAfter, error);
         }
         var contentType = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
         if (!contentType.Contains("text/event-stream", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("OpenCode did not return a completion stream. No automatic replay was attempted.");
+            throw new InvalidOperationException($"{providerLabel} did not return a completion stream. No automatic replay was attempted.");
 
         var contentBuffer = new StringBuilder();
         var reasoningBuffer = new StringBuilder();
@@ -59,7 +87,7 @@ public static class OpenCodeStreamingCall
         streamDeadline.CancelAfter(TimeSpan.FromMinutes(10));
         while (await reader.ReadLineAsync(streamDeadline.Token) is { } line)
         {
-            if (line is { Length: > 1048576 }) throw new InvalidOperationException("OpenCode stream event exceeded its limit.");
+            if (line is { Length: > 1048576 }) throw new InvalidOperationException($"{providerLabel} stream event exceeded its limit.");
             if (string.IsNullOrWhiteSpace(line) || !line.StartsWith("data:", StringComparison.Ordinal)) continue;
             var data = line[5..].Trim();
             if (data == "[DONE]") break;
@@ -71,7 +99,7 @@ public static class OpenCodeStreamingCall
             }
             catch (JsonException)
             {
-                throw new InvalidOperationException("OpenCode returned a malformed completion stream.");
+                throw new InvalidOperationException($"{providerLabel} returned a malformed completion stream.");
             }
             if (chunk.TryGetProperty("model", out var modelEl) && modelEl.ValueKind == JsonValueKind.String)
             {
@@ -133,18 +161,18 @@ public static class OpenCodeStreamingCall
             if (contentBuffer.Length > 262144 || reasoningBuffer.Length > 262144
                 || (toolAccumulator?.Values.Sum(c => c.ArgsJson.Length) ?? 0) > 262144
                 || (toolAccumulator?.Count ?? 0) > 16)
-                throw new InvalidOperationException("OpenCode completion exceeded its bounded output limit.");
+                throw new InvalidOperationException($"{providerLabel} completion exceeded its bounded output limit.");
         }
 
         if (toolAccumulator?.Values.Any(c => string.IsNullOrWhiteSpace(c.Id) || string.IsNullOrWhiteSpace(c.ToolCode)
             || string.IsNullOrWhiteSpace(c.ArgsJson)) == true)
-            throw new InvalidOperationException("OpenCode returned an incomplete tool call.");
+            throw new InvalidOperationException($"{providerLabel} returned an incomplete tool call.");
         if (toolAccumulator is not null)
             foreach (var call in toolAccumulator.Values)
             {
                 using var args = JsonDocument.Parse(call.ArgsJson);
                 if (args.RootElement.ValueKind != JsonValueKind.Object)
-                    throw new InvalidOperationException("OpenCode tool arguments must be an object.");
+                    throw new InvalidOperationException($"{providerLabel} tool arguments must be an object.");
             }
         var toolCalls = toolAccumulator is null
             ? null
@@ -159,15 +187,15 @@ public static class OpenCodeStreamingCall
                 .ToList();
 
         ct.ThrowIfCancellationRequested();
-        if (finishElement is null) throw new InvalidOperationException("OpenCode stream ended before completion.");
+        if (finishElement is null) throw new InvalidOperationException($"{providerLabel} stream ended before completion.");
         if (finishElement.Value.GetProperty("finish_reason").GetString() == "length")
-            throw new InvalidOperationException("OpenCode reached its output limit. The incomplete response was not replayed.");
+            throw new InvalidOperationException($"{providerLabel} reached its output limit. The incomplete response was not replayed.");
         if (toolCalls is { Count: 0 }) toolCalls = null;
         if (toolCalls is not null && toolCalls.Select(c => c.Id).Distinct().Count() != toolCalls.Count)
-            throw new InvalidOperationException("OpenCode returned duplicate tool-call identifiers.");
+            throw new InvalidOperationException($"{providerLabel} returned duplicate tool-call identifiers.");
         if (contentBuffer.Length == 0 && toolCalls is null)
         {
-            throw new InvalidOperationException("OpenCode returned no answer or tool calls.");
+            throw new InvalidOperationException($"{providerLabel} returned no answer or tool calls.");
         }
 
         JsonElement finish = finishElement

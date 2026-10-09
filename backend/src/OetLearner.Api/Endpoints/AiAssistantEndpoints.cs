@@ -93,8 +93,13 @@ public static class AiAssistantEndpoints
             if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
 
             var model = string.IsNullOrWhiteSpace(req?.Model) ? null : req.Model.Trim();
+            // The learner's MODEL catalog is narrow on purpose — one curated personal assistant, not
+            // the staff list — but it is no longer a single hardcoded value. Unpinning the learner
+            // (owner directive 2026-10-09) is about WHO serves the turn, not about widening what a
+            // learner may choose; keeping this check separate from IsThreadSelectable is what stops a
+            // future widening of the staff picker from quietly widening the learner's entitlement.
             if (GetUserRole(ctx.User) == ApplicationUserRoles.Learner && model is not null
-                && model != AssistantModelCatalog.LearnerModel)
+                && !AssistantModelCatalog.IsLearnerSelectable(model))
                 return new ApiErrorResult(400, "ai_assistant_model_role_not_allowed", "Only the OET Personal Ai Assistant is available to learners.");
             if (model is not null && !AssistantModelCatalog.IsThreadSelectable(model))
                 return new ApiErrorResult(400, "ai_assistant_model_unknown", "Unknown assistant model.");
@@ -108,11 +113,33 @@ public static class AiAssistantEndpoints
                     return new ApiErrorResult(400, "ai_assistant_model_unavailable", "This model is not available right now.");
             }
 
+            // A Z.AI model is only offered when that row is active AND credentialed. Without this the
+            // picker would advertise models the learner cannot actually run, and pinning one would
+            // leave the thread on a dead provider until it failed over.
+            if (AssistantModelCatalog.IsZaiModel(model)
+                && !await ProviderIsServingAsync(providerRegistry, ZaiProviderDefaults.ProviderCode, model, ct))
+            {
+                return new ApiErrorResult(400, "ai_assistant_model_unavailable", "This model is not available right now.");
+            }
+
             var saved = await orchestrator.SetThreadModelAsync(threadId, userId, model, ct);
             return saved ? Results.NoContent() : Results.NotFound();
         }).RequireRateLimiting("PerUserWrite");
 
-        // Catalogs, never mixed: Claude (Anthropic API), UBAG (browser) and, for
+        // Is this provider actually able to serve that model right now — active row, credentialed, and the
+        // model inside its declared allow-list?
+        private static async Task<bool> ProviderIsServingAsync(
+            IAiProviderRegistry registry, string providerCode, string? model, CancellationToken ct)
+        {
+            var row = await registry.FindByCodeAsync(providerCode, ct);
+            if (row is null) return false;
+            if (string.IsNullOrWhiteSpace(row.EncryptedApiKey)) return false;
+            var allowed = (row.AllowedModelsCsv ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return allowed.Length == 0 || (model is not null && allowed.Contains(model, StringComparer.OrdinalIgnoreCase));
+        }
+
+        // Catalogs, never mixed: Claude (Anthropic API), UBAG (browser), Z.AI (GLM) and, for
         // learners only and only while its provider row is active, OpenCode.
         // `claude_web` is a UBAG browser target, not an Anthropic model.
         group.MapGet("/models", async (
@@ -122,13 +149,31 @@ public static class AiAssistantEndpoints
         {
             if (GetUserRole(ctx.User) == ApplicationUserRoles.Learner)
             {
-                var learnerModels = (await GetOpenCodeModelsAsync(providerRegistry, ct))
-                    .Where(m => m == AssistantModelCatalog.LearnerModel).ToArray();
+                // The learner's list is the curated Z.AI catalog, offered only while that row is
+                // active and credentialed. Free-to-call ids are included — they are genuinely free,
+                // and the picker label says so — but none is ever made the default.
+                var zaiRow = await providerRegistry.FindByCodeAsync(ZaiProviderDefaults.ProviderCode, ct);
+                var zaiAllowed = new HashSet<string>(
+                    (zaiRow?.AllowedModelsCsv ?? string.Empty)
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                    StringComparer.OrdinalIgnoreCase);
+                var learnerModels = zaiRow is null || string.IsNullOrWhiteSpace(zaiRow.ApiKeyHint)
+                    ? Array.Empty<string>()
+                    : AssistantModelCatalog.LearnerModels
+                        // Empty allow-list means "no restriction" (the documented meaning of the
+                        // column), so it must NOT be read as "nothing is allowed".
+                        .Where(m => zaiAllowed.Count == 0 || zaiAllowed.Contains(m))
+                        .ToArray();
                 return Results.Ok(new
                 {
                     groups = learnerModels.Length == 0 ? Array.Empty<object>() : new object[]
                     {
-                        new { provider = "personal-assistant", label = AssistantModelCatalog.LearnerAssistantLabel, models = learnerModels }
+                        new
+                        {
+                            provider = AssistantModelCatalog.LearnerDefaultProviderCode,
+                            label = AssistantModelCatalog.LearnerAssistantLabel,
+                            models = learnerModels
+                        }
                     },
                     models = learnerModels
                 });
@@ -140,6 +185,31 @@ public static class AiAssistantEndpoints
                 new { provider = UbagProviderRouteDefaults.ProviderCode, label = "UBAG (browser)", models = ubagModels },
             };
             var models = AssistantModelCatalog.ClaudeApiModels.Concat(ubagModels);
+
+            // Z.AI group for staff. Offered only while that row is active and credentialed, so the
+            // picker never advertises a model the admin has not actually set up. Free-to-call ids are
+            // included; the label in the picker says which they are.
+            var zaiRow = await providerRegistry.FindByCodeAsync(ZaiProviderDefaults.ProviderCode, ct);
+            if (zaiRow is not null && !string.IsNullOrWhiteSpace(zaiRow.ApiKeyHint))
+            {
+                var zaiAllowed = new HashSet<string>(
+                    (zaiRow.AllowedModelsCsv ?? string.Empty)
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                    StringComparer.OrdinalIgnoreCase);
+                var zaiModels = AssistantModelCatalog.ZaiModels
+                    .Where(m => zaiAllowed.Count == 0 || zaiAllowed.Contains(m))
+                    .ToArray();
+                if (zaiModels.Length > 0)
+                {
+                    groups.Add(new
+                    {
+                        provider = ZaiProviderDefaults.ProviderCode,
+                        label = AssistantModelCatalog.ProviderLabelFor(ZaiProviderDefaults.ProviderCode),
+                        models = zaiModels,
+                    });
+                    models = models.Concat(zaiModels);
+                }
+            }
 
             var openCodeModels = await GetOpenCodeModelsAsync(providerRegistry, ct);
             if ((GetUserRole(ctx.User) is ApplicationUserRoles.Learner or ApplicationUserRoles.Admin or ApplicationUserRoles.Expert)

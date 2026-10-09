@@ -100,6 +100,7 @@ The owner tests the live product by hand and reports bugs; the agent fixes them 
   verification, the PDF bench).
 - **Owner-confirmed carve-out (2026-10-09, AI Pipeline Control Center):** an on-demand, in-app **Pipeline self-check** (admin button, runs on the server, never in CI), a provider-usage reconciliation report and manual production scripts under `scripts/qa/` are allowed as product evidence. CI still runs no tests of any kind.
 - **Owner-confirmed carve-out (2026-10-09, Writing validator self-check):** an on-demand, admin-only "Validator self-check" on the Admin > Writing hub (`POST /v1/admin/writing/validator-self-check`, `WritingValidatorSelfCheck`) runs golden clinical-abbreviation cases (QD/QID/QDS/QOD/BD/TDS/PRN, scan and table forms, OD vs right eye, completed vs pending actions) through the deployed Model Answer validator on the server. It never runs in CI, writes nothing and calls no AI provider.
+- **Owner-confirmed carve-out (2026-10-09, AI provider capability probe):** an on-demand, admin-only **capability probe** on `/admin/ai-providers` (`POST /v1/admin/ai/providers/{code}/probe-capabilities`, `AiProviderCapabilityProbe`) calls a provider's live endpoint with its own stored key to record what each model *actually* supports (tools, images, documents, JSON mode, streaming, embeddings, thinking). It exists because vendor documentation cannot be trusted for this — Z.AI's own OpenAPI schema and model page contradict each other about `response_format`. It runs only on an admin click, never on a schedule and never in CI. CI still runs no tests of any kind.
 - **Standing product rules still bind** (Max never off, the $0 Writing rule, Writing house style, scoring and rulebook
   invariants, the Speaking Provisional label ...). With no CI test enforcing them, agents follow them by reading the rules.
 
@@ -375,6 +376,16 @@ voice) on the admin Pipeline page (`/v1/admin/ai/pipelines`). Rules:
   key, and no boot task re-activates it. `PUT /writing-provider` stays inert.
 - **Restore.** "Restore built-in order" (Max first) is always available and is itself a new audited version. Every AI admin page
   shows a banner while Max is not first or is off, naming who changed it and when.
+- **Z.AI / GLM (owner directive 2026-10-09).** `z-ai` (`glm-5.3-flash`) is the owner's paid provider: **primary on
+  the three AI-assistant surfaces** (admin, learner, expert/tutor — one widget, three feature codes) and a
+  **last-resort hop** in `WritingGrade`, `SpeakingGrade`, `WritingReview` and `SpeakingReview` **after** Max →
+  Anthropic API → Codex. This changes nothing above: Max still serves every run, GLM on grading fires only when
+  every paid route has already failed, and `verify-pipeline-contract.mjs:633-639` fails the build if GLM is ever
+  placed before `MaxProvider`. It is never in `LiveVoice`, and never on OCR/STT/embeddings — the capability gate
+  refuses those routes. **The learner chatbot is no longer hardcoded**: a thread's choice wins, then the admin
+  default at `/admin/ai-assistant/config`, then `AssistantModelCatalog.LearnerDefaultModel`. The learner's model
+  list stays the narrow curated catalog (`IsLearnerSelectable`) — unpinning is about who serves the turn, not
+  access. Spend is alert-only, never blocking. See `docs/ops/ZAI-PROVIDER.md`.
 
 **Still forbidden, no exception:** any automatic, computed or code-written state that skips or reorders a provider — markers
 (`WritingAiClaudeQuotaExceededUntil` is retired, never assign it), utilisation, weekly-estimate, allowance or CREDIT-BALANCE
@@ -482,6 +493,7 @@ Load the named docs before editing these surfaces.
 - Scoring: use `lib/scoring.ts` or `OetScoring`; never inline pass thresholds. Anchor: Listening/Reading `30/42 == 350/500`; Writing is country-aware; Speaking is 350. See `docs/SCORING.md`.
 - Rulebooks: use `lib/rulebook` or backend Rulebook services; never read rulebook JSON directly from UI/endpoints. See `docs/RULEBOOKS.md`.
 - AI calls: route through the coordinator (`IAiGatewayService` / `IDirectAiCallRecorder`); one `AiUsageRecord` per physical provider call; never bypass grounding. See `docs/AI-USAGE-POLICY.md`.
+- **AI provider routing (owner directive 2026-10-09):** a provider is a candidate for an unrouted feature only when its row has `ParticipatesInAutoSelection = true` — the single rule in `AiProviderDefaultEligibility`, consulted by every implicit-default site. A row cannot serve a feature code unless that model was **live-probed** and met the capability the code declares in `AiFeatureCapabilityRequirements` (all 63 routable codes are mapped); unprobed means incapable and the route save is refused naming what is missing. Never infer a capability from vendor documentation — Z.AI's schema and model page contradict each other about `response_format`. New rows seed with auto-selection OFF, so adding a vendor never silently changes who answers Reading explanations or vocabulary cards. See `docs/ops/ZAI-PROVIDER.md`.
 - Content uploads: use `ContentPaper -> ContentPaperAsset -> MediaAsset`, chunked admin upload endpoints, `IFileStorage`, provenance, publish gates, and audit events. See `docs/CONTENT-UPLOAD-PLAN.md`.
 - Statement of Results: do not restyle the CBLA-style card; use `lib/adapters/oet-sor-adapter.ts`. See `docs/OET-RESULT-CARD-SPEC.md`.
 - Reading, grammar, pronunciation, and conversation are server-authoritative; preserve their scoring, rulebook, ASR/TTS/provider, entitlement, retention, and publish-gate contracts. See the matching docs in `docs/`.
@@ -526,6 +538,7 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
 - `.github/instructions/deployment.instructions.md` — Docker/CI/CD/storage/VPS/desktop/mobile.
 - `.github/instructions/admin-hallmark.instructions.md` — admin operational UI discipline.
 - `docs/SHARED-CODEX-REVIEWER.md` — the ONE shared GPT-6.1 Sol / Codex reviewer pipeline for Writing AND Speaking: single FIFO capacity gate (`Reviewer:Shared` / `CODEX_REVIEWER_MAX_CONCURRENCY`), bounded waits, automatic API-reviewer fallback, observability (`/v1/admin/ai/reviewer-queue`). Load it before touching either reviewer; never give either assessment type its own queue or an unbounded wait on Codex quota.
+- `docs/ops/ZAI-PROVIDER.md` — the Z.AI / GLM provider (`z-ai`): why `glm-5.3-flash` and not the flagship, the dedicated `ZAI__*` env channel and why `AI__ProviderId=z-ai` must never be set, the live capability probe and its fail-closed routing gate, the vendor request limits the payload builder enforces, the corrected cost rates, and the known risks. **Load it before any change to `ZaiProviderDefaults`, the AI providers screen, `AiProviderDefaultEligibility`, or feature-route capability gating.**
 - `docs/play-store-automation.md` — Google Play Console release/listing/tester/review
   automation via service-account toolkit; compulsory before any Play Store action.
 - `docs/app-release-playbook.md` — the "cut app releases" procedure across Android,
