@@ -55,6 +55,34 @@ upgrade path. The revised final spec governs where it conflicts with older tier/
 Newest live build at the time of writing: **`d98b53dfb`**. Everything below is in it — verified by
 ancestry against the live `X-Oet-Release`, not assumed.
 
+### Defect class worth carrying forward: a change that breaks its neighbour
+
+Three times now, a change has been correct in itself and silently broken an adjacent behaviour. Each
+was found only by reading, not by any check:
+
+1. **F-077 → `companion_why_score_change`.** Introducing the `official_result` memory kind left the
+   score-change tool filtering on `Kind == "score"`, so a learner who had just recorded an official
+   result and asked why their score moved would have been told they had *no confirmed scores on
+   record* — the tool denying data it was holding.
+2. **F-127/128/129 → build.** The dashboards were written against a subagent's output that was still
+   changing; the committed snapshot was missing a projection field and a `using`, and the API build
+   failed. A sibling session fixed it before I did.
+3. **The Pack 3 "attachment defect"** was never a product defect — the lost harness had not been
+   sending attachment arguments, and the assistant honestly reported receiving nothing.
+
+The pattern in all three: the change passed its own scenario and the breakage lived one step away.
+Two practices follow, and both are cheap: after touching a *shared* concept (a memory kind, an enum, a
+payload shape), grep for every other reader of it before committing; and when adopting another
+agent's output, diff the staged content against disk rather than trusting the `git add` snapshot.
+
+### Operational note: a stale-looking lock can still be a live owner
+
+The ship lock records an expiry, but the expiry is not a lease on the process. During this session a
+lock showed `expires 2026-10-09T11:46:29Z` while the wall clock read `16:37Z` — over four hours past
+— and `pid 22100` was **still running**. A passed expiry is not evidence that the lock is abandoned,
+and the wrapper refuses to override a live owner anyway. The correct action is to wait or to report
+the blocker; force-releasing would have been the exact mistake the rule exists to prevent.
+
 ### F-077 / F-078 result-day assistant — built and VERIFIED end to end
 
 The gap was that the companion could record a score but had no idea whether it was an **official**
