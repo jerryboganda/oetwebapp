@@ -1,3 +1,5 @@
+using OetLearner.Api.Domain;
+
 namespace OetLearner.Api.Services.Companion;
 
 /// <summary>
