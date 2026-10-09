@@ -42,6 +42,10 @@ public static class WritingTaskAdminEndpoints
         // blocking codes. Powers the backfill workflow and reporting.
         group.MapGet("/preparation-status", PreparationStatus).WithAdminRead("AdminContentRead");
 
+        // Advisory case-note completeness audit (owner directive 9 Oct 2026): tasks whose STORED case-note rows look like
+        // a value (DOB, range of movement ...) was lost in extraction. Read-only; never blocks anything.
+        group.MapGet("/case-note-audit", CaseNoteAudit).WithAdminRead("AdminContentRead");
+
         // Full-catalogue release gate (§22/§15): enumerates EVERY published
         // candidate-facing scenario from the live application model and runs
         // the same resolvers candidate grading depends on. A non-zero
@@ -214,6 +218,12 @@ public static class WritingTaskAdminEndpoints
         var (items, total) = await service.GetPreparationStatusAsync(status, profession, page, pageSize, ct);
         return Results.Ok(new { items, total });
     }
+
+    private static async Task<IResult> CaseNoteAudit(
+        IWritingTaskAuthoringService service,
+        [FromQuery] string? status,
+        CancellationToken ct = default)
+        => Results.Ok(await service.GetCaseNoteAuditAsync(status, ct));
 
     private static async Task<IResult> CatalogueCompatibility(
         IWritingCataloguePreflightService service,

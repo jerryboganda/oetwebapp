@@ -13,6 +13,7 @@
 import { apiClient } from '../api';
 import type { BulkActionResultDto } from '../types/admin';
 import type {
+  WritingCaseNoteAuditDto,
   WritingTaskDto,
   WritingTaskUpsertDto,
   WritingTaskValidationDto,
@@ -73,6 +74,10 @@ export const createWritingTask = (payload: WritingTaskUpsertDto) =>
 
 export const updateWritingTask = (taskId: string, payload: WritingTaskUpsertDto) =>
   apiClient.put<WritingTaskDto>(p('/v1/admin/writing/tasks/{id}', { id: taskId }), payload);
+
+/** Read-only case-note completeness audit: tasks whose stored rows look like a value was lost in extraction. */
+export const getWritingCaseNoteAudit = (status: 'published' | 'draft' | 'archived' | 'all' = 'published') =>
+  apiClient.get<WritingCaseNoteAuditDto>(`/v1/admin/writing/tasks/case-note-audit${qs({ status })}`);
 
 export const validateWritingTask = (taskId: string) =>
   apiClient.get<WritingTaskValidationDto>(p('/v1/admin/writing/tasks/{id}/validate', { id: taskId }));

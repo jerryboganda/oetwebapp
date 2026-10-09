@@ -57,6 +57,13 @@ public interface IWritingTaskAuthoringService
         CancellationToken ct = default);
 
     /// <summary>
+    /// Advisory case-note completeness audit (owner directive 9 Oct 2026): lists the tasks (default: published) whose
+    /// STORED case-note rows look like a value was lost in extraction (no DOB line, a DOB or range-of-movement label without
+    /// a value, no degree values for a physiotherapy task ...). Read-only; never blocks anything.
+    /// </summary>
+    Task<WritingCaseNoteAuditReport> GetCaseNoteAuditAsync(string? status, CancellationToken ct = default);
+
+    /// <summary>
     /// Applies a bulk workflow action (<c>publish</c> | <c>archive</c> |
     /// <c>delete</c> | <c>force-delete</c>) to many tasks at once. Mirrors
     /// <c>ContentPaperService.BulkAsync</c> so the admin UI gets a uniform
@@ -195,7 +202,10 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         scenario.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(ct);
-        return (MapToDto(scenario), validation);
+        // Warnings never block the publish; they ride back so the admin sees them at the moment of publishing.
+        return (
+            MapToDto(scenario) with { Warnings = validation.Issues.Where(i => i.Severity == "warning").ToList() },
+            validation);
     }
 
     public async Task<WritingTaskDto?> ArchiveAsync(Guid id, CancellationToken ct = default)
@@ -268,6 +278,43 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
         return scenario is null ? null : MapToExportJson(scenario);
+    }
+
+    public async Task<WritingCaseNoteAuditReport> GetCaseNoteAuditAsync(string? status, CancellationToken ct = default)
+    {
+        var scope = string.IsNullOrWhiteSpace(status) ? "published" : status.Trim().ToLowerInvariant();
+        var query = db.WritingScenarios.AsNoTracking().AsQueryable();
+        if (scope != "all") query = query.Where(s => s.Status == scope);
+        var scenarios = await query.OrderBy(s => s.Profession).ThenBy(s => s.Title).ToListAsync(ct);
+        var ids = scenarios.Select(s => s.Id).ToList();
+
+        var textsById = (await db.WritingScenarioStructuredSentences.AsNoTracking()
+                .Where(x => ids.Contains(x.ScenarioId))
+                .OrderBy(x => x.Ordinal)
+                .ToListAsync(ct))
+            .GroupBy(x => x.ScenarioId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Ordinal).Select(x => x.SentenceText ?? string.Empty).ToList());
+
+        var rows = new List<WritingCaseNoteAuditRow>();
+        foreach (var s in scenarios)
+        {
+            textsById.TryGetValue(s.Id, out var texts);
+            texts ??= new List<string>();
+            var codes = WritingCaseNoteCompleteness.Warnings(texts, s.Profession);
+            if (codes.Count == 0) continue;
+            rows.Add(new WritingCaseNoteAuditRow(
+                s.Id,
+                s.InternalCode,
+                s.Title,
+                s.Profession,
+                s.LetterType,
+                s.Status,
+                texts.Count,
+                codes,
+                codes.Select(WritingCaseNoteCompleteness.Message).ToList()));
+        }
+
+        return new WritingCaseNoteAuditReport(DateTimeOffset.UtcNow, scope, scenarios.Count, rows.Count, rows);
     }
 
     public async Task<(IReadOnlyList<WritingTaskPreparationStatusDto> Items, int Total)> GetPreparationStatusAsync(
@@ -707,10 +754,18 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
                 || !string.IsNullOrWhiteSpace(understanding.DiagnosisOrPlanEvidence),
             classificationConflicting: understanding.ConflictingEvidence);
 
+        // Advisory only (owner directive 9 Oct 2026): a stored case-note set that looks like a value was lost in extraction
+        // is shown as a warning to the admin and never blocks publishing.
+        var warnings = WritingCaseNoteCompleteness.Warnings(
+            sentences.Select(x => x.SentenceText ?? string.Empty).ToList(),
+            scenario.Profession);
+
         return new WritingTaskValidationResult
         {
             IsPublishReady = codes.Count == 0,
-            Issues = codes.Select(c => Error(c, BlockingMessage(c))).ToList(),
+            Issues = codes.Select(c => Error(c, BlockingMessage(c)))
+                .Concat(warnings.Select(w => Warning(w, WritingCaseNoteCompleteness.Message(w))))
+                .ToList(),
         };
     }
 
@@ -855,6 +910,13 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     {
         Code = code,
         Severity = "error",
+        Message = message,
+    };
+
+    private static WritingTaskValidationIssue Warning(string code, string message) => new()
+    {
+        Code = code,
+        Severity = "warning",
         Message = message,
     };
 
@@ -1070,6 +1132,9 @@ public sealed record WritingTaskDto
     public string? ConfirmedPurposeText { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
+
+    /// <summary>Advisory case-note warnings; filled only by the publish response.</summary>
+    public List<WritingTaskValidationIssue> Warnings { get; init; } = new();
 }
 
 public sealed record WritingTaskUpsertDto

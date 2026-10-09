@@ -381,8 +381,21 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
       }
       const dto = await publishWritingTask(saved.id);
       setStatus(dto.status);
-      setIssues([]);
-      setToast({ message: 'Task published', variant: 'success' });
+      // Case-note warnings never block a publish; keep them on screen so the admin can check the source PDF.
+      const publishWarnings: DisplayIssue[] = (dto.warnings ?? []).map((w) => ({
+        code: w.code ?? '',
+        severity: 'warning',
+        message: w.message ?? 'Check the case notes',
+      }));
+      setIssues(publishWarnings);
+      setToast(
+        publishWarnings.length > 0
+          ? {
+              message: `Task published, with ${publishWarnings.length} case-note warning${publishWarnings.length === 1 ? '' : 's'} to check`,
+              variant: 'warning',
+            }
+          : { message: 'Task published', variant: 'success' },
+      );
     } catch (err) {
       // Surface 400 publish-gate issues. The shared client raises ApiError with
       // a `fieldErrors` array ({ field, code, message }). When the gate returns

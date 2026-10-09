@@ -934,6 +934,29 @@ export interface WritingTaskDto {
   stimulusPdfDownloadPath?: string | null;
   /** Answer-sheet / model-answer PDF shown on the results page (post-submission only). */
   answerSheetPdfMediaAssetId?: string | null;
+  /** Advisory case-note warnings; the publish response fills it, other responses leave it empty. */
+  warnings?: Array<{ code: string; severity: string; message: string }>;
+}
+
+/** One task flagged by the case-note completeness audit (stored rows that look like a value was lost in extraction). */
+export interface WritingCaseNoteAuditRowDto {
+  scenarioId: string;
+  internalCode: string | null;
+  title: string;
+  profession: string;
+  letterType: string;
+  status: string;
+  caseNoteRowCount: number;
+  warnings: string[];
+  messages: string[];
+}
+
+export interface WritingCaseNoteAuditDto {
+  generatedAt: string;
+  scope: string;
+  scanned: number;
+  flagged: number;
+  rows: WritingCaseNoteAuditRowDto[];
 }
 
 /** Admin create/update payload for a writing task (subset that is editable). */

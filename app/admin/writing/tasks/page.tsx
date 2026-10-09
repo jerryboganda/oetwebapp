@@ -143,8 +143,16 @@ export default function WritingTasksPage() {
     async (id: string) => {
       setRowBusyId(id);
       try {
-        await publishWritingTask(id);
-        setToast({ message: 'Task published', variant: 'success' });
+        const published = await publishWritingTask(id);
+        const warningCount = published.warnings?.length ?? 0;
+        setToast(
+          warningCount > 0
+            ? {
+                message: `Task published, with ${warningCount} case-note warning${warningCount === 1 ? '' : 's'}: ${(published.warnings ?? []).map((w) => w.message).join(' ')}`,
+                variant: 'warning',
+              }
+            : { message: 'Task published', variant: 'success' },
+        );
         await load();
       } catch (err) {
         setToast({
@@ -421,16 +429,27 @@ export default function WritingTasksPage() {
     [canWrite, canPublish, rowBusyId, router, handleClone, handlePublish, handleArchive, handleExport],
   );
 
-  const headerActions = canWrite ? (
+  const headerActions = (
     <>
-      <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
-        Import JSON
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => router.push('/admin/writing/tasks/case-note-audit')}
+      >
+        Case-note audit
       </Button>
-      <Button size="sm" onClick={() => router.push('/admin/writing/tasks/new')}>
-        + New task
-      </Button>
+      {canWrite && (
+        <>
+          <Button variant="secondary" size="sm" onClick={() => setImportOpen(true)}>
+            Import JSON
+          </Button>
+          <Button size="sm" onClick={() => router.push('/admin/writing/tasks/new')}>
+            + New task
+          </Button>
+        </>
+      )}
     </>
-  ) : undefined;
+  );
 
   return (
     <AdminSettingsLayout

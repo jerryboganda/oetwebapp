@@ -134,6 +134,12 @@ degree sign / degrees, R / right, label and value on separate lines).
   "search the whole notes in every form before alleging absence".
 - The candidate rule-engine lane is deliberately NOT given `CaseNotesText`: that would switch on score-bearing
   source detectors whose date/age handling has known gaps. Do not add it without replacing those regexes with the verifier.
+- Prevention (owner directive 9 Oct 2026): `WritingCaseNoteCompleteness` flags stored case-note rows that look like a
+  value was lost in extraction (no DOB line, a DOB or range-of-movement label without a value, no degree values for a
+  physiotherapy / OT task, OCR debris, very short or truncated). It is advisory only: the task publish validation shows
+  the codes as `warning` issues (never blocking, also returned on the publish response), and
+  `GET /v1/admin/writing/tasks/case-note-audit` (page `/admin/writing/tasks/case-note-audit`) lists every flagged task.
+  A flag means "compare with the source PDF"; repair in the case-notes editor.
 - If the stored case-note rows genuinely lack the fact (an extraction or authoring loss, as happened with the Weir
   DOB), the claim is TRUE for that snapshot and the verifier correctly keeps it: repair the rows in the admin
   case-notes editor, then re-submit.
