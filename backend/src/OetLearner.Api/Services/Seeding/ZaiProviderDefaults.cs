@@ -23,30 +23,61 @@ namespace OetLearner.Api.Services.Seeding;
 /// <see cref="OetLearner.Api.Services.Rulebook.AiProviderDefaultEligibility"/>.
 /// </para>
 /// </summary>
+/// <summary>Z.AI (Zhipu AI / BigModel) GLM provider registration values (owner directive 2026-10-09).</summary>
 public static class ZaiProviderDefaults
 {
     public const string ProviderCode = "z-ai";
     public const string ProviderName = "Z.AI (GLM)";
 
-    /// <summary>International Z.AI OpenAI-compatible surface. Global pay-as-you-go; the only
-    /// documented general (non-Coding-Plan) endpoint. The China platform would be
-    /// <c>https://open.bigmodel.cn/api/paas/v4</c> with its own balance.</summary>
-    public const string BaseUrl = "https://api.z.ai/api/paas/v4";
-
     /// <summary>
-    /// Owner-directed default (2026-10-09). Chosen over the text-only <c>glm-5.3</c> because the
-    /// assistant sends image and document attachments and several call sites emit strict JSON:
-    /// only the Flash line is multimodal AND JSON-capable at $0.15/$0.50 per 1M.
+    /// The owner's GLM **Coding Plan** endpoint (owner decision 2026-10-09).
+    ///
+    /// <para>
+    /// A Coding Plan is a separate entitlement from the pay-as-you-go balance, served on its own base
+    /// URL. The general endpoint rejects plan traffic with <c>1113 "Insufficient balance or no
+    /// resource package. Please recharge."</c> — which reads exactly like an empty wallet and is not
+    /// one. Verified against the live endpoint with the owner's key: <c>/api/paas/v4</c> → 429/1113,
+    /// <c>/api/coding/paas/v4</c> → 200.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Known licensing question, decided by the owner.</b> Z.AI's Coding Plan is documented as
+    /// limited to officially supported tools (a named list of ~15 coding agents), with their FAQ
+    /// directing self-built applications and bots to the standard API and advising billing
+    /// accordingly, and their Usage Policy threatening rate limiting, account freezing or ban. The
+    /// owner states they have Z.AI's permission to use the plan for this product, and this endpoint is
+    /// configured on that basis. Recorded here so the basis of the decision travels with the code.
+    /// </para>
+    ///
+    /// <para>
+    /// Only <c>GLM-5.3</c> and <c>GLM-5.3-Flash</c> are plan-callable, so
+    /// <see cref="CuratedChatModels"/> is restricted to exactly those two.
+    /// </para>
+    /// </summary>
+    public const string BaseUrl = "https://api.z.ai/api/coding/paas/v4";
+
+    /// <summary>The pay-as-you-go endpoint, kept for reference. Returns 429/1113 on a plan-only key.</summary>
+    public const string PayAsYouGoBaseUrl = "https://api.z.ai/api/paas/v4";
+
+        /// <summary>
+    /// Owner-directed default (2026-10-09). <b>Measured on the Coding Plan endpoint, not assumed</b>:
+    /// <c>glm-5.3-flash</c> passes chat, <c>response_format</c> (valid JSON out), tool calling,
+    /// SSE streaming and an image content part. <c>glm-5.3</c> is text-only — an image turn returns
+    /// <c>1210 messages.content.type is invalid</c> — so the Flash line is the only model here that
+    /// can serve the assistants, which do accept attachments.
     /// </summary>
     public const string DefaultModel = "glm-5.3-flash";
 
     /// <summary>
-    /// Thinking is FORCED and cannot be disabled on GLM-5.3 / GLM-5.3-FLASH, and
-    /// <c>reasoning_effort</c> defaults to <c>max</c>. Reasoning output is billed inside
-    /// <c>completion_tokens</c> at the model's normal output rate (Z.AI's <c>usage</c> object has
-    /// no separate reasoning field), so <c>max</c> on a high-traffic surface is expensive.
-    /// <c>low</c> is the only lever — the model will not go below it and will not go off.
-    /// Owner decision, 2026-10-09, with alert-only spend monitoring (never a hard stop).
+    /// Reasoning level for the Coding Plan.
+    ///
+    /// <para>
+    /// Earlier this was justified by Z.AI's documentation saying thinking is forced on and cannot be
+    /// disabled, with <c>reasoning_effort</c> defaulting to <c>max</c>. <b>Measured on the coding
+    /// endpoint that did not reproduce:</b> at <c>low</c> the model returns zero reasoning characters
+    /// and answers directly. <c>low</c> is therefore kept as an explicit floor rather than a
+    /// necessity, and the reasoning control is still per-model and probe-driven.
+    /// </para>
     /// </summary>
     public const string DefaultReasoningEffort = "low";
 
@@ -58,83 +89,57 @@ public static class ZaiProviderDefaults
     public const int FailoverPriority = 100;
 
     /// <summary>
-    /// Models offered in the admin/thread pickers. <b>Free</b> entries are surfaced with an honest
-    /// "free" label and are never made a default: a vendor's free tier is the first thing it
-    /// changes, and the learner chatbot must not depend on that.
+    /// Models offered in the admin/thread pickers — <b>exactly the two the Coding Plan can call</b>.
     ///
     /// <para>
-    /// Do NOT extend this list with a vision model lacking JSON mode (<c>glm-4.6v</c>,
-    /// <c>glm-4.5v</c>): those bind to a request schema with no <c>response_format</c> at all, so
-    /// they would silently break every strict-JSON call site. The capability probe is the authority
-    /// on what any given model can actually do, not this list.
+    /// Z.AI documents that only GLM-5.3 and GLM-5.3-Flash are directly callable on the plan. Older
+    /// names are silently aliased onto one of those two, so offering them would be offering a
+    /// different model under a misleading label.
+    /// </para>
+    ///
+    /// <para>
+    /// The pay-as-you-go free tiers (<c>glm-4.5-flash</c>, <c>glm-4.7-flash</c>) are deliberately NOT
+    /// here. They are not in the plan, so pinning one would fail on this base URL, and the default
+    /// model is Flash regardless.
     /// </para>
     /// </summary>
     public static readonly string[] CuratedChatModels =
     [
-        "glm-5.3-flash",  // owner default; multimodal, tools, JSON mode, 1M context
-        "glm-5.3",        // flagship text, tools, JSON mode — no vision
-        "glm-5.2",
-        "glm-5.1",
-        "glm-4.7",
-        "glm-4.6",
-        "glm-4.7-flash",  // free to call
-        "glm-4.5-flash",  // free to call
+        "glm-5.3-flash",  // owner default; measured: tools, JSON mode, SSE, vision
+        "glm-5.3",        // measured: tools, JSON mode, SSE — TEXT ONLY (no image content part)
     ];
 
-    /// <summary>Models Z.AI bills nothing for (all four price columns free, no expiry published).</summary>
-    public static readonly HashSet<string> FreeModels =
-        new(["glm-4.7-flash", "glm-4.5-flash"], StringComparer.OrdinalIgnoreCase);
-
-    public static string AllowedModelsCsv => string.Join(',', CuratedChatModels);
-
     /// <summary>
-    /// Published rates, USD per 1M tokens, read from the Z.AI pricing page on 2026-10-09 and
-    /// converted to the per-1K columns <c>AiProviders</c> stores.
-    ///
-    /// <para>
-    /// <b>Why this table exists.</b> The env bootstrapper used to hardcode 0.015 / 0.075 per 1K,
-    /// which is $15 / $75 per 1M — <b>100x too high in both directions</b> for every current Z.AI
-    /// model. A cost screen reading those numbers is not merely imprecise, it is actively
-    /// misleading, and it is what you would use to judge whether the last-resort pipeline hops are
-    /// firing more than expected.
-    /// </para>
-    ///
-    /// <para>
-    /// Reasoning/thinking tokens are metered inside <c>completion_tokens</c>, so a forced-thinking
-    /// model costs more than its table row suggests — that is what the spend alert is for.
-    /// </para>
+    /// Nothing is billed per token on this row: the Coding Plan is a flat subscription drawn down in
+    /// credits, so a per-1K price would double-count spend already covered by the subscription. The
+    /// usage dashboards therefore show zero direct cost for <c>z-ai</c>, which is accurate — the cost
+    /// is the monthly plan, not the traffic.
     /// </summary>
     public static readonly Dictionary<string, (decimal PromptPer1k, decimal CompletionPer1k)> RatesPer1k =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            // $1.40 / $4.40 per 1M
-            ["glm-5.3"] = (0.0014m, 0.0044m),
-            ["glm-5.3-flash"] = (0.00015m, 0.0005m),   // $0.15 / $0.50
-            ["glm-5.3-flashx"] = (0.00037m, 0.00125m),
-            ["glm-5.2"] = (0.0014m, 0.0044m),
-            ["glm-5.1"] = (0.0014m, 0.0044m),
-            ["glm-5"] = (0.0010m, 0.0032m),
-            ["glm-4.7"] = (0.0006m, 0.0022m),
-            ["glm-4.7-flash"] = (0m, 0m),               // free to call
-            ["glm-4.7-flashx"] = (0.00007m, 0.0004m),
-            ["glm-4.6"] = (0.0006m, 0.0022m),
-            ["glm-4.6v"] = (0.0003m, 0.0009m),
-            ["glm-4.6v-flash"] = (0m, 0m),
-            ["glm-4.5"] = (0.0006m, 0.0022m),
-            ["glm-4.5-air"] = (0.0002m, 0.0011m),
-            ["glm-4.5-flash"] = (0m, 0m),               // free to call
-            ["glm-4.5v"] = (0.0006m, 0.0018m),
+            ["glm-5.3"] = (0m, 0m),
+            ["glm-5.3-flash"] = (0m, 0m),
         };
 
-    /// <summary>Rates for <paramref name="model"/>, falling back to the owner's default model's
-    /// rates rather than to zero — an unknown model must not look free.</summary>
-    public static (decimal PromptPer1k, decimal CompletionPer1k) RatesFor(string? model)
-        => !string.IsNullOrWhiteSpace(model) && RatesPer1k.TryGetValue(model.Trim(), out var rates)
-            ? rates
-            : RatesPer1k[DefaultModel];
+    /// <summary>
+    /// Pay-as-you-go rates per 1K, kept only as a reference for what the same models would cost
+    /// outside the plan. Not applied to the row.
+    /// </summary>
+    public static readonly Dictionary<string, (decimal PromptPer1k, decimal CompletionPer1k)> PayAsYouGoRatesPer1k =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["glm-5.3"] = (0.0014m, 0.0044m),      // $1.40 / $4.40 per 1M
+            ["glm-5.3-flash"] = (0.00015m, 0.0005m), // $0.15 / $0.50 per 1M
+        };
 
-    public static bool IsFreeModel(string? model)
-        => !string.IsNullOrWhiteSpace(model) && FreeModels.Contains(model.Trim());
+    /// <summary>Zero on a subscription row; see <see cref="RatesPer1k"/>.</summary>
+    public static (decimal PromptPer1k, decimal CompletionPer1k) RatesFor(string? model)
+        => (0m, 0m);
+
+    public static bool IsFreeModel(string? model) => false;
+
+    public static string AllowedModelsCsv => string.Join(',', CuratedChatModels);
 
     /// <summary>True for <c>z.ai</c> and any subdomain of it (the international platform).</summary>
     public static bool IsZaiHost(string? host)

@@ -157,6 +157,84 @@ public static class DatabaseBootstrapper
             reasoningEffort: ZaiProviderDefaults.DefaultReasoningEffort,
             envPrefix: "ZAI__",
             cancellationToken);
+
+        await ReconcileSeedRowAsync(db, logger, cancellationToken);
+    }
+
+    /// <summary>
+    /// Align the NON-SECRET identity fields of a known seeded row with the code that defines them.
+    ///
+    /// <para>
+    /// The seeder is insert-only, which is right for everything that is an owner decision: the
+    /// <b>key</b>, <b>IsActive</b> and <b>ParticipatesInAutoSelection</b> are never touched. But three
+    /// fields are code-owned by construction and drift silently when they change:
+    /// </para>
+    /// <list type="bullet">
+    /// <item><b>BaseUrl</b> — an endpoint change is a code change. This is not hypothetical: Z.AI moved
+    /// from the pay-as-you-go endpoint to the Coding Plan endpoint, and a row left on the old URL
+    /// fails with <c>429 / 1113 "Insufficient balance"</c> on every call, which reads exactly like an
+    /// empty wallet rather than a stale URL.</item>
+    /// <item><b>AllowedModelsCsv</b> — must match what the plan can actually call.</item>
+    /// <item><b>Price columns</b> — must match the billing model (zero for a subscription row).</item>
+    /// </list>
+    ///
+    /// <para>
+    /// Reconciling these means the next deploy fixes a stale row with no manual database edit and no
+    /// hand-written SQL, and the change is logged rather than silent. Anything the owner owns is left
+    /// exactly as they set it.
+    /// </para>
+    /// </summary>
+    private static async Task ReconcileSeedRowAsync(
+        LearnerDbContext db, ILogger logger, CancellationToken cancellationToken)
+    {
+        foreach (var seed in AiProviderEnvSeedDefaults.KnownCodes.Select(AiProviderEnvSeedDefaults.For).OfType<ProviderEnvSeed>())
+        {
+            var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Code == seed.Code, cancellationToken);
+            if (row is null) continue;
+
+            // Z.AI owns its own base URL, model list and billing model, because those encode the
+            // Coding Plan's endpoint contract. Any other seeded row uses its seed values verbatim.
+            var isZai = string.Equals(seed.Code, ZaiProviderDefaults.ProviderCode, StringComparison.OrdinalIgnoreCase);
+
+            var changes = new List<string>();
+            var wantBaseUrl = isZai ? ZaiProviderDefaults.BaseUrl : seed.DefaultBaseUrl;
+            var wantModels = isZai ? ZaiProviderDefaults.AllowedModelsCsv : null;
+            var wantModel = isZai ? ZaiProviderDefaults.DefaultModel : seed.DefaultModel;
+            var rates = isZai ? ZaiProviderDefaults.RatesFor(wantModel) : seed.RateResolver(wantModel);
+
+            if (!string.Equals(row.BaseUrl, wantBaseUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                changes.Add($"BaseUrl {row.BaseUrl} -> {wantBaseUrl}");
+                row.BaseUrl = wantBaseUrl;
+            }
+            if (wantModels is not null
+                && !string.Equals(row.AllowedModelsCsv, wantModels, StringComparison.OrdinalIgnoreCase))
+            {
+                changes.Add($"AllowedModelsCsv '{row.AllowedModelsCsv}' -> '{wantModels}'");
+                row.AllowedModelsCsv = wantModels;
+            }
+            if (!string.Equals(row.DefaultModel, wantModel, StringComparison.OrdinalIgnoreCase))
+            {
+                changes.Add($"DefaultModel {row.DefaultModel} -> {wantModel}");
+                row.DefaultModel = wantModel;
+            }
+            if (row.PricePer1kPromptTokens != rates.PromptPer1k
+                || row.PricePer1kCompletionTokens != rates.CompletionPer1k)
+            {
+                changes.Add($"prices {row.PricePer1kPromptTokens}/{row.PricePer1kCompletionTokens} -> {rates.PromptPer1k}/{rates.CompletionPer1k} per 1k");
+                row.PricePer1kPromptTokens = rates.PromptPer1k;
+                row.PricePer1kCompletionTokens = rates.CompletionPer1k;
+            }
+
+            if (changes.Count == 0) continue;
+
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+            logger.LogWarning(
+                "Reconciled code-owned fields on provider '{Code}': {Changes}. The API key, active flag and "
+                + "auto-selection flag were NOT touched — those stay owner-owned.",
+                seed.Code, string.Join("; ", changes));
+        }
     }
 
     private static async Task SynchroniseOneAsync(

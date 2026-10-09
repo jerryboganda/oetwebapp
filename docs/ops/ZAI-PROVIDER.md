@@ -13,24 +13,68 @@ routes to Z.AI until you paste the key, run **Test**, run **Probe capabilities**
 | | |
 |---|---|
 | Vendor | Z.AI (Zhipu AI / BigModel), GLM model family |
-| Base URL | `https://api.z.ai/api/paas/v4` (international platform) |
+| Base URL | `https://api.z.ai/api/coding/paas/v4` — the owner's **GLM Coding Plan** endpoint |
 | Provider code | `z-ai` |
 | Default model | `glm-5.3-flash` |
+| Callable models | `glm-5.3-flash`, `glm-5.3` (the only two the plan exposes) |
 | Dialect / category | `OpenAiCompatible` / `TextChat` |
 | Seeded priority | `100` — behind `anthropic` (20) on purpose |
-| Rates | `$0.15` in / `$0.50` out per 1M tokens for `glm-5.3-flash` |
-
-The China platform (`https://open.bigmodel.cn/api/paas/v4`) is a **different account with a different
-balance** even though it accepts the same `{32-hex}.{16-char}` key shape. This integration is pinned
-to the international platform deliberately.
+| Billing | Subscription, drawn in credits — **no per-token cost on this row** |
 
 Code: `backend/src/OetLearner.Api/Services/Seeding/ZaiProviderDefaults.cs`.
 
-### Why `glm-5.3-flash` and not the flagship
+### The endpoint, and why it is the Coding Plan one
 
-The assistant sends image and document attachments, and many call sites emit strict JSON. `glm-5.3`
-is **text-only**. `glm-4.6v` / `glm-4.5v` have vision but **no JSON mode**. The Flash line is the
-only current GLM family that is multimodal, tool-calling and JSON-capable at `$0.15/$0.50` per 1M.
+A Coding Plan is a **separate entitlement** from the pay-as-you-go balance and is served on its own
+base URL. Measured with the owner's own key:
+
+```
+https://api.z.ai/api/paas/v4          429  1113 "Insufficient balance or no resource package"
+https://api.z.ai/api/coding/paas/v4   200  "ready"     <- Coding Plan
+https://api.z.ai/api/anthropic        200              <- Coding Plan (Claude Code / Goose)
+```
+
+`1113` on the general endpoint is the documented symptom of plan traffic sent to the wrong base URL.
+It reads exactly like an empty wallet and is not one — the plan quota was sitting unused the whole
+time.
+
+### ⚠️ Licensing question — decided by the owner, recorded here deliberately
+
+Z.AI documents the Coding Plan as **limited to officially supported tools**: a named list of roughly
+fifteen coding agents (Claude Code, Codex, OpenCode, Cursor, Cline, Roo Code, Goose, TRAE, …). Their
+FAQ directs integrators to the standard API and to bill accordingly, and their Usage Policy warns that
+violations may trigger rate limiting, **account freezing** or ban.
+
+This product's assistant backend is not one of those tools. The owner states they have Z.AI's
+permission to use the plan for this product and directed the configuration on that basis
+(2026-10-09). That basis is recorded here so anyone reading this later knows *why* the row points at
+the coding endpoint rather than the general one, and what would need revisiting if that permission
+were withdrawn or found not to cover a self-built product.
+
+**If that permission ever lapses, the only correct fix is to fund pay-as-you-go** and move
+`BaseUrl` back to `https://api.z.ai/api/paas/v4` — a one-line change, and the row will be corrected on
+the next deploy automatically (§2).
+
+### Why `glm-5.3-flash`
+
+Measured on the Coding Plan endpoint, not assumed:
+
+| | `glm-5.3-flash` | `glm-5.3` |
+|---|---|---|
+| Chat | pass | pass |
+| `response_format` | pass (valid JSON out) | pass |
+| Tool calling | pass | pass |
+| SSE streaming | pass | pass |
+| **Vision (image part)** | **pass** | **fail** — `1210 messages.content.type is invalid` |
+| Reasoning chars at `effort=low` | 0 | 0 |
+
+The assistants accept image attachments, so `glm-5.3` cannot serve them. The Flash line is the only
+model here that can, which is why it is the default.
+
+Earlier in the cycle this file claimed thinking is **forced on and cannot be disabled**, on the
+strength of Z.AI's documentation. That did not reproduce on the coding endpoint: at
+`reasoning_effort: low` the model returns zero reasoning characters and answers directly.
+`low` is kept as an explicit floor rather than a necessity.
 
 ---
 
