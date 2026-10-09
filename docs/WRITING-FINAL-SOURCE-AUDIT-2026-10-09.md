@@ -84,3 +84,26 @@ Each edit keeps the body inside 180-200 words by estimate (word counts of the st
 ## Evidence folder
 
 `.tools-state/writing-final-audit-2026-10-09/`: `REPAIRS.json`, `apply-repairs.ps1`, `verify-live-final.ps1`, `consolidated.txt` (both reviewers side by side for every flagged answer), `results/A01-A10.json` and `B01-B10.json` (per-claim ledgers), `packs/` (source + answer + hints for each of the 223), `index.json`.
+
+## Closure run (live, 9 Oct 2026, 16:01 UTC)
+
+The owner asked for the repairs, the self-check and the live verification to be done without any manual step and without
+any agent credential. A temporary job (`WritingFinalAuditJob`, shipped through the normal pipeline, removed afterwards) ran
+inside production after each deploy: it applied the audited edits only where the LIVE text still contained them and the full
+Model Answer gate passed, ran the Validator self-check on the server, and re-validated every stored answer against the CURRENT
+case notes (no apply, no AI call). Four runs (commits c6e1c4a0e, then rounds two to four) took it from 17 applied repairs and
+6 failing active answers to:
+
+- Validator self-check: **45 / 45** (26 abbreviation cases + 5 completed-action cases + 14 source-grounding / precedence probes).
+- Candidate-visible verified answers: **223**; re-validated against the current notes: **223 passed, 0 failed, 0 source conflicts**.
+- Repairs: 33 entries, all applied or already applied; the gate refused three wordings in earlier runs and changed nothing.
+- Decisions: Casey, O'Riley, Hawthorne, Collins and Norris state no letter date (the PDFs give none); Brew (task: admitted 5 days
+  ago) and Davies (ready for discharge 2 July) use the source-derived writing day for the gate; McDonald is unchanged (owner rule
+  OA-08: "six to ten standard drinks daily"); Roden follows the PDF patient-details line (Alex).
+- Checked against the original PDF text layer (embedded text only, no OCR): Osburn "Monica", Andresen, the Charge Nurse role,
+  the White letter date 6 March 2019, Casey "Day 7", Norris re-dress 19/04/15 and 22/04/15, Collins "78 years" with DOB 01/09/1940
+  and an OT date of 11/01/18 (the PDF contradicts itself), Brew "admitted 5 days ago", Brown final review 27/08/26.
+- Not checked against the PDF image: the scanned PDFs (Stokes, Weston, Ballard, Garcia, Morrison) were settled from the scenario
+  titles and explicit TodayDate; Carmel "thirty minutes before meals" is an inference the stored note does not state.
+
+Evidence: `.tools-state/writing-final-audit-2026-10-09/live-run-1.json` .. `live-run-4.json`.
