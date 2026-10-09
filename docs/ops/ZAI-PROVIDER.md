@@ -250,6 +250,30 @@ instead of the spec.
 **Still unverified for `glm-5.3-flash` specifically**, because the balance block prevented the call.
 Re-run **Probe capabilities** after funding; it settles it per model and nothing else will.
 
+### Measured capability profile — `glm-4.5-flash`, real key, 2026-10-09
+
+The only model the account could actually be charged for, so it is the only one with hard evidence:
+
+| Capability | Result |
+|---|---|
+| `response_format: json_object` | **Works** — returned `{"ok":true}` |
+| Tool calling (`tool_choice: "auto"`) | **Works** — emitted `get_weather` |
+| Streaming | **Works** — `text/event-stream`, 156 chunks |
+| **Vision (`image_url`)** | **HTTP 400** |
+
+**Vision lives in the `v` variants, not the plain Flash line.** `glm-4.5v` and `glm-4.6v` take images;
+`glm-4.5-flash` does not. This corrects an assumption made earlier in the cycle from vendor docs.
+
+Consequence, handled in code: the assistant surfaces ACCEPT image attachments, so offering a
+text-only model there would `400` on every image turn — rescued by failover, but the user still eats
+the delay. `IsOfferableAssistantModel` therefore requires **tools + streaming + vision** from any model
+that has a probe row. A model with **no** probe row is still offered: requiring a probe would empty
+every picker until an admin pressed the button, which is worse than offering an unverified model that
+still fails over. Note the deliberate asymmetry with the feature-**route** gate, which fails closed on
+unprobed models — a route is a standing owner decision, a picker entry is only a suggestion.
+
+`glm-5.3-flash` (the default) remains unmeasured for all of the above, blocked by the balance.
+
 ---
 
 ## 8. Known risks — read before enabling anything
