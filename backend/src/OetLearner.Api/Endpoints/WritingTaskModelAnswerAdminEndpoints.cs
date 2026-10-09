@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Endpoints;
@@ -53,6 +54,11 @@ public static class WritingTaskModelAnswerAdminEndpoints
         // the CURRENT validator ("do not trust old VERIFIED flags"). Paged;
         // apply=true stamps passing rows and holds/hides failing ones.
         group.MapPost("/model-answers/revalidate", RevalidateModelAnswers).WithAdminWrite("AdminContentWrite");
+
+        // On-demand evidence for the clinical-abbreviation rules (owner directive 9 Oct 2026): runs golden cases
+        // through the REAL deployed validator on the server. No database, no AI call, never in CI.
+        group.MapPost("/validator-self-check", (WritingRuleEngine engine, TimeProvider clock) =>
+            Results.Ok(WritingValidatorSelfCheck.Run(engine, clock.GetUtcNow()))).WithAdminRead("AdminContentRead");
 
         return app;
     }

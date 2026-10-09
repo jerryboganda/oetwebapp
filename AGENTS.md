@@ -99,6 +99,7 @@ The owner tests the live product by hand and reports bugs; the agent fixes them 
   product-measurement tools in `scripts/qa/` and `tools/` (Speaking calibration, audio probe, Jev calibrate, Listening
   verification, the PDF bench).
 - **Owner-confirmed carve-out (2026-10-09, AI Pipeline Control Center):** an on-demand, in-app **Pipeline self-check** (admin button, runs on the server, never in CI), a provider-usage reconciliation report and manual production scripts under `scripts/qa/` are allowed as product evidence. CI still runs no tests of any kind.
+- **Owner-confirmed carve-out (2026-10-09, Writing validator self-check):** an on-demand, admin-only "Validator self-check" on the Admin > Writing hub (`POST /v1/admin/writing/validator-self-check`, `WritingValidatorSelfCheck`) runs golden clinical-abbreviation cases (QD/QID/QDS/QOD/BD/TDS/PRN, scan and table forms, OD vs right eye, completed vs pending actions) through the deployed Model Answer validator on the server. It never runs in CI, writes nothing and calls no AI provider.
 - **Standing product rules still bind** (Max never off, the $0 Writing rule, Writing house style, scoring and rulebook
   invariants, the Speaking Provisional label ...). With no CI test enforcing them, agents follow them by reading the rules.
 

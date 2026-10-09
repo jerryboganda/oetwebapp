@@ -22,6 +22,7 @@ import {
 import { AdminCatalogLayout } from '@/components/admin/layout/admin-catalog-layout';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AdminHubSection, type AdminHubLink } from '@/components/admin/ui/hub-card';
+import { WritingValidatorSelfCheck } from '@/components/domain/admin/writing-validator-self-check';
 import { canAccessAdminRoute } from '@/lib/admin-permissions';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
 
@@ -122,6 +123,7 @@ export default function AdminWritingHubPage() {
           description="Your admin account does not currently have permission to open any Writing workflows."
         />
       )}
+      <WritingValidatorSelfCheck />
     </AdminCatalogLayout>
   );
 }
