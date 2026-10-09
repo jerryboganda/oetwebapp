@@ -581,6 +581,10 @@ export default function AiProvidersPage() {
         pricePer1kPromptTokens: 0, pricePer1kCompletionTokens: 0,
         retryCount: 2, circuitBreakerThreshold: 5, circuitBreakerWindowSeconds: 30,
         failoverPriority: 100, isActive: true,
+        // A newly registered provider is never a candidate for implicit selection until an
+        // admin explicitly opens it and turns this on, so adding a vendor cannot silently
+        // change who answers an existing feature.
+        participatesInAutoSelection: false,
         lastTestedAt: null, lastTestStatus: null, lastTestError: null,
         createdAt: '', updatedAt: '', apiKey: '',
       });
