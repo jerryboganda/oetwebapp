@@ -21,7 +21,6 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { Input } from '@/components/admin/ui/input';
-import { KpiTile } from '@/components/admin/ui/kpi-tile';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { Skeleton } from '@/components/admin/ui/skeleton';
 import { Switch } from '@/components/admin/ui/switch';
@@ -34,18 +33,24 @@ import {
   updateAiProvider,
   type AiProviderRow,
 } from '@/lib/ai-management-api';
+import { CostBreakdownPanel } from '@/components/domain/admin/ai-pipelines/cost-breakdown-panel';
+import { InfoTip } from '@/components/domain/admin/ai-pipelines/info-tip';
+import { PipelineGuide } from '@/components/domain/admin/ai-pipelines/pipeline-guide';
 import {
   createCreditGrant,
   deleteCreditGrant,
   drainSubscriptionAccount,
+  fetchBenchmarkRuns,
   fetchPipelineHistory,
   fetchPipelineOverview,
   fetchPipelines,
   restorePipelineDefault,
   rollbackPipelineStage,
+  runBenchmark,
   runPipelineSelfCheck,
   savePipelineStage,
   setSubscriptionPoolThreshold,
+  type BenchmarkRun,
   type CreditGrantInput,
   type OverviewWindow,
   type PipelineHopInput,
@@ -505,6 +510,17 @@ export default function AiPipelinesPage() {
         </Card>
       )}
 
+      <SettingsSection
+        id="guide"
+        title="How to manage AI pipelines"
+        description="A permanent, step-by-step guide to the five pipelines, the on/off switches, changing priorities, keys and benchmarks, and what every cost figure means. The diagrams show your live saved order. Hover or tap the (i) icons next to controls for a short explanation of each."
+      >
+        <PipelineGuide
+          stages={data.stages}
+          providerNames={Object.fromEntries(data.providers.map((p) => [p.code, p.name]))}
+        />
+      </SettingsSection>
+
       {data.stages.map((stage) => {
         const draft = drafts[stage.stageKey] ?? toDraft(stage);
         const dirty = signature(draft.stageEnabled, draft.hops) !== signature(stage.stageEnabled, stage.hops);
@@ -542,12 +558,24 @@ export default function AiPipelinesPage() {
           >
             <dl className="mb-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-2xs font-semibold uppercase tracking-wider text-admin-fg-muted">Next run starts on</dt>
+                <dt className="flex items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-admin-fg-muted">
+                  Next run starts on
+                  <InfoTip label="Next run starts on">
+                    The first step that is switched on and ready (active provider with a key). This is where the next
+                    submission or session begins. If it fails, the work moves down the list.
+                  </InfoTip>
+                </dt>
                 <dd className="mt-1 font-medium text-admin-fg-strong">{stage.nextRunStartsOn ? nameOf(stage.stageKey, stage.nextRunStartsOn) : 'Nothing usable'}</dd>
               </div>
               {!live && (
                 <div>
-                  <dt className="text-2xs font-semibold uppercase tracking-wider text-admin-fg-muted">Last served by</dt>
+                  <dt className="flex items-center gap-1 text-2xs font-semibold uppercase tracking-wider text-admin-fg-muted">
+                    Last served by
+                    <InfoTip label="Last served by">
+                      The provider and exact model of the most recent successful call, read from the call record. Use it
+                      to confirm a change really took effect after the next candidate run.
+                    </InfoTip>
+                  </dt>
                   <dd className="mt-1 text-admin-fg-default">
                     {stage.lastServed
                       ? `${nameOf(stage.stageKey, stage.lastServed.providerId ?? '')}${stage.lastServed.model ? ` (${stage.lastServed.model})` : ''}, ${new Date(stage.lastServed.createdAt).toLocaleString()}`
@@ -556,6 +584,19 @@ export default function AiPipelinesPage() {
                 </div>
               )}
             </dl>
+
+            {!live && (
+              <ModelCheck
+                stage={stage}
+                hops={draft.hops}
+                nameOf={(code) => nameOf(stage.stageKey, code)}
+                onUseApproved={(index) =>
+                  patchDraft(stage.stageKey, (d) => ({
+                    ...d,
+                    hops: d.hops.map((h, i) => (i === index ? { ...h, model: stage.approvedClaudeModel ?? h.model } : h)),
+                  }))}
+              />
+            )}
 
             {stage.kind === 'reviewer' && (
               <div className="mb-4 flex items-center gap-3">
@@ -567,6 +608,11 @@ export default function AiPipelinesPage() {
                 <span className="text-sm text-admin-fg-default">
                   {draft.stageEnabled ? 'Reviewer is on' : 'Reviewer is off: grades are published on the first grader alone'}
                 </span>
+                <InfoTip label="the reviewer switch">
+                  Switches the whole second-reader stage. Off: grades are published on the first grader alone and no
+                  review cost is spent. On: every finished grade is re-read by the first working step below. Press
+                  Save order for it to take effect.
+                </InfoTip>
               </div>
             )}
 
@@ -615,6 +661,17 @@ export default function AiPipelinesPage() {
                           />
                         </div>
                       )}
+                      {!live && (
+                        <p className="flex items-center gap-1 text-2xs text-admin-fg-muted">
+                          Model, attempts and time limit
+                          <InfoTip label="model, attempts and time limit">
+                            Model is the exact model id sent to the provider (leave blank for the approved default of
+                            this route). Attempts is how many tries this step gets before the work moves to the next
+                            step (1 to 4). Seconds per attempt is the longest one try may take before it counts as a
+                            failure.
+                          </InfoTip>
+                        </p>
+                      )}
                       {newlyEnabled && (
                         <Input
                           label="Benchmark run id (required for a model that leaves Claude)"
@@ -629,6 +686,11 @@ export default function AiPipelinesPage() {
                         onCheckedChange={(checked) => patchDraft(stage.stageKey, (d) => ({ ...d, hops: d.hops.map((h, i) => (i === index ? { ...h, enabled: checked } : h)) }))}
                         aria-label={`${nameOf(stage.stageKey, hop.provider)} on or off`}
                       />
+                      <InfoTip label="the step switch">
+                        Switches this provider on or off in THIS pipeline only. It stays available in other pipelines.
+                        An off step is skipped and never called. To switch a provider off everywhere, use Active in
+                        Keys &amp; providers. Press Save order to apply.
+                      </InfoTip>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -688,6 +750,10 @@ export default function AiPipelinesPage() {
                 <Button onClick={() => void save(stage)} disabled={!dirty || busy === stage.stageKey}>
                   Save order
                 </Button>
+                <InfoTip label="Save order">
+                  Saves this order and the on/off switches as a new version. It applies to the next grade or session
+                  on every server, with no redeploy. Runs already in progress finish on the order they started with.
+                </InfoTip>
                 <Button
                   variant="outline"
                   disabled={!dirty}
@@ -703,10 +769,18 @@ export default function AiPipelinesPage() {
                 <RotateCcw className="h-4 w-4" aria-hidden="true" />
                 Restore built-in order
               </Button>
+              <InfoTip label="Restore built-in order">
+                Resets this stage to the factory order (Claude Max first) and saves it as a new version. Your previous
+                order stays in History, so this can be undone.
+              </InfoTip>
               <Button variant="ghost" size="sm" onClick={() => void showHistory(stage)}>
                 <History className="h-4 w-4" aria-hidden="true" />
                 {revisions ? 'Hide history' : 'History'}
               </Button>
+              <InfoTip label="History and restore">
+                Every saved version with who changed it, when and why. Restore this brings any older order back as a
+                new version; nothing is deleted.
+              </InfoTip>
             </div>
 
             {revisions && (
@@ -733,10 +807,12 @@ export default function AiPipelinesPage() {
         );
       })}
 
+      <CostBreakdownPanel />
+
       <SettingsSection
         id="usage-cost"
-        title="Usage & cost"
-        description="Every AI call is recorded with its provider, stage and a rate-card cost estimate. Figures are internally tracked — exact call counts, estimated USD — and cover the pipeline plus every other AI feature on the platform."
+        title="Usage by provider"
+        description="Every AI call is recorded with its provider, stage and a list-price cost estimate. Call counts are exact; USD is an internally tracked estimate. A subscription route shows $0 here because it adds no per-request API charge. This table covers the pipelines plus every other AI feature on the platform; the per-letter and per-assessment figures are in Cost by stage above."
         actions={
           <Tabs
             tabs={OVERVIEW_WINDOWS}
@@ -754,24 +830,6 @@ export default function AiPipelinesPage() {
           <Skeleton className="h-40 w-full" />
         ) : (
           <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <KpiTile
-                label="Per Writing letter"
-                value={overview.writingLetter.avgUsd !== null ? fmtUsd(overview.writingLetter.avgUsd) : '—'}
-                hint={`${overview.writingLetter.count} graded · ${fmtUsd(overview.writingLetter.totalUsd)} total`}
-              />
-              <KpiTile
-                label="Per Speaking assessment"
-                value={overview.speakingAssessment.avgUsd !== null ? fmtUsd(overview.speakingAssessment.avgUsd) : '—'}
-                hint={`${overview.speakingAssessment.count} graded · ${fmtUsd(overview.speakingAssessment.totalUsd)} total (grade + audio model)`}
-              />
-              <KpiTile
-                label="Per reviewer run"
-                value={overview.reviewerRun.avgUsd !== null ? fmtUsd(overview.reviewerRun.avgUsd) : '—'}
-                hint={`${overview.reviewerRun.count} reviews · ${fmtUsd(overview.reviewerRun.totalUsd)} total`}
-              />
-            </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -823,8 +881,8 @@ export default function AiPipelinesPage() {
               {overview.liveVoiceSessions.length === 0
                 ? 'none'
                 : overview.liveVoiceSessions.map((lv) => `${lv.provider === 'openai' ? 'OpenAI' : lv.provider === 'gemini' ? 'Gemini' : lv.provider}: ${lv.sessions.toLocaleString()}`).join(', ')}
-              . Live voice audio does not flow through the usage ledger, so sessions are counted but no USD is estimated for them.
-              {' '}All USD figures are internally tracked rate-card estimates, not provider billing.
+              . Live voice audio does not flow through the usage ledger: it is priced from connected minutes in Cost by
+              stage above. All USD figures are internally tracked estimates, not provider billing.
             </p>
           </div>
         )}
@@ -1059,7 +1117,321 @@ export default function AiPipelinesPage() {
           </p>
         ) : null}
       </SettingsSection>
+
+      <SettingsSection
+        id="providers"
+        title="Keys & providers"
+        description="Add or rotate API keys (encrypted server-side, never returned to the browser), test connections, discover models and switch providers on or off — effective on the next call, no redeploy. Subscription bridges have no API key; their auth lives in the sidecar containers. Full per-provider settings remain on the AI Providers page."
+        actions={
+          <div className="flex items-center gap-2">
+            <InfoTip label="Keys and providers">
+              Active is the GLOBAL switch for a provider: off means every pipeline and every other AI feature skips
+              it. A step switch inside a pipeline only affects that pipeline. Test makes one cheap call to confirm
+              the key and model work.
+            </InfoTip>
+            <Button variant="outline" size="sm" onClick={() => void loadProviderRows()} aria-label="Refresh providers">
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Refresh
+            </Button>
+          </div>
+        }
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-start text-2xs uppercase tracking-wider text-admin-fg-muted">
+                <th className="px-3 py-2 text-start">Provider</th>
+                <th className="px-3 py-2 text-start">Key</th>
+                <th className="px-3 py-2 text-start">Model</th>
+                <th className="px-3 py-2 text-start">Active</th>
+                <th className="px-3 py-2 text-start">Connection</th>
+                <th className="px-3 py-2 text-start">Used in</th>
+                <th className="px-3 py-2 text-start"><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {providerRows.length === 0 && (
+                <tr><td colSpan={7} className="px-3 py-3 text-admin-fg-muted">
+                  {data.providers.length === 0 ? 'No providers registered yet.' : 'Loading full provider details…'}
+                </td></tr>
+              )}
+              {providerRows.map((p) => {
+                const isBridge = p.apiKeyHint === 'claude-max-5x' || p.apiKeyHint === 'codex-chatgpt';
+                const editing = keyDraft?.id === p.id;
+                const models = discoveredModels[p.id];
+                const usedIn = stagesByProvider.get(p.code) ?? [];
+                return (
+                  <ProviderKeyRow
+                    key={p.id}
+                    provider={p}
+                    isBridge={isBridge}
+                    usedIn={usedIn}
+                    models={models}
+                    busy={rowBusy === p.id}
+                    editing={editing}
+                    draft={keyDraft}
+                    onEdit={() => setKeyDraft(editing ? null : { id: p.id, apiKey: '', model: p.defaultModel, isActive: p.isActive })}
+                    onCancel={() => setKeyDraft(null)}
+                    onDraftChange={(patch) => setKeyDraft((d) => (d && d.id === p.id ? { ...d, ...patch } : d))}
+                    onSave={() => void saveKeyRow(p)}
+                    onToggle={(next) => void toggleProviderActive(p, next)}
+                    onTest={() => void testRow(p)}
+                    onDiscover={() => void discoverRow(p)}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </SettingsSection>
+
+      <BenchmarkSection
+        stages={data.stages}
+        providers={data.providers.map((p) => ({ code: p.code, name: p.name, defaultModel: p.defaultModel }))}
+      />
+
+      <SettingsSection
+        id="self-check"
+        title="Pipeline self-check"
+        description="Production evidence on demand: the next run follows the saved order, disabled steps were never called, and what actually served since the last change. The live probe makes one cheap connection test per enabled step."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <InfoTip label="Pipeline self-check">
+              Run check reads the saved order and the call records and confirms the plan follows it, that switched-off
+              steps were never called after your change, and what served since. Run with live probe also makes one
+              cheap connection test per enabled step.
+            </InfoTip>
+            <Button variant="outline" size="sm" disabled={busy === 'self-check'} onClick={() => void check(false)}>
+              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+              Run check
+            </Button>
+            <Button variant="outline" size="sm" disabled={busy === 'self-check'} onClick={() => void check(true)}>
+              Run with live probe
+            </Button>
+          </div>
+        }
+      >
+        {selfCheck ? (
+          <div className="space-y-3 text-sm">
+            <p className="text-admin-fg-muted">Ran {new Date(selfCheck.ranAt).toLocaleString()}{selfCheck.live ? ' with live probe' : ''}.</p>
+            {selfCheck.results.map((r) => (
+              <div key={r.stageKey} className="rounded-admin-lg border border-admin-border p-3">
+                <p className="font-medium text-admin-fg-strong">{r.label} <span className="text-admin-fg-muted">v{r.version}</span></p>
+                <ul className="mt-2 space-y-1">
+                  {r.checks.map((c) => (
+                    <li key={c.name} className="flex flex-wrap items-start gap-2">
+                      {c.ok ? <Badge variant="success">Pass</Badge> : <Badge variant="danger">Fail</Badge>}
+                      <span className="min-w-0 flex-1 text-admin-fg-default">
+                        {c.name.replace(/_/g, ' ')}
+                        {c.detail ? `: ${c.detail}` : ''}
+                        {c.violations?.map((v) => ` | ${v.provider}: ${v.callsAfterGrace} calls after the change window, ${v.callsInsideGrace} inside it`).join('')}
+                        {c.served?.length ? ` | ${c.served.map((s) => `${s.providerId ?? 'none'} ${s.outcome} x${s.calls}`).join(', ')}` : ''}
+                        {c.probes?.map((p) => ` | ${p.provider}: ${p.status} ${p.latencyMs}ms`).join('')}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-admin-fg-muted">Not run yet.</p>
+        )}
+      </SettingsSection>
     </AdminSettingsLayout>
+  );
+}
+
+/**
+ * Per-stage model verification (owner directive 2026-10-10). Two independent facts are shown side by side so the
+ * owner never has to trust a display name: the model the saved step will send (a blank model resolves to the
+ * approved one), and the model ids the route ACTUALLY sent in the last 7 days, read from the call records.
+ */
+function ModelCheck({
+  stage,
+  hops,
+  nameOf,
+  onUseApproved,
+}: {
+  stage: PipelineStage;
+  hops: DraftHop[];
+  nameOf: (code: string) => string;
+  onUseApproved: (hopIndex: number) => void;
+}) {
+  const approved = stage.approvedClaudeModel;
+  if (!approved) return null;
+
+  const claudeHops = hops
+    .map((h, index) => ({ h, index }))
+    .filter(({ h }) => h.provider === 'anthropic' && h.enabled);
+  const recent = stage.recentModels ?? [];
+  const wrongRecent = recent.filter((m) => m.provider === 'anthropic' && m.model && m.model !== approved);
+  if (claudeHops.length === 0 && recent.length === 0 && !stage.effortNote) return null;
+
+  const wrongSaved = claudeHops.filter(({ h }) => h.model && h.model.trim() !== approved);
+  const ok = wrongSaved.length === 0 && wrongRecent.length === 0;
+
+  return (
+    <div className={`mb-4 rounded-admin-lg border p-3 text-sm ${ok ? 'border-emerald-600/40 bg-emerald-500/5' : 'border-amber-500/50 bg-amber-500/10'}`}>
+      <p className="flex flex-wrap items-center gap-2 font-semibold text-admin-fg-strong">
+        Model check
+        {ok ? <Badge variant="success">Claude API uses {approved}</Badge> : <Badge variant="warning">Not the approved model</Badge>}
+        <InfoTip label="model check">
+          Compares the model saved for the Claude API step with the approved grading model ({approved}) and lists the
+          model ids this stage really sent in the last 7 days. A blank model means the approved model.
+        </InfoTip>
+      </p>
+      {claudeHops.map(({ h, index }) => {
+        const effective = h.model && h.model.trim() ? h.model.trim() : approved;
+        const matches = effective === approved;
+        return (
+          <p key={h.provider} className="mt-2 flex flex-wrap items-center gap-2 text-admin-fg-default">
+            <span>{nameOf(h.provider)} step is set to <strong>{effective}</strong>{h.model ? '' : ' (blank → approved default)'}.</span>
+            {!matches && (
+              <Button variant="outline" size="sm" onClick={() => onUseApproved(index)}>
+                Use {approved}
+              </Button>
+            )}
+          </p>
+        );
+      })}
+      {recent.length > 0 && (
+        <p className="mt-2 flex flex-wrap items-center gap-1.5 text-2xs text-admin-fg-muted">
+          Sent in the last 7 days:
+          {recent.map((m) => (
+            <Badge
+              key={`${m.provider}|${m.model}`}
+              variant={m.provider === 'anthropic' && m.model && m.model !== approved ? 'warning' : 'muted'}
+            >
+              {m.provider ? nameOf(m.provider) : 'unknown'} · {m.model ?? 'unknown'} ×{m.calls.toLocaleString()}
+            </Badge>
+          ))}
+        </p>
+      )}
+      {stage.effortNote ? <p className="mt-2 text-2xs text-admin-fg-muted">{stage.effortNote}</p> : null}
+    </div>
+  );
+}
+
+/** Runs the route benchmark for a candidate model and lists recent runs, so a run id can be pasted into a step. */
+function BenchmarkSection({
+  stages,
+  providers,
+}: {
+  stages: PipelineStage[];
+  providers: Array<{ code: string; name: string; defaultModel: string }>;
+}) {
+  const scoringStages = stages.filter((s) => s.kind !== 'voice');
+  const [featureCode, setFeatureCode] = useState<string>(scoringStages[0]?.stageKey ?? '');
+  const [providerCode, setProviderCode] = useState('');
+  const [model, setModel] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [runs, setRuns] = useState<BenchmarkRun[] | null>(null);
+  const [last, setLast] = useState<{ runId: string; passed: boolean; failures: string[] } | null>(null);
+
+  const loadRuns = useCallback(async () => {
+    if (!featureCode) return;
+    try {
+      setRuns(await fetchBenchmarkRuns(featureCode));
+    } catch {
+      setRuns([]);
+    }
+  }, [featureCode]);
+
+  useEffect(() => {
+    void loadRuns();
+  }, [loadRuns]);
+
+  async function run() {
+    if (!featureCode || !providerCode || !model.trim()) {
+      toast.error('Choose a stage, a provider and a model first.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await runBenchmark({ featureCode, providerCode, model: model.trim() });
+      setLast({ runId: result.runId, passed: result.passed, failures: result.failures ?? [] });
+      if (result.passed) toast.success('Benchmark passed. Copy the run id into the step before saving.');
+      else toast.error('Benchmark did not pass. The model cannot be enabled in this stage yet.');
+      await loadRuns();
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SettingsSection
+      id="benchmarks"
+      title="Benchmark a model"
+      description="A model that leaves Claude in a scoring stage must pass the benchmark before it can be switched on. The run sends a small test set to the candidate model through the real dispatch path and records the result; it costs a few cents."
+      actions={
+        <InfoTip label="benchmarks">
+          Pick the stage the model would serve, the provider and the model id, then Run. A passing run gives a run id.
+          Paste it into the step&apos;s Benchmark run id field and Save order. A failed run is recorded and blocks the
+          switch.
+        </InfoTip>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-4 sm:items-end">
+        <NativeSelect
+          label="Stage"
+          value={featureCode}
+          options={scoringStages.map((s) => ({ value: s.stageKey, label: s.label }))}
+          onChange={(e) => setFeatureCode(e.target.value)}
+        />
+        <NativeSelect
+          label="Provider"
+          placeholder="Choose a provider"
+          value={providerCode}
+          options={providers.map((p) => ({ value: p.code, label: p.name }))}
+          onChange={(e) => {
+            setProviderCode(e.target.value);
+            const p = providers.find((x) => x.code === e.target.value);
+            if (p && !model) setModel(p.defaultModel);
+          }}
+        />
+        <Input label="Model id" value={model} onChange={(e) => setModel(e.target.value)} />
+        <Button disabled={busy} onClick={() => void run()}>
+          {busy ? 'Running…' : 'Run benchmark'}
+        </Button>
+      </div>
+
+      {last && (
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm" role="status">
+          {last.passed ? <Badge variant="success">Passed</Badge> : <Badge variant="danger">Failed</Badge>}
+          <span>Run id <code className="select-all">{last.runId}</code></span>
+          {last.failures.length > 0 && <span className="text-admin-fg-muted">{last.failures.join('; ')}</span>}
+        </p>
+      )}
+
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-2xs uppercase tracking-wider text-admin-fg-muted">
+              <th className="px-3 py-2 text-start">Recorded</th>
+              <th className="px-3 py-2 text-start">Provider and model</th>
+              <th className="px-3 py-2 text-start">Result</th>
+              <th className="px-3 py-2 text-start">Run id</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(runs ?? []).length === 0 && (
+              <tr><td colSpan={4} className="px-3 py-3 text-admin-fg-muted">{runs === null ? 'Loading…' : 'No benchmark runs recorded for this stage.'}</td></tr>
+            )}
+            {(runs ?? []).slice(0, 10).map((r) => (
+              <tr key={r.id} className="border-t border-admin-border">
+                <td className="px-3 py-2">{new Date(r.recordedAt).toLocaleString()}</td>
+                <td className="px-3 py-2">{r.providerCode} · {r.model}</td>
+                <td className="px-3 py-2">{r.passed ? <Badge variant="success">Passed</Badge> : <Badge variant="danger">Failed</Badge>}</td>
+                <td className="px-3 py-2"><code className="select-all text-2xs">{r.id}</code></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </SettingsSection>
   );
 }
 

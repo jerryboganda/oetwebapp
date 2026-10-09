@@ -24,6 +24,15 @@ export interface PipelineHopView extends PipelineHop {
   status: string;
 }
 
+/** A model a stage's route really sent in the last 7 days (the model id the provider received). */
+export interface PipelineRecentModel {
+  provider: string | null;
+  model: string | null;
+  calls: number;
+  succeeded: number;
+  lastAt: string;
+}
+
 export interface PipelineStage {
   stageKey: PipelineStageKey;
   label: string;
@@ -38,6 +47,12 @@ export interface PipelineStage {
   maxNotFirst: boolean;
   maxDisabled: boolean;
   lastChange: { version: number; kind: string; changedBy: string | null; reason: string | null; at: string } | null;
+  /** The approved Claude model for the paid-API route (claude-opus-5-5). */
+  approvedClaudeModel?: string;
+  /** Plain-language statement of the effort each Claude route runs at (null for stages with none). */
+  effortNote?: string | null;
+  /** Models actually sent in the last 7 days; null for live voice. */
+  recentModels?: PipelineRecentModel[] | null;
 }
 
 export interface PipelineProvider {
@@ -332,4 +347,221 @@ export function createCreditGrant(input: CreditGrantInput): Promise<{ id: string
 
 export function deleteCreditGrant(id: string): Promise<void> {
   return apiClient.delete<void>(`${base}/credit-grants/${encodeURIComponent(id)}`);
+}
+
+// ── Cost breakdown (owner directive 2026-10-10) ──────────────────────────
+// Writing and Speaking cost by processing stage. Every figure is an internally
+// tracked estimate (provider-reported tokens x list prices, or connected live
+// voice minutes x an operator rate). A subscription route is never an API
+// charge: its cost is 0 and its API-equivalent value is reported separately.
+
+export type CostRowKind = 'subscription' | 'api' | 'live_voice';
+export type CostBasis = 'subscription' | 'rate_card' | 'stored_estimate' | 'duration_estimate' | 'duration_assumed';
+
+export interface CostRow {
+  providerId: string;
+  providerName: string;
+  model: string;
+  kind: CostRowKind;
+  requests: number;
+  successes: number;
+  failedAttempts: number;
+  retries: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheTokens: number;
+  costUsd: number;
+  apiEquivalentUsd: number | null;
+  basis: CostBasis;
+  minutes: number | null;
+}
+
+export interface CostComponent {
+  key: string;
+  label: string;
+  requests: number;
+  failedAttempts: number;
+  retries: number;
+  promptTokens: number;
+  completionTokens: number;
+  cacheTokens: number;
+  subscriptionRequests: number;
+  apiRequests: number;
+  apiUsd: number;
+  subscriptionApiEquivalentUsd: number;
+  rows: CostRow[];
+}
+
+export interface WritingCostBlock {
+  grading: CostComponent;
+  reviewer: CostComponent;
+  totalUsd: number;
+  letters: number;
+  avgPerLetterUsd: number | null;
+}
+
+export interface SpeakingCostBlock {
+  liveVoice: CostComponent;
+  grading: CostComponent;
+  reviewer: CostComponent;
+  audioModel: CostComponent;
+  totalUsd: number;
+  singleCards: number;
+  fullMocks: number;
+  avgPerSingleCardUsd: number | null;
+  avgPerFullMockUsd: number | null;
+  avgPerAssessmentUsd: number | null;
+  liveVoiceSessions: number;
+  liveVoiceMinutes: number;
+}
+
+export interface PromoGrantCost {
+  grantId: string;
+  providerCode: string;
+  grantUsd: number;
+  startsAt: string;
+  note: string | null;
+  consumedInWindowUsd: number;
+  consumedTotalUsd: number;
+  remainingUsd: number;
+  overflowUsd: number;
+}
+
+export interface MoneyBlock {
+  grossApiUsd: number;
+  pipelineApiUsd: number;
+  otherFeaturesApiUsd: number;
+  subscriptionApiEquivalentUsd: number;
+  promoConsumedUsd: number;
+  promoRemainingUsd: number;
+  outOfPocketUsd: number;
+  grants: PromoGrantCost[];
+}
+
+export interface CostBreakdown {
+  window: OverviewWindow;
+  windowStart: string | null;
+  generatedAt: string;
+  writing: WritingCostBlock;
+  speaking: SpeakingCostBlock;
+  money: MoneyBlock;
+}
+
+export interface CostWindowSummary {
+  window: OverviewWindow;
+  label: string;
+  writingGradingUsd: number;
+  writingReviewerUsd: number;
+  writingTotalUsd: number;
+  letters: number;
+  writingAvgPerLetterUsd: number | null;
+  speakingLiveVoiceUsd: number;
+  speakingGradingUsd: number;
+  speakingReviewerUsd: number;
+  speakingAudioUsd: number;
+  speakingTotalUsd: number;
+  singleCards: number;
+  fullMocks: number;
+  speakingAvgPerAssessmentUsd: number | null;
+  speakingAvgPerFullMockUsd: number | null;
+  grossApiUsd: number;
+  promoConsumedUsd: number;
+  outOfPocketUsd: number;
+}
+
+export interface CostRunLeg {
+  providerId: string;
+  providerName: string;
+  model: string;
+  kind: CostRowKind;
+  calls: number;
+  failed: number;
+  costUsd: number;
+}
+
+export interface CostRunPart {
+  costUsd: number;
+  calls: number;
+  failed: number;
+  retries: number;
+  legs: CostRunLeg[];
+}
+
+export interface CostRun {
+  kind: 'writing' | 'speaking_card' | 'speaking_mock';
+  at: string;
+  learner: string;
+  succeeded: boolean;
+  grading: CostRunPart;
+  reviewer: CostRunPart;
+  audio: CostRunPart;
+  liveVoice: CostRunPart;
+  totalUsd: number;
+}
+
+export interface LiveVoiceRateView {
+  provider: 'openai' | 'gemini';
+  name: string;
+  model: string;
+  perMinuteUsd: number;
+  /** false = the built-in starting assumption is in use, not a figure the owner entered. */
+  ownerSet: boolean;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
+export interface CostBreakdownResponse {
+  selected: CostBreakdown;
+  summary: CostWindowSummary[];
+  runs: CostRun[];
+  liveVoiceRates: LiveVoiceRateView[];
+  rateCardVerifiedOn: string;
+}
+
+export function fetchCostBreakdown(window: OverviewWindow = '7d'): Promise<CostBreakdownResponse> {
+  return apiClient.get<CostBreakdownResponse>(`${base}/cost-breakdown?window=${encodeURIComponent(window)}`);
+}
+
+/** Sets the per-minute live voice rate used to price connected minutes. Audited. */
+export function saveLiveVoiceRate(
+  provider: 'openai' | 'gemini',
+  perMinuteUsd: number,
+  reason?: string,
+): Promise<{ provider: string; perMinuteUsd: number }> {
+  return apiClient.put<{ provider: string; perMinuteUsd: number }>(`${base}/live-voice-rates`, {
+    provider,
+    perMinuteUsd,
+    reason,
+  });
+}
+
+// ── Route benchmarks (the gate a model that leaves Claude must pass) ─────────
+
+export interface BenchmarkRun {
+  id: string;
+  featureCode: string;
+  providerCode: string;
+  model: string;
+  corpusVersion: string | null;
+  passed: boolean;
+  recordedAt: string;
+}
+
+export interface BenchmarkResult {
+  runId: string;
+  passed: boolean;
+  failures: string[];
+}
+
+const opsBase = '/v1/admin/ai';
+
+export async function fetchBenchmarkRuns(featureCode?: string): Promise<BenchmarkRun[]> {
+  const query = featureCode ? `?featureCode=${encodeURIComponent(featureCode)}` : '';
+  const response = await apiClient.get<{ rows: BenchmarkRun[] }>(`${opsBase}/benchmark-runs${query}`);
+  return response.rows;
+}
+
+/** Calls the candidate model on the benchmark corpus through the real dispatch path; spends a few cents. */
+export function runBenchmark(input: { featureCode: string; providerCode: string; model: string }): Promise<BenchmarkResult> {
+  return apiClient.post<BenchmarkResult>(`${opsBase}/benchmark-runs/run`, input);
 }

@@ -276,23 +276,22 @@ public sealed class AiPipelineOverviewService(
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var q = db.AiUsageRecords.AsNoTracking();
-        if (start is { } s) q = q.Where(r => r.CreatedAt >= s);
 
-        var rows = await q
-            .Where(r => r.ProviderId != null)
-            .GroupBy(r => new { r.ProviderId, r.FeatureCode })
+        // Priced by AiUsageLedger (model rate card incl. cache tokens): a subscription route's tokens carry an
+        // API-equivalent value here, so its "USD" column is zeroed below — a subscription is never a charge.
+        var groups = await AiUsageLedger.LoadGroupsAsync(db, start, null, null, ct);
+        var rows = groups
             .Select(g => new
             {
-                ProviderId = g.Key.ProviderId!,
-                g.Key.FeatureCode,
-                Calls = (long)g.Count(),
-                Successes = (long)g.Count(x => x.Outcome == AiCallOutcome.Success),
-                PromptTokens = (long)g.Sum(x => x.PromptTokens),
-                CompletionTokens = (long)g.Sum(x => x.CompletionTokens),
-                CostUsd = g.Sum(x => x.CalculatedCostUsd ?? x.CostEstimateUsd),
+                g.ProviderId,
+                g.FeatureCode,
+                g.Calls,
+                g.Successes,
+                PromptTokens = g.PromptTokens + g.CacheWriteTokens + g.CacheReadTokens,
+                CompletionTokens = g.CompletionTokens,
+                CostUsd = g.IncrementalApiUsd,
             })
-            .ToListAsync(ct);
+            .ToList();
 
         return rows
             .GroupBy(r => r.ProviderId, StringComparer.Ordinal)
@@ -465,9 +464,7 @@ public sealed class AiPipelineOverviewService(
         foreach (var grant in grants)
         {
             // One indexed sum per grant; grants are operator-entered and stay in the dozens at most.
-            var spent = await db.AiUsageRecords.AsNoTracking()
-                .Where(r => r.ProviderId == grant.ProviderCode && r.CreatedAt >= grant.StartsAt)
-                .SumAsync(r => (decimal?)(r.CalculatedCostUsd ?? r.CostEstimateUsd), ct) ?? 0m;
+            var spent = await AiUsageLedger.SpendUsdAsync(db, grant.ProviderCode, grant.StartsAt, null, ct);
             var remaining = grant.GrantUsd - spent;
             views.Add(new PipelineCreditGrantView(
                 grant.Id,

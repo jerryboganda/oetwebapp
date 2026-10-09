@@ -128,9 +128,10 @@ public sealed class AiCreditGuard(
                 null, 0m, 0m, 0m, o.ReserveUsd, o.FloorUsd, null, now);
         }
 
-        var spent = await db.AiUsageRecords.AsNoTracking()
-            .Where(r => r.ProviderId == o.ProviderCode && r.CreatedAt >= grant.StartsAt)
-            .SumAsync(r => (decimal?)(r.CalculatedCostUsd ?? r.CostEstimateUsd), ct) ?? 0m;
+        // Model-aware and cache-aware (AiUsageLedger), so the promotional balance falls at the rate Anthropic
+        // really bills: claude-opus-5-5 at $4/$20 per million plus the prompt-cache buckets, not the provider
+        // row's flat Sonnet-class price over non-cached tokens only.
+        var spent = await AiUsageLedger.SpendUsdAsync(db, o.ProviderCode, grant.StartsAt, null, ct);
         var remaining = grant.GrantUsd - spent;
         var mode = ResolveMode(remaining, o.ReserveUsd, o.FloorUsd);
 

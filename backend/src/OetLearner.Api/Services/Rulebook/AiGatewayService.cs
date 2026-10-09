@@ -105,17 +105,26 @@ public sealed class AiGatewayService(
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
         => _promptBuilder.Build(context);
 
-    /// <summary>Owner directive (25 Sep 2026): learner Speaking and Writing
-    /// grading runs Claude Sonnet 5 with maximum reasoning (adaptive thinking,
-    /// effort "max"). Thinking tokens count against max_tokens, so grading gets
-    /// ample room - the old 4096 cap truncated the scored JSON.</summary>
-    internal const int GradingMaxTokens = 128_000; // claude-sonnet-5 output maximum
+    /// <summary>Speaking grading runs adaptive extended thinking at <see cref="GradingEffort"/>
+    /// (owner directive 2026-10-10: Claude Opus 5.5 High; it was "max" from 25 Sep 2026).
+    /// Thinking tokens count against max_tokens, so grading gets ample room - the old
+    /// 4096 cap truncated the scored JSON.</summary>
+    internal const int GradingMaxTokens = 128_000; // Claude 5 output maximum
 
     internal static bool GradingMaxReasoning(string featureCode)
         // Writing grading (claude-opus-5-5) runs effort "high" per the 2026-09-29
         // owner directive — effort "max" on Claude 5 models previously consumed the
-        // whole token budget and returned empty grades. Speaking keeps max.
+        // whole token budget and returned empty grades. Speaking grading uses extended
+        // thinking with the same approved effort (GradingEffort); see below.
         => string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The approved Speaking grading effort (owner directive 2026-10-10: "Claude Opus 5.5 High"). The Claude Max
+    /// sidecar is pinned to <c>high</c> (WRITING_CLAUDE_EFFORT), so the paid-API hop must run the same effort, or
+    /// the same candidate would be graded at a different depth depending on which route served the run. The
+    /// previous API value was <c>max</c>.
+    /// </summary>
+    internal const string GradingEffort = "high";
 
     public async Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
     {
@@ -768,7 +777,7 @@ public sealed class AiGatewayService(
                         ToolChoice = tools.Count == 0 ? null : "auto",
                         ResponseFormatJson = request.ResponseFormatJson,
                         EnableExtendedThinking = request.EnableExtendedThinking || GradingMaxReasoning(featureCode),
-                        ThinkingEffort = GradingMaxReasoning(featureCode) ? "max" : request.ThinkingEffort,
+                        ThinkingEffort = GradingMaxReasoning(featureCode) ? GradingEffort : request.ThinkingEffort,
                     },
                     circuitProviderKey,
                     circuitCredentialKey,

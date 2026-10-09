@@ -66,9 +66,43 @@ public static class AiPipelineAdminEndpoints
                         .FirstOrDefaultAsync(ct);
                 }
 
+                // What each route ACTUALLY sent over the last 7 days (the model column of the usage rows is the model
+                // id the provider received), so "verify the production configuration" never rests on a display name.
+                object? recentModels = null;
+                if (key != AiPipelineStageKeys.LiveVoice)
+                {
+                    var modelsSince = DateTimeOffset.UtcNow.AddDays(-7);
+                    recentModels = (await db.AiUsageRecords.AsNoTracking()
+                            .Where(u => u.FeatureCode == key && u.CreatedAt >= modelsSince && u.ProviderId != null)
+                            .GroupBy(u => new { u.ProviderId, u.Model })
+                            .Select(g => new
+                            {
+                                Provider = g.Key.ProviderId,
+                                Model = g.Key.Model,
+                                Calls = g.Count(),
+                                Succeeded = g.Count(x => x.Outcome == AiCallOutcome.Success),
+                                LastAt = g.Max(x => x.CreatedAt),
+                            })
+                            .ToListAsync(ct))
+                        .OrderByDescending(x => x.Calls)
+                        .ToList();
+                }
+
+                var effortNote = key switch
+                {
+                    AiPipelineStageKeys.SpeakingGrade =>
+                        "Claude API runs adaptive thinking at effort HIGH. The Claude Max sidecar is pinned to effort HIGH (WRITING_CLAUDE_EFFORT).",
+                    AiPipelineStageKeys.WritingGrade =>
+                        "The Claude Max sidecar is pinned to effort HIGH. The paid-API hop sends no explicit effort, so Claude's own default applies.",
+                    _ => null,
+                };
+
                 var firstEnabled = config.Hops.FirstOrDefault(h => h.Enabled);
                 stages.Add(new
                 {
+                    approvedClaudeModel = AiPipelineDefaults.ClaudeModel,
+                    effortNote,
+                    recentModels,
                     stageKey = key,
                     label = AiPipelineStageKeys.Label(key),
                     kind = AiPipelineStageKeys.IsGrading(key) ? "grading" : AiPipelineStageKeys.IsReviewer(key) ? "reviewer" : "voice",
@@ -268,6 +302,72 @@ public static class AiPipelineAdminEndpoints
         group.MapGet("/overview", async (IAiPipelineOverviewService overview, string? window, CancellationToken ct) =>
             Results.Ok(await overview.BuildAsync(window, ct)));
 
+        // Writing and Speaking cost by processing stage (owner directive 2026-10-10): Writing grading + reviewer,
+        // Speaking live voice + grading + reviewer (+ the audio model), per-unit averages, promotional-credit
+        // accounting, and the same headline figures for Today / 7 days / 30 days / all time. Read-only.
+        group.MapGet("/cost-breakdown", async (ICostBreakdownService breakdown, string? window, CancellationToken ct) =>
+            Results.Ok(await breakdown.BuildAsync(window, ct)));
+
+        // The operator's per-minute live voice rate (the realtime audio never passes through this API, so live
+        // voice is metered in connected minutes). Audited like every other pipeline control; never writes the
+        // saved provider order.
+        group.MapPut("/live-voice-rates", async (
+            LiveVoiceRateDto dto,
+            LearnerDbContext db,
+            HttpContext http,
+            ICostBreakdownService breakdown,
+            CancellationToken ct) =>
+        {
+            var provider = (dto.Provider ?? string.Empty).Trim().ToLowerInvariant();
+            if (provider is not ("openai" or "gemini"))
+                return new ApiErrorResult(400, "live_voice_rate_provider_invalid", "Provider must be openai or gemini.");
+            if (dto.PerMinuteUsd < 0m || dto.PerMinuteUsd > 100m)
+                return new ApiErrorResult(400, "live_voice_rate_invalid", "The rate must be between 0 and 100 USD per minute.");
+
+            var now = DateTimeOffset.UtcNow;
+            var actor = Actor(http);
+            var key = AiCostBreakdownService.LiveVoiceRateFlagPrefix + provider;
+            var flag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Key == key, ct);
+            if (flag is null)
+            {
+                flag = new FeatureFlag
+                {
+                    Id = $"FLG-{Guid.NewGuid():N}"[..12],
+                    Name = $"Live voice rate: {provider}",
+                    Key = key,
+                    FlagType = FeatureFlagType.Operational,
+                    CreatedAt = now,
+                };
+                db.FeatureFlags.Add(flag);
+            }
+
+            flag.Enabled = true;
+            flag.RolloutPercentage = 0;
+            flag.Owner = actor.Name.Length > 128 ? actor.Name[..128] : actor.Name;
+            flag.Description = AiCostBreakdownService.FormatRateDescription(dto.PerMinuteUsd, provider);
+            flag.UpdatedAt = now;
+
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = now,
+                ActorId = actor.Id,
+                ActorName = actor.Name,
+                Action = "AiLiveVoiceRateUpdated",
+                ResourceType = "AiConfig",
+                ResourceId = key,
+                Details = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    provider,
+                    perMinuteUsd = dto.PerMinuteUsd,
+                    reason = dto.Reason,
+                }, AiPipelineJson.Options),
+            });
+            await db.SaveChangesAsync(ct);
+            breakdown.InvalidateCache();
+            return Results.Ok(new { provider, perMinuteUsd = dto.PerMinuteUsd });
+        }).RequireRateLimiting("PerUserWrite");
+
         // Subscription-account rotation (owner directive 2026-10-10): per-account state + the audited
         // controls (switch threshold, per-account drain). Neither control may write the saved order.
         group.MapGet("/accounts", (ISubscriptionAccountPool pool) =>
@@ -424,6 +524,7 @@ public static class AiPipelineAdminEndpoints
             LearnerDbContext db,
             HttpContext http,
             IAiPipelineOverviewService overview,
+            ICostBreakdownService costBreakdown,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(dto.ProviderCode))
@@ -470,6 +571,7 @@ public static class AiPipelineAdminEndpoints
 
             // Drop the 60s cache so the panel shows the new grant immediately.
             overview.InvalidateCache();
+            costBreakdown.InvalidateCache();
             AiCreditGuard.InvalidateCache();
             return Results.Ok(new { grant.Id, grant.ProviderCode, grant.GrantUsd, grant.StartsAt });
         }).RequireRateLimiting("PerUserWrite");
@@ -479,6 +581,7 @@ public static class AiPipelineAdminEndpoints
             LearnerDbContext db,
             HttpContext http,
             IAiPipelineOverviewService overview,
+            ICostBreakdownService costBreakdown,
             CancellationToken ct) =>
         {
             var grant = await db.AiCreditGrants.FirstOrDefaultAsync(g => g.Id == id, ct);
@@ -504,6 +607,7 @@ public static class AiPipelineAdminEndpoints
             });
             await db.SaveChangesAsync(ct);
             overview.InvalidateCache();
+            costBreakdown.InvalidateCache();
             AiCreditGuard.InvalidateCache();
             return Results.NoContent();
         }).RequireRateLimiting("PerUserWrite");
@@ -558,6 +662,8 @@ public static class AiPipelineAdminEndpoints
     public sealed record CreditGrantDto(string ProviderCode, decimal GrantUsd, DateTimeOffset? StartsAt, string? Note);
 
     public sealed record DrainAccountDto(string ProviderCode, bool Drain, string? Reason);
+
+    public sealed record LiveVoiceRateDto(string Provider, decimal PerMinuteUsd, string? Reason);
 
     public sealed record ThresholdDto(double SwitchPercent, string? Reason);
 }

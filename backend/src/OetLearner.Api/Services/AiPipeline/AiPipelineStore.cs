@@ -188,7 +188,14 @@ public sealed class AiPipelineStore(
             if (row is null) { skipped.Add($"{hop.Provider}: provider record inactive or missing"); continue; }
             if (string.IsNullOrWhiteSpace(key)) { skipped.Add($"{hop.Provider}: no credential"); continue; }
 
-            var model = string.IsNullOrWhiteSpace(hop.Model) ? row.DefaultModel : hop.Model!;
+            // A blank model means "the approved model of this route", not "whatever the provider row defaults to":
+            // the anthropic row defaults to a Sonnet-class model while the approved grading and review model is
+            // claude-opus-5-5 (owner directive 2026-10-10). An explicit saved model is never overridden here.
+            var model = !string.IsNullOrWhiteSpace(hop.Model)
+                ? hop.Model!
+                : string.Equals(hop.Provider, AiPipelineDefaults.ClaudeApiProvider, StringComparison.OrdinalIgnoreCase)
+                    ? AiPipelineDefaults.ClaudeModel
+                    : row.DefaultModel;
             resolved.Add(new AiPipelineResolvedHop(i, hop.Provider, model, hop.Attempts, hop.BudgetSeconds));
         }
 

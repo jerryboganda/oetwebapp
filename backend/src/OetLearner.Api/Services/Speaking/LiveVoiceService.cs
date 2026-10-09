@@ -50,7 +50,7 @@ public sealed class LiveVoiceService(
     // provider-session audit insert fail with Postgres 22001, so no live voice
     // conversation could start in production (25 Sep 2026).
     internal const string LiveVoiceSessionRole = "live_session";
-    private const string LiveVoiceTurnRole = "realtime_turn";
+    internal const string LiveVoiceTurnRole = "realtime_turn";
     // A transcript saved by this service is labelled this prefix plus the provider ("realtime-openai").
     // The results endpoint reads it to tell a live conversation, which has no audio, from a recording.
     internal const string TranscriptProviderPrefix = "realtime-";

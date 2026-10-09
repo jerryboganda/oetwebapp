@@ -2556,6 +2556,9 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Writing.ICodexSubscription
     OetLearner.Api.Services.Writing.CodexSubscriptionQuotaService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.AiPipeline.IAiPipelineOverviewService,
     OetLearner.Api.Services.AiPipeline.AiPipelineOverviewService>();
+// Writing/Speaking cost breakdown by processing stage (owner directive 2026-10-10): read-only aggregation.
+builder.Services.AddSingleton<OetLearner.Api.Services.AiPipeline.ICostBreakdownService,
+    OetLearner.Api.Services.AiPipeline.AiCostBreakdownService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingSubscriptionSelector,
     OetLearner.Api.Services.Writing.WritingSubscriptionSelector>();
 // Subscription-account rotation (owner directive 2026-10-10): one container per account; the pool
