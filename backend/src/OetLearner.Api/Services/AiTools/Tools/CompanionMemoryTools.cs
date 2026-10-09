@@ -587,10 +587,21 @@ public sealed class CompanionWhyScoreChangeTool(
         if (!context.ActionsEnabled) return CompanionToolGuards.ActionsOff();
 
         var scoreEntries = await memory.GetCurrentAsync(ctx.UserId!, CompanionMemoryLayers.Learning, ct);
+        // Both kinds count. `official_result` was introduced for F-077 and this filter
+        // originally matched only `score`, which made an official result invisible here:
+        // a learner who had just recorded a real result and asked why their score moved
+        // would have been told they had no confirmed scores on record.
         var bySubtest = scoreEntries
-            .Where(m => m.Kind == "score" && m.ConfirmedAt != null)
+            .Where(m => (m.Kind == "score" || m.Kind == "official_result") && m.ConfirmedAt != null)
+            // An official result outranks a mock at the same sub-test regardless of which
+            // is newer: a mock sat after the real exam must not read as the learner's
+            // current standing. Recency still orders within the same kind.
             .GroupBy(m => m.Subtest)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(m => m.RecordedAt).ToList());
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(m => m.Kind == "official_result" ? 0 : 1)
+                      .ThenByDescending(m => m.RecordedAt)
+                      .ToList());
         if (bySubtest.Count == 0)
         {
             return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
@@ -606,10 +617,36 @@ public sealed class CompanionWhyScoreChangeTool(
             g => g.Value.Take(3).Select(m => new { date = m.RecordedAt.ToString("yyyy-MM-dd"), content = m.Content }).ToArray());
         var weaknesses = await errorDna.TopWeaknessesAsync(ctx.UserId!, 6, ct);
 
+        // F-083. Personal bests, derived from the same confirmed records so the two answers
+        // can never disagree with each other. Deliberately no historical baseline is
+        // invented: with one recorded result there is no "best" to speak of, and the flag
+        // below says so instead of presenting a single score as an achievement.
+        var bests = bySubtest.ToDictionary(
+            g => g.Key,
+            g =>
+            {
+                var official = g.Value.FirstOrDefault(m => m.Kind == "official_result");
+                var numeric = g.Value
+                    .Select(m => new { m, score = TryReadScore(m.DataJson) })
+                    .Where(x => x.score is not null)
+                    .ToList();
+                var best = numeric.OrderByDescending(x => x.score!.Value).FirstOrDefault();
+                return new
+                {
+                    best_score = best?.score,
+                    best_on = best?.m.RecordedAt.ToString("yyyy-MM-dd"),
+                    was_official = best?.m.Kind == "official_result",
+                    attempts_recorded = numeric.Count,
+                    official_result_on_file = official is not null,
+                    basis = numeric.Count >= 2 ? "multiple_results" : "single_result",
+                };
+            });
+
         return new AiToolExecutionResult(AiToolOutcome.Success, CompanionToolGuards.Json(new
         {
             can_explain = true,
             score_trend = trend,
+            personal_bests = bests,
             current_weaknesses = weaknesses.Select(w => new
             {
                 category = w.Category,
@@ -618,7 +655,31 @@ public sealed class CompanionWhyScoreChangeTool(
                 evidence_count = w.EvidenceCount,
                 mastery = w.MasteryScore,
             }),
-            instruction = "Explain the change ONLY from the recorded trend and error evidence. If the history does not support a cause, say exactly that and propose how to measure it (e.g. track answer-changing for a week).",
+            instruction = "Explain the change ONLY from the recorded trend and error evidence. If the history does not support a cause, say exactly that and propose how to measure it (e.g. track answer-changing for a week). You may also state the learner's personal best per sub-test, but when `basis` is `single_result` say plainly that one result is not yet a best to beat — never present a lone score as an achievement.",
         }));
+    }
+
+    /// <summary>
+    /// Reads the numeric score out of a confirmed memory entry's payload. The score is
+    /// stored as JSON rather than a column, so this is deliberately defensive: an entry
+    /// whose payload predates or postdates the current shape yields null and is skipped,
+    /// rather than throwing and taking the whole answer down.
+    /// </summary>
+    private static int? TryReadScore(string? dataJson)
+    {
+        if (string.IsNullOrWhiteSpace(dataJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(dataJson);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                   && doc.RootElement.TryGetProperty("score", out var scoreEl)
+                   && scoreEl.ValueKind == JsonValueKind.Number
+                ? scoreEl.GetInt32()
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 }
