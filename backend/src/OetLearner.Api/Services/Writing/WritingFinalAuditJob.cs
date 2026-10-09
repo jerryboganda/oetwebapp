@@ -43,7 +43,8 @@ public sealed record WritingFinalAuditActive(
     int Passed,
     int Failed,
     IReadOnlyList<string> SourceConflicts,
-    IReadOnlyList<string> VisibleFailures);
+    IReadOnlyList<string> VisibleFailures,
+    IReadOnlyList<string> StaleVisible);
 
 public sealed record WritingFinalAuditSnapshot(
     string State,
@@ -80,14 +81,18 @@ internal static class WritingFinalAuditSpec
         new("035403b8-a8da-42a9-97ea-298b4038b55c", "pack 17", [("he has been informed of the possible side effects of the antibiotics", "he is to be informed of the possible side effects of the antibiotics")]),
         new("066ecfa1-c02e-4b71-9d9c-6e5393bb6da8", "pack 18", [("\n\n2 September 2009\n\nDear", "\n\nDear")]),
         new("0fc02e37-24b0-47cb-a408-5a090aa587ac", "pack 23", [("\n\n6 April 2019\n\nDear", "\n\nDear")]),
+        new("1443641c-09b5-4b30-bc9a-01250cc1eaf1", "pack 25", [("\nRe: Ms Jane Robinson, aged 19\n", "\nRe: Ms Jane Robinson, DOB: 26 October 1988\n")]),
         new("2b7fae26-e8b4-4803-9be1-99f8524dbcfd", "pack 30", [("Referrals have also been initiated to", "Referrals are also to be initiated to")]),
         new("2dc96911-e1eb-4963-a156-1a6465be3be1", "pack 31", [("\n\n4 February 2014\n\nDear", "\n\nDear"), ("Mrs Casey was admitted today after fainting and falling", "Mrs Casey was admitted on 4 February 2014 after fainting and falling")]),
+        new("422ee8ad-c86e-4a49-9269-fa7f0381bb02", "pack 38", [("\nRe: Ms Gemma Brown\n", "\nRe: Ms Gemma Brown, DOB: 19 January 1991\n")]),
         new("4753a45d-359e-4571-b5dc-4b1615c2d4a7", "pack 42", [("renal failure secondary to dehydration, mild dementia and pneumonia.", "renal failure secondary to dehydration and mild dementia.")]),
         new("48c52e8e-1019-40a8-83a1-897f23cd3c6d", "pack 43", [("\nAdelaide 3001", "\nNorth Adelaide 3001")]),
+        new("7436a118-c943-478d-b8ef-626565204522", "pack 54", [("\nRe: Ms Ling Wu\n", "\nRe: Ms Ling Wu, DOB: 1 March 1996\n")]),
         new("75134963-0c27-4481-b9f5-2b1786421781", "pack 55", [("\n\n8 July 2017\n\nDear Admissions Officer,", "\n\n11 July 2017\n\nDear Admissions Officer,"), ("Today, endoscopy, biopsy and barium swallow confirmed", "On 8 July, endoscopy, biopsy and barium swallow confirmed")]),
+        new("7b09ff8d-9448-49c5-9fb3-e232bc0e20d5", "pack 57", [("\nRe: Ms Nina Sharman\n", "\nRe: Ms Nina Sharman, DOB: 9 February 1951\n")]),
         new("9489ce12-1555-4dce-958d-d648e0218e74", "pack 64", [(", requiring significant assistance.", ".")]),
-        new("95f2ea74-0f4e-4424-af68-ced741716552", "pack 66", [("There is no history of such infection, IV drug use or overseas travel.", "She has no history of such infection. Her partner has no IV drug use or recent overseas travel."), ("A urine PCR test and Pap smear were taken for Ms Montoa.", "A urine PCR test and Pap smear were taken."), ("She has been on the oral contraceptive pill for twelve months.", "She has taken the contraceptive pill for twelve months."), ("her last sexual contact was fourteen days ago", "her last sexual contact was fourteen days before presentation")]),
-        new("a3d1b730-604c-4af7-82ef-cf1c40015bac", "pack 74", [("\n\n22 April 2015\n\nDear", "\n\n19 April 2015\n\nDear"), ("The wound was re-dressed on 19 April 2015.", "The wound was re-dressed today."), ("re-dress Ms Norris's wound today.", "re-dress her wound on 22 April 2015.")]),
+        new("95f2ea74-0f4e-4424-af68-ced741716552", "pack 66", [("There is no history of such infection, IV drug use or overseas travel.", "Her partner has no IV drug use or recent overseas travel."), ("She has been on the oral contraceptive pill for twelve months.", "She has taken the contraceptive pill for twelve months."), ("her last sexual contact was fourteen days ago", "her last sexual contact was fourteen days before presentation")]),
+        new("a3d1b730-604c-4af7-82ef-cf1c40015bac", "pack 74", [("\n\n22 April 2015\n\nDear", "\n\nDear"), ("re-dress Ms Norris's wound today.", "re-dress her wound on 22 April.")]),
         new("bfa16ff7-8dac-42c4-b5a2-632f1d04f040", "pack 84", [("has untreated dyslipidaemia", "has previously untreated dyslipidaemia")]),
         new("c110e41b-a05f-4c1a-8500-af7a9dc71b74", "pack 85", [("\n\n11 January 2018\n\nDear", "\n\nDear")]),
         new("cb30e37c-9a24-4a9a-a7ae-54eb7f473a5f", "pack 87", [("Quitline contact has been encouraged", "Quitline contact is to be encouraged")]),
@@ -95,41 +100,23 @@ internal static class WritingFinalAuditSpec
         new("fae4d05e-3d0a-4d67-9bdc-cfd511644814", "pack 101", [(" upon his request,", "")]),
         new("ea93ffbd-a2cf-4027-9767-9f40392804b9", "pack 107", [("I would be grateful if you could arrange a bath board or alternative shower equipment and temporary domestic support at your earliest convenience.", "I would be grateful if you could review bath board or alternative shower equipment needs and assess temporary domestic support at your earliest convenience.")]),
         new("245b5873-ed37-4dd6-9226-8c4280a82969", "pack 117", [("increase the risk of a blood clot.", "increase the risk of blood clot failure.")]),
-        new("8dc0a8b6-071a-4705-b41a-cbe0a79281ab", "pack 128", [("I am writing to request your prescribing care for Mrs Tomomi Aoki, who has influenza, and to provide the medication history you requested.", "I am writing to provide the medication history you requested for Mrs Tomomi Aoki, who has influenza."), ("I would be grateful if you could continue Mrs Aoki's vitamin B6 and prenatal vitamin prescriptions.", "I would be grateful if you could consider this medication history in Mrs Aoki's continuing care.")]),
+        new("843c7231-6322-4731-bb8c-b352b3619054", "pack 126", [("Re: Mr Ian Roden, DOB", "Re: Mr Alex Roden, DOB"), ("prescribed for Mr Ian Roden by your locum", "prescribed for Mr Alex Roden by your locum")]),
+        new("8dc0a8b6-071a-4705-b41a-cbe0a79281ab", "pack 128", [("I am writing to request your prescribing care for Mrs Tomomi Aoki, who has influenza, and to provide the medication history you requested.", "I am writing to outline the medication history of Mrs Tomomi Aoki, who has influenza, as you requested."), ("I would be grateful if you could continue Mrs Aoki's vitamin B6 and prenatal vitamin prescriptions.", "I would be grateful if you could consider this medication history in Mrs Aoki's continuing care.")]),
         new("c371b7c0-24fa-4476-8208-c610f41262bf", "pack 134", [("Today, Mrs Katrina Morrison presented", "Today, Ms Katrina Morrison presented")]),
         new("d092de42-1f30-4fdb-82c0-133ef3a78793", "pack 139", [("I counselled him on lifestyle, exercise and diet.", "I plan to counsel him on lifestyle, exercise and diet.")]),
-        new("698a9f8f-25db-4131-b16e-7633f803c3f7", "pack 192", [("drinks six to ten standard drinks daily", "drinks over six to ten standard drinks daily"), ("Penicillin caused an allergic rash in childhood.", "Penicillin caused a childhood allergic rash.")]),
+        new("0a935f31-5d0f-42f9-b36a-68090d3ed939", "pack 142", [("\nRe: Mr Anthony Miller, aged 58\n", "\nRe: Mr Anthony Miller, DOB: 28 February 1968\n")]),
+        new("8ce14aa5-d564-401a-86dc-e0039e7ae437", "pack 180", [(" Insulin, 50 IU and a statin, 40 mg, were continued.", "")]),
         new("dced34e1-ab84-43e3-af54-3e124d08d5b8", "pack 194", [("I advised smoking cessation and discussed likely investigations.", "Smoking cessation and likely investigations will be discussed.")]),
+        new("065df5a5-52e3-48e4-bc6c-df726f8d4084", "pack 198", [("I would be grateful if you could monitor Mrs Jackson's pregnancy and discuss her delivery options.", "I would be grateful if you could discuss her home delivery request with Mrs Jackson.")]),
     ];
 
     internal static readonly PdfProbe[] PdfProbes =
     [
-        new("90906d15-3762-487b-b03b-eac9241afb5f", "pack 63", ["Monica"]),
-        new("891fe875-9241-4ffb-8eb7-4c9bf27b134e", "pack 127", ["Marion"]),
-        new("843c7231-6322-4731-bb8c-b352b3619054", "pack 126", ["Ian Roden", "Alex Roden", "Roden"]),
-        new("2b8f3297-873e-47e3-bbb8-7fa2f80b5208", "pack 206", ["Mrs Betty", "Ms Betty", "Mrs. Betty", "Ms. Betty", "Miss Betty", "Betty Weston"]),
-        new("d8dc7716-0550-4ec4-ad2b-fa3943a80190", "pack 90", ["Andresen", "Andersen"]),
-        new("8dc5d15f-8eef-437d-80f8-f3985ca3b76b", "pack 61", ["EC1", "1BB", "Gray"]),
-        new("953bf2bc-5c6a-4948-8add-efcd93b83e5b", "pack 65", ["Devonshire"]),
-        new("07dea539-2f8b-4822-be41-91be7cc29c2a", "pack 19", ["Kumar"]),
-        new("9c8101b9-6910-48ab-a3bf-4dc5b193f2bd", "pack 69", ["Dyer"]),
-        new("25fe70e9-4c01-45bb-a6bd-ef2e51cd20dd", "pack 27", ["Charge Nurse"]),
-        new("2e32afab-118a-4c2b-9e1b-e5b24d6de735", "pack 32", ["parents", "Mr and Mrs"]),
-        new("b6793942-d248-4956-a7ce-4d9d6a41bdfc", "pack 79", ["Christine", "4-7 days"]),
-        new("078dc252-bdfa-4531-a94f-164e6a73dfbf", "pack 114", ["6 March", "10 March"]),
-        new("8ce14aa5-d564-401a-86dc-e0039e7ae437", "pack 180", ["19/10", "continue", "Insulin"]),
-        new("065df5a5-52e3-48e4-bc6c-df726f8d4084", "pack 198", ["monitor", "delivery", "anxiety"]),
-        new("4f8f628a-f9af-472c-ac73-3e7d1467cde9", "pack 46", ["before meals", "30 minutes"]),
-        new("67b0d868-1ba9-4196-b162-6eeb4d0e3eec", "pack 164", ["27/08", "discharge"]),
-        new("066ecfa1-c02e-4b71-9d9c-6e5393bb6da8", "pack 18", ["2 September", "September 2009", "discharge"]),
-        new("0fc02e37-24b0-47cb-a408-5a090aa587ac", "pack 23", ["April 2019", "06.04.19"]),
-        new("c110e41b-a05f-4c1a-8500-af7a9dc71b74", "pack 85", ["11/01/18", "78"]),
-        new("bb8982f4-9ee6-43cf-814e-7d876ab11168", "pack 209", ["23 May", "Today"]),
-        new("c371b7c0-24fa-4476-8208-c610f41262bf", "pack 134", ["21 January", "three days ago"]),
-        new("2dc96911-e1eb-4963-a156-1a6465be3be1", "pack 31", ["day 7", "4/02/14"]),
-        new("a3d1b730-604c-4af7-82ef-cf1c40015bac", "pack 74", ["19/04/15", "22/04/15"]),
-        new("75134963-0c27-4481-b9f5-2b1786421781", "pack 55", ["5 days ago"]),
-        new("f08ba66d-735a-4509-85f6-59954cf029f6", "pack 97", ["2 July"]),
+        new("8dc5d15f-8eef-437d-80f8-f3985ca3b76b", "pack 61", ["City of London", "London"]),
+        new("f08ba66d-735a-4509-85f6-59954cf029f6", "pack 97", ["July", "ready for discharge"]),
+        new("4f8f628a-f9af-472c-ac73-3e7d1467cde9", "pack 46", ["insulin", "meal"]),
+        new("2e32afab-118a-4c2b-9e1b-e5b24d6de735", "pack 32", ["Mr ", "Mrs"]),
+        new("843c7231-6322-4731-bb8c-b352b3619054", "pack 126", ["Ian", "Alex"]),
     ];
 }
 
@@ -409,7 +396,16 @@ public sealed class WritingFinalAuditJob(
             if (offset >= page.TotalRows) break;
         }
 
-        return new WritingFinalAuditActive(visibleVerified, visibleAny, checkedCount, passed, failed, conflicts, failures);
+        // Ready + visible but verified under another validator version: candidates do not see these (CandidateVisibleVerified).
+        var staleRows = await db.WritingTaskModelAnswers.AsNoTracking()
+            .Where(a => a.Status == WritingAssessmentModelAnswerStatus.Ready && a.IsCandidateVisible
+                && a.ValidatorVersion != WritingRuleEngine.ValidatorVersion)
+            .Select(a => new { a.ScenarioId, a.ValidatorVersion })
+            .Take(20)
+            .ToListAsync(ct);
+        var stale = staleRows.Select(r => r.ScenarioId.ToString("D") + " v=" + (r.ValidatorVersion ?? "none")).ToList();
+
+        return new WritingFinalAuditActive(visibleVerified, visibleAny, checkedCount, passed, failed, conflicts, failures, stale);
     }
 
     private static string Short(string value, int max)

@@ -30,17 +30,18 @@ internal static class WritingScenarioSourceExceptions
         Guid.Parse("066ecfa1-c02e-4b71-9d9c-6e5393bb6da8"),
         Guid.Parse("0fc02e37-24b0-47cb-a408-5a090aa587ac"),
         Guid.Parse("c110e41b-a05f-4c1a-8500-af7a9dc71b74"),
+        // Norris: the PDF re-dresses 19/04/15 (discharge day) and plans the next re-dress 22/04/15; no letter date is stated,
+        // and the body states the 19 April dates, which a dated letter may not repeat.
+        Guid.Parse("a3d1b730-604c-4af7-82ef-cf1c40015bac"),
     ];
 
-    // The writing day IS derivable from the source: Brew (task: "admitted 5 days ago", admitted 6 July 2017), Davies
-    // (note: "2 July: ... patient ready for discharge", the transfer is written then), Norris (discharge 19 April 2015;
-    // the 22 April re-dressing is a PLANNED date and never the letter date). Used by the Model Answer gate only: the
-    // candidate-facing task is not changed.
+    // The writing day IS derivable from the source: Brew (task: "admitted 5 days ago", admitted 6 July 2017) and Davies
+    // (note: "2 July: ... patient ready for discharge", the transfer is written then). Used by the Model Answer gate
+    // only: the candidate-facing task is not changed.
     private static readonly Dictionary<Guid, string> TodayDateOverrides = new()
     {
         [Guid.Parse("75134963-0c27-4481-b9f5-2b1786421781")] = "11 July 2017",
         [Guid.Parse("f08ba66d-735a-4509-85f6-59954cf029f6")] = "2 July 2017",
-        [Guid.Parse("a3d1b730-604c-4af7-82ef-cf1c40015bac")] = "19 April 2015",
     };
 
     public static string? TodayDate(Guid scenarioId, string? todayDate)
