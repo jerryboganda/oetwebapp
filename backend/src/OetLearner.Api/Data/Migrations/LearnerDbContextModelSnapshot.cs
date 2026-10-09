@@ -2142,6 +2142,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
+                    b.Property<bool>("ParticipatesInAutoSelection")
+                        .HasColumnType("boolean");
+
                     b.Property<decimal>("PricePer1kCompletionTokens")
                         .HasColumnType("numeric");
 
@@ -2244,6 +2247,83 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("ProviderId", "Priority");
 
                     b.ToTable("AiProviderAccounts");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.AiProviderModelCapability", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AllowedReasoningEffortsCsv")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ContextTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MaxTokensCeiling")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("ProbeDetail")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("ProbeStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<DateTimeOffset?>("ProbedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProviderCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("SupportsDocuments")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsEmbeddings")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsJsonMode")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsStreaming")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsThinking")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsTools")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SupportsVision")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ThinkingCanBeDisabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProviderCode", "Model")
+                        .IsUnique();
+
+                    b.ToTable("AiProviderModelCapabilities");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.AiProviderBenchmarkRun", b =>
@@ -19530,6 +19610,9 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<DateTimeOffset>("AnsweredAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("Confidence")
+                        .HasColumnType("integer");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");

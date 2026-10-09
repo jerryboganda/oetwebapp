@@ -45,6 +45,23 @@ public sealed class AiAssistantGateway(
     IHostEnvironment? hostEnvironment = null,
     IDirectAiCallRecorder? directRecorder = null) : IAiAssistantGateway
 {
+    /// <summary>
+    /// Provider codes whose ABSENCE must refuse a pinned thread rather than fall through to the
+    /// mock provider.
+    ///
+    /// <para>
+    /// This used to be <c>OpenCodeProviderDefaults.ExplicitOnlyCodes</c> — the whole mechanism for
+    /// "explicit only". That rule is now stored per row
+    /// (<c>AiProvider.ParticipatesInAutoSelection</c>), which is strictly better because it is
+    /// owner-editable and covers new vendors. It cannot express one case, though: a row that does
+    /// not exist carries no state, so "row deleted" and "row opted out" look identical. Deleting a
+    /// pinned provider's row must not silently downgrade a thread to the mock, so the absence case
+    /// is pinned here. Frozen: add a code only when deleting its row must refuse.
+    /// </para>
+    /// </summary>
+    internal static readonly HashSet<string> RequiredActiveRowCodes =
+        new([OpenCodeProviderDefaults.ProviderCode], StringComparer.OrdinalIgnoreCase);
+
     public async IAsyncEnumerable<LlmStreamChunk> StreamCompleteWithToolsAsync(
         string featureCode,
         string? userId,
@@ -715,13 +732,25 @@ public sealed class AiAssistantGateway(
 
         var routeRow = await providerRegistry.FindByCodeAsync(providerCode, ct);
 
-        // An explicit-only provider (OpenCode) is reached only through its own active row. If the
-        // row is missing or inactive (a thread can stay pinned after an admin disables it) the call
-        // is refused: it must never fall through to a same-named direct provider, the OpenAI shims
-        // or the mock below.
-        if (AiProviderDefaultEligibility.IsExplicitOnlyCode(providerCode) && routeRow is not { IsActive: true })
+        // A provider that does not participate in automatic selection is reached only through its own
+        // active row. If the row is missing or inactive (a thread can stay pinned after an admin
+        // disables it) the call is refused: it must never fall through to a same-named direct
+        // provider, the OpenAI shims or the mock below.
+        //
+        // Two things are checked, because "does not auto-select" is now per-row state and a missing
+        // row therefore carries no state at all:
+        //   * MissingOrInactiveRequiresRow — the legacy explicit-only codes, where the ABSENCE of a
+        //     row is itself the failure (a deleted row must not silently become the mock provider).
+        //     Frozen now that the live rule is stored per row; it exists to preserve that behaviour,
+        //     not as the primary mechanism.
+        //   * ParticipatesInAutoSelection — the stored rule, for a row that exists but was switched
+        //     off automatic selection or deactivated.
+        if (routeRow is not { IsActive: true })
         {
-            return null;
+            if (AiAssistantGateway.RequiredActiveRowCodes.Contains(providerCode ?? string.Empty))
+                return null;
+            if (routeRow is not null && !routeRow.ParticipatesInAutoSelection)
+                return null;
         }
 
         if (routeRow is not null)

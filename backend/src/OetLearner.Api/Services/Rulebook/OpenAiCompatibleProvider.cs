@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Services.Seeding;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.Rulebook;
@@ -50,6 +51,11 @@ public sealed class OpenAiCompatibleProvider(
 
         var model = string.IsNullOrWhiteSpace(request.Model) ? gateway.DefaultModel : request.Model;
         var maxTokens = request.MaxTokens ?? gateway.DefaultMaxTokens;
+
+        // Vendor request limits (owner directive 2026-10-09) — see AiProviderPayloadBuilder. This is
+        // the env-configured provider rather than the registry-backed one, so it has no capability row
+        // of its own; the host-based rules (which are all Z.AI's) still apply.
+        maxTokens = AiProviderPayloadBuilder.ClampMaxTokens(maxTokens, baseUrl, null, model);
         if (request.AudioAttachments is { Count: > 0 } && IsTranscriptionModel(model))
         {
             return await TranscribeAudioAsync(client, model, request, ct);
@@ -64,12 +70,13 @@ public sealed class OpenAiCompatibleProvider(
         {
             ["model"] = model,
             ["messages"] = AiProviderPayloadBuilder.BuildOpenAiMessages(request),
-            ["temperature"] = request.Temperature,
             [AiProviderPayloadBuilder.MaxTokensParameter(model)] = maxTokens,
             ["stream"] = false,
         };
+        var temperature = AiProviderPayloadBuilder.ResolveTemperature(request.Temperature, baseUrl);
+        if (temperature is not null) payload["temperature"] = temperature;
         var responseFormat = AiProviderPayloadBuilder.BuildOpenAiResponseFormat(request.ResponseFormatJson);
-        if (responseFormat is not null)
+        if (responseFormat is not null && AiProviderPayloadBuilder.ShouldSendResponseFormat(null, model))
         {
             payload["response_format"] = responseFormat;
         }
@@ -81,7 +88,8 @@ public sealed class OpenAiCompatibleProvider(
         if (tools.Count > 0)
         {
             payload["tools"] = tools;
-            if (!string.IsNullOrWhiteSpace(request.ToolChoice)) payload["tool_choice"] = request.ToolChoice;
+            var toolChoice = AiProviderPayloadBuilder.ResolveToolChoice(request.ToolChoice, baseUrl);
+            if (toolChoice is not null) payload["tool_choice"] = toolChoice;
         }
 
         using var response = await client.PostAsync(
@@ -179,16 +187,17 @@ public sealed class OpenAiCompatibleProvider(
     /// Unknown models fall through as false so we don't send an unsupported
     /// parameter that would 400.
     /// </summary>
-    private static bool IsReasoningCapable(string model)
+private static bool IsReasoningCapable(string model)
     {
         if (string.IsNullOrWhiteSpace(model)) return false;
-        var m = model.ToLowerInvariant();
+        var m = model.Trim().ToLowerInvariant();
         if (m.Contains("claude-opus") || m.Contains("claude-4") || m.Contains("claude-5")) return true;
-        if (m.Contains("opus-4")) return true;
         if (m.Contains("openai-o1") || m.Contains("openai-o3") || m.Contains("openai-o4")) return true;
         if (m.StartsWith("o1") || m.StartsWith("o3") || m.StartsWith("o4")) return true;
         if (m.Contains("gpt-5")) return true;
         if (m.Contains("thinking")) return true;
+        // Z.AI GLM: see AiProviderRegistry.IsReasoningCapable for why this branch matters.
+        if (ZaiProviderDefaults.IsZaiModel(m)) return true;
         return false;
     }
 }

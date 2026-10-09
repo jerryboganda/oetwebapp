@@ -625,7 +625,7 @@ public static class AiUsageAdminEndpoints
                     p.DefaultModel, p.ReasoningEffort, p.AllowedModelsCsv,
                     p.PricePer1kPromptTokens, p.PricePer1kCompletionTokens,
                     p.RetryCount, p.CircuitBreakerThreshold, p.CircuitBreakerWindowSeconds,
-                    p.FailoverPriority, p.IsActive,
+                    p.FailoverPriority, p.IsActive, p.ParticipatesInAutoSelection,
                     p.LastTestedAt, p.LastTestStatus, p.LastTestError,
                     p.CreatedAt, p.UpdatedAt, p.UpdatedByAdminId,
                 })
@@ -798,6 +798,195 @@ public static class AiUsageAdminEndpoints
                 testedAt = result.TestedAt,
             });
         }).RequireRateLimiting("PerUserWrite");
+
+        // ── Capability probe (owner directive 2026-10-09) ──────────────────────────────
+        // Probes the LIVE endpoint with the REAL key and stores what each model was OBSERVED to
+        // do. Documentation cannot answer this for Z.AI: the OpenAPI schema and the model page
+        // contradict each other about response_format, so only a call settles it. Admin-triggered
+        // only, never a hosted job and never a CI step.
+        group.MapPost("/providers/{code}/probe-capabilities", async (
+            string code,
+            AiProviderCapabilityProbeRequest request,
+            IAiProviderCapabilityProbe probe,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var providerRow = await db.AiProviders.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Code == code, ct);
+            if (providerRow is null) return Results.NotFound();
+
+            var requested = request?.Models is { Length: > 0 }
+                ? request.Models.Where(m => !string.IsNullOrWhiteSpace(m)).Select(m => m.Trim()).ToArray()
+                : null;
+
+            IReadOnlyList<ModelCapabilityResult> results;
+            try
+            {
+                results = await probe.ProbeAsync(code, requested, ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return new ApiErrorResult(400, "ai_capability_probe_unavailable", ex.Message);
+            }
+
+            var tracked = await db.AiProviders.FirstAsync(p => p.Code == code, ct);
+            await SaveWithAuditAsync(db, http, "AiProviderCapabilitiesProbed", tracked.Id,
+                $"code={code} models={string.Join(',', results.Select(r => $"{r.Model}:{r.Status}"))}", ct);
+
+            return Results.Ok(new
+            {
+                providerCode = code,
+                probedAt = DateTimeOffset.UtcNow,
+                results = results.Select(r => new
+                {
+                    r.Model,
+                    r.SupportsTools,
+                    r.SupportsVision,
+                    r.SupportsDocuments,
+                    r.SupportsJsonMode,
+                    r.SupportsEmbeddings,
+                    r.SupportsStreaming,
+                    r.SupportsThinking,
+                    r.ThinkingCanBeDisabled,
+                    allowedReasoningEfforts = r.AllowedReasoningEfforts,
+                    r.MaxTokensCeiling,
+                    r.ContextTokens,
+                    r.Status,
+                    r.Detail,
+                }),
+            });
+        }).RequireRateLimiting("PerUserWrite");
+
+        // ── Who wins the implicit-default pick, right now ────────────────────────────────
+        // The stored auto-selection flag is only useful if you can see its effect. Without this,
+        // flipping the toggle is a leap of faith and "why is my route not being used" has no answer
+        // anywhere on the screen.
+        group.MapGet("/providers/auto-selection", async (
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var rows = await db.AiProviders.AsNoTracking()
+                .Where(p => p.Category == AiProviderCategory.TextChat)
+                .OrderBy(p => p.FailoverPriority)
+                .ToListAsync(ct);
+
+            var candidates = rows
+                .Where(AiProviderDefaultEligibility.IsDefaultEligible)
+                .ToList();
+            var winner = candidates.FirstOrDefault();
+
+            return Results.Ok(new
+            {
+                // The row that an unrouted feature would resolve to today. Null means nothing is
+                // eligible, in which case such a call falls through to the mock provider.
+                winner = winner is null ? null : new
+                {
+                    winner.Id, winner.Code, winner.Name, winner.Dialect,
+                    winner.DefaultModel, winner.FailoverPriority,
+                },
+                eligible = candidates.Select(r => new { r.Code, r.Name, r.FailoverPriority }),
+                all = rows.Select(r => new
+                {
+                    r.Id, r.Code, r.Name, r.Dialect, r.IsActive, r.FailoverPriority,
+                    r.ParticipatesInAutoSelection,
+                    hasKey = !string.IsNullOrWhiteSpace(r.EncryptedApiKey),
+                    reason = AiProviderDefaultEligibility.IneligibilityReason(r),
+                }),
+            });
+        }).RequireRateLimiting("PerUser");
+
+        // Toggle whether a row may be picked implicitly. Stored state, so a vendor's reachability
+        // is an owner decision rather than a hardcoded code list requiring a deploy.
+        group.MapPut("/providers/{code}/auto-selection", async (
+            string code,
+            UpdateAiProviderAutoSelectionDto dto,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Code == code, ct);
+            if (row is null) return Results.NotFound();
+
+            var previous = row.ParticipatesInAutoSelection;
+            row.ParticipatesInAutoSelection = dto.Enabled;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            await SaveWithAuditAsync(db, http,
+                dto.Enabled ? "AiProviderAutoSelectionEnabled" : "AiProviderAutoSelectionDisabled",
+                row.Id, $"code={code} {previous}->{dto.Enabled} priority={row.FailoverPriority}", ct);
+
+            return Results.Ok(new
+            {
+                row.Id, row.Code,
+                row.ParticipatesInAutoSelection,
+                row.FailoverPriority,
+                reason = AiProviderDefaultEligibility.IneligibilityReason(row),
+            });
+        }).RequireRateLimiting("PerUserWrite");
+
+        // Stored capabilities for a provider, so the admin screen can render the capability table
+        // (and the per-model reasoning dropdown) without re-probing.
+        group.MapGet("/providers/{code}/capabilities", async (
+            string code,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            if (!await db.AiProviders.AsNoTracking().AnyAsync(p => p.Code == code, ct))
+                return Results.NotFound();
+
+            var rows = await db.AiProviderModelCapabilities.AsNoTracking()
+                .Where(c => c.ProviderCode == code)
+                .OrderBy(c => c.Model)
+                .ToListAsync(ct);
+
+            return Results.Ok(new
+            {
+                providerCode = code,
+                capabilities = rows.Select(c => new
+                {
+                    c.Model, c.SupportsTools, c.SupportsVision, c.SupportsDocuments,
+                    c.SupportsJsonMode, c.SupportsEmbeddings, c.SupportsStreaming,
+                    c.SupportsThinking, c.ThinkingCanBeDisabled, c.AllowedReasoningEffortsCsv,
+                    c.MaxTokensCeiling, c.ContextTokens, c.ProbeStatus, c.ProbeDetail, c.ProbedAtUtc,
+                }),
+            });
+        }).RequireRateLimiting("PerUser");
+
+        // Feature routes that the chosen provider could NOT serve, with the reason. Turns the
+        // capability gate from a silent refusal into a screen an owner can read before routing.
+        group.MapGet("/providers/{code}/unsupported-features", async (
+            string code,
+            LearnerDbContext db,
+            CancellationToken ct) =>
+        {
+            var providerRow = await db.AiProviders.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Code == code, ct);
+            if (providerRow is null) return Results.NotFound();
+
+            var capabilities = await db.AiProviderModelCapabilities.AsNoTracking()
+                .Where(c => c.ProviderCode == code)
+                .ToListAsync(ct);
+            var byModel = capabilities.ToDictionary(c => c.Model, StringComparer.OrdinalIgnoreCase);
+
+            var verdicts = AiFeatureRouteResolver.KnownFeatureCodes
+                .Select(featureCode =>
+                {
+                    var model = providerRow.DefaultModel;
+                    var capability = byModel.TryGetValue(model, out var c) ? c : null;
+                    var verdict = AiFeatureCapabilityRequirements.Evaluate(featureCode, providerRow, capability, model);
+                    return new { featureCode, verdict.Allowed, verdict.Reason };
+                })
+                .ToArray();
+
+            return Results.Ok(new
+            {
+                providerCode = code,
+                evaluatedModel = providerRow.DefaultModel,
+                supported = verdicts.Where(v => v.Allowed).Select(v => v.featureCode),
+                unsupported = verdicts.Where(v => !v.Allowed).Select(v => new { v.featureCode, v.Reason }),
+            });
+        }).RequireRateLimiting("PerUser");
 
         // Discover models from an OpenAI-compatible provider via GET /models.
         // Used by the admin "Discover models" button so the operator can
@@ -1188,7 +1377,7 @@ public static class AiUsageAdminEndpoints
 
             var routeProvider = await db.AiProviders.AsNoTracking()
                 .Where(p => p.Code == providerCode && p.IsActive)
-                .Select(p => new { p.Dialect, p.Category })
+                .Select(p => new { p.Id, p.Dialect, p.Category, p.DefaultModel })
                 .FirstOrDefaultAsync(ct);
             if (routeProvider is null)
                 return new ApiErrorResult(400, "ai_provider_inactive", $"Provider '{providerCode}' is not registered or not active.");
@@ -1196,6 +1385,29 @@ public static class AiUsageAdminEndpoints
             // would silently fall through to the default provider, so refuse it up front.
             if (routeProvider.Category == AiProviderCategory.Judgment || routeProvider.Dialect == AiProviderDialect.TypeSafeJev)
                 return new ApiErrorResult(400, "ai_provider_not_routable", $"Provider '{providerCode}' is a typed-judgment provider and cannot be a feature route target.");
+
+            // Capability gate (owner directive 2026-10-09): a route is only accepted when the target
+            // model was OBSERVED to do what the feature needs. Without this, a route onto a model that
+            // cannot OCR / stream / emit JSON is accepted here and fails at call time, where the
+            // failure looks like a vendor outage rather than a misconfiguration.
+            var requestedModel = string.IsNullOrWhiteSpace(dto.Model) ? null : dto.Model.Trim();
+            var capability = requestedModel is null
+                ? null
+                : await db.AiProviderModelCapabilities.AsNoTracking()
+                    .FirstOrDefaultAsync(c => c.ProviderCode == providerCode && c.Model == requestedModel, ct);
+
+            var providerForGate = new AiProvider
+            {
+                Id = routeProvider.Id,
+                Code = providerCode,
+                Name = providerCode,
+                Category = routeProvider.Category,
+                Dialect = routeProvider.Dialect,
+                DefaultModel = routeProvider.DefaultModel,
+            };
+            var verdict = AiFeatureCapabilityRequirements.Evaluate(featureCode, providerForGate, capability, requestedModel);
+            if (!verdict.Allowed)
+                return new ApiErrorResult(400, "ai_provider_capability_mismatch", verdict.Reason);
 
             var now = DateTimeOffset.UtcNow;
             var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == featureCode, ct);
@@ -1604,6 +1816,16 @@ public sealed record AiFeatureRouteUpsertDto(
     string? Model,
     bool IsActive,
     string? BenchmarkRunId = null);
+
+/// <summary>Turn a provider row's participation in implicit ("first active credentialed row")
+/// selection on or off. Stored per row so a vendor's reachability is an owner decision from the
+/// admin screen rather than a hardcoded code list needing a deploy.</summary>
+public sealed record UpdateAiProviderAutoSelectionDto(bool Enabled);
+
+/// <summary>Which models to probe. Omit <see cref="Models"/> to probe the row's default model plus
+/// every model in its allow-list. Bound from the BODY explicitly — a bare <c>string[]</c> parameter
+/// would bind from the query string and silently ignore the request payload.</summary>
+public sealed record AiProviderCapabilityProbeRequest(string[]? Models = null);
 
 /// <summary>Partial update for the Writing AI subscription provider control.
 /// Null fields are left unchanged; <see cref="ClearQuotaMarker"/> resets the

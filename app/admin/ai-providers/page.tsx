@@ -24,6 +24,7 @@ import {
   type AiProviderTestStatus,
 } from '@/lib/ai-management-api';
 import { AiProviderAccountsModal } from '@/components/domain/ai-provider-accounts-modal';
+import { AiProviderAutoSelectionPanel, AiProviderCapabilityPanel } from '@/components/domain/ai-provider-capability-panel';
 import { AiFeatureRoutesPanel } from '@/components/domain/ai-feature-routes-panel';
 import { AiFeatureToolGrantsPanel } from '@/components/domain/ai-feature-tool-grants-panel';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
@@ -373,6 +374,31 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     failoverPriority: 900,
     isActive: false,
   },
+  'z-ai': {
+    // Z.AI / GLM international platform (owner directive 2026-10-09). Mirrors ZaiProviderDefaults.cs.
+    // Key shape is {32-hex}.{16-char}; the China platform (open.bigmodel.cn) is a DIFFERENT account
+    // with a different balance, so this preset targets the international endpoint deliberately.
+    code: 'z-ai',
+    name: 'Z.AI (GLM)',
+    dialect: 'OpenAiCompatible',
+    category: 'TextChat',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    // Multimodal: the assistant sends image + document attachments and several call sites emit
+    // strict JSON, so the Flash line rather than the text-only flagship.
+    defaultModel: 'glm-5.3-flash',
+    // Published Z.AI rates per 1K ($0.15 in / $0.50 out per 1M). The old env-seeded values of
+    // 0.015 / 0.075 were $15 / $75 per 1M — 100x too high.
+    pricePer1kPromptTokens: 0.00015,
+    pricePer1kCompletionTokens: 0.0005,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    // Behind anthropic (20) so Z.AI does not silently take over unrouted features.
+    failoverPriority: 100,
+    // Inactive and not auto-selectable until you paste the key, run Test, and probe capabilities.
+    isActive: false,
+    reasoningEffort: 'low',
+  },
 };
 
 export default function AiProvidersPage() {
@@ -596,6 +622,8 @@ export default function AiProvidersPage() {
         }
         footer={
           <div className="space-y-6">
+            <AiProviderCapabilityPanel />
+            <AiProviderAutoSelectionPanel />
             <AiFeatureRoutesPanel />
             <AiFeatureToolGrantsPanel />
           </div>

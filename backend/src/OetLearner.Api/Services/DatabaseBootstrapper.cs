@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Extensions.Logging;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Services;
 
@@ -95,69 +97,169 @@ public static class DatabaseBootstrapper
     }
 
     /// <summary>
-    /// Copy the AI provider configuration from environment variables
-    /// (<c>AI__ApiKey</c>, <c>AI__BaseUrl</c>, <c>AI__DefaultModel</c>,
-    /// <c>AI__ProviderId</c>) into the <c>AiProviders</c> row so the
-    /// registry-backed provider resolves the key at runtime. Encrypts the
-    /// key with the Data Protection key ring before persistence.
+    /// Create provider rows from the environment at first boot, so a new deployment has a working
+    /// provider without anyone pasting a key by hand.
     ///
-    /// Idempotent: runs on every boot, updates only when the plain-text
-    /// env value actually differs from what the stored ciphertext decrypts
-    /// to. Call sites outside bootstrap should never touch these rows.
+    /// <para>
+    /// Two independent channels:
+    /// <list type="bullet">
+    /// <item><c>AI__ApiKey</c> / <c>AI__BaseUrl</c> / <c>AI__DefaultModel</c> / <c>AI__ProviderId</c>
+    /// — the original platform-key channel, keyed by <c>AI__ProviderId</c> (default
+    /// <c>digitalocean-serverless</c>).</item>
+    /// <item><c>ZAI__ApiKey</c> / <c>ZAI__BaseUrl</c> / <c>ZAI__DefaultModel</c> — a dedicated
+    /// channel for the <c>z-ai</c> row.</item>
+    /// </list>
+    ///
+    /// <para>
+    /// The dedicated channel is not redundancy. <c>AI__ProviderId</c> does double duty: it is both
+    /// the row code here AND the DI name of the legacy env-only provider
+    /// (<c>OpenAiCompatibleProvider.Name</c>). Because <c>AiGatewayService</c> matches
+    /// <c>p.Name == request.Provider</c> BEFORE consulting the registry, setting
+    /// <c>AI__ProviderId=z-ai</c> would create a shadow provider that reads the env key and the
+    /// runtime-settings base URL — never the registry's encrypted key. Separate variables keep the
+    /// two roles from colliding.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Create-only.</b> An existing row is NEVER rewritten from the environment (owner directive
+    /// 2026-10-09): once the row exists, the dashboard owns the key, the models and the on/off
+    /// switch. When env is present but the row already exists this now LOGS that env is being
+    /// ignored — previously it returned in silence, which is how an env edit becomes a mystery.
+    /// </para>
     /// </summary>
     public static async Task SynchroniseAiProviderFromEnvAsync(
         LearnerDbContext db,
         IDataProtectionProvider dpProvider,
         AiProviderOptions options,
+        ILogger logger,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(options.ApiKey)) return;
-        var code = string.IsNullOrWhiteSpace(options.ProviderId)
-            ? "digitalocean-serverless" : options.ProviderId.Trim().ToLowerInvariant();
+        await SynchroniseOneAsync(
+            db, dpProvider, logger,
+            providerCode: string.IsNullOrWhiteSpace(options.ProviderId)
+                ? AiProviderEnvSeedDefaults.DigitalOceanCode
+                : options.ProviderId.Trim(),
+            apiKey: options.ApiKey,
+            baseUrl: options.BaseUrl,
+            defaultModel: options.DefaultModel,
+            reasoningEffort: options.ReasoningEffort,
+            envPrefix: "AI__",
+            cancellationToken);
 
-        var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Code == code, cancellationToken);
-        var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
-        var encrypted = protector.Protect(options.ApiKey);
-        var model = string.IsNullOrWhiteSpace(options.DefaultModel)
-            ? "glm-5" : options.DefaultModel;
-        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
-            ? "https://inference.do-ai.run/v1" : options.BaseUrl;
+        // The Z.AI channel. Read directly rather than through options because it is a distinct
+        // vendor with its own balance, not a second name for the platform key.
+        await SynchroniseOneAsync(
+            db, dpProvider, logger,
+            providerCode: ZaiProviderDefaults.ProviderCode,
+            apiKey: Environment.GetEnvironmentVariable("ZAI__ApiKey"),
+            baseUrl: Environment.GetEnvironmentVariable("ZAI__BaseUrl"),
+            defaultModel: Environment.GetEnvironmentVariable("ZAI__DefaultModel"),
+            reasoningEffort: ZaiProviderDefaults.DefaultReasoningEffort,
+            envPrefix: "ZAI__",
+            cancellationToken);
+    }
 
-        var hint = options.ApiKey.Length > 10
-            ? options.ApiKey[..4] + "..." + options.ApiKey[^4..]
-            : "(short)";
-
-        var now = DateTimeOffset.UtcNow;
-        if (row is null)
+    private static async Task SynchroniseOneAsync(
+        LearnerDbContext db,
+        IDataProtectionProvider dpProvider,
+        ILogger logger,
+        string providerCode,
+        string? apiKey,
+        string? baseUrl,
+        string? defaultModel,
+        string? reasoningEffort,
+        string envPrefix,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            db.AiProviders.Add(new AiProvider
+            // Previously a silent return: a blank key created nothing and logged nothing, so
+            // "why is there no provider row" had no answer anywhere in the logs.
+            if (AiProviderEnvSeedDefaults.IsKnown(providerCode))
             {
-                Id = Guid.NewGuid().ToString("N"),
-                Code = code,
-                Name = "DigitalOcean Serverless Inference (GLM-5)",
-                Dialect = AiProviderDialect.OpenAiCompatible,
-                BaseUrl = baseUrl,
-                EncryptedApiKey = encrypted,
-                ApiKeyHint = hint,
-                DefaultModel = model,
-                ReasoningEffort = string.IsNullOrWhiteSpace(options.ReasoningEffort) ? null : options.ReasoningEffort.Trim().ToLowerInvariant(),
-                PricePer1kPromptTokens = 0.015m,
-                PricePer1kCompletionTokens = 0.075m,
-                RetryCount = 2,
-                CircuitBreakerThreshold = 5,
-                CircuitBreakerWindowSeconds = 30,
-                FailoverPriority = 100,
-                IsActive = true,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-            await db.SaveChangesAsync(cancellationToken);
+                logger.LogWarning(
+                    "{Env}ApiKey is not set; no '{Code}' provider row will be created from the environment. "
+                    + "The provider must be added from /admin/ai-providers instead.",
+                    envPrefix, providerCode);
+            }
             return;
         }
 
-        // Owner directive 2026-10-09: an existing row is NEVER rewritten from the environment. Credentials, models and
-        // on/off are managed in the admin Pipeline page; the environment can only create a missing row at first setup.
-        return;
+        var code = providerCode.Trim().ToLowerInvariant();
+        var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Code == code, cancellationToken);
+
+        var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+        var encrypted = protector.Protect(apiKey);
+
+        if (row is not null)
+        {
+            // Owner directive 2026-10-09: an existing row is NEVER rewritten from the environment.
+            // Say so, or the next person to edit the env file concludes it took effect.
+            logger.LogInformation(
+                "'{Code}' already exists; {Env}ApiKey is being IGNORED. The stored (encrypted) key, "
+                + "model and active flag are managed from the admin AI Providers screen.",
+                code, envPrefix);
+            return;
+        }
+
+        // Identity and pricing come from the per-code seed table so a Z.AI row is never labelled
+        // DigitalOcean and is never costed at the old 100x-wrong rates.
+        var seed = AiProviderEnvSeedDefaults.For(code);
+        var name = seed?.DisplayName ?? code;
+        var resolvedBaseUrl = !string.IsNullOrWhiteSpace(baseUrl) ? baseUrl.Trim() : seed?.DefaultBaseUrl ?? "";
+        var model = !string.IsNullOrWhiteSpace(defaultModel) ? defaultModel.Trim() : seed?.DefaultModel ?? "";
+        var rates = seed?.RateResolver(model) ?? (0m, 0m);
+
+        var hint = apiKey.Length > 10
+            ? apiKey[..4] + "..." + apiKey[^4..]
+            : "(short)";
+
+        var now = DateTimeOffset.UtcNow;
+        var created = new AiProvider
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = code,
+            Name = name,
+            Dialect = AiProviderDialect.OpenAiCompatible,
+            BaseUrl = resolvedBaseUrl,
+            EncryptedApiKey = encrypted,
+            ApiKeyHint = hint,
+            DefaultModel = model,
+            ReasoningEffort = string.IsNullOrWhiteSpace(reasoningEffort) ? null : reasoningEffort.Trim().ToLowerInvariant(),
+            PricePer1kPromptTokens = rates.PromptPer1k,
+            PricePer1kCompletionTokens = rates.CompletionPer1k,
+            RetryCount = 2,
+            CircuitBreakerThreshold = 5,
+            CircuitBreakerWindowSeconds = 30,
+            FailoverPriority = seed?.FailoverPriority ?? 100,
+            IsActive = true,
+            // Registered but NOT auto-selectable. A row created by the environment must never
+            // become the implicit "first active credentialed row" for every feature nobody routed;
+            // the owner opts it in from /admin/ai-providers.
+            ParticipatesInAutoSelection = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        if (seed is null)
+        {
+            // An unknown code means we would be inventing a display name and pricing. Say so rather
+            // than writing a row that looks official and costs nothing.
+            logger.LogWarning(
+                "Provider code '{Code}' is not a known env seed; the row was created with the code as its "
+                + "name and ZERO prices. Set its name, base URL and rates from /admin/ai-providers, or add it "
+                + "to AiProviderEnvSeedDefaults.",
+                code);
+        }
+
+        db.AiProviders.Add(created);
+        await db.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation(
+            "Created provider row '{Code}' ({Name}) from the environment: base {BaseUrl}, model {Model}, "
+            + "auto-selection OFF. Verify it from /admin/ai-providers, then opt it in if you want it considered "
+            + "for unrouted features.",
+            code, name, resolvedBaseUrl, model);
     }
 
 #pragma warning disable EF1002 // Identifiers come from EF model metadata and are sanitized with QuoteIdentifier.

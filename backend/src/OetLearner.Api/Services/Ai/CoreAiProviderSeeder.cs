@@ -23,6 +23,9 @@ namespace OetLearner.Api.Services.Ai;
 ///   <item><c>opencode</c> — OpenCode inference gateway (OpenAI-compatible text chat, seeded
 ///   INACTIVE and keyless; explicit-only, reached solely through the learner chatbot's model
 ///   picker — see <see cref="AiProviderDefaultEligibility"/>).</item>
+///   <item><c>z-ai</c> — Z.AI / GLM international platform (OpenAI-compatible text chat, seeded
+///   INACTIVE, keyless and NOT auto-selectable; reached only where a capability-gated route points
+///   at it). See <c>ZaiProviderDefaults</c> and <c>docs/ops/ZAI-PROVIDER.md</c>.</item>
 /// </list>
 /// <para>
 /// Safety: strictly additive. Rows are seeded <b>keyless</b>
@@ -99,6 +102,10 @@ public sealed class CoreAiProviderSeeder(
                     CircuitBreakerWindowSeconds = 30,
                     FailoverPriority = s.FailoverPriority,
                     IsActive = s.IsActive,
+                    // Every seeded row is registered-but-not-auto-selected. Seeding a row must never
+                    // be the thing that makes a vendor the implicit provider for features nobody
+                    // routed; opting in is an explicit owner action on the row.
+                    ParticipatesInAutoSelection = false,
                     CreatedAt = now,
                     UpdatedAt = now,
                 });
@@ -210,6 +217,28 @@ public sealed class CoreAiProviderSeeder(
             IsActive: false,
             AllowedModelsCsv: OpenCodeProviderDefaults.AllowedModelsCsv,
             ReasoningEffort: OpenCodeProviderDefaults.DefaultReasoningEffort),
+
+        // Z.AI / GLM (owner directive 2026-10-09). Keyless and INACTIVE: the row exists so the admin
+        // screen offers the correct name, base URL, model list and REAL prices, and so the capability
+        // probe has a row to write against. It ships not-auto-selectable for the same reason OpenCode
+        // does, plus one more: adding a vendor must not silently change who serves Reading
+        // explanations or vocabulary cards (AiProviderDefaultEligibility).
+        //
+        // Prices are the researched Z.AI rates per 1K. The env bootstrapper used to hardcode
+        // 0.015/0.075 per 1K = $15/$75 per 1M, which is 100x too high for every current Z.AI model.
+        new CoreProviderSeed(
+            Code: ZaiProviderDefaults.ProviderCode,
+            Name: ZaiProviderDefaults.ProviderName,
+            Category: AiProviderCategory.TextChat,
+            Dialect: AiProviderDialect.OpenAiCompatible,
+            BaseUrl: ZaiProviderDefaults.BaseUrl,
+            DefaultModel: ZaiProviderDefaults.DefaultModel,
+            PricePer1kPromptTokens: ZaiProviderDefaults.RatesFor(ZaiProviderDefaults.DefaultModel).PromptPer1k,
+            PricePer1kCompletionTokens: ZaiProviderDefaults.RatesFor(ZaiProviderDefaults.DefaultModel).CompletionPer1k,
+            FailoverPriority: ZaiProviderDefaults.FailoverPriority,
+            IsActive: false,
+            AllowedModelsCsv: ZaiProviderDefaults.AllowedModelsCsv,
+            ReasoningEffort: ZaiProviderDefaults.DefaultReasoningEffort),
     };
 }
 

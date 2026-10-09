@@ -273,6 +273,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     // AiProviderAccountRegistry.PickAndReserveAsync.
     public DbSet<AiProviderAccount> AiProviderAccounts => Set<AiProviderAccount>();
 
+    // Live-probed per-model capabilities. A provider row serves many models with genuinely
+    // different abilities (Z.AI: multimodal vs text-only vs vision-without-JSON-mode), so
+    // capability is per model, and every flag is observed rather than documented.
+    public DbSet<AiProviderModelCapability> AiProviderModelCapabilities => Set<AiProviderModelCapability>();
+
     // Per-feature routing overrides (Phase 7). One row per FeatureCode that
     // pins a provider; consulted by AiFeatureRouteResolver before the
     // global failover-priority default.

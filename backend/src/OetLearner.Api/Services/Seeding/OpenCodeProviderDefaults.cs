@@ -55,9 +55,13 @@ public static class OpenCodeProviderDefaults
     public const string LearnerBusyMessage =
         "The AI provider service is busy at the moment. Please try again later after a few minutes.";
 
-    /// <summary>Provider codes that may only be selected explicitly. A real-key row has no marker
-    /// key, so without this list it would qualify for every "first active credentialed row" pick.
-    /// A string[] so EF Core can translate <c>Contains</c>.</summary>
+/// <summary>RETIRED (2026-10-09): auto-selection eligibility is now per-row state —
+/// <c>AiProvider.ParticipatesInAutoSelection</c>, owner-editable from /admin/ai-providers — so this
+/// list is no longer read by any default-selection site. The one behaviour it could express that
+/// stored state cannot, "a DELETED row must refuse rather than fall through to the mock provider",
+/// is frozen as <c>AiAssistantGateway.RequiredActiveRowCodes</c>. Kept for reference only; do not
+/// add codes here, add them there.</summary>
+[Obsolete("Replaced by AiProvider.ParticipatesInAutoSelection; see AiAssistantGateway.RequiredActiveRowCodes for the absence case.")]
     public static readonly string[] ExplicitOnlyCodes = [ProviderCode];
 
     /// <summary>True for <c>opencode.ai</c> and any subdomain of it.</summary>

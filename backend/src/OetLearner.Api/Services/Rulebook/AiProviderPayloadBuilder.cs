@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiTools;
+using OetLearner.Api.Services.Seeding;
 
 namespace OetLearner.Api.Services.Rulebook;
 
@@ -177,6 +179,93 @@ internal static class AiProviderPayloadBuilder
             || normalized.StartsWith("o3", StringComparison.Ordinal)
             || normalized.StartsWith("o4", StringComparison.Ordinal)
             || normalized.StartsWith("o5", StringComparison.Ordinal);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Vendor request limits.
+    //
+    // These are WHOLE-REQUEST rejections, not warnings: Z.AI answers an unsupported
+    // parameter with HTTP 400 and error code 1214, so an unfiltered payload fails the
+    // whole call rather than degrading one field. Enforcing them centrally here — beside the
+    // existing MaxTokensParameter / IsOpenAiReasoningModel rules — means no call site has to
+    // remember, and the next vendor with the same constraint is a table entry rather than
+    // another scattered conditional.
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Value of <c>temperature</c> a host will accept, or <see langword="null"/> to omit the
+    /// parameter entirely.
+    ///
+    /// <para>
+    /// Z.AI documents the range as (0, 1] and states outright that
+    /// <c>do_sample = False (temperature = 0) is not applicable in OpenAI calls</c>; a 0 is
+    /// rejected with a 400. Many call sites legitimately want a deterministic 0, so the value
+    /// is clamped to the vendor's floor rather than passed through.
+    /// </para>
+    /// </summary>
+    public static double? ResolveTemperature(double? requested, string? baseUrl)
+    {
+        if (requested is null) return null;
+        if (ZaiProviderDefaults.IsZaiBaseUrl(baseUrl)
+            && requested.Value <= ZaiProviderDefaults.RequestLimits.MinTemperature)
+        {
+            return ZaiProviderDefaults.RequestLimits.MinTemperature;
+        }
+        return requested;
+    }
+
+    /// <summary>
+    /// The <c>tool_choice</c> value a host will accept, or <see langword="null"/> to omit it.
+    ///
+    /// <para>
+    /// Z.AI's schema is a single-member enum containing only <c>"auto"</c>: no <c>"none"</c>,
+    /// no <c>"required"</c>, no forced-function object. Sending any of those is a 400, so a
+    /// request that wanted to suppress tool calls must simply omit the parameter — which is
+    /// what the OpenAI default does anyway, so nothing is lost.
+    /// </para>
+    /// </summary>
+    public static string? ResolveToolChoice(string? requested, string? baseUrl)
+    {
+        if (string.IsNullOrWhiteSpace(requested)) return null;
+        if (!ZaiProviderDefaults.IsZaiBaseUrl(baseUrl)) return requested;
+        return string.Equals(requested.Trim(), ZaiProviderDefaults.RequestLimits.OnlyToolChoice, StringComparison.Ordinal)
+            ? ZaiProviderDefaults.RequestLimits.OnlyToolChoice
+            : null;
+    }
+
+    /// <summary>
+    /// Should <c>response_format</c> be sent at all?
+    ///
+    /// <para>
+    /// Driven by the OBSERVED probe result rather than by the vendor name: Z.AI's published
+    /// schema binds its multimodal GLM models to a request shape with no <c>response_format</c>
+    /// key whatsoever, while the model page advertises Structured Output. Where the probe has
+    /// a recorded answer we obey it. Where there is no probe row we send it (current behaviour)
+    /// rather than silently dropping a feature's strict-JSON contract — an unprobed model is
+    /// not yet known to be incapable, and a wrong omission would break a working call.
+    /// </para>
+    /// </summary>
+    public static bool ShouldSendResponseFormat(AiProviderModelCapability? capability, string? model)
+    {
+        if (capability is null) return true;
+        var effective = string.IsNullOrWhiteSpace(model) ? capability.Model : model.Trim();
+        if (!string.Equals(capability.Model, effective, StringComparison.OrdinalIgnoreCase)) return true;
+        // Only a successful probe is authoritative; a failed one leaves the question open.
+        return capability.ProbeStatus is not ("ok" or "partial") || capability.SupportsJsonMode;
+    }
+
+    /// <summary>Clamp a requested output-token ceiling to what the host/model will accept.</summary>
+    public static int ClampMaxTokens(int requested, string? baseUrl, AiProviderModelCapability? capability, string? model)
+    {
+        var ceiling = int.MaxValue;
+        if (ZaiProviderDefaults.IsZaiBaseUrl(baseUrl))
+            ceiling = ZaiProviderDefaults.RequestLimits.MaxTokensCeiling;
+        if (capability is not null && capability.MaxTokensCeiling > 0
+            && string.Equals(capability.Model, (model ?? capability.Model).Trim(), StringComparison.OrdinalIgnoreCase))
+        {
+            ceiling = Math.Min(ceiling, capability.MaxTokensCeiling);
+        }
+        return ceiling == int.MaxValue ? requested : Math.Min(requested, ceiling);
     }
 
     /// <summary>The <c>input_audio</c> content parts for the request's audio attachments: only for an

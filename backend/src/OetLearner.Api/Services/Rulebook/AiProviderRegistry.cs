@@ -31,6 +31,17 @@ public interface IAiProviderRegistry
     Task<IReadOnlyList<AiProvider>> ListByCategoryAsync(AiProviderCategory category, CancellationToken ct);
     /// <summary>Return platform-held API key plaintext, decrypted.</summary>
     Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct);
+    /// <summary>
+    /// The live-probed capability record for one model on one provider row, or <see langword="null"/>
+    /// when the model has never been probed.
+    ///
+    /// <para>
+    /// Null is meaningful and must stay meaningful: it means "not established", and every consumer
+    /// treats it as "no evidence" rather than as "capable". It is what keeps the payload shims from
+    /// changing behaviour for the providers nobody has probed yet.
+    /// </para>
+    /// </summary>
+    Task<AiProviderModelCapability?> FindCapabilityAsync(string? providerCode, string? model, CancellationToken ct);
 }
 
 public sealed class AiProviderRegistry(
@@ -91,6 +102,19 @@ public sealed class AiProviderRegistry(
     private static bool IsInternalBaseUrl(string? baseUrl)
         => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
            && AiProviderConnectionTester.IsInternalAiHost(uri.Host);
+
+    public async Task<AiProviderModelCapability?> FindCapabilityAsync(string? providerCode, string? model, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(providerCode) || string.IsNullOrWhiteSpace(model)) return null;
+        var code = providerCode.Trim().ToLowerInvariant();
+        var wanted = model.Trim();
+        // EF translates this to a case-sensitive equality on a unique index, so match in memory
+        // instead: model ids are stored exactly as sent, but callers vary the casing.
+        var candidates = await db.AiProviderModelCapabilities.AsNoTracking()
+            .Where(c => c.ProviderCode == code)
+            .ToListAsync(ct);
+        return candidates.FirstOrDefault(c => string.Equals(c.Model, wanted, StringComparison.OrdinalIgnoreCase));
+    }
 }
 
 /// <summary>
@@ -236,9 +260,25 @@ public sealed class RegistryBackedProvider(
         }
         if (first is not null)
         {
-            if (first.Code == "opencode" && (!OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(first.BaseUrl)
-                || !first.AllowedModelsCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).Contains(request.Model)))
+            // Model allow-list enforcement (owner directive 2026-10-09).
+            //
+            // This used to be guarded by `first.Code == "opencode"`, which made the column a lie on
+            // every other row: stored, displayed in the admin editor, and never checked. A stored
+            // allow-list that is not enforced is worse than none, because an admin reads it as a
+            // guarantee — so it is now enforced for ANY row that declares one.
+            //
+            // Empty means "no restriction" (the documented meaning of the column), so only a
+            // NON-empty list constrains. The OpenCode branch keeps its extra direct-gateway base-URL
+            // check, which is a property of that gateway's protocol and not of the model list.
+            var declaredModels = first.AllowedModelsCsv
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (declaredModels.Length > 0 && !declaredModels.Contains(request.Model, StringComparer.OrdinalIgnoreCase))
+                throw new InvalidOperationException(
+                    $"Model '{request.Model}' is not in the allow-list for provider '{first.Code}'. Check /admin/ai-providers.");
+            if (OpenCodeProviderDefaults.ProviderCode.Equals(first.Code, StringComparison.OrdinalIgnoreCase)
+                && !OpenCodeProviderDefaults.IsDirectGatewayBaseUrl(first.BaseUrl))
                 throw new InvalidOperationException("The selected OpenCode gateway or model is unavailable. Check /admin/ai-providers.");
+
             // Per-provider ReasoningEffort overrides env default when set.
             if (!string.IsNullOrWhiteSpace(first.ReasoningEffort))
                 reasoningEffort = first.ReasoningEffort!.Trim().ToLowerInvariant();
@@ -296,6 +336,14 @@ public sealed class RegistryBackedProvider(
         // OpenAI's first-party reasoning models reject a non-default temperature outright
         // ("Unsupported parameter", like max_tokens), so they are omitted for them.
         var openAiReasoning = AiProviderPayloadBuilder.IsOpenAiReasoningModel(model);
+
+        // Vendor request limits (owner directive 2026-10-09). Z.AI rejects these outright with a 400,
+        // so the values are resolved here rather than at each call site. The capability row is the
+        // probe's recorded answer for THIS model on THIS provider; it is absent for every provider
+        // that has not been probed, in which case the helpers preserve today's behaviour.
+        var capability = await registry.FindCapabilityAsync(request.ProviderCode, model, ct);
+        maxTokens = AiProviderPayloadBuilder.ClampMaxTokens(maxTokens, baseUrl, capability, model);
+
         var payload = new Dictionary<string, object?>
         {
             ["model"] = model,
@@ -305,14 +353,15 @@ public sealed class RegistryBackedProvider(
         };
         if (!openAiReasoning)
         {
-            payload["temperature"] = request.Temperature;
+            var temperature = AiProviderPayloadBuilder.ResolveTemperature(request.Temperature, baseUrl);
+            if (temperature is not null) payload["temperature"] = temperature;
         }
         if (ubagFacade)
         {
             payload["ubag_nonce"] = Guid.NewGuid().ToString("N");
         }
         var responseFormat = AiProviderPayloadBuilder.BuildOpenAiResponseFormat(request.ResponseFormatJson);
-        if (responseFormat is not null)
+        if (responseFormat is not null && AiProviderPayloadBuilder.ShouldSendResponseFormat(capability, model))
         {
             payload["response_format"] = responseFormat;
         }
@@ -330,7 +379,8 @@ public sealed class RegistryBackedProvider(
         if (tools.Count > 0)
         {
             payload["tools"] = tools;
-            if (!string.IsNullOrWhiteSpace(request.ToolChoice)) payload["tool_choice"] = request.ToolChoice;
+            var toolChoice = AiProviderPayloadBuilder.ResolveToolChoice(request.ToolChoice, baseUrl);
+            if (toolChoice is not null) payload["tool_choice"] = toolChoice;
         }
 
         // SAMI UAT finding (2026-10-07): max-effort turns exceed the ~100s non-streamed
@@ -515,6 +565,12 @@ public sealed class RegistryBackedProvider(
         if (m.StartsWith("o1") || m.StartsWith("o3") || m.StartsWith("o4")) return true;
         if (m.Contains("gpt-5")) return true;
         if (m.Contains("thinking")) return true;
+        // Z.AI GLM (owner directive 2026-10-09). Without this branch no glm-* model matched, so
+        // `reasoning_effort` was never sent and Z.AI applied its own DEFAULT of "max" on every turn —
+        // the most expensive setting, unmetered by us, on the surface with the most traffic. GLM-4.5
+        // and later all support reasoning_effort; the value ladder differs from OpenAI's, which is
+        // why the offered set is per-model and driven by the capability probe.
+        if (ZaiProviderDefaults.IsZaiModel(m)) return true;
         return false;
     }
 

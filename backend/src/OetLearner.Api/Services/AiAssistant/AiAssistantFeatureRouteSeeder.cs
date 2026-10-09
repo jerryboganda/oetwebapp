@@ -31,8 +31,10 @@ public sealed class AiAssistantFeatureRouteSeeder(
                                && !string.IsNullOrWhiteSpace(provider.EncryptedApiKey)
                                // Never seed an assistant route onto a keyless subscription sidecar row.
                                && provider.EncryptedApiKey != OetLearner.Api.Services.Seeding.WritingSubscriptionProviderDefaults.MarkerKey
-                               // Nor onto an explicit-only provider (OpenCode): reachable only by a deliberate pick.
-                               && !OetLearner.Api.Services.Seeding.OpenCodeProviderDefaults.ExplicitOnlyCodes.Contains(provider.Code))
+                               // Nor onto a row that does not participate in automatic selection
+                               // (OpenCode, and every vendor row added since that column landed):
+                               // reachable only by a deliberate pick, never as a seeded default.
+                               && provider.ParticipatesInAutoSelection)
             .OrderBy(provider => provider.FailoverPriority)
             .FirstOrDefaultAsync(ct);
         if (defaultProvider is null)

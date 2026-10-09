@@ -173,12 +173,63 @@ export interface AiProviderRow {
   circuitBreakerWindowSeconds: number;
   failoverPriority: number;
   isActive: boolean;
+  /**
+   * May this row be picked implicitly for a feature nobody routed? Stored per row
+   * (owner directive 2026-10-09). False = reachable only where a route points at it.
+   */
+  participatesInAutoSelection: boolean;
   /** Phase 4: last admin-initiated connection probe outcome. */
   lastTestedAt: string | null;
   lastTestStatus: AiProviderTestStatus | null;
   lastTestError: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** One model's OBSERVED abilities. Every flag comes from a live probe, never from vendor docs. */
+export interface AiProviderModelCapabilityRow {
+  model: string;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  supportsDocuments: boolean;
+  supportsJsonMode: boolean;
+  supportsEmbeddings: boolean;
+  supportsStreaming: boolean;
+  supportsThinking: boolean;
+  /** False when the model is forced-on and cannot be turned off (Z.AI GLM-5.3 / 5.3-FLASH). */
+  thinkingCanBeDisabled: boolean;
+  allowedReasoningEffortsCsv: string;
+  maxTokensCeiling: number;
+  contextTokens: number;
+  /** ok | partial | auth | rate_limited | network | rejected | unknown */
+  probeStatus: string;
+  probeDetail: string | null;
+  probedAtUtc: string | null;
+}
+
+export interface AiProviderAutoSelectionSnapshot {
+  /** The row an unrouted feature would resolve to right now; null means none is eligible. */
+  winner: {
+    id: string;
+    code: string;
+    name: string;
+    dialect: AiProviderDialect;
+    defaultModel: string;
+    failoverPriority: number;
+  } | null;
+  eligible: { code: string; name: string; failoverPriority: number }[];
+  all: {
+    id: string;
+    code: string;
+    name: string;
+    dialect: AiProviderDialect;
+    isActive: boolean;
+    failoverPriority: number;
+    participatesInAutoSelection: boolean;
+    hasKey: boolean;
+    /** Why this row cannot win the implicit-default pick; null when it can. */
+    reason: string | null;
+  }[];
 }
 
 export interface AiUserPolicySnapshot {
@@ -468,6 +519,65 @@ export const testAiProviderModel = (code: string, model: string) =>
  */
 export const discoverAiProviderModels = (code: string) =>
   aiApi<{ models: string[] }>(`/v1/admin/ai/providers/${encodeURIComponent(code)}/models`);
+
+// ═════════════════════════════════════════════════════════════════════════
+// Admin — live capability probe + auto-selection (owner directive 2026-10-09)
+// ═════════════════════════════════════════════════════════════════════════
+
+/**
+ * Probe the provider's REAL capabilities against the LIVE endpoint with the
+ * REAL key and store what each model was observed to do.
+ *
+ * Documentation cannot answer this for Z.AI — its OpenAPI schema and its model
+ * page contradict each other about `response_format` — so this exists to settle
+ * the question with one observed call. Server-side and on demand; never CI.
+ *
+ * Omit `models` to probe the row's default model plus every allow-listed model.
+ */
+export const probeAiProviderCapabilities = (code: string, models?: string[]) =>
+  aiApi<{
+    providerCode: string;
+    probedAt: string;
+    results: AiProviderModelCapabilityRow[];
+  }>(`/v1/admin/ai/providers/${encodeURIComponent(code)}/probe-capabilities`, {
+    method: 'POST',
+    body: JSON.stringify({ models: models ?? null }),
+  });
+
+/** Read stored probe results without re-probing. */
+export const fetchAiProviderCapabilities = (code: string) =>
+  aiApi<{ providerCode: string; capabilities: AiProviderModelCapabilityRow[] }>(
+    `/v1/admin/ai/providers/${encodeURIComponent(code)}/capabilities`,
+  );
+
+/**
+ * Who currently wins the implicit ("first active credentialed row") pick, and why
+ * each row cannot. Without this the auto-selection toggle is a leap of faith.
+ */
+export const fetchAiProviderAutoSelection = () =>
+  aiApi<AiProviderAutoSelectionSnapshot>('/v1/admin/ai/providers/auto-selection');
+
+/** Turn a row's participation in implicit selection on or off. */
+export const updateAiProviderAutoSelection = (code: string, enabled: boolean) =>
+  aiApi<{
+    id: string;
+    code: string;
+    participatesInAutoSelection: boolean;
+    failoverPriority: number;
+    reason: string | null;
+  }>(`/v1/admin/ai/providers/${encodeURIComponent(code)}/auto-selection`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  });
+
+/** Which feature codes this provider's current default model could serve, and which it could not. */
+export const fetchAiProviderUnsupportedFeatures = (code: string) =>
+  aiApi<{
+    providerCode: string;
+    evaluatedModel: string;
+    supported: string[];
+    unsupported: { featureCode: string; reason: string }[];
+  }>(`/v1/admin/ai/providers/${encodeURIComponent(code)}/unsupported-features`);
 
 // ═════════════════════════════════════════════════════════════════════════
 // Admin — provider account pool (multi-PAT failover)

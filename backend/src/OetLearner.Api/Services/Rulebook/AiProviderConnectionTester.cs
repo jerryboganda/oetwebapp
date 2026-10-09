@@ -775,6 +775,27 @@ public sealed class AiProviderConnectionTester(
         => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
            && string.Equals(uri.Host, "ubag-vps-gateway-1", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Does this endpoint need a real reasoning token budget for a connectivity probe?
+    ///
+    /// <para>
+    /// A 1-token probe is enough for an ordinary chat model: it answers, and the probe only cares
+    /// that the endpoint is reachable and the key is accepted. It is actively WRONG for a reasoning
+    /// model, which spends its budget thinking before it answers and then returns
+    /// <c>finish_reason=length</c> with empty content — indistinguishable from a bad key.
+    /// </para>
+    ///
+    /// <para>
+    /// Keyed on HOST, deliberately. Naming model ids instead would also change the DigitalOcean
+    /// Serverless probe (its default model is <c>glm-5</c>), which is outside this change; that row
+    /// carries the same latent false-failure risk and should be revisited separately, with its own
+    /// verification, rather than silently altered here.
+    /// </para>
+    /// </summary>
+    private static bool RequiresThinkingBudget(string? baseUrl)
+        => OpenCodeProviderDefaults.IsOpenCodeBaseUrl(baseUrl)
+           || ZaiProviderDefaults.IsZaiBaseUrl(baseUrl);
+
     private static HttpRequestMessage BuildChatCompletionsProbe(string baseUrl, string apiKey, string? defaultModel, bool fullPipeline = false)
     {
         var url = new Uri(new Uri(TrimBase(baseUrl) + "/", UriKind.Absolute), "chat/completions");
@@ -787,16 +808,21 @@ public sealed class AiProviderConnectionTester(
             new { role = "system", content = "Reply with the single word OK." },
             new { role = "user", content = fullPipeline ? "ping — reply with a single word." : "ping" },
         };
-        if (OpenCodeProviderDefaults.IsOpenCodeBaseUrl(baseUrl))
+        if (RequiresThinkingBudget(baseUrl))
         {
-            // OpenCode gateway: the same identity headers a real call sends (so the probe predicts
-            // runtime), and none of the UBAG/Azure extras below — a third-party gateway gets only
-            // what it documents, and its own key must not be echoed into a second header.
+            // Reasoning-model gateways: the same identity headers a real call sends (so the probe
+            // predicts runtime), and none of the UBAG/Azure extras below — a third-party gateway gets
+            // only what it documents, and its own key must not be echoed into a second header.
             // DeepSeek (a reasoning model by default) spends the token budget thinking before it
-            // answers, so a 1-token probe reports finish_reason=length with empty content. The
-            // probe here tests connectivity/auth/availability, so it grants a real thinking budget.
+            // answers, so a 1-token probe reports finish_reason=length with empty content. Z.AI is the
+            // same failure with a worse symptom: GLM-5.x thinking is FORCED and cannot be disabled, so
+            // a 1-token probe returns empty content against a perfectly valid key — the admin reads
+            // "failed", concludes the key is bad, and is simply wrong.
+            //
+            // The probe here tests connectivity/auth/availability, so it grants a real thinking budget.
             maxTokens = 512;
-            OpenCodeGatewayHeaders.Apply(req.Headers, sessionKey: null);
+            if (OpenCodeProviderDefaults.IsOpenCodeBaseUrl(baseUrl))
+                OpenCodeGatewayHeaders.Apply(req.Headers, sessionKey: null);
             req.Content = JsonContent.Create(new { model, max_tokens = maxTokens, messages });
             return req;
         }

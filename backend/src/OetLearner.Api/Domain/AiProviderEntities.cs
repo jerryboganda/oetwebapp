@@ -160,6 +160,26 @@ public class AiProvider
 
     public bool IsActive { get; set; } = true;
 
+    /// <summary>
+    /// May this row be picked IMPLICITLY — "the first active credentialed row" — by any
+    /// default-selection site (<c>AiProviderDefaultEligibility</c>)?
+    ///
+    /// <para>
+    /// <see cref="IsActive"/> and this flag are deliberately independent, giving three states:
+    /// an <b>off</b> row (unreachable), a row that is active and keyed but
+    /// <see langword="false"/> here (registered and testable, reachable only where an admin
+    /// routes it explicitly), and a row that participates in automatic selection.
+    /// </para>
+    ///
+    /// <para>
+    /// This replaced a hardcoded code list (<c>OpenCodeProviderDefaults.ExplicitOnlyCodes</c>):
+    /// a new vendor row must not silently become the provider for every feature nobody routed.
+    /// Owner-editable from <c>/admin/ai-providers</c>, default <see langword="false"/> so a
+    /// freshly seeded row is never auto-selected until it is asked for.
+    /// </para>
+    /// </summary>
+    public bool ParticipatesInAutoSelection { get; set; }
+
     /// <summary>Phase 4: timestamp of the most recent admin-initiated
     /// connectivity probe via <c>POST /v1/admin/ai/providers/{code}/test</c>.
     /// Null = never tested.</summary>
@@ -184,6 +204,101 @@ public class AiProvider
 
     [MaxLength(64)]
     public string? UpdatedByAdminId { get; set; }
+}
+
+/// <summary>
+/// Observed capabilities of ONE model on ONE provider row. Z.AI ships models with genuinely
+/// different abilities: <c>glm-5.3-flash</c> is multimodal with a 1M context, <c>glm-5.3</c> is
+/// text-only, <c>glm-4.6v</c> has vision but no JSON mode.
+///
+/// <para>
+/// Capabilities therefore cannot live on <see cref="AiProvider"/>: one row serves many models,
+/// and a single truthy flag would be a lie for at least one of them.
+/// </para>
+///
+/// <para>
+/// Every value here comes from a LIVE probe against the real endpoint with the real key
+/// (<c>POST /v1/admin/ai/providers/{code}/probe-capabilities</c>), never copied from vendor
+/// documentation — for Z.AI the published schema and the published model page contradict each
+/// other about <c>response_format</c>, so only an observed call settles it. A missing row means
+/// <b>unknown</b>, and every consumer treats unknown as <b>unsupported</b> (fail closed); see
+/// <c>AiFeatureCapabilityRequirements</c>.
+/// </para>
+/// </summary>
+[Index(nameof(ProviderCode), nameof(Model), IsUnique = true)]
+public class AiProviderModelCapability
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    /// <summary>Provider code (not the surrogate key) so a capability row survives a provider
+    /// re-create and so eligibility lookups avoid a join.</summary>
+    [MaxLength(64)]
+    public string ProviderCode { get; set; } = default!;
+
+    /// <summary>Exact model id as sent in the request body.</summary>
+    [MaxLength(128)]
+    public string Model { get; set; } = default!;
+
+    /// <summary>Accepts <c>tools</c> and returns <c>tool_calls</c>.</summary>
+    public bool SupportsTools { get; set; }
+
+    /// <summary>Accepts <c>{"type":"image_url"}</c> content parts (base64 data URL).</summary>
+    public bool SupportsVision { get; set; }
+
+    /// <summary>Accepts a document/file content part. Distinct from vision: a provider may take
+    /// images but not documents, and this codebase folds documents to text
+    /// (<c>AiProviderPayloadBuilder.BuildDocumentFold</c>) rather than sending bytes.</summary>
+    public bool SupportsDocuments { get; set; }
+
+    /// <summary>Honours <c>response_format</c> (json_object / json_schema).</summary>
+    public bool SupportsJsonMode { get; set; }
+
+    /// <summary>Serves a vector-embedding endpoint. Deliberately a probed flag rather than a
+    /// hardcoded vendor exception: <c>embeddings.generate</c> is a routable feature code, and
+    /// several chat vendors (Z.AI among them) expose no <c>/embeddings</c> route at all.</summary>
+    public bool SupportsEmbeddings { get; set; }
+
+    /// <summary>Streams via SSE. When <see langword="false"/> the caller must take the buffered
+    /// path — the assistant's fake-stream burst slicing is the visible symptom of getting this
+    /// wrong.</summary>
+    public bool SupportsStreaming { get; set; }
+
+    /// <summary>Understands the <c>thinking</c> parameter and emits <c>reasoning_content</c>.</summary>
+    public bool SupportsThinking { get; set; }
+
+    /// <summary>Can thinking actually be switched OFF. Z.AI documents GLM-5.3 and GLM-5.3-FLASH
+    /// as forced-on and not disableable, so a control offering "off" for those would be lying —
+    /// the UI renders them locked and this flag is the reason it shows.</summary>
+    public bool ThinkingCanBeDisabled { get; set; }
+
+    /// <summary>Comma-separated <c>reasoning_effort</c> values the model accepts, e.g.
+    /// <c>max,xhigh,high,medium,low,minimal,none</c>. Empty = the model has no reasoning dial.</summary>
+    [MaxLength(256)]
+    public string AllowedReasoningEffortsCsv { get; set; } = string.Empty;
+
+    /// <summary>Observed hard ceiling on <c>max_tokens</c>, or 0 when unknown.</summary>
+    public int MaxTokensCeiling { get; set; }
+
+    /// <summary>Documented context window, or 0 when unknown.</summary>
+    public int ContextTokens { get; set; }
+
+    /// <summary>Probe outcome: <c>ok</c>, <c>partial</c>, <c>auth</c>, <c>rate_limited</c>,
+    /// <c>network</c> or <c>unknown</c>. Only <c>ok</c> and <c>partial</c> carry usable
+    /// capabilities; anything else leaves every flag false so callers fail closed.</summary>
+    [MaxLength(32)]
+    public string ProbeStatus { get; set; } = "unknown";
+
+    /// <summary>Human-readable probe notes — which sub-probe failed and why. Capped at 512 so a
+    /// stack trace never reaches the UI.</summary>
+    [MaxLength(512)]
+    public string? ProbeDetail { get; set; }
+
+    public DateTimeOffset? ProbedAtUtc { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 /// <summary>
