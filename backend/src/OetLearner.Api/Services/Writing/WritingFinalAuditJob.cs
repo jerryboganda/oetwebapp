@@ -87,12 +87,12 @@ internal static class WritingFinalAuditSpec
         new("422ee8ad-c86e-4a49-9269-fa7f0381bb02", "pack 38", [("\nRe: Ms Gemma Brown\n", "\nRe: Ms Gemma Brown, DOB: 19 January 1991\n")]),
         new("4753a45d-359e-4571-b5dc-4b1615c2d4a7", "pack 42", [("renal failure secondary to dehydration, mild dementia and pneumonia.", "renal failure secondary to dehydration and mild dementia.")]),
         new("48c52e8e-1019-40a8-83a1-897f23cd3c6d", "pack 43", [("\nAdelaide 3001", "\nNorth Adelaide 3001")]),
-        new("7436a118-c943-478d-b8ef-626565204522", "pack 54", [("\nRe: Ms Ling Wu\n", "\nRe: Ms Ling Wu, DOB: 1 March 1996\n")]),
+        new("7436a118-c943-478d-b8ef-626565204522", "pack 54", [("\nRe: Ms Ling Wu\n", "\nRe: Ling Wu, DOB: 1 March 1996\n"), ("Ms Wu's", "Ling's"), ("Ms Wu", "Ling")]),
         new("75134963-0c27-4481-b9f5-2b1786421781", "pack 55", [("\n\n8 July 2017\n\nDear Admissions Officer,", "\n\n11 July 2017\n\nDear Admissions Officer,"), ("Today, endoscopy, biopsy and barium swallow confirmed", "On 8 July, endoscopy, biopsy and barium swallow confirmed")]),
         new("7b09ff8d-9448-49c5-9fb3-e232bc0e20d5", "pack 57", [("\nRe: Ms Nina Sharman\n", "\nRe: Ms Nina Sharman, DOB: 9 February 1951\n")]),
         new("9489ce12-1555-4dce-958d-d648e0218e74", "pack 64", [(", requiring significant assistance.", ".")]),
         new("95f2ea74-0f4e-4424-af68-ced741716552", "pack 66", [("There is no history of such infection, IV drug use or overseas travel.", "Her partner has no IV drug use or recent overseas travel."), ("She has been on the oral contraceptive pill for twelve months.", "She has taken the contraceptive pill for twelve months."), ("her last sexual contact was fourteen days ago", "her last sexual contact was fourteen days before presentation")]),
-        new("a3d1b730-604c-4af7-82ef-cf1c40015bac", "pack 74", [("\n\n22 April 2015\n\nDear", "\n\nDear"), ("re-dress Ms Norris's wound today.", "re-dress her wound on 22 April.")]),
+        new("a3d1b730-604c-4af7-82ef-cf1c40015bac", "pack 74", [("\n\n22 April 2015\n\nDear", "\n\nDear"), ("The wound was re-dressed on 19 April 2015.", "The wound was re-dressed on 19 April."), ("re-dress Ms Norris's wound today.", "re-dress Ms Norris's wound on 22 April.")]),
         new("bfa16ff7-8dac-42c4-b5a2-632f1d04f040", "pack 84", [("has untreated dyslipidaemia", "has previously untreated dyslipidaemia")]),
         new("c110e41b-a05f-4c1a-8500-af7a9dc71b74", "pack 85", [("\n\n11 January 2018\n\nDear", "\n\nDear")]),
         new("cb30e37c-9a24-4a9a-a7ae-54eb7f473a5f", "pack 87", [("Quitline contact has been encouraged", "Quitline contact is to be encouraged")]),
@@ -107,7 +107,7 @@ internal static class WritingFinalAuditSpec
         new("0a935f31-5d0f-42f9-b36a-68090d3ed939", "pack 142", [("\nRe: Mr Anthony Miller, aged 58\n", "\nRe: Mr Anthony Miller, DOB: 28 February 1968\n")]),
         new("8ce14aa5-d564-401a-86dc-e0039e7ae437", "pack 180", [(" Insulin, 50 IU and a statin, 40 mg, were continued.", "")]),
         new("dced34e1-ab84-43e3-af54-3e124d08d5b8", "pack 194", [("I advised smoking cessation and discussed likely investigations.", "Smoking cessation and likely investigations will be discussed.")]),
-        new("065df5a5-52e3-48e4-bc6c-df726f8d4084", "pack 198", [("I would be grateful if you could monitor Mrs Jackson's pregnancy and discuss her delivery options.", "I would be grateful if you could discuss her home delivery request with Mrs Jackson.")]),
+        new("065df5a5-52e3-48e4-bc6c-df726f8d4084", "pack 198", [("I would be grateful if you could monitor Mrs Jackson's pregnancy and discuss her delivery options.", "I would be grateful if you could discuss Mrs Jackson's home delivery request with her.")]),
     ];
 
     internal static readonly PdfProbe[] PdfProbes =
