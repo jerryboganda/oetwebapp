@@ -328,6 +328,18 @@ public interface ICompanionRetriever
 
         var sources = await query.ToListAsync(ct);
 
+        // ── Content-protection boundary (owner directive 2026-10-09) ──
+        // Dr Ahmed Hesham's workshops, correction sessions and their recordings are never
+        // knowledge sources for Sami. This is enforced here, on the candidate set every
+        // retrieval flows through, rather than only in the prompt: a prompt rule can be
+        // argued with, paraphrased around or jailbroken, but content that never enters the
+        // candidate set cannot be leaked by any of those. See CompanionContentBoundary.
+        //
+        // Applied before entitlement scoping so a protected source cannot become reachable
+        // merely because a learner's package happens to include it — ownership is permission
+        // to watch the resource on the platform, not permission to have Sami reproduce it.
+        sources = sources.Where(s => !CompanionContentBoundary.IsProtected(s)).ToList();
+
         // Entitlement scope is applied in memory because the comparison is a set
         // membership test against the resolved snapshot, not a column predicate.
         var scopes = new HashSet<string>(context.EntitlementScopes, StringComparer.OrdinalIgnoreCase);
