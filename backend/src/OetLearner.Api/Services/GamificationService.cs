@@ -137,7 +137,12 @@ public class GamificationService(LearnerDbContext db)
             xpReward = a.XPReward,
             sortOrder = a.SortOrder,
             unlocked = unlocked.TryGetValue(a.Id, out var la),
-            unlockedAt = unlocked.TryGetValue(a.Id, out var la2) ? la2.UnlockedAt : (DateTimeOffset?)null
+            unlockedAt = unlocked.TryGetValue(a.Id, out var la2) ? la2.UnlockedAt : (DateTimeOffset?)null,
+            // False means this achievement's criteria are NOT measured yet, so it can never be
+            // awarded. Surfaced explicitly rather than leaving it looking permanently locked:
+            // a "locked" badge and a "not implemented" badge are different things to a learner,
+            // and only one of them is true. See EvaluableCriteriaTypes.
+            evaluable = IsEvaluable(a)
         });
     }
 
@@ -151,6 +156,13 @@ public class GamificationService(LearnerDbContext db)
                     la.UserId == userId &&
                     la.AchievementId == a.Id))
             .ToListAsync(ct);
+
+        // Drop anything this service cannot evaluate before doing the prerequisite queries.
+        // Without this filter MeetsCriteria returns false for them on every call forever, so
+        // they would sit in the candidate set for the life of the account and be re-parsed on
+        // every trigger. See EvaluableCriteriaTypes for why they are not evaluated, and why
+        // that is a wiring gap rather than a bug in the criteria themselves.
+        candidates = candidates.Where(IsEvaluable).ToList();
 
         if (candidates.Count == 0)
             return;
@@ -494,6 +506,56 @@ public class GamificationService(LearnerDbContext db)
         lastActiveDate = lastActiveDate ?? s.LastActiveDate,
         streakFreezesAvailable = s.StreakFreezeCount - s.StreakFreezeUsedCount
     };
+
+    /// <summary>
+    /// Criteria types this service can actually evaluate.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="MeetsCriteria"/> receives only XP, streak, attempt count and vocabulary counts.
+    /// The seed data also ships criteria that need data this service is never handed — grades per
+    /// sub-test, mock-exam completions, spaced-review and pronunciation-drill sessions, forum
+    /// posts, converted referrals, consecutive score improvement — and those hit the switch's
+    /// <c>_ =&gt; false</c> arm. Ten seeded achievements could therefore never be awarded, and
+    /// because <see cref="GetAchievementsAsync"/> reports every active achievement with
+    /// <c>unlocked: false</c> and no other signal, a learner saw them permanently locked with
+    /// nothing to explain why.
+    /// </para>
+    /// <para>
+    /// This set is the honest description of what the evaluator covers. It exists so the API can
+    /// say which achievements are measured rather than presenting an unevaluable one as merely
+    /// unearned, and so an admin diagnosing "this achievement never fires" has the answer in code
+    /// instead of having to read the switch. Adding a criterion type here is only correct once
+    /// <see cref="MeetsCriteria"/> genuinely evaluates it AND the caller supplies its inputs.
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<string> EvaluableCriteriaTypes = new(StringComparer.Ordinal)
+    {
+        "attempt_count",
+        "streak_days",
+        "total_xp",
+        "vocab_added",
+        "vocab_mastered",
+    };
+
+    /// <summary>
+    /// True when this achievement's criteria can actually be evaluated today. Unparseable or
+    /// unrecognised criteria read as not evaluable, matching <see cref="MeetsCriteria"/>'s
+    /// fail-closed behaviour.
+    /// </summary>
+    private static bool IsEvaluable(Achievement ach)
+    {
+        try
+        {
+            var type = System.Text.Json.JsonDocument.Parse(ach.CriteriaJson)
+                .RootElement.GetProperty("type").GetString();
+            return type is not null && EvaluableCriteriaTypes.Contains(type);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     private static bool MeetsCriteria(
         Achievement ach,

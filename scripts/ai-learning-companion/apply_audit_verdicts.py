@@ -77,11 +77,18 @@ CORRECTED_GAP = {
     'F-090': "The vision path works end to end through the floating assistant widget, but the dedicated "
              "companion page discarded the attachment argument in its AiAssistantInput onSend, so an "
              "image attached there was silently dropped -- now fixed in this change.",
-    'F-120': "Achievements tied to demonstrated learning value are seeded but can never fire: "
-             "GamificationService.MeetsCriteria handles only attempt_count/streak_days/total_xp/"
-             "vocab_added/vocab_mastered and returns false for every other criterion, so first_grade, "
-             "all_subtests_grade, consecutive_improvement, mock_exams and the rest are dead criteria. "
-             "The only caller is VocabularyService.TryEvaluateAchievementsAsync.",
+    'F-120': "Ten seeded achievements tied to demonstrated learning value cannot be awarded yet: "
+             "GamificationService.MeetsCriteria receives only XP, streak, attempt count and "
+             "vocabulary counts, while ach-020..ach-024 (first_grade, all_subtests_grade, "
+             "consecutive_improvement), ach-033/034/035/036 (review/pronunciation/conversation/"
+             "grammar sessions), ach-040/041 (forum posts) and ach-042/043 (referrals) need data "
+             "it is never handed. The API now reports `evaluable: false` for these and the "
+             "achievements page labels them \"Not tracked\" instead of leaving them looking "
+             "permanently locked. Remaining work to close this properly is plumbing: emit "
+             "CheckAndAwardAchievementsAsync from each event source (grading, mock completion, "
+             "drill and review sessions, forum posts, referral conversion, leaderboard refresh) "
+             "and extend the evaluator with per-criterion queries for grades, session counts and "
+             "consecutive score improvement.",
     'F-153': "The unknown-answer contract now exists across the prompt and the honest-empty tool paths, "
              "but there is still no unsupported-claim detection: CompanionLeakDetector checks canaries, "
              "pack scaffolding, credential shapes and verbatim reuse, never whether a claim is "

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Trophy, Flame, Star, Zap, Lock, ShieldCheck } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { ProgressBar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -19,7 +20,14 @@ import { analytics } from '@/lib/analytics';
 
 type XPData = { totalXP: number; weeklyXP: number; monthlyXP: number; level: number; nextLevelXP: number; currentLevelXP: number };
 type StreakData = { currentStreak: number; longestStreak: number; lastActiveDate: string | null; streakFreezesAvailable: number };
-type Achievement = { id: string; code: string; label: string; description: string; category: string; iconUrl: string | null; xpReward: number; sortOrder: number; unlocked: boolean; unlockedAt: string | null };
+type Achievement = { id: string; code: string; label: string; description: string; category: string; iconUrl: string | null; xpReward: number; sortOrder: number; unlocked: boolean; unlockedAt: string | null;
+  /**
+   * False means the server does not measure this achievement's criteria yet, so it can never be
+   * awarded. It is deliberately distinct from "locked": a locked badge is in progress, an
+   * unevaluable one is not being tracked at all, and showing the two identically told learners
+   * they were failing at something the platform was not counting.
+   */
+  evaluable?: boolean };
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   practice: <Star className="w-5 h-5" aria-hidden="true" />,
@@ -86,6 +94,9 @@ export default function AchievementsPage() {
   const filtered = filter === 'all' ? achievements : achievements.filter(a => a.category === filter);
   const unlocked = filtered.filter(a => a.unlocked);
   const locked = filtered.filter(a => !a.unlocked);
+  // Achievements the server cannot evaluate yet. Counted across ALL achievements rather than
+  // the filtered set, so switching category tabs does not change the explanation.
+  const untrackedCount = achievements.filter(a => !a.unlocked && a.evaluable === false).length;
   const unlockedTotal = achievements.filter(a => a.unlocked).length;
   const latestUnlock = achievements
     .filter((achievement) => achievement.unlockedAt)
@@ -231,6 +242,14 @@ export default function AchievementsPage() {
             {locked.length > 0 && (
               <div>
                 <h3 className="mb-3 text-base font-bold text-navy">Locked ({locked.length})</h3>
+                {untrackedCount > 0 && (
+                  <p className="mb-3 text-xs text-muted">
+                    {untrackedCount === 1 ? 'One badge here is not' : `${untrackedCount} badges here are not`} being
+                    counted yet, so {untrackedCount === 1 ? 'it is' : 'they are'} marked
+                    <span className="font-semibold"> Not tracked</span> rather than simply unearned. {untrackedCount === 1 ? 'It' : 'They'} will
+                    start counting once the platform records the activity behind {untrackedCount === 1 ? 'it' : 'them'}.
+                  </p>
+                )}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {locked.map((ach, i) => (
                     <MotionItem key={ach.id} delayIndex={Math.min(i, 5)} className="h-full">
@@ -245,6 +264,9 @@ export default function AchievementsPage() {
                           <div className="mt-1.5 flex items-center gap-1 text-muted">
                             <Zap className="h-3 w-3" aria-hidden="true" />
                             <span className="text-xs tabular-nums">+{ach.xpReward} XP</span>
+                            {ach.evaluable === false && (
+                              <Badge variant="muted" className="ml-1">Not tracked</Badge>
+                            )}
                           </div>
                         </div>
                       </Card>
