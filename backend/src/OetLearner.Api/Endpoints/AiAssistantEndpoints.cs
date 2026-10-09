@@ -126,19 +126,6 @@ public static class AiAssistantEndpoints
             return saved ? Results.NoContent() : Results.NotFound();
         }).RequireRateLimiting("PerUserWrite");
 
-        // Is this provider actually able to serve that model right now — active row, credentialed, and the
-        // model inside its declared allow-list?
-        private static async Task<bool> ProviderIsServingAsync(
-            IAiProviderRegistry registry, string providerCode, string? model, CancellationToken ct)
-        {
-            var row = await registry.FindByCodeAsync(providerCode, ct);
-            if (row is null) return false;
-            if (string.IsNullOrWhiteSpace(row.EncryptedApiKey)) return false;
-            var allowed = (row.AllowedModelsCsv ?? string.Empty)
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            return allowed.Length == 0 || (model is not null && allowed.Contains(model, StringComparer.OrdinalIgnoreCase));
-        }
-
         // Catalogs, never mixed: Claude (Anthropic API), UBAG (browser), Z.AI (GLM) and, for
         // learners only and only while its provider row is active, OpenCode.
         // `claude_web` is a UBAG browser target, not an Anthropic model.
@@ -152,17 +139,17 @@ public static class AiAssistantEndpoints
                 // The learner's list is the curated Z.AI catalog, offered only while that row is
                 // active and credentialed. Free-to-call ids are included — they are genuinely free,
                 // and the picker label says so — but none is ever made the default.
-                var zaiRow = await providerRegistry.FindByCodeAsync(ZaiProviderDefaults.ProviderCode, ct);
-                var zaiAllowed = new HashSet<string>(
-                    (zaiRow?.AllowedModelsCsv ?? string.Empty)
+                var learnerZaiRow = await providerRegistry.FindByCodeAsync(ZaiProviderDefaults.ProviderCode, ct);
+                var learnerZaiAllowed = new HashSet<string>(
+                    (learnerZaiRow?.AllowedModelsCsv ?? string.Empty)
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                     StringComparer.OrdinalIgnoreCase);
-                var learnerModels = zaiRow is null || string.IsNullOrWhiteSpace(zaiRow.ApiKeyHint)
+                var learnerModels = learnerZaiRow is null || string.IsNullOrWhiteSpace(learnerZaiRow.ApiKeyHint)
                     ? Array.Empty<string>()
                     : AssistantModelCatalog.LearnerModels
                         // Empty allow-list means "no restriction" (the documented meaning of the
                         // column), so it must NOT be read as "nothing is allowed".
-                        .Where(m => zaiAllowed.Count == 0 || zaiAllowed.Contains(m))
+.Where(m => learnerZaiAllowed.Count == 0 || learnerZaiAllowed.Contains(m))
                         .ToArray();
                 return Results.Ok(new
                 {
@@ -885,6 +872,32 @@ public static class AiAssistantEndpoints
             || string.IsNullOrWhiteSpace(await providerRegistry.GetPlatformKeyAsync(row.Code, ct))) return [];
         var allowed = row.AllowedModelsCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         return AssistantModelCatalog.OpenCodeModels.Where(m => allowed.Contains(m, StringComparer.Ordinal)).ToArray();
+    }
+
+    /// <summary>
+    /// Is this provider actually able to serve that model right now — an active row, a usable key,
+    /// and the model inside its declared allow-list?
+    ///
+    /// <para>
+    /// Used when a learner or staff member pins a Z.AI model. Without it the picker would advertise
+    /// models the provider cannot actually serve, and pinning one would leave the thread on a dead
+    /// provider until it failed over — surfacing as a vague outage rather than "pick another".
+    /// </para>
+    ///
+    /// <para>
+    /// An EMPTY allow-list means "no restriction" (the documented meaning of that column), so it must
+    /// never be read as "nothing is allowed".
+    /// </para>
+    /// </summary>
+    private static async Task<bool> ProviderIsServingAsync(
+        IAiProviderRegistry providerRegistry, string providerCode, string? model, CancellationToken ct)
+    {
+        var row = await providerRegistry.FindByCodeAsync(providerCode, ct);
+        if (row is null || !row.IsActive) return false;
+        if (string.IsNullOrWhiteSpace(await providerRegistry.GetPlatformKeyAsync(row.Code, ct))) return false;
+        var allowed = (row.AllowedModelsCsv ?? string.Empty)
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return allowed.Length == 0 || (model is not null && allowed.Contains(model, StringComparer.OrdinalIgnoreCase));
     }
 
     private static string AssistantFeatureCodeForRole(string role) => role switch
