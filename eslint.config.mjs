@@ -41,6 +41,7 @@ const ADMIN_KIT_ALLOWED = [
     "app/admin/**",
     "components/admin/**",
     "components/domain/**/admin/**",
+    "components/domain/ai-provider-capability-panel.tsx",
     "components/domain/listening/ListeningManifestPanel.tsx",
     "components/domain/materials/course-materials-map.tsx",
     "components/domain/materials/materials-course-browser.tsx",
