@@ -113,6 +113,13 @@ public sealed class AnsibleProvisioner : IProvisioner
                 // re-verifies SSH, so re-asserting the firewall on every repair is safe.
                 return ProvisionResult.NotSatisfied("the firewall re-asserts on every repair");
 
+            case EnrollStep.FleetUser:
+                // Same lying-check shape as the firewall: the fleet-user playbook copies the current
+                // oet-fleet-gate/oet-fleet-ctl/sudoers onto the helper, and a check-mode "satisfied"
+                // would freeze a helper on an old control surface forever (seen live 9 Oct: a helper
+                // missed the 443 publish update). The copies are idempotent re-asserts.
+                return ProvisionResult.NotSatisfied("the fleet user and control surface re-assert on every repair");
+
             default:
                 return await RunPlaybookAsync(request, check: true, cancellationToken);
         }
