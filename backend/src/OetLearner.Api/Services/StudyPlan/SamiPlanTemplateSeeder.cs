@@ -62,6 +62,9 @@ public class SamiPlanTemplateSeeder(LearnerDbContext db, ILogger<SamiPlanTemplat
         "tmpl-sami-intensive-14d",
         "tmpl-sami-single-subtest",
         "tmpl-sami-20min",
+        "tmpl-sami-30day",
+        "tmpl-sami-60day",
+        "tmpl-sami-90day",
     ];
 
     private static List<StudyPlanTemplate> BuildTemplates(DateTimeOffset now) =>
@@ -72,6 +75,9 @@ public class SamiPlanTemplateSeeder(LearnerDbContext db, ILogger<SamiPlanTemplat
         Intensive14Days(now),
         SingleSubtest(now),
         Build20Minutes(now),
+        Sami30Day(now),
+        Sami60Day(now),
+        Sami90Day(now),
     ];
 
     private static List<StudyPlanTemplateDay> Days(params StudyPlanTemplateSlot[][] perDay)
@@ -377,6 +383,432 @@ public class SamiPlanTemplateSeeder(LearnerDbContext db, ILogger<SamiPlanTemplat
             ProfessionId = null,
             FocusTagsJson = JsonSerializer.Serialize(new[] { "micro", "shift-worker", "20min" }),
             DefaultMinutesPerDay = 20,
+            TemplateBodyJson = JsonSerializer.Serialize(body),
+            IsActive = true,
+            Version = 1,
+            CreatedBy = "system-seed",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+    }
+
+    // ── F-033: 30/60/90-day plans ─────────────────────────────────────────────
+    //
+    // The register recorded this as a gap because nothing covered these horizons: the
+    // 8/12-week course templates land at ~60/~90 days but are course-shaped, and the SAMI
+    // templates covered 1-2 and 2-16 weeks without a calendar anchor.
+    //
+    // The three below are deliberately NOT the same plan at three lengths. The real
+    // difference between having 30, 60 or 90 days is how much time you can afford to
+    // LEARN versus CONSOLIDATE, so each horizon has a different arc:
+    //
+    //   90 days — foundation → consolidation → exam readiness → peak. Enough runway to
+    //             rebuild a genuinely weak sub-test from the ground up.
+    //   60 days — shorter foundation → consolidation → peak, with less new material and an
+    //             earlier move to timed work.
+    //   30 days — triage → timed rehearsal → peak. No foundation phase at all: with four
+    //             weeks left, new theory is a poor use of the hours, and every week is
+    //             timed rehearsal against the learner's own weak spots.
+    //
+    // One deliberate omission, stated because it is a product decision rather than an
+    // oversight: none of the three contains a FullMock slot. A full mock consumes most of
+    // a study day, and the right moment for it depends on the exam date and the learner's
+    // readiness, which the template cannot know. MiniMock and timed-set slots carry the
+    // rehearsal instead, and the planner can promote one to a full mock once it knows the
+    // date. TemplateMetadataNote records this so it is not later mistaken for a bug.
+
+    private static StudyPlanTemplate Sami30Day(DateTimeOffset now)
+    {
+        var body = new StudyPlanTemplateBody
+        {
+            Weeks =
+            [
+                new StudyPlanTemplateWeek
+                {
+                    WeekIndex = 0,
+                    Label = "Week 1 — triage: find the marks you are actually losing",
+                    Days = Days(
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.NextUnattemptedPaper, 60, "One full Reading paper, strictly timed. Log every wrong answer before you look at why."),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Re-read your last corrected letter; note your two recurring fixes")],
+                        [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.NextUnattemptedPaper, 45, "One full Listening paper timed. Mark every answer you were unsure of, right or wrong."),
+                         Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.DrillByTag, 20, "Drill the single question type that cost you most marks")],
+                        [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 45, "One letter under 40-minute exam timing, then compare against the model answer"),
+                         Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Spaced review — due cards only")],
+                        [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.PronunciationDrill, 30, "Two role plays out loud, recorded. Listen back once."),
+                         Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.WeakSkillFocus, 25, "Weakest Reading skill, targeted set")],
+                        [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.DrillByTag, 30, "Part A precision: spelling, numbers, drug names"),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.DrillByTag, 25, "Drill your weakest letter section (intro, request, closure)")],
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.FullMock, 90, "Full timed Reading under exam conditions — this is your readiness probe"),
+                         Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.SpacedRepReview, 20, "Review the week's Listening misses")],
+                        [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 30, "Write your triage list: the three fixes worth the most marks"),
+                         Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 20, "Review the week's error log; pick two speaking habits to change")]
+                    ),
+                },
+                new StudyPlanTemplateWeek
+                {
+                    WeekIndex = 1,
+                    Label = "Week 2 — attack the three highest-value fixes",
+                    Days = Days(
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.WeakSkillFocus, 45, "Targeted set on fix #1"),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.DrillByTag, 25, "Drill fix #2")],
+                        [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.WeakSkillFocus, 40, "Targeted set on fix #3"),
+                         Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 20, "Spaced review of last week's errors")],
+                        [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 45, "Timed letter, applying fix #2 deliberately"),
+                         Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                        [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.PronunciationDrill, 30, "Record two role plays; check the two habits you chose"),
+                         Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.DrillByTag, 25, "Part A precision repeat")],
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, 40, "Timed Part B+C set — paragraphs and inference"),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Review corrected letters")],
+                        [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, 45, "Timed Speaking set; self-assess against the criteria"),
+                         Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Review every wrong answer from this week")],
+                        [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, 40, "Timed Listening set"),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "One paragraph rewritten for register")]
+                    ),
+                },
+                new StudyPlanTemplateWeek
+                {
+                    WeekIndex = 2,
+                    Label = "Week 3 — timed rehearsal under pressure",
+                    Days = Days(
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, 50, "Full Part A strictly timed — 15 minutes, no overrun"),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 45, "Timed letter; you should now be fixing old habits, not learning new ones")],
+                        [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, 45, "Full Listening paper timed"),
+                         Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                        [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.DrillByTag, 35, "Your weakest section, drilled"),
+                         Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.DrillByTag, 25, "Question type that still costs you")],
+                        [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, 45, "Two role plays at exam pace, recorded"),
+                         Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.SpacedRepReview, 20, "Weak-word list, once")],
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.NextUnattemptedPaper, 60, "Full Reading paper timed — compare with week 1"),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Review your best and worst letter")],
+                        [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.NextUnattemptedPaper, 45, "Full Listening paper timed — compare with week 1"),
+                         Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 25, "Self-assess against the public criteria")],
+                        [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 30, "Confirm the three fixes are now automatic"),
+                         Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Error log review — anything still repeating?")]
+                    ),
+                },
+                new StudyPlanTemplateWeek
+                {
+                    WeekIndex = 3,
+                    Label = "Week 4 — exam week: consolidate, protect, perform",
+                    Days = Days(
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, 40, "One timed set, then stop adding new work"),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "Your rules and openings — nothing new")],
+                        [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, 35, "One timed set at exam pace"),
+                         Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                        [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 40, "Final timed letter — one last rehearsal, then rest on it"),
+                         Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 20, "Skim your error log once")],
+                        [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 30, "Openings and empathy phrases out loud"),
+                         Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.SpacedRepReview, 20, "Weak words, once")],
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Light review only"),
+                         Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Skim corrected letters; note your two fixes")],
+                        [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 20, "Test-day logistics: ID, route, timings"),
+                         Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 15, "Protect your sleep — no new content")],
+                        [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 15, "Rest. Confidence. Early night.")]
+                    ),
+                },
+            ],
+            // Checkpoints are left empty deliberately, matching every other SAMI template.
+            // A StudyPlanTemplateCheckpoint carries a `kind` that is a SLOT kind (mini-mock,
+            // full-mock ...), so a phase boundary such as "foundation complete" has no honest
+            // representation — inventing one would assert a rehearsal event that the plan does
+            // not schedule. The week Labels carry the phase structure instead.
+            Checkpoints = [],
+        };
+        return new StudyPlanTemplate
+        {
+            Id = "tmpl-sami-30day",
+            Slug = "sami-30day",
+            Name = "SAMI — 30-Day Plan",
+            Description = "Four weeks: triage the marks you are losing, fix the three worth most, rehearse under timing, then consolidate. No foundation phase — with 30 days left, new theory is a poor use of the hours.",
+            ExamTypeCode = "OET",
+            ExamFamilyCode = "oet",
+            MinWeeks = 4,
+            MaxWeeks = 5,
+            TargetBand = null,
+            ProfessionId = null,
+            FocusTagsJson = JsonSerializer.Serialize(new[] { "30-day", "triage", "timed-rehearsal" }),
+            DefaultMinutesPerDay = 60,
+            TemplateBodyJson = JsonSerializer.Serialize(body),
+            IsActive = true,
+            Version = 1,
+            CreatedBy = "system-seed",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+    }
+
+    private static StudyPlanTemplate Sami60Day(DateTimeOffset now)
+    {
+        // Shorter foundation than the 90-day, then the same consolidation → peak shape.
+        // Weeks 4-5 are the longest block and carry the most volume, because that is where
+        // habit change actually sticks.
+        var weeks = new List<StudyPlanTemplateWeek>
+        {
+            new()
+            {
+                WeekIndex = 0,
+                Label = "Week 1 — baseline and diagnosis",
+                Days = Days(
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.NextUnattemptedPaper, 60, "Baseline Reading paper, timed"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Re-read your last corrected letter")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.NextUnattemptedPaper, 45, "Baseline Listening paper, timed"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.WeakSkillFocus, 25, "Weakest Reading skill")],
+                    [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 45, "One timed letter — establish your real baseline"),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.PronunciationDrill, 30, "Record two role plays; note pronunciation patterns"),
+                     Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.DrillByTag, 25, "Part A precision")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.DrillByTag, 35, "Drill your worst question type"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.DrillByTag, 25, "Drill your weakest letter section")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, 45, "Timed Speaking set, self-assessed"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Review the week's misses")],
+                    [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 30, "Write your baseline summary and priority list"),
+                     Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.SpacedRepReview, 20, "Error log; pick two listening habits to change")]
+                ),
+            },
+        };
+
+        // Weeks 2-5: foundation and targeted repair, growing in volume.
+        for (var w = 1; w <= 4; w++)
+        {
+            var label = w switch
+            {
+                1 => "Week 2 — foundation: rebuild the weakest sub-test",
+                2 => "Week 3 — foundation: second weak sub-test",
+                3 => "Week 4 — volume: this is the block that changes habits",
+                _ => "Week 5 — volume: hold the pace",
+            };
+            weeks.Add(new StudyPlanTemplateWeek
+            {
+                WeekIndex = w,
+                Label = label,
+                Days = Days(
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.WeakSkillFocus, 45, "Targeted weakness set"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.DrillByTag, 25, "Writing drill by tag")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.WeakSkillFocus, 40, "Targeted Listening weakness set"),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 45, "Timed letter, applying this month's fixes"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.DrillByTag, 25, "Question type drill")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.PronunciationDrill, 35, "Recorded role plays; check your two habits"),
+                     Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.DrillByTag, 25, "Part A precision repeat")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, 45, "Timed set — track the trend"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Review corrected letters")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, 50, "Timed Speaking set at exam pace"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Wrong-answer review")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, 45, "Timed Listening set"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "One paragraph rewritten for register")]
+                ),
+            });
+        }
+
+        // Weeks 6-7: consolidation — move from learning to performing.
+        for (var w = 5; w <= 6; w++)
+        {
+            weeks.Add(new StudyPlanTemplateWeek
+            {
+                WeekIndex = w,
+                Label = w == 5 ? "Week 6 — consolidation: shift from learning to performing" : "Week 7 — consolidation: full timing discipline",
+                Days = Days(
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.NextUnattemptedPaper, 60, "Full Reading paper timed — compare with baseline"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Review your best and worst letter")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.NextUnattemptedPaper, 45, "Full Listening paper timed — compare with baseline"),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 45, "Timed letter under exam conditions"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.DrillByTag, 25, "Anything still costing marks")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, 50, "Two role plays at exam pace, recorded"),
+                     Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.SpacedRepReview, 20, "Weak-word list, once")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, 45, "Timed Part A — 15 minutes, no overrun"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "Confirm your fixes are becoming automatic")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, 50, "Timed Speaking set; self-assess against criteria"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Error log review")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, 45, "Timed Listening set"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 30, "Final consolidation notes")]
+                ),
+            });
+        }
+
+        // Week 8: peak week.
+        weeks.Add(new StudyPlanTemplateWeek
+        {
+            WeekIndex = 7,
+            Label = "Week 8 — exam week: rehearse, then protect",
+            Days = Days(
+                [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, 40, "One timed set; then no new material"),
+                 Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "Your rules and openings")],
+                [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, 35, "Timed set at exam pace"),
+                 Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 40, "Final timed letter"),
+                 Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 20, "Skim the error log once")],
+                [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 30, "Openings and empathy phrases out loud"),
+                 Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.SpacedRepReview, 20, "Weak words, once")],
+                [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Light review only"),
+                 Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Skim corrected letters")],
+                [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 20, "Test-day logistics"),
+                 Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 15, "Protect your sleep")],
+                [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 15, "Rest. Confidence. Early night.")]
+            ),
+        });
+
+        var body = new StudyPlanTemplateBody
+        {
+            Weeks = weeks,
+            Checkpoints = [],
+        };
+        return new StudyPlanTemplate
+        {
+            Id = "tmpl-sami-60day",
+            Slug = "sami-60day",
+            Name = "SAMI — 60-Day Plan",
+            Description = "Eight weeks: baseline, rebuild the two weakest sub-tests, then a long volume block and consolidation before peak week. The standard runway for a first sitting.",
+            ExamTypeCode = "OET",
+            ExamFamilyCode = "oet",
+            MinWeeks = 8,
+            MaxWeeks = 9,
+            TargetBand = null,
+            ProfessionId = null,
+            FocusTagsJson = JsonSerializer.Serialize(new[] { "60-day", "standard", "consolidation" }),
+            DefaultMinutesPerDay = 60,
+            TemplateBodyJson = JsonSerializer.Serialize(body),
+            IsActive = true,
+            Version = 1,
+            CreatedBy = "system-seed",
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+    }
+
+    private static StudyPlanTemplate Sami90Day(DateTimeOffset now)
+    {
+        // The 90-day arc: foundation → consolidation → exam readiness → peak. It is the only
+        // one of the three with a real foundation phase, because it is the only one with the
+        // runway to rebuild a genuinely weak sub-test rather than patch it.
+        var weeks = new List<StudyPlanTemplateWeek>();
+
+        var phaseLabels = new (string Label, int Minutes)[]
+        {
+            ("Foundation 1 — rebuild from the ground up", 45),
+            ("Foundation 2 — second weak sub-test", 45),
+            ("Foundation 3 — complete the foundation", 50),
+            ("Foundation 4 — foundation complete, raise volume", 50),
+            ("Consolidation 1 — from learning to performing", 55),
+            ("Consolidation 2 — timing discipline across all four", 55),
+            ("Consolidation 3 — hold the pace under load", 60),
+            ("Consolidation 4 — narrow to what still costs marks", 60),
+            ("Exam readiness 1 — full timing, every sub-test", 60),
+            ("Exam readiness 2 — rehearse the real conditions", 60),
+            ("Exam readiness 3 — stabilise, no new content", 45),
+            ("Peak week — rehearse lightly, then protect", 30),
+        };
+
+        for (var w = 0; w < phaseLabels.Length; w++)
+        {
+            var (label, minutes) = phaseLabels[w];
+            var isFoundation = w < 4;
+            var isReadiness = w >= 8;
+            var isPeak = w == 11;
+
+            var daily = new StudyPlanTemplateSlot[][];
+            if (isPeak)
+            {
+                daily =
+                [
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, 40, "One timed set, then stop adding new work"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "Your rules and openings — nothing new")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, 35, "One timed set at exam pace"),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 40, "Final timed letter"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 20, "Skim the error log once")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 30, "Openings and empathy phrases out loud"),
+                     Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.SpacedRepReview, 20, "Weak words, once")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Light review only"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Skim corrected letters")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 20, "Test-day logistics"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 15, "Protect your sleep")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 15, "Rest. Confidence. Early night.")],
+                ];
+            }
+            else if (isFoundation)
+            {
+                var focus = minutes >= 50 ? "Weakest sub-test block 1" : "Weakest sub-test block";
+                daily =
+                [
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.WeakSkillFocus, minutes - 15, focus),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.WeakSkillFocus, minutes - 15, "Listening weakness block"),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.DrillByTag, minutes, "Writing drill by tag — fundamentals first")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.PronunciationDrill, minutes - 10, "Recorded out-loud practice"),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 10, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.DrillByTag, minutes - 10, "Question-type drill"),
+                     Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.DrillByTag, 10, "Part A precision")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, minutes, "Weekend timed set — first real timing work"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Review corrected work")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, minutes, "Weekend timed set"),
+                     Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.SpacedRepReview, 20, "Review the week's error log")]
+                ];
+            }
+            else if (isReadiness)
+            {
+                daily =
+                [
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.NextUnattemptedPaper, minutes, "Full Reading paper timed — compare with baseline"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Review your best and worst letter")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.NextUnattemptedPaper, minutes - 15, "Full Listening paper timed"),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 45, "Timed letter under exam conditions"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.DrillByTag, 25, "Only what still costs marks")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, 50, "Timed Speaking set at exam pace"),
+                     Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.SpacedRepReview, 20, "Weak words, once")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, 45, "Timed Part A — 15 minutes, no overrun"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "Confirm fixes are automatic")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, 50, "Second timed Speaking set; self-assess"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Error log review")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, 45, "Timed Listening set"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "Consolidation notes")]
+                ];
+            }
+            else
+            {
+                daily =
+                [
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.MiniMock, minutes - 15, "Timed set — track the trend"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.DrillByTag, 15, "Writing drill by tag")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.MiniMock, minutes - 15, "Timed Listening set"),
+                     Slot(StudyPlanSubtestCodes.Vocabulary, StudyPlanSlotKinds.SpacedRepReview, 15, "Due cards only")],
+                    [Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.MiniMock, 45, "Timed letter, applying your fixes"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.DrillByTag, 25, "Question-type drill")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.PronunciationDrill, minutes - 20, "Recorded role plays"),
+                     Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.DrillByTag, 20, "Part A precision")],
+                    [Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.NextUnattemptedPaper, minutes, "Full timed Reading — compare with baseline"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 20, "Review corrected letters")],
+                    [Slot(StudyPlanSubtestCodes.Speaking, StudyPlanSlotKinds.MiniMock, minutes, "Timed Speaking set; self-assess against criteria"),
+                     Slot(StudyPlanSubtestCodes.Reading, StudyPlanSlotKinds.SpacedRepReview, 25, "Wrong-answer review")],
+                    [Slot(StudyPlanSubtestCodes.Listening, StudyPlanSlotKinds.NextUnattemptedPaper, minutes - 15, "Full timed Listening — compare with baseline"),
+                     Slot(StudyPlanSubtestCodes.Writing, StudyPlanSlotKinds.SpacedRepReview, 25, "Register and closure practice")]
+                ];
+            }
+
+            weeks.Add(new StudyPlanTemplateWeek { WeekIndex = w, Label = $"Week {w + 1} — {label}", Days = Days(daily) });
+        }
+
+        var body = new StudyPlanTemplateBody
+        {
+            Weeks = weeks,
+            Checkpoints = [],
+        };
+        return new StudyPlanTemplate
+        {
+            Id = "tmpl-sami-90day",
+            Slug = "sami-90day",
+            Name = "SAMI — 90-Day Plan",
+            Description = "Twelve weeks in four phases: foundation, consolidation, exam readiness, peak. The only horizon with runway to genuinely rebuild a weak sub-test rather than patch it.",
+            ExamTypeCode = "OET",
+            ExamFamilyCode = "oet",
+            MinWeeks = 12,
+            MaxWeeks = 13,
+            TargetBand = null,
+            ProfessionId = null,
+            FocusTagsJson = JsonSerializer.Serialize(new[] { "90-day", "foundation", "full-program" }),
+            DefaultMinutesPerDay = 55,
             TemplateBodyJson = JsonSerializer.Serialize(body),
             IsActive = true,
             Version = 1,
