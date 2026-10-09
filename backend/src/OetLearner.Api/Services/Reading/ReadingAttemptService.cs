@@ -69,12 +69,20 @@ public interface IReadingAttemptService
     /// value and <c>TotalElapsedMs</c> is incremented atomically. Pass
     /// <c>null</c> (the default) for legacy callers that do not yet
     /// capture timing.</param>
+    /// <param name="confidence">F-070 — optional self-reported confidence in
+    /// this answer. When supplied it is stored on the answer row (last value
+    /// wins). When <c>null</c> any previously stored rating is left
+    /// <b>untouched</b>, so a legacy client, or a save caused only by changing
+    /// the answer text, can never erase a rating the learner gave. Null is the
+    /// only correct value for "not rated" — it is never defaulted to a level,
+    /// because a defaulted rating would later be analysed as a self-report.</param>
     Task SaveAnswerAsync(
         string userId,
         string attemptId,
         string questionId,
         string userAnswerJson,
         int? elapsedMs = null,
+        ReadingConfidence? confidence = null,
         CancellationToken ct = default);
 
     /// <summary>
@@ -531,6 +539,7 @@ public sealed class ReadingAttemptService(
         string questionId,
         string userAnswerJson,
         int? elapsedMs = null,
+        ReadingConfidence? confidence = null,
         CancellationToken ct = default)
     {
         var attempt = await db.ReadingAttempts
@@ -657,10 +666,17 @@ public sealed class ReadingAttemptService(
         //      change-tracking after a read.
         var existingRow = await db.ReadingAnswers
             .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
-            .Select(a => new { a.Id, a.UserAnswerJson })
+            .Select(a => new { a.Id, a.UserAnswerJson, a.Confidence })
             .FirstOrDefaultAsync(ct);
         var existingRowId = existingRow?.Id;
         var previousUserAnswerJson = existingRow?.UserAnswerJson;
+
+        // F-070 — confidence is only ever written when this save carries one.
+        // A save that omits it must not erase a rating the learner already gave
+        // (the "keep what is stored" arm below), and the column is never given a
+        // default, because a defaulted rating would be indistinguishable from a
+        // real self-report in companion_learning_fingerprint.
+        var effectiveConfidence = confidence ?? existingRow?.Confidence;
         var isNewAnswer = false;
 
         // Wave 1 — record changed-answer history. A revision is appended when
@@ -683,6 +699,7 @@ public sealed class ReadingAttemptService(
                     AnsweredAt = now,
                     ElapsedMs = sanitisedElapsedMs,
                     TotalElapsedMs = sanitisedElapsedMs,
+                    Confidence = confidence,
                     CreatedAt = now,
                     UpdatedAt = now,
                 };
@@ -701,10 +718,16 @@ public sealed class ReadingAttemptService(
                     db.Entry(insertRow).State = EntityState.Detached;
                 }
 
-                existingRowId = await db.ReadingAnswers
+                // Re-read the row that won the race with the SAME projection, so
+                // the confidence rule below ("keep what is stored when this save
+                // carries no rating") also holds on the race path instead of
+                // writing null over the winner's rating.
+                existingRow = await db.ReadingAnswers
                     .Where(a => a.ReadingAttemptId == attemptId && a.ReadingQuestionId == questionId)
-                    .Select(a => a.Id)
+                    .Select(a => new { a.Id, a.UserAnswerJson, a.Confidence })
                     .FirstOrDefaultAsync(ct);
+                existingRowId = existingRow?.Id;
+                effectiveConfidence = confidence ?? existingRow?.Confidence;
             }
         }
 
@@ -729,7 +752,8 @@ public sealed class ReadingAttemptService(
                         .SetProperty(a => a.IsCorrect, _ => (bool?)null)
                         .SetProperty(a => a.PointsEarned, _ => 0)
                         .SetProperty(a => a.ElapsedMs, _ => sanitisedElapsedMs)
-                        .SetProperty(a => a.TotalElapsedMs, a => (a.TotalElapsedMs ?? 0) + deltaSql),
+                        .SetProperty(a => a.TotalElapsedMs, a => (a.TotalElapsedMs ?? 0) + deltaSql)
+                        .SetProperty(a => a.Confidence, _ => effectiveConfidence),
                         ct);
                 if (rowsAffected == 0)
                 {
@@ -748,6 +772,10 @@ public sealed class ReadingAttemptService(
                 tracked.UpdatedAt = now;
                 tracked.IsCorrect = null;
                 tracked.PointsEarned = 0;
+                // Same rule as the relational path: writing a rating is opt-in
+                // per save, and the tracked entity already carries the stored
+                // value, so an omitted confidence must not overwrite it.
+                if (confidence is not null) tracked.Confidence = confidence;
                 if (sanitisedElapsedMs is int delta)
                 {
                     tracked.ElapsedMs = delta;

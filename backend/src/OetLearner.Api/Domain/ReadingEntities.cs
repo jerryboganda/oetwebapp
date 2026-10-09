@@ -147,6 +147,38 @@ public enum ReadingDistractorCategory
 }
 
 /// <summary>
+/// F-045/F-070 — how sure the learner was of one Reading answer, captured with
+/// the answer save when the client sends it.
+///
+/// <para>
+/// Four levels rather than a 1–5 or 1–10 scale, deliberately: a rating the
+/// learner cannot apply consistently would manufacture precision that
+/// <c>companion_learning_fingerprint</c> then reports as if it were signal. The
+/// values persist in the database (0..3), so changing an existing integer value
+/// is a migration-breaking change.
+/// </para>
+///
+/// <para>
+/// <b>Null is a distinct state and is never stored as 0.</b> Every row written
+/// before the column existed, and every learner who does not rate an answer,
+/// stays null — "not rated" and "guessed" are different facts and only the
+/// second one is evidence.
+/// </para>
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ReadingConfidence
+{
+    /// <summary>A pure guess — no reason to prefer the chosen answer.</summary>
+    Guessed = 0,
+    /// <summary>Narrowed to more than one option and unable to choose between them.</summary>
+    Unsure = 1,
+    /// <summary>Reasonably confident, but not certain.</summary>
+    FairlySure = 2,
+    /// <summary>Certain of the answer.</summary>
+    Certain = 3,
+}
+
+/// <summary>
 /// Phase 4 — per-question authoring review state. A paper may only be
 /// published when every question is in <see cref="Published"/>. The state
 /// machine is strictly forward except for the <see cref="Retired"/>
@@ -665,6 +697,21 @@ public class ReadingAnswer
     /// <summary>Phase Wave 1 — learner-set flag to revisit this question on
     /// post-submit review. Defaults false.</summary>
     public bool FlaggedForReview { get; set; }
+
+    /// <summary>
+    /// F-070 — the learner's own confidence in this answer, captured with the
+    /// save when the client supplies it (autosave accepts it as an optional
+    /// field; omitting it leaves any stored rating untouched).
+    ///
+    /// <para>
+    /// Deliberately NULLABLE and never defaulted. Every row written before this
+    /// column existed, and every learner who never rates, stays null — analysed
+    /// as "not rated" rather than as "guessed". <c>companion_learning_fingerprint</c>
+    /// joins it to <see cref="IsCorrect"/> and counts only rows where it is
+    /// non-null, so it can never present an assumption as a self-report.
+    /// </para>
+    /// </summary>
+    public ReadingConfidence? Confidence { get; set; }
 
     public DateTimeOffset AnsweredAt { get; set; }
 

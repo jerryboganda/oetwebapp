@@ -429,7 +429,25 @@ public static class ReadingLearnerEndpoints
                 ?? throw new InvalidOperationException("auth required");
             try
             {
-                await svc.SaveAnswerAsync(userId, attemptId, questionId, dto.UserAnswerJson, dto.ElapsedMs, ct);
+                // F-070 — optional per-question confidence. Validated here rather
+                // than trusted, and passed through as null when the client does
+                // not send it, which the service treats as "leave any stored
+                // rating alone".
+                ReadingConfidence? confidence = null;
+                if (dto.Confidence is int requestedConfidence)
+                {
+                    if (!Enum.IsDefined(typeof(ReadingConfidence), requestedConfidence))
+                    {
+                        return new ApiErrorResult(
+                            400,
+                            "reading_confidence_invalid",
+                            "confidence must be 0 (guessed), 1 (unsure), 2 (fairly sure) or 3 (certain).");
+                    }
+
+                    confidence = (ReadingConfidence)requestedConfidence;
+                }
+
+                await svc.SaveAnswerAsync(userId, attemptId, questionId, dto.UserAnswerJson, dto.ElapsedMs, confidence, ct);
                 return Results.NoContent();
             }
             catch (ReadingAttemptException ex)
@@ -1875,8 +1893,19 @@ public static class ReadingLearnerEndpoints
 /// milliseconds the learner spent on this question between focus and save.
 /// Server caps the value at 14_400_000 (4 h) and ignores non-positive
 /// values. Pass <c>null</c> for legacy clients that don't capture timing.
+///
+/// <para>
+/// <see cref="Confidence"/> (F-070) is the learner's optional self-rating for
+/// this question, as its stored integer: <c>0</c> = guessed, <c>1</c> =
+/// unsure, <c>2</c> = fairly sure, <c>3</c> = certain. Omit it — or send
+/// <c>null</c> — to leave any previously stored rating untouched. It is never
+/// defaulted: <c>null</c> means "not rated" and analysis counts only rows that
+/// carry a real rating, so an assumed value can never be reported back to the
+/// learner as their own answer. An out-of-range integer is rejected with
+/// <c>reading_confidence_invalid</c>.
+/// </para>
 /// </summary>
-public sealed record AnswerSaveDto(string UserAnswerJson, int? ElapsedMs = null);
+public sealed record AnswerSaveDto(string UserAnswerJson, int? ElapsedMs = null, int? Confidence = null);
 
 /// <summary>R08 rule-out annotations payload — opaque JSON capped at 64 KB
 /// (see <see cref="OetLearner.Api.Services.Reading.ReadingAttemptService.MaxAnnotationsBytes"/>).

@@ -1974,6 +1974,15 @@ builder.Services.AddHttpClient(nameof(OetLearner.Api.Services.Rulebook.AiProvide
     .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderConnectionTester,
     OetLearner.Api.Services.Rulebook.AiProviderConnectionTester>();
+
+// Live per-model capability probe. Its own named client and short per-request timeout so a
+// misbehaving vendor can never consume the production call budget, and so a hung endpoint is a
+// 45-second probe failure rather than a wedged request. Admin-triggered only — see the interface's
+// XML doc for why this is deliberately not a hosted job.
+builder.Services.AddHttpClient(OetLearner.Api.Services.Rulebook.AiProviderCapabilityProbe.HttpClientName)
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderCapabilityProbe,
+    OetLearner.Api.Services.Rulebook.AiProviderCapabilityProbe>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.RegistryBackedProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
@@ -2327,6 +2336,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.CompanionWhyScoreChangeTool>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.CompanionWeeklyReportTool>();
+// F-045/F-070 Learning Fingerprint — read-only analysis of the learner's OWN graded
+// Reading answers: confidence vs accuracy, answer changing, pace against their own
+// median, distractor pattern, and the knowledge-vs-confidence/pace separation.
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionLearningFingerprintTool>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.CompanionRequestHandoffTool>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
@@ -3422,14 +3436,16 @@ await using (var scope = app.Services.CreateAsyncScope())
         .GetRequiredService<OetLearner.Api.Services.Content.IFileStorage>();
     await DatabaseBootstrapper.InitializeAsync(db, app.Environment, bootstrapOptions, storageOptions, storage);
 
-    // Sync AI provider key from env (AI__ApiKey, AI__BaseUrl, AI__DefaultModel)
-    // into the AiProviders row so the registry-backed provider resolves it at
-    // runtime. Encrypts with Data Protection. Idempotent.
+// Sync AI provider keys from the environment (AI__ApiKey/AI__BaseUrl/AI__DefaultModel, and the
+    // dedicated ZAI__ApiKey/ZAI__BaseUrl/ZAI__DefaultModel for the z-ai row) into AiProviders so the
+    // registry-backed provider resolves them at runtime. Create-only: an existing row is never
+    // rewritten from the environment, and that is now logged rather than silent. Encrypts with Data
+    // Protection. Idempotent.
     var dp = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
     var aiOpts = scope.ServiceProvider
         .GetRequiredService<Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions>>()
         .Value;
-    await DatabaseBootstrapper.SynchroniseAiProviderFromEnvAsync(db, dp, aiOpts);
+    await DatabaseBootstrapper.SynchroniseAiProviderFromEnvAsync(db, dp, aiOpts, app.Logger);
 
     // RecallSetTags are not seeded at boot: admin manages the recalls catalog manually.
 

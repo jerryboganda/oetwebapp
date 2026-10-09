@@ -112,6 +112,12 @@ public sealed class AiToolRegistry : IAiToolRegistry
         "companion_upgrade",
         "companion_why_score_change",
         "companion_weekly_report",
+
+        // F-045/F-070 Learning Fingerprint: read-only analysis of the learner's OWN
+        // graded Reading answers (confidence vs accuracy, answer changing, pace against
+        // their own median, distractor pattern). It resolves nothing outside the
+        // caller's own rows and reveals no question content.
+        "companion_learning_fingerprint",
     };
 
     /// <summary>

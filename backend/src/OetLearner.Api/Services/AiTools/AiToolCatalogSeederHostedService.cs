@@ -80,6 +80,7 @@ public sealed class AiToolCatalogSeederHostedService(
         "companion_upgrade",
         "companion_why_score_change",
         "companion_weekly_report",
+        "companion_learning_fingerprint",
     ];
 
     /// <summary>
