@@ -197,3 +197,63 @@ In scope = SAMI PDF §16 disposition REQUIRED (not FUTURE, not POST-BETA, not EQ
 | `traceability/FEATURE_TRACEABILITY_MATRIX.md` | regenerated with Status/Evidence columns so it can no longer contradict the JSON |
 | `REGISTER-RECONCILIATION.md` | this document (new) |
 
+---
+
+## 14. Owner decisions of 9 October 2026 (post-reconciliation)
+
+Recorded here because they change dispositions. These supersede the corresponding rows above.
+
+### 14.1 F-099 / F-094 — video library stays OUT OF SCOPE (owner decision)
+
+**Decision:** the video library is confirmed out of scope for the OET beta, so there is no video
+corpus for a timestamp to point at.
+
+**Effect.** F-099 (open exact timestamp) remains **NOT DELIVERED** and is now formally **out of
+scope rather than pending** — it is not an acceptance blocker and must not be reported as an
+incomplete deliverable. The same applies to the video half of F-094 (timestamp-aware help).
+
+**What was nevertheless fixed, and stays fixed.** The prompt rule that previously told the model
+flatly that video lessons "are not indexed by timestamp" and to "never quote or guess a time
+position" was internally inconsistent: the composer already prints `timestamp: {n}s` for any
+retrieved chunk that carries one, and citations already expose `timestampSeconds`. It now forbids
+only what is actually unsafe — inventing a position, or implying one exists when the evidence
+carries none. That is correct behaviour for **any** timestamped source, video or not, and needs no
+further work while the video library stays out. It changes no disposition.
+
+### 14.2 F-045 / F-070 — instrumentation and feature APPROVED (owner decision)
+
+The owner approved building both the missing instrumentation and the feature.
+
+### 14.3 Correction: answer-change and timing data ALREADY EXIST
+
+The earlier reconciliation assessed F-045/F-070 as unbuildable because "no answer-change or
+per-question confidence instrumentation exists". That was **wrong on three of the four signals**,
+and the error mattered because it argued against work that was in fact possible:
+
+| Signal | Earlier assessment | Actual |
+| --- | --- | --- |
+| Answer changing | absent | **already recorded** — `ReadingAnswerRevision` stores one row per change (`ReadingEntities.cs:1061`) |
+| Per-question timing | absent | **already recorded** — `ReadingAnswer.ElapsedMs` |
+| Review flagging | absent | **already recorded** — `ReadingAnswer.FlaggedForReview` |
+| Distractor pattern | absent | **already recorded** — `ReadingAnswer.SelectedDistractorCategory`, `MissReason` |
+| Per-question **confidence** | absent | absent — genuinely the only gap, and it needed owner approval to instrument |
+
+So F-045/F-070 rest on data that mostly already existed. The lesson matches the defect class
+recorded in `SAMI-RUN-STATE.md`: an absence claim is itself a finding and deserves the same
+evidence as a presence claim before it is used to justify not building something.
+
+### 14.4 Six physical-capture UAT scenarios — owner will run them
+
+The owner will execute the six scenarios that need a human input (degraded photograph, real
+handwriting, a genuine voice recording, live pause-and-coach role play, sensitive-data photograph,
+second device). Instructions are in `uat/OWNER-CAPTURE-SHEETS.md`. Until those results arrive they
+are recorded as **owner-run, not yet executed** — never as passed.
+
+### 14.5 F-015 / F-016 / F-017 and F-076 — owner has taken them on
+
+The owner selected the workshop / correction-session corpus (F-015/016/017) and final-24-hours
+mode (F-076) as work to take on. F-015/016/017 additionally need the actual source material —
+workshop recordings, transcripts or materials — before anything can be indexed; that request is
+open. F-076 overlaps the existing `sami-exam-eve` template and needs a steer on what should
+differ from it.
+
