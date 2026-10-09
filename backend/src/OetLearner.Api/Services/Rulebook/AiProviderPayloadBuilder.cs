@@ -157,11 +157,27 @@ internal static class AiProviderPayloadBuilder
             && !normalized.Contains("transcribe", StringComparison.Ordinal);
     }
 
-    /// <summary>The token-limit parameter the model accepts. OpenAI's audio chat models take
-    /// <c>max_completion_tokens</c> (<c>max_tokens</c> is deprecated there); every other model keeps
-    /// the long-standing <c>max_tokens</c>.</summary>
+    /// <summary>The token-limit parameter the model accepts. OpenAI's audio chat models AND its
+    /// first-party reasoning models (gpt-5/gpt-6/o-series — the latter reject <c>max_tokens</c> with
+    /// "Unsupported parameter", observed live 9 Oct 2026) take <c>max_completion_tokens</c>; every
+    /// other model keeps the long-standing <c>max_tokens</c>.</summary>
     internal static string MaxTokensParameter(string? model)
-        => IsAudioChatModel(model) ? "max_completion_tokens" : "max_tokens";
+        => IsAudioChatModel(model) || IsOpenAiReasoningModel(model) ? "max_completion_tokens" : "max_tokens";
+
+    /// <summary>OpenAI's first-party reasoning families, which reject <c>max_tokens</c> and a
+    /// non-default <c>temperature</c>. Name-prefix based: gpt-5*, gpt-6* and the o-series. Third-party
+    /// OpenAI-compatible models (deepseek/glm on the OpenCode gateway) keep the classic parameters.</summary>
+    internal static bool IsOpenAiReasoningModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var normalized = model.Trim().ToLowerInvariant();
+        return normalized.StartsWith("gpt-5", StringComparison.Ordinal)
+            || normalized.StartsWith("gpt-6", StringComparison.Ordinal)
+            || normalized.StartsWith("o1", StringComparison.Ordinal)
+            || normalized.StartsWith("o3", StringComparison.Ordinal)
+            || normalized.StartsWith("o4", StringComparison.Ordinal)
+            || normalized.StartsWith("o5", StringComparison.Ordinal);
+    }
 
     /// <summary>The <c>input_audio</c> content parts for the request's audio attachments: only for an
     /// audio chat model, and only mp3/wav (the formats the API accepts); anything else is left out

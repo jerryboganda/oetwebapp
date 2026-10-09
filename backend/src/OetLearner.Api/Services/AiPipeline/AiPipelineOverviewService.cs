@@ -119,7 +119,8 @@ public sealed record PipelineOverview(
     PipelineCodexReviewerSnapshot CodexReviewer,
     IReadOnlyList<PipelineCreditGrantView> Credits,
     IReadOnlyList<PipelineSubscriptionAccountView> SubscriptionAccounts,
-    SubscriptionPoolPolicyView SubscriptionPool);
+    SubscriptionPoolPolicyView SubscriptionPool,
+    AiCreditGuardState? CreditGuard = null);
 
 public interface IAiPipelineOverviewService
 {
@@ -196,6 +197,7 @@ public sealed class AiPipelineOverviewService(
             accountPool.Policy.SwitchPercent,
             (int)accountPool.Policy.CooldownFloor.TotalMinutes,
             (int)accountPool.Policy.RefreshTtl.TotalSeconds);
+        var creditGuard = await CreditGuardAsync(ct);
 
         logger.LogDebug(
             "AI pipeline overview built (window={Window}): {Providers} providers, {Calls} calls, ${Cost}.",
@@ -215,7 +217,24 @@ public sealed class AiPipelineOverviewService(
             CodexReviewer: codex,
             Credits: credits,
             SubscriptionAccounts: accounts,
-            SubscriptionPool: policy);
+            SubscriptionPool: policy,
+            CreditGuard: creditGuard);
+    }
+
+    /// <summary>The promotional-credit guard snapshot; null when it cannot be read (monitoring only).</summary>
+    private async Task<AiCreditGuardState?> CreditGuardAsync(CancellationToken ct)
+    {
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var guard = scope.ServiceProvider.GetRequiredService<IAiCreditGuard>();
+            return await guard.GetStateAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogDebug(ex, "Credit guard snapshot failed; the dashboard omits it.");
+            return null;
+        }
     }
 
     /// <summary>

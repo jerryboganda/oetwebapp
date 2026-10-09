@@ -293,14 +293,20 @@ public sealed class RegistryBackedProvider(
         // OpenCode models are not in the name-based capability list: the row's own setting decides.
         var sendReasoning = openCode ? !string.IsNullOrWhiteSpace(reasoningEffort) : IsReasoningCapable(model);
 
+        // OpenAI's first-party reasoning models reject a non-default temperature outright
+        // ("Unsupported parameter", like max_tokens), so they are omitted for them.
+        var openAiReasoning = AiProviderPayloadBuilder.IsOpenAiReasoningModel(model);
         var payload = new Dictionary<string, object?>
         {
             ["model"] = model,
             ["messages"] = AiProviderPayloadBuilder.BuildOpenAiMessages(request, stateProtection),
-            ["temperature"] = request.Temperature,
             [AiProviderPayloadBuilder.MaxTokensParameter(model)] = maxTokens,
             ["stream"] = false,
         };
+        if (!openAiReasoning)
+        {
+            payload["temperature"] = request.Temperature;
+        }
         if (ubagFacade)
         {
             payload["ubag_nonce"] = Guid.NewGuid().ToString("N");

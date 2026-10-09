@@ -29,7 +29,10 @@ public sealed class SpeakingSimulationV11AssessmentService(
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.SpeakingGradingOptions>? gradingOptions = null,
     ITypeSafeJudgmentService? judgments = null,
     Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.TypeSafeOptions>? typeSafeOptions = null,
-    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null)
+    OetLearner.Api.Services.AiPipeline.IAiPipelineStore? pipelineStore = null,
+    // Promotional-credit protection (owner directive 2026-10-09): demotes/drops the paid API hop when the
+    // credit grant runs low. Optional LAST parameter, absent = the plan runs exactly as resolved.
+    OetLearner.Api.Services.AiPipeline.IAiCreditGuard? creditGuard = null)
 {
     private const string PromptTemplateId = "speaking.simulation.v1.1.assessment";
     private const string CardKind = "card";
@@ -307,7 +310,7 @@ Rules:
                 UserId = session.UserId,
                 PromptTemplateId = PromptTemplateId,
                 AssessmentContext = AiAssessmentContext.Practice,
-            }, gradingOptions?.Value, pipelineStore, logger, ct);
+            }, gradingOptions?.Value, pipelineStore, logger, ct, creditGuard: creditGuard);
         }
         catch (PromptNotGroundedException) { throw; }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -951,7 +954,7 @@ Rules:
                 UserId = exam.UserId,
                 PromptTemplateId = CombinedPromptTemplateId,
                 AssessmentContext = AiAssessmentContext.Practice,
-            }, gradingOptions?.Value, pipelineStore, logger, ct);
+            }, gradingOptions?.Value, pipelineStore, logger, ct, creditGuard: creditGuard);
         }
         catch (PromptNotGroundedException) { throw; }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

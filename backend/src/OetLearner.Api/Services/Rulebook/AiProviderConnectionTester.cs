@@ -769,6 +769,12 @@ public sealed class AiProviderConnectionTester(
         };
     }
 
+    /// <summary>True when the base URL points at the UBAG facade host — the only OpenAI-compatible
+    /// endpoint that needs the idempotency nonce. Mirrors the runtime dispatch condition.</summary>
+    private static bool IsUbagFacadeBaseUrl(string? baseUrl)
+        => Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+           && string.Equals(uri.Host, "ubag-vps-gateway-1", StringComparison.OrdinalIgnoreCase);
+
     private static HttpRequestMessage BuildChatCompletionsProbe(string baseUrl, string apiKey, string? defaultModel, bool fullPipeline = false)
     {
         var url = new Uri(new Uri(TrimBase(baseUrl) + "/", UriKind.Absolute), "chat/completions");
@@ -801,15 +807,14 @@ public sealed class AiProviderConnectionTester(
         // can never collide with a previous probe's record: without it, a
         // retest of the same model replays the SAME native job ID, and after
         // any fingerprint-scheme change the store answers CONFLICT instead.
-        // Harmless to every other OpenAI-compatible provider (extra field
-        // ignored), and it keeps each admin Test click an independent run.
-        req.Content = JsonContent.Create(new
-        {
-            model,
-            max_tokens = maxTokens,
-            messages,
-            ubag_nonce = Guid.NewGuid().ToString("N"),
-        });
+        // Strict first-party APIs (OpenAI) reject unknown parameters with a
+        // 400, so the nonce goes ONLY to the UBAG facade host (the same
+        // condition the runtime dispatch uses) and keeps each admin Test
+        // click an independent run there.
+        object body = IsUbagFacadeBaseUrl(baseUrl)
+            ? new { model, max_tokens = maxTokens, messages, ubag_nonce = Guid.NewGuid().ToString("N") }
+            : new { model, max_tokens = maxTokens, messages };
+        req.Content = JsonContent.Create(body);
         return req;
     }
 

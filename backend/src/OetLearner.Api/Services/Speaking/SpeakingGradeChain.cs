@@ -95,12 +95,21 @@ public static class SpeakingGradeChain
         // Subscription-account rotation (owner directive 2026-10-10): same hops, permuted inside each
         // engine group per run. Optional: absent = the saved order runs exactly as saved.
         OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool? accountPool = null,
-        OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null)
+        OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null,
+        // Promotional-credit protection (owner directive 2026-10-09): demotes/drops the paid API hop
+        // when its grant runs low. Optional: absent = the plan runs exactly as resolved.
+        OetLearner.Api.Services.AiPipeline.IAiCreditGuard? creditGuard = null)
     {
         if (store is null)
             return await CompleteAsync(gateway, template, options, logger, ct);
 
         var plan = await store.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.SpeakingGrade, ct);
+        if (creditGuard is not null)
+        {
+            // Applied before the pool: the guard's demotion is cross-group and the pool only permutes
+            // inside each subscription engine group, so the two never fight.
+            plan = await creditGuard.ApplyAsync(plan, logger, ct);
+        }
         if (accountPool is not null && accountState is not null)
         {
             plan = await accountPool.OrderAsync(accountState, plan, ct);

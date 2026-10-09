@@ -1947,6 +1947,12 @@ builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiProviderRouteApprovalSe
 // AI Pipeline Control Center: owner-saved provider order per stage (uncached read per run) and the live voice snapshot refresher.
 builder.Services.AddScoped<OetLearner.Api.Services.AiPipeline.IAiPipelineStore,
     OetLearner.Api.Services.AiPipeline.AiPipelineStore>();
+// Promotional-credit protection (owner directive 2026-10-09): demotes/drops the paid API grading hop
+// while the operator-entered credit grant runs low, with the AI-budget alert ladder on the balance.
+builder.Services.Configure<OetLearner.Api.Services.AiPipeline.AiPipelineCreditGuardOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Services.AiPipeline.AiPipelineCreditGuardOptions.SectionName));
+builder.Services.AddScoped<OetLearner.Api.Services.AiPipeline.IAiCreditGuard,
+    OetLearner.Api.Services.AiPipeline.AiCreditGuard>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiPipeline.LiveVoiceRoutingRefresher>();
 // Route-approval benchmark: executes the learner-route corpus through the real registry-backed
 // dispatch path and records the run (DECISION_LOG D-004/D-005).

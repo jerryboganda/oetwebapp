@@ -264,6 +264,22 @@ export interface PipelineOverview {
   credits: PipelineCreditGrantView[];
   subscriptionAccounts: PipelineSubscriptionAccountView[];
   subscriptionPool: SubscriptionPoolPolicyView;
+  creditGuard?: CreditGuardState | null;
+}
+
+/** The runtime promotional-credit guard snapshot (owner directive 2026-10-09). */
+export interface CreditGuardState {
+  active: boolean;
+  mode: 'none' | 'demoted' | 'skipped';
+  providerCode: string;
+  grantId: string | null;
+  grantUsd: number;
+  spentUsd: number;
+  remainingUsd: number;
+  reserveUsd: number;
+  floorUsd: number;
+  grantStartsAt: string | null;
+  checkedAt: string;
 }
 
 export function fetchPipelineOverview(window: OverviewWindow = '7d'): Promise<PipelineOverview> {

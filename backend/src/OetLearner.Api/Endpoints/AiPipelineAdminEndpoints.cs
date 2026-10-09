@@ -24,7 +24,7 @@ public static class AiPipelineAdminEndpoints
             .RequireAuthorization("AdminAiConfig")
             .RequireRateLimiting("PerUser");
 
-        group.MapGet("", async (IAiPipelineStore store, LearnerDbContext db, CancellationToken ct) =>
+        group.MapGet("", async (IAiPipelineStore store, LearnerDbContext db, IAiCreditGuard creditGuard, CancellationToken ct) =>
         {
             await store.EnsureSeededAsync(null, ct);
             var providerRows = await db.AiProviders.AsNoTracking()
@@ -84,7 +84,8 @@ public static class AiPipelineAdminEndpoints
                 });
             }
 
-            return Results.Ok(new { stages, providers, disableMaxConfirmation = AiPipelineStore.DisableMaxConfirmation });
+            var guardSnapshot = await creditGuardState(creditGuard, ct);
+            return Results.Ok(new { stages, providers, disableMaxConfirmation = AiPipelineStore.DisableMaxConfirmation, creditGuard = guardSnapshot });
         });
 
         group.MapPut("/{stageKey}", async (
@@ -155,9 +156,11 @@ public static class AiPipelineAdminEndpoints
             IAiPipelineStore store,
             LearnerDbContext db,
             IAiProviderConnectionTester tester,
+            IAiCreditGuard creditGuard,
             bool? live,
             CancellationToken ct) =>
         {
+            var guardState = await creditGuard.GetStateAsync(ct);
             var results = new List<object>();
             foreach (var key in AiPipelineStageKeys.All)
             {
@@ -232,6 +235,25 @@ public static class AiPipelineAdminEndpoints
                     }
 
                     checks.Add(new { name = "live_probe", ok = probes.Count > 0, probes });
+                }
+
+                // 5. Promotional-credit guard: whether the paid API hop will run where the saved order
+                // puts it on the next run, and the ledger balance behind that decision.
+                if (AiPipelineStageKeys.IsGrading(key))
+                {
+                    var guardHits = guardState.Active &&
+                        config.Hops.Any(h => string.Equals(h.Provider, guardState.ProviderCode, StringComparison.Ordinal) && h.Enabled);
+                    checks.Add(new
+                    {
+                        name = "credit_guard",
+                        ok = true,
+                        mode = guardState.Mode.ToString().ToLowerInvariant(),
+                        applies = guardHits,
+                        provider = guardState.ProviderCode,
+                        remainingUsd = guardState.RemainingUsd,
+                        reserveUsd = guardState.ReserveUsd,
+                        floorUsd = guardState.FloorUsd,
+                    });
                 }
 
                 results.Add(new { stageKey = key, label = AiPipelineStageKeys.Label(key), version = config.Version, checks });
@@ -448,6 +470,7 @@ public static class AiPipelineAdminEndpoints
 
             // Drop the 60s cache so the panel shows the new grant immediately.
             overview.InvalidateCache();
+            AiCreditGuard.InvalidateCache();
             return Results.Ok(new { grant.Id, grant.ProviderCode, grant.GrantUsd, grant.StartsAt });
         }).RequireRateLimiting("PerUserWrite");
 
@@ -481,6 +504,7 @@ public static class AiPipelineAdminEndpoints
             });
             await db.SaveChangesAsync(ct);
             overview.InvalidateCache();
+            AiCreditGuard.InvalidateCache();
             return Results.NoContent();
         }).RequireRateLimiting("PerUserWrite");
 
@@ -491,6 +515,27 @@ public static class AiPipelineAdminEndpoints
     {
         var id = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
         return new AiPipelineActor(id, http.User.FindFirstValue(ClaimTypes.Name) ?? id);
+    }
+
+    /// <summary>The runtime credit-guard snapshot: what the guard would do to the API hops of the next
+    /// grading run and the ledger balance behind that decision. Dashboard-only, never the run path.</summary>
+    private static async Task<object> creditGuardState(IAiCreditGuard guard, CancellationToken ct)
+    {
+        var s = await guard.GetStateAsync(ct);
+        return new
+        {
+            active = s.Active,
+            mode = s.Mode.ToString().ToLowerInvariant(),
+            s.ProviderCode,
+            s.GrantId,
+            s.GrantUsd,
+            spentUsd = s.SpentUsd,
+            remainingUsd = s.RemainingUsd,
+            s.ReserveUsd,
+            s.FloorUsd,
+            s.GrantStartsAt,
+            s.CheckedAt,
+        };
     }
 
     private sealed record Violation(string Provider, DateTimeOffset? DisabledAt, int CallsAfterGrace, int CallsInsideGrace);

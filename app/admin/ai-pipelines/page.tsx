@@ -1043,110 +1043,21 @@ export default function AiPipelinesPage() {
             </table>
           </div>
         )}
-      </SettingsSection>
-
-      <SettingsSection
-        id="providers"
-        title="Keys & providers"
-        description="Add or rotate API keys (encrypted server-side, never returned to the browser), test connections, discover models and switch providers on or off — effective on the next call, no redeploy. Subscription bridges have no API key; their auth lives in the sidecar containers. Full per-provider settings remain on the AI Providers page."
-        actions={
-          <Button variant="outline" size="sm" onClick={() => void loadProviderRows()} aria-label="Refresh providers">
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
-            Refresh
-          </Button>
-        }
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-start text-2xs uppercase tracking-wider text-admin-fg-muted">
-                <th className="px-3 py-2 text-start">Provider</th>
-                <th className="px-3 py-2 text-start">Key</th>
-                <th className="px-3 py-2 text-start">Model</th>
-                <th className="px-3 py-2 text-start">Active</th>
-                <th className="px-3 py-2 text-start">Connection</th>
-                <th className="px-3 py-2 text-start">Used in</th>
-                <th className="px-3 py-2 text-start"><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {providerRows.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-3 text-admin-fg-muted">
-                  {data.providers.length === 0 ? 'No providers registered yet.' : 'Loading full provider details…'}
-                </td></tr>
-              )}
-              {providerRows.map((p) => {
-                const isBridge = p.apiKeyHint === 'claude-max-5x' || p.apiKeyHint === 'codex-chatgpt';
-                const editing = keyDraft?.id === p.id;
-                const models = discoveredModels[p.id];
-                const usedIn = stagesByProvider.get(p.code) ?? [];
-                return (
-                  <ProviderKeyRow
-                    key={p.id}
-                    provider={p}
-                    isBridge={isBridge}
-                    usedIn={usedIn}
-                    models={models}
-                    busy={rowBusy === p.id}
-                    editing={editing}
-                    draft={keyDraft}
-                    onEdit={() => setKeyDraft(editing ? null : { id: p.id, apiKey: '', model: p.defaultModel, isActive: p.isActive })}
-                    onCancel={() => setKeyDraft(null)}
-                    onDraftChange={(patch) => setKeyDraft((d) => (d && d.id === p.id ? { ...d, ...patch } : d))}
-                    onSave={() => void saveKeyRow(p)}
-                    onToggle={(next) => void toggleProviderActive(p, next)}
-                    onTest={() => void testRow(p)}
-                    onDiscover={() => void discoverRow(p)}
-                  />
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </SettingsSection>
-
-      <SettingsSection
-        id="self-check"
-        title="Pipeline self-check"
-        description="Production evidence on demand: the next run follows the saved order, disabled steps were never called, and what actually served since the last change. The live probe makes one cheap connection test per enabled step."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" disabled={busy === 'self-check'} onClick={() => void check(false)}>
-              <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-              Run check
-            </Button>
-            <Button variant="outline" size="sm" disabled={busy === 'self-check'} onClick={() => void check(true)}>
-              Run with live probe
-            </Button>
-          </div>
-        }
-      >
-        {selfCheck ? (
-          <div className="space-y-3 text-sm">
-            <p className="text-admin-fg-muted">Ran {new Date(selfCheck.ranAt).toLocaleString()}{selfCheck.live ? ' with live probe' : ''}.</p>
-            {selfCheck.results.map((r) => (
-              <div key={r.stageKey} className="rounded-admin-lg border border-admin-border p-3">
-                <p className="font-medium text-admin-fg-strong">{r.label} <span className="text-admin-fg-muted">v{r.version}</span></p>
-                <ul className="mt-2 space-y-1">
-                  {r.checks.map((c) => (
-                    <li key={c.name} className="flex flex-wrap items-start gap-2">
-                      {c.ok ? <Badge variant="success">Pass</Badge> : <Badge variant="danger">Fail</Badge>}
-                      <span className="min-w-0 flex-1 text-admin-fg-default">
-                        {c.name.replace(/_/g, ' ')}
-                        {c.detail ? `: ${c.detail}` : ''}
-                        {c.violations?.map((v) => ` | ${v.provider}: ${v.callsAfterGrace} calls after the change window, ${v.callsInsideGrace} inside it`).join('')}
-                        {c.served?.length ? ` | ${c.served.map((s) => `${s.providerId ?? 'none'} ${s.outcome} x${s.calls}`).join(', ')}` : ''}
-                        {c.probes?.map((p) => ` | ${p.provider}: ${p.status} ${p.latencyMs}ms`).join('')}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-admin-fg-muted">Not run yet.</p>
-        )}
+        {overview?.creditGuard?.active ? (
+          <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-admin-fg" role="status">
+            <strong className="font-semibold">Credit guard {overview.creditGuard.mode}</strong>{' '}
+            — promotional balance {fmtUsd(overview.creditGuard.remainingUsd)} remaining of{' '}
+            {fmtUsd(overview.creditGuard.grantUsd)} is at or below the{' '}
+            {overview.creditGuard.mode === 'skipped'
+              ? `floor (${fmtUsd(overview.creditGuard.floorUsd)})`
+              : `reserve (${fmtUsd(overview.creditGuard.reserveUsd)})`}, so the{' '}
+            {overview.creditGuard.providerCode} grading hop{' '}
+            {overview.creditGuard.mode === 'skipped'
+              ? 'is left out of the plan and'
+              : 'runs after the Claude Max subscription instead of first, and'}{' '}
+            Claude Max is effectively primary. The saved order is unchanged.
+          </p>
+        ) : null}
       </SettingsSection>
     </AdminSettingsLayout>
   );

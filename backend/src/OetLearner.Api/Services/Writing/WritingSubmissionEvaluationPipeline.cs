@@ -131,7 +131,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
     // Subscription-account rotation (owner directive 2026-10-10): permutes the hops of one engine group
     // per run by remaining quota. Optional LAST parameters, absent = the saved order runs as saved.
     OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool? accountPool = null,
-    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null) : IWritingSubmissionEvaluationPipeline
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null,
+    // Promotional-credit protection (owner directive 2026-10-09): demotes/drops the paid API hop when the
+    // credit grant runs low. Optional LAST parameter, absent = the plan runs exactly as resolved.
+    OetLearner.Api.Services.AiPipeline.IAiCreditGuard? creditGuard = null) : IWritingSubmissionEvaluationPipeline
 {
     private readonly WritingGradeChainOptions _chainOptions = gradeChainOptions?.Value ?? new WritingGradeChainOptions();
 
@@ -2132,6 +2135,13 @@ private async Task AttachTaskModelAnswerAsync(
                 // The owner-saved order (admin Pipeline page) is read once per run, uncached. It is the only
                 // source of the order; nothing observed during a run can change it.
                 var plan = await pipelineStore.ResolvePlanAsync(OetLearner.Api.Services.AiPipeline.AiPipelineStageKeys.WritingGrade, ct);
+                if (creditGuard is not null)
+                {
+                    // Promotional-credit protection (owner directive 2026-10-09): demote/drop the paid API
+                    // hop while its grant runs low. Applied before the pool, which only permutes INSIDE
+                    // each subscription engine group, so the demotion survives rotation untouched.
+                    plan = await creditGuard.ApplyAsync(plan, logger, ct);
+                }
                 if (accountPool is not null && accountState is not null)
                 {
                     // Same hops, rotated inside each subscription engine group by remaining quota

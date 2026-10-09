@@ -118,7 +118,9 @@ public static class AiPipelineDefaults
         AiPipelineStageKeys.SpeakingGrade =>
         [
             new(MaxProvider, ClaudeModel, true, 1, 900),
-            new(ClaudeApiProvider, "claude-sonnet-5", true, 1, 900),
+            // Owner correction 9 Oct 2026: the API hop is the approved claude-opus-5-5, never sonnet-5
+            // (the initial seed predated the pipeline API-first flip).
+            new(ClaudeApiProvider, ClaudeModel, true, 1, 900),
         ],
         AiPipelineStageKeys.WritingReview or AiPipelineStageKeys.SpeakingReview =>
         [

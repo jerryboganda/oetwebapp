@@ -46,7 +46,10 @@ public sealed partial class SpeakingAiAssessmentService(
     // Subscription-account rotation (owner directive 2026-10-10): permutes the hops of one engine group
     // per run by remaining quota. Optional LAST parameters, absent = the saved order runs as saved.
     OetLearner.Api.Services.AiPipeline.ISubscriptionAccountPool? accountPool = null,
-    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null)
+    OetLearner.Api.Services.AiPipeline.ISubscriptionAccountStateProvider? accountState = null,
+    // Promotional-credit protection (owner directive 2026-10-09): demotes/drops the paid API hop when the
+    // credit grant runs low. Optional LAST parameter, absent = the plan runs exactly as resolved.
+    OetLearner.Api.Services.AiPipeline.IAiCreditGuard? creditGuard = null)
 {
     // v3 (4 Oct 2026): the system prompt now carries the official OET band descriptors and the
     // "rules guide, never deduct" principles; the model is no longer asked for a readiness band
@@ -526,7 +529,7 @@ Scoring rules:
                 AssessmentContext = input.Context,
             };
             aiResult = await SpeakingGradeChain.CompleteAsync(
-                aiGateway, gradeRequest, gradingOptions?.Value, pipelineStore, logger, ct, accountPool, accountState);
+                aiGateway, gradeRequest, gradingOptions?.Value, pipelineStore, logger, ct, accountPool, accountState, creditGuard);
         }
         catch (PromptNotGroundedException)
         {
