@@ -53,7 +53,11 @@ export default function TutorDashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    // `loading` already initialises to true, and this effect runs once on mount, so setting
+    // it here was a synchronous setState in an effect body — a wasted render and an eslint
+    // error (react-hooks/set-state-in-effect). The flags below still clear it when the fetch
+    // settles. If this effect ever gains dependencies, restore an explicit reset through a
+    // ref-guarded path rather than a bare setState in the body.
     Promise.all([
       fetchTutorClasses().catch((err: unknown) => {
         throw err instanceof Error ? err : new Error('Could not load classes.');
