@@ -52,6 +52,7 @@ public sealed class WritingTaskCaseNotesService(
     TimeProvider clock,
     IFileStorage storage,
     IPdfTextExtractor extractor,
+    IWritingTaskModelAnswerService modelAnswers,
     ILogger<WritingTaskCaseNotesService>? logger = null) : IWritingTaskCaseNotesService
 {
     /// <summary>Upper bound on sentences stored per extraction (table hygiene).</summary>
@@ -96,7 +97,26 @@ public sealed class WritingTaskCaseNotesService(
 
         scenario.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
+        await HoldModelAnswerIfSourceConflictAsync(scenarioId, ct);
         return saved;
+    }
+
+    /// <summary>
+    /// Source precedence (CASE NOTES / SOURCE PDF &gt; MODEL ANSWER, owner directive 9 Oct 2026): the notes just
+    /// changed, so the task's published Model Answer is re-checked against them. A confirmed high-risk disagreement
+    /// (the Daniels case: notes corrected to "once daily", answer still "four times daily") holds the answer for admin
+    /// review and hides it from candidates. A failure of this check never fails the case-note save.
+    /// </summary>
+    private async Task HoldModelAnswerIfSourceConflictAsync(Guid scenarioId, CancellationToken ct)
+    {
+        try
+        {
+            await modelAnswers.HoldIfSourceConflictAsync(scenarioId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger?.LogWarning(ex, "Model-answer source check after a case-note change failed for scenario {ScenarioId}.", scenarioId);
+        }
     }
 
     public async Task<WritingCaseNotesExtractionResult?> ExtractFromStimulusPdfAsync(

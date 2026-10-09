@@ -9,7 +9,7 @@ namespace OetLearner.Api.Services.Rulebook;
 /// <list type="bullet">
 /// <item>Model Answer only and source-gated on the canonical case notes; silent without them.</item>
 /// <item>Conservative by design: it fires only when the letter claims an action is done ("has been notified",
-/// "was referred", "has been arranged/booked/scheduled", "has been contacted") AND the notes mention that action
+/// "was referred", "has been arranged/booked/scheduled", "has been contacted/informed/initiated/encouraged", "I counselled") AND the notes mention that action
 /// only in its plan form ("Notify ...", "Refer ...", "Arrange/Book/Schedule ...", "Contact ...") and nowhere in a
 /// completed form (notified, referred, arranged, appointment, ...). A completed note anywhere suppresses it.</item>
 /// <item>Ceiling: the reverse direction (a request for something the notes show as done) is not checked, because
@@ -35,6 +35,21 @@ public sealed partial class WritingRuleEngine
         ("contacted", new Regex(CaAux + @"contacted\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
             new Regex(@"\bcontact\b(?!\s+lens)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
             new Regex(@"\b(?:contacted|spoke|spoken)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)),
+        // 9 Oct 2026 final source audit: "To be informed of the side effects" was written as "he has been informed", referrals "to be
+        // initiated" as "have been initiated", "Quitline contact to be encouraged" as "has been encouraged" and "Plan: counsel on ..."
+        // as "I counselled him". "to be informed/initiated/encouraged" is the plan form, so it is never read as the done form.
+        ("informed", new Regex(CaAux + @"informed\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+            new Regex(@"\b(?:to\s+be\s+informed|inform)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+            new Regex(@"(?<!\bto\s+be\s)\binformed\b|\b(?:told|let\s+\w+\s+know)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)),
+        ("initiated", new Regex(CaAux + @"initiated\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+            new Regex(@"\b(?:to\s+be\s+initiated|initiate)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+            new Regex(@"(?<!\bto\s+be\s)\binitiated\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)),
+        ("encouraged", new Regex(CaAux + @"encouraged\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+            new Regex(@"\b(?:to\s+be\s+encouraged|encourage)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+            new Regex(@"(?<!\bto\s+be\s)\bencouraged\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)),
+        ("counselled", new Regex(@"\bI\s+(?:have\s+)?counsell?ed\b|" + CaAux + @"counsell?ed\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+            new Regex(@"\bcounsel\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant),
+            new Regex(@"\bcounsell?ed\b|\bcounselling\s+(?:provided|given)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)),
     ];
 
     private static IEnumerable<LintFinding> DetectCompletedActionUnsupported(OetRule rule, WritingLintInput input, LetterStructure s)

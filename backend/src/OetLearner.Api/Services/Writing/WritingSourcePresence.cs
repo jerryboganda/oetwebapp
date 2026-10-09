@@ -256,7 +256,7 @@ internal static class WritingSourcePresenceEngine
             foreach (var raw in sentences)
             {
                 var sentence = Normalise(raw);
-                if (QualifierSymbol.IsMatch(sentence)) return false;
+                if (QualifiedClaimedValue(sentence, facts)) return false;
                 if (!facts.IsSubsetOf(FactsOf(sentence))) return false;
                 var letterEvents = EventTagsOf(sentence);
                 foreach (var fact in facts)
@@ -466,6 +466,30 @@ internal static class WritingSourcePresenceEngine
 
         return true;
     }
+
+    /// <summary>
+    /// True when a value the claim is ABOUT carries a qualifier in the letter sentence ("&lt;90°", "~90°", "-10°", "90°+",
+    /// "80-90°"). A sign on ANOTHER value in the same sentence is that value's own ("flexion was 90 degrees with extension
+    /// to -5 degrees": the -5 does not qualify the 90), so it no longer blocks the proof for the claimed one.
+    /// </summary>
+    private static bool QualifiedClaimedValue(string sentence, HashSet<string> facts)
+    {
+        foreach (var hit in DateHitsOf(sentence))
+        {
+            if (hit.Keys.Any(k => facts.Contains("d|" + k)) && IsQualifiedInLetter(sentence, hit.Index, hit.Length)) return true;
+        }
+
+        foreach (var m in MeasuresOf(sentence))
+        {
+            if (facts.Contains("m|" + m.Number + "|" + m.Unit) && IsQualifiedInLetter(sentence, m.Index, m.Length)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>A qualifier directly before the value (see <see cref="IsQualifiedInSource"/>) or a plus-minus sign directly after it.</summary>
+    private static bool IsQualifiedInLetter(string sentence, int index, int length)
+        => IsQualifiedInSource(sentence, index, length) || sentence[(index + length)..].TrimStart().StartsWith('±');
 
     /// <summary>The stemmed words of a source line plus its heading line (the nearest digit-free line above, when it is
     /// a heading: it ends with a colon or is at most three words - a narrative line above is not a heading).</summary>

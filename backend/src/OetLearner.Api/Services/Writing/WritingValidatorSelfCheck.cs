@@ -1,4 +1,5 @@
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Writing.Review;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -9,6 +10,11 @@ namespace OetLearner.Api.Services.Writing;
 /// scan and table forms, OD vs right eye, completed vs pending actions) through the REAL deployed
 /// <see cref="WritingRuleEngine"/> on the server and reports pass/fail per case. It never runs in CI, never
 /// touches the database and never calls an AI provider ($0 Writing rule).
+/// <para>
+/// It also carries the SOURCE-GROUNDING and SOURCE-PRECEDENCE probes (owner directive, 9 Oct 2026): a fact that IS in the
+/// case notes (the Physiotherapy DOB and 90-degree knee flexion) is never called invented or absent by the grader or the
+/// reviewer, a real absence is still reported, and a Model Answer never outranks the case notes.
+/// </para>
 /// </summary>
 public static class WritingValidatorSelfCheck
 {
@@ -56,6 +62,124 @@ public static class WritingValidatorSelfCheck
         new("Action", "A pending note presented as done is held", "Notify the patient's doctor", "Her doctor, Dr Sotto, has been notified.", CompletedCheck, true),
         new("Action", "A completed note stated as done passes", "Notified Mrs Jones' doctor, Dr Sotto", "Her doctor, Dr Sotto, has been notified.", CompletedCheck, false),
         new("Action", "A request is not a completion claim", "Notify the patient's doctor", "I would be grateful if you could notify her doctor.", CompletedCheck, false),
+        // Found by the 9 Oct 2026 final source audit: plan items written as done.
+        new("Action", "'To be informed' written as 'has been informed' is held", "To be informed of the possible side effects of the antibiotics", "Mrs Jones has been informed of the possible side effects of the antibiotics.", CompletedCheck, true),
+        new("Action", "'Informed of ...' stated as done passes", "Informed of the possible side effects of the antibiotics", "Mrs Jones has been informed of the possible side effects of the antibiotics.", CompletedCheck, false),
+        new("Action", "Referrals 'to be initiated' are not written as initiated", "Referrals are to be initiated to a dietician and a district nurse", "Referrals have been initiated to a dietician and a district nurse.", CompletedCheck, true),
+        new("Action", "'Plan: counsel' written as 'I counselled' is held", "Plan: counsel on lifestyle, exercise and diet", "I counselled Mrs Jones on lifestyle, exercise and diet.", CompletedCheck, true),
+        new("Action", "'Quitline contact to be encouraged' written as done is held", "Contact with Quitline to be encouraged", "Quitline contact has been encouraged.", CompletedCheck, true),
+    ];
+
+    // ---------------------------------------------------------------------------------------------------------
+    // Source grounding + source precedence (the Physiotherapy live-test regression and the CASE NOTES > MODEL ANSWER rule)
+    // ---------------------------------------------------------------------------------------------------------
+
+    private sealed record Probe(string Group, string Name, string CheckId, bool Expected, Func<(bool Actual, string Detail)> Run);
+
+    // The real shape of the stored Physiotherapy case notes (Mr Anthony Miller): the DOB line and the AROM line are exactly
+    // the two facts the grader and the reviewer once called "invented" while they were in the source.
+    private const string MillerNotes =
+        "Mr Anthony Miller attended physiotherapy following a knee arthroscopy\n"
+        + "DOB: 28 February 1968 (58 y.o.)\n"
+        + "Initial physiotherapy assessment on 28 October 2026 found mild right knee swelling and pain rated 4/10\n"
+        + "AROM R knee: flexion 90\u00B0, extension -5\u00B0.\n"
+        + "He was walking with one stick";
+
+    private const string MillerNotesOtherDobAndSide =
+        "Mr Anthony Miller attended physiotherapy following a knee arthroscopy\n"
+        + "DOB: 30 March 1956 (70 y.o.)\n"
+        + "Initial physiotherapy assessment on 28 October 2026 found mild right knee swelling and pain rated 4/10\n"
+        + "AROM L knee: flexion 90\u00B0, extension 0\u00B0.\n"
+        + "He was walking with one stick";
+
+    private const string MillerLetter =
+        "Dr Sarah Patel\nEmergency Assessment Unit\nCity General Hospital\n\n3 November 2026\n\nDear Dr Patel,\n"
+        + "Re: Mr Anthony Miller (DOB: 28 February 1968) \u2014 suspected right deep vein thrombosis\n\n"
+        + "I am writing to refer Mr Anthony Miller for same-day assessment.\n\n"
+        + "At his initial physiotherapy assessment on 28 October 2026, right knee flexion was 90 degrees with extension to -5 degrees, and he was walking with one stick.\n\n"
+        + "Yours sincerely,\n\nPhysiotherapist";
+
+    private const string DobClaim = "The date of birth 28 February 1968 is not in the case notes, so it is invented.";
+    private const string FlexionQuote = "right knee flexion was 90 degrees";
+    private const string FlexionClaim = "The right knee flexion of 90 degrees is not recorded in the case notes.";
+    private const string DoseClaim = "The dose of amlodipine 5 mg is not in the case notes.";
+    private const string DoseNotes = "His hypertension is controlled with amlodipine 5mg daily";
+
+    private const string DoseLetter =
+        "Dr Sarah Patel\nEmergency Assessment Unit\n\n3 November 2026\n\nDear Dr Patel,\nRe: Mr Anthony Miller, aged 58\n\n"
+        + "His hypertension is controlled with amlodipine 5 mg daily.\n\nYours sincerely,\n\nPhysiotherapist";
+
+    private static (bool Actual, string Detail) Removed(string quote, string message, string letter, string notes)
+    {
+        var removed = WritingSourcePresence.IsFalseAbsenceClaim(quote, message, letter, notes, null, out var evidence);
+        return (removed, removed ? "claim removed; source line: " + evidence : "claim kept");
+    }
+
+    private static (bool Actual, string Detail) Evidence(string quote, string message, string notes, string mustContain)
+    {
+        var seen = WritingSourcePresence.ValueLookup(quote, message, notes, null);
+        return (seen is not null && seen.Contains(mustContain, StringComparison.Ordinal), seen ?? "no source line found");
+    }
+
+    private static (bool Actual, string Detail) ReviewerPromptCarriesSourceCheck()
+    {
+        var finding = new WritingAssessmentRuleFinding(
+            "AI:content", "Content", "critical", DobClaim, "28 February 1968", null, null, null, "C2");
+        var request = new WritingReviewRequest(
+            Guid.Empty, "self-check", 0, null, "practice", "physiotherapy", "LT-UR", string.Empty, MillerNotes, MillerLetter,
+            new WritingReviewScores(2, 5, 5, 5, 5, 5, 350), "self-check",
+            [WritingReviewFinding.From("f1", WritingReviewFindingOrigin.Ai, finding)],
+            [], [], null, (_, _) => Task.CompletedTask, WritingReviewMode.Shadow);
+        var prompt = WritingReviewPrompt.Build(request, new WritingReviewOptions(), enhanced: false, issues: []);
+        var ok = prompt.Contains("SOURCE GROUNDING", StringComparison.Ordinal)
+            && prompt.Contains("source check (computed from the case notes)", StringComparison.Ordinal);
+        return (ok, ok ? "reviewer prompt tells the reviewer the DOB IS in the case notes" : "source check line missing from the reviewer prompt");
+    }
+
+    private static readonly Probe[] Probes =
+    [
+        // The two facts the owner saw wrongly flagged in live Physiotherapy testing.
+        new("SourceGrounding", "DOB is in the case notes: the 'invented DOB' claim is removed", "source_grounding", true,
+            () => Removed("28 February 1968", DobClaim, MillerLetter, MillerNotes)),
+        new("SourceGrounding", "Right knee flexion 90 degrees is in the case notes: the 'not recorded' claim is removed (the real sentence, with extension to -5 degrees)", "source_grounding", true,
+            () => Removed(FlexionQuote, FlexionClaim, MillerLetter, MillerNotes)),
+        // A real absence is still reported (the guard only ever removes a claim it can prove false).
+        new("SourceGrounding", "A DOB the notes do not carry is still reported", "source_grounding", false,
+            () => Removed("28 February 1968", DobClaim, MillerLetter, MillerNotesOtherDobAndSide)),
+        new("SourceGrounding", "A value recorded for the other side (left knee) never proves the right knee", "source_grounding", false,
+            () => Removed(FlexionQuote, FlexionClaim, MillerLetter, MillerNotesOtherDobAndSide)),
+        new("SourceGrounding", "A dose is never suppressed by code, even when the dose is in the notes", "source_grounding", false,
+            () => Removed("amlodipine 5 mg daily", DoseClaim, DoseLetter, DoseNotes)),
+        // The reviewer is given the matching source line for every absence claim.
+        new("SourceGrounding", "The reviewer is shown the DOB source line", "source_grounding", true,
+            () => Evidence("28 February 1968", DobClaim, MillerNotes, "dob: 28 february 1968")),
+        new("SourceGrounding", "The reviewer is shown the knee-flexion source line", "source_grounding", true,
+            () => Evidence(FlexionQuote, FlexionClaim, MillerNotes, "flexion 90deg")),
+        new("SourceGrounding", "The reviewer is shown the dose source line", "source_grounding", true,
+            () => Evidence("amlodipine 5 mg daily", DoseClaim, DoseNotes, "amlodipine 5mg")),
+        new("SourceGrounding", "The reviewer prompt carries the computed source check", "source_grounding", true,
+            ReviewerPromptCarriesSourceCheck),
+        new("SourceGrounding", "The grader prompt orders a full case-note check before any 'invented' finding", "source_grounding", true,
+            () =>
+            {
+                var ok = WritingRev8HouseStyle.CandidateGradingRules.Contains("SOURCE-GROUNDING CHECK", StringComparison.Ordinal);
+                return (ok, ok ? "SOURCE-GROUNDING CHECK is in the candidate grading rules" : "rule missing from the candidate grading rules");
+            }),
+        // Source precedence: CASE NOTES / SOURCE PDF > MODEL ANSWER.
+        new("Precedence", "Every Writing AI prompt says the original notes outrank any Model Answer", "source_precedence", true,
+            () =>
+            {
+                var text = ClinicalAbbreviationGlossary.PromptSection(false);
+                var ok = text.Contains("primary source of truth", StringComparison.Ordinal)
+                    && text.Contains("never overrides", StringComparison.Ordinal);
+                return (ok, ok ? "candidate prompt: notes are the primary source of truth, a Model Answer never overrides them" : "precedence wording missing");
+            }),
+        new("Precedence", "A medicine-frequency disagreement with the notes blocks publishing and holds a published answer", "source_precedence", true,
+            () => (WritingTaskModelAnswerService.IsSourceFidelityCheck(FrequencyCheck), FrequencyCheck)),
+        new("Precedence", "A pending action shown as done blocks publishing and holds a published answer", "source_precedence", true,
+            () => (WritingTaskModelAnswerService.IsSourceFidelityCheck(CompletedCheck), CompletedCheck)),
+        new("Precedence", "A style-only finding never holds a published answer", "source_precedence", false,
+            () => (WritingTaskModelAnswerService.IsSourceFidelityCheck("dob_colon_format"), "dob_colon_format")),
     ];
 
     private const string LetterTemplate =
@@ -92,6 +216,19 @@ public static class WritingValidatorSelfCheck
                 results.Add(new CaseResult(c.Group, c.Name, c.CheckId, c.ExpectFinding, false, false, "check crashed: " + ex.GetType().Name));
             }
         }
+        foreach (var p in Probes)
+        {
+            try
+            {
+                var (actual, detail) = p.Run();
+                results.Add(new CaseResult(p.Group, p.Name, p.CheckId, p.Expected, actual, actual == p.Expected, detail));
+            }
+            catch (Exception ex)
+            {
+                results.Add(new CaseResult(p.Group, p.Name, p.CheckId, p.Expected, false, false, "check crashed: " + ex.GetType().Name));
+            }
+        }
+
         var passed = results.Count(r => r.Ok);
         return new SelfCheckReport(now, WritingRuleEngine.ValidatorVersion, results.Count, passed, results.Count - passed, results);
     }

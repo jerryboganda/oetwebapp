@@ -165,6 +165,15 @@ public interface IWritingTaskModelAnswerService
     Task<WritingTaskModelAnswerDto?> RejectAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
 
     /// <summary>
+    /// Source precedence (owner directive, 9 Oct 2026: CASE NOTES / SOURCE PDF &gt; MODEL ANSWER). Re-checks the saved,
+    /// candidate-visible answer against the CURRENT case notes with the deterministic source-fidelity checks of the
+    /// Model Answer gate (no AI call). On a conflict the answer is held for admin review and hidden from candidates
+    /// (<c>model_answer_source_conflict</c>); candidates are never graded against it either way. Returns true when it
+    /// held the answer. Called after the case notes of a task change.
+    /// </summary>
+    Task<bool> HoldIfSourceConflictAsync(Guid scenarioId, CancellationToken ct = default);
+
+    /// <summary>
     /// Preparation-time backfill across published tasks: generates the ONE
     /// reusable Model Answer for every task that lacks a fresh, verified
     /// approved one. Resumable, idempotent, concurrency-safe and rate-limit
@@ -987,6 +996,16 @@ public sealed class WritingTaskModelAnswerService(
                 $"This model answer has not been verified under the current Writing validator ({WritingRuleEngine.ValidatorVersion}). Revalidate or regenerate it first.");
         }
 
+        // Source precedence (9 Oct 2026): the case notes outrank the answer. A confirmed high-risk disagreement
+        // (medicine frequency, a completed action, a date, identity ...) blocks publishing until it is corrected.
+        var conflicts = await SourceConflictsAsync(scenarioId, row.ModelAnswerText, ct);
+        if (conflicts.Count > 0)
+        {
+            throw ApiException.Validation("model_answer_source_conflict",
+                "This model answer disagrees with the case notes, which outrank it, so it cannot be published until it is corrected and re-imported: "
+                + string.Join(" | ", conflicts.Take(3).Select(c => c.Message)));
+        }
+
         row.IsCandidateVisible = true;
         row.ApprovedByUserId = adminUserId;
         row.ApprovedAt = clock.GetUtcNow();
@@ -995,6 +1014,76 @@ public sealed class WritingTaskModelAnswerService(
 
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
         return ToDto(row, scenario, includeReport: true);
+    }
+
+    /// <summary>
+    /// The deterministic checks whose finding means a Model Answer disagrees with its source on a fact a reader acts
+    /// on: a medicine frequency, an action shown as done that the notes only plan, the letter date, the recipient,
+    /// the patient's age/DOB or Re: identity, a requested action the notes never plan, a vital sign re-labelled with a
+    /// diagnosis, or a discharge the notes do not support. Style findings are not here: they never hide a published answer.
+    /// </summary>
+    private static readonly HashSet<string> SourceFidelityChecks = new(StringComparer.Ordinal)
+    {
+        "medication_frequency_source_mismatch",
+        "completed_action_unsupported",
+        "letter_date_unsupported",
+        "recipient_name_mismatch",
+        "age_dob_inconsistent",
+        "re_line_identity_unsupported",
+        "request_action_unsupported",
+        "vital_sign_interpretation_unsupported",
+        "discharge_language_unsupported",
+    };
+
+    internal const string SourceConflictHoldReason = "model_answer_source_conflict";
+
+    internal static bool IsSourceFidelityCheck(string? checkId)
+        => checkId is not null && SourceFidelityChecks.Contains(checkId);
+
+    /// <summary>
+    /// The source-fidelity findings of the stored answer against the CURRENT case notes (no AI call). Empty when the
+    /// answer agrees, or when it cannot be judged (no rule pack for the profession, no case notes, no text).
+    /// </summary>
+    private async Task<IReadOnlyList<WritingModelAnswerFindingDto>> SourceConflictsAsync(
+        Guid scenarioId, string? answerText, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(answerText)) return [];
+        var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
+        if (scenario is null || !RulebookProfessionParser.TryParse(scenario.Profession, out var profession)) return [];
+        var sentences = await LoadSentencesAsync(scenarioId, ct);
+        if (sentences.Count == 0) return [];
+        var report = await RunGateAsync(scenario, sentences, profession, answerText, includeSemantic: false, "system:source-precedence", ct);
+        return report.DeterministicFindings
+            .Where(f => IsSourceFidelityCheck(
+                f.RuleId.StartsWith("BUILTIN.", StringComparison.Ordinal)
+                    ? f.RuleId["BUILTIN.".Length..]
+                    : ruleEngine.CheckIdForRule(profession, f.RuleId)))
+            .ToList();
+    }
+
+    public async Task<bool> HoldIfSourceConflictAsync(Guid scenarioId, CancellationToken ct = default)
+    {
+        var row = await db.WritingTaskModelAnswers.FirstOrDefaultAsync(x => x.ScenarioId == scenarioId, ct);
+        if (row is null
+            || row.Status != WritingAssessmentModelAnswerStatus.Ready
+            || !row.IsCandidateVisible)
+        {
+            return false;
+        }
+
+        var conflicts = await SourceConflictsAsync(scenarioId, row.ModelAnswerText, ct);
+        if (conflicts.Count == 0) return false;
+
+        row.Status = WritingAssessmentModelAnswerStatus.HeldForReview;
+        row.IsCandidateVisible = false;
+        row.HoldReason = SourceConflictHoldReason;
+        row.ValidatorVersion = null;
+        row.UpdatedAt = clock.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        logger.LogWarning(
+            "Model answer for scenario {ScenarioId} held for admin review: it disagrees with the current case notes ({Checks}).",
+            scenarioId, string.Join(", ", conflicts.Select(c => c.RuleId)));
+        return true;
     }
 
     public async Task<WritingTaskModelAnswerDto?> RejectAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default)
