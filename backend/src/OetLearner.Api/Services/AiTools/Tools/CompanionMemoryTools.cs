@@ -728,7 +728,7 @@ public sealed class CompanionWeeklyReportTool(
         // The learner's active plan. A learner may have none, or only an inactive one.
         var plan = await db.StudyPlans.AsNoTracking()
             .Where(p => p.UserId == userId && p.IsActive)
-            .OrderByDescending(p => p.CreatedAt)
+            .OrderByDescending(p => p.GeneratedAt)
             .Select(p => new { p.Id })
             .FirstOrDefaultAsync(ct);
 
