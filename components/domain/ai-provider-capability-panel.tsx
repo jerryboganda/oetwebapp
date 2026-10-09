@@ -12,6 +12,7 @@ import {
   probeAiProviderCapabilities,
   fetchAiProviderAutoSelection,
   updateAiProviderAutoSelection,
+  updateAiProvider,
   type AiProviderAutoSelectionSnapshot,
   type AiProviderModelCapabilityRow,
   type AiProviderRow,
@@ -137,6 +138,27 @@ export function AiProviderAutoSelectionPanel() {
 }
 
 /**
+ * The reasoning values a probed model will actually accept.
+ *
+ * <p>The vendor ladder is not ours to invent: this is the exact set the probe observed the model
+ * honour. A forced-on model returns a ladder with no "off" in it, because Z.AI documents GLM-5.3
+ * and GLM-5.3-FLASH as unable to disable thinking — offering a switch that silently does nothing is
+ * the one outcome worth avoiding here.
+ */
+function reasoningOptionsFor(row: AiProviderModelCapabilityRow): { value: string; label: string }[] {
+  if (!row.supportsThinking) return [];
+  const ladder = row.allowedReasoningEffortsCsv
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
+  if (ladder.length === 0) return [];
+  return ladder.map(v => ({
+    value: v,
+    label: v === 'none' ? 'none (thinking off)' : v,
+  }));
+}
+
+/**
  * Live capability probe.
  *
  * Every flag shown here is what the endpoint was OBSERVED to do, never what a vendor's docs claim.
@@ -152,7 +174,11 @@ export function AiProviderCapabilityPanel() {
   const [selected, setSelected] = useState('');
   const [results, setResults] = useState<AiProviderModelCapabilityRow[]>([]);
   const [probing, setProbing] = useState(false);
+  const [savingEffort, setSavingEffort] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
+
+  const selectedRow = providers.find(p => p.code === selected) ?? null;
+  const defaultModel = selectedRow?.defaultModel ?? '';
 
   const load = useCallback(async () => {
     try {
@@ -191,6 +217,27 @@ export function AiProviderCapabilityPanel() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  /**
+   * Persist the reasoning level for the provider's DEFAULT model.
+   *
+   * <p>`AiProviders.ReasoningEffort` is one column on one row, so it governs whichever model that
+   * row will actually call — not every model the provider offers. The UI says so rather than letting
+   * an operator set a value that looks per-model but is not.
+   */
+  const saveReasoningEffort = async (model: string, effort: string) => {
+    if (!selectedRow) return;
+    setSavingEffort(model);
+    try {
+      await updateAiProvider(selectedRow.id, { reasoningEffort: effort });
+      setProviders(prev => prev.map(p => (p.code === selectedRow.code ? { ...p, reasoningEffort: effort } : p)));
+      setToast({ variant: 'success', message: `Reasoning effort for ${selectedRow.code} is now "${effort}".` });
+    } catch (e) {
+      setToast({ variant: 'error', message: `Could not save reasoning effort: ${(e as Error).message}` });
+    } finally {
+      setSavingEffort(null);
+    }
+  };
+
   return (
     <SettingsSection
       title="Model capability probe"
@@ -225,34 +272,76 @@ export function AiProviderCapabilityPanel() {
                     <th className="py-2 pr-3">JSON</th>
                     <th className="py-2 pr-3">Stream</th>
                     <th className="py-2 pr-3">Embed</th>
-                    <th className="py-2">Thinking</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((r) => (
-                    <tr key={r.model} className="border-t border-admin-border align-top">
-                      <td className="py-2 pr-3">
-                        <div className="font-medium">{r.model}</div>
-                        <Badge variant={r.probeStatus === 'ok' ? 'success' : 'warning'}>{r.probeStatus}</Badge>
-                        {r.probeDetail && (
-                          <div className="mt-1 max-w-md text-xs text-admin-fg-muted">{r.probeDetail}</div>
-                        )}
-                      </td>
-                      <td className="py-2 pr-3">{r.supportsTools ? 'yes' : 'no'}</td>
-                      <td className="py-2 pr-3">{r.supportsVision ? 'yes' : 'no'}</td>
-                      <td className="py-2 pr-3">{r.supportsJsonMode ? 'yes' : 'no'}</td>
-                      <td className="py-2 pr-3">{r.supportsStreaming ? 'yes' : 'no'}</td>
-                      <td className="py-2 pr-3">{r.supportsEmbeddings ? 'yes' : 'no'}</td>
-                      <td className="py-2 text-xs">
-                        {!r.supportsThinking
-                          ? 'n/a'
-                          : r.thinkingCanBeDisabled
-                            ? r.allowedReasoningEffortsCsv || 'selectable'
-                            : 'forced on (cannot disable)'}
-                      </td>
+<th className="py-2">Reasoning</th>
                     </tr>
-                  ))}
-                </tbody>
+                  </thead>
+                  <tbody>
+                    {results.map((r) => {
+                      const effortOptions = reasoningOptionsFor(r);
+                      const isDefault = r.model.toLowerCase() === defaultModel.toLowerCase();
+                      return (
+                      <tr key={r.model} className="border-t border-admin-border align-top">
+                        <td className="py-2 pr-3">
+                          <div className="font-medium">{r.model}</div>
+                          {isDefault && <Badge variant="info">default</Badge>}
+                          <Badge variant={r.probeStatus === 'ok' ? 'success' : 'warning'}>{r.probeStatus}</Badge>
+                          {r.probeDetail && (
+                            <div className="mt-1 max-w-md text-xs text-admin-fg-muted">{r.probeDetail}</div>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3">{r.supportsTools ? 'yes' : 'no'}</td>
+                        <td className="py-2 pr-3">{r.supportsVision ? 'yes' : 'no'}</td>
+                        <td className="py-2 pr-3">{r.supportsJsonMode ? 'yes' : 'no'}</td>
+                        <td className="py-2 pr-3">{r.supportsStreaming ? 'yes' : 'no'}</td>
+                        <td className="py-2 pr-3">{r.supportsEmbeddings ? 'yes' : 'no'}</td>
+                        <td className="py-2 text-xs">
+                          {!r.supportsThinking ? (
+                            <span className="text-admin-fg-muted">not a reasoning model</span>
+                          ) : !r.thinkingCanBeDisabled ? (
+                            <div className="space-y-1">
+                              <Badge variant="warning">forced on — cannot be disabled</Badge>
+                              {isDefault ? (
+                                <Select
+                                  label={`Level for ${selectedRow?.code}`}
+                                  value={selectedRow?.reasoningEffort ?? ''}
+                                  disabled={savingEffort === r.model}
+                                  onChange={(e) => saveReasoningEffort(r.model, e.target.value)}
+                                  options={effortOptions}
+                                />
+                              ) : (
+                                <span className="text-admin-fg-muted">
+                                  Set from the provider&apos;s default model.
+                                </span>
+                              )}
+                              <p className="text-admin-fg-muted">
+                                This vendor documents thinking as always-on for this model, so there is
+                                no &quot;off&quot; to offer — every level still costs reasoning tokens.
+                              </p>
+                            </div>
+                          ) : (
+                            isDefault ? (
+                              <Select
+                                label={`Level for ${selectedRow?.code}`}
+                                value={selectedRow?.reasoningEffort ?? ''}
+                                disabled={savingEffort === r.model}
+                                onChange={(e) => saveReasoningEffort(r.model, e.target.value)}
+                                options={[
+                                  { value: '', label: 'Inherit env default' },
+                                  ...effortOptions,
+                                ]}
+                              />
+                            ) : (
+                              <span className="text-admin-fg-muted">
+                                Supports: {effortOptions.map(o => o.value).join(', ')}. Set from the
+                                provider&apos;s default model.
+                              </span>
+                            )
+                          )}
+                        </td>
+                      </tr>
+                      );
+                    })}
+                  </tbody>
               </table>
             </div>
           )}

@@ -729,7 +729,36 @@ public static class AiUsageAdminEndpoints
             row.DefaultModel = dto.DefaultModel ?? row.DefaultModel;
             if (dto.ReasoningEffort is not null)
             {
-                row.ReasoningEffort = string.IsNullOrWhiteSpace(dto.ReasoningEffort) ? null : dto.ReasoningEffort.Trim().ToLowerInvariant();
+                var effort = string.IsNullOrWhiteSpace(dto.ReasoningEffort)
+                    ? null
+                    : dto.ReasoningEffort.Trim().ToLowerInvariant();
+
+                // Validate rather than trust (owner directive 2026-10-09). This column was previously
+                // stored verbatim, so a typo became a SILENT no-op: the provider kept applying its own
+                // default effort and nothing said so. Z.AI in particular uses a different ladder
+                // (max/xhigh/high/medium/low/minimal/none), so the only honest allow-list is
+                // "OpenAI-style levels, plus whatever this provider's probed models actually accept".
+                if (effort is not null)
+                {
+                    var openAiStyle = new[] { "low", "medium", "high" };
+                    var probed = await db.AiProviderModelCapabilities.AsNoTracking()
+                        .Where(c => c.ProviderCode == row.Code && c.SupportsThinking)
+                        .ToListAsync(ct);
+                    var allowed = probed
+                        .SelectMany(c => (c.AllowedReasoningEffortsCsv ?? string.Empty)
+                            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        .Select(v => v.ToLowerInvariant())
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                    if (!openAiStyle.Contains(effort) && !allowed.Contains(effort))
+                    {
+                        return new ApiErrorResult(400, "ai_reasoning_effort_invalid",
+                            $"'{effort}' is not a reasoning level this provider accepts. Probe its capabilities first, "
+                            + "or use one of low / medium / high.");
+                    }
+                }
+
+                row.ReasoningEffort = effort;
             }
             row.AllowedModelsCsv = dto.AllowedModelsCsv ?? row.AllowedModelsCsv;
             row.PricePer1kPromptTokens = dto.PricePer1kPromptTokens;

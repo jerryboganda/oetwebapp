@@ -734,6 +734,7 @@ export default function AiProvidersPage() {
               </div>
               <Select label="Reasoning effort" value={editing.reasoningEffort ?? ''}
                 onChange={(e) => setEditing({ ...editing, reasoningEffort: e.target.value || null })}
+                hint="OpenAI/Anthropic-style levels. Vendors with their own ladder (Z.AI) support different values and cannot always disable thinking — set those from the Model capability probe panel below, which only ever offers what the live endpoint accepted."
                 options={[
                   { value: '', label: 'Inherit env default (AI__ReasoningEffort)' },
                   { value: 'low', label: 'low' },
