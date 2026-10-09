@@ -279,7 +279,7 @@ public sealed class AiAssistantGateway(
         }
 
 // Build provider request with explicit messages + tools (skip gateway tool loop)
-        var systemPrompt = messages.FirstOrDefault(m => m.Role == "system");
+        var systemMsg = messages.FirstOrDefault(m => m.Role == "system");
         var lastUser = messages.LastOrDefault(m => m.Role == "user");
 
         // Document text rides in the prompt so even text-only providers (incl.
