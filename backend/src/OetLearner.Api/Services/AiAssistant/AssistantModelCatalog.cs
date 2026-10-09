@@ -104,10 +104,22 @@ public static class AssistantModelCatalog
     public static bool IsSelectable(string? model) =>
         IsClaudeApiModel(model) || IsUbagModel(model) || IsZaiModel(model);
 
-    /// <summary>Models a learner may pin to a single conversation. Z.AI plus OpenCode (the two
-    /// vendors the learner surface has ever been entitled to); never Claude or UBAG.</summary>
+/// <summary>
+    /// Models any staff or learner conversation may be pinned to: everything the picker offers
+    /// (Claude API, UBAG, Z.AI) plus the OpenCode gateway.
+    ///
+    /// <para>
+    /// <b>This MUST stay the union of what <c>GET /models</c> offers.</b> A previous version listed
+    /// only Z.AI and OpenCode while the picker still listed Claude and UBAG, so selecting
+    /// <c>claude-sonnet-5</c> or any <c>chatgpt_web|…</c> model failed with
+    /// <c>ai_assistant_model_unknown</c> and the UI showed "Failed to change model" — a validator that
+    /// disagrees with the control above it. Deriving this from <see cref="IsSelectable"/> is what
+    /// keeps the two in step: the picker can only offer a subset of
+    /// <see cref="IsSelectable"/> plus OpenCode.
+    /// </para>
+    /// </summary>
     public static bool IsThreadSelectable(string? model)
-        => IsZaiModel(model) || IsOpenCodeModel(model);
+        => IsSelectable(model) || IsOpenCodeModel(model);
 
     /// <summary>What a LEARNER may be offered. Kept separate from <see cref="IsThreadSelectable"/>
     /// so widening the staff picker can never quietly widen the learner's entitlement.</summary>

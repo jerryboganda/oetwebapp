@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiAssistant;
@@ -86,6 +87,7 @@ public static class AiAssistantEndpoints
             [FromServices] IAiAssistantOrchestrator orchestrator,
             [FromServices] IAiProviderRegistry providerRegistry,
             HttpContext ctx,
+            ILoggerFactory loggerFactory,
             [FromBody] SetAiThreadModelRequest? req,
             CancellationToken ct = default) =>
         {
@@ -117,7 +119,8 @@ public static class AiAssistantEndpoints
             // picker would advertise models the learner cannot actually run, and pinning one would
             // leave the thread on a dead provider until it failed over.
             if (AssistantModelCatalog.IsZaiModel(model)
-                && !await ProviderIsServingAsync(providerRegistry, ZaiProviderDefaults.ProviderCode, model, ct))
+                && !await ProviderIsServingAsync(providerRegistry, ZaiProviderDefaults.ProviderCode, model, ct,
+                    loggerFactory.CreateLogger("AiAssistantThreadModel")))
             {
                 return new ApiErrorResult(400, "ai_assistant_model_unavailable", "This model is not available right now.");
             }
@@ -929,14 +932,38 @@ public static class AiAssistantEndpoints
     /// </para>
     /// </summary>
     private static async Task<bool> ProviderIsServingAsync(
-        IAiProviderRegistry providerRegistry, string providerCode, string? model, CancellationToken ct)
+        IAiProviderRegistry providerRegistry, string providerCode, string? model, CancellationToken ct,
+        ILogger? logger = null)
     {
         var row = await providerRegistry.FindByCodeAsync(providerCode, ct);
-        if (row is null || !row.IsActive) return false;
-        if (string.IsNullOrWhiteSpace(await providerRegistry.GetPlatformKeyAsync(row.Code, ct))) return false;
+        if (row is null)
+        {
+            logger?.LogWarning("Assistant model {Model}: provider '{Provider}' row is missing or inactive.", model, providerCode);
+            return false;
+        }
+        if (string.IsNullOrWhiteSpace(await providerRegistry.GetPlatformKeyAsync(row.Code, ct)))
+        {
+            // The usual cause is a key that no longer unprotects (Data Protection key ring rotated),
+            // not a missing key: EncryptedApiKey is present but Unprotect throws and the registry
+            // returns null. Saying so here is what turns a silent "Failed to change model" into a
+            // diagnosable one.
+            logger?.LogWarning(
+                "Assistant model {Model}: the stored key for '{Provider}' could not be read. "
+                + "EncryptedApiKey present={Present}, length={Length} — a key that fails to unprotect "
+                + "looks identical to a missing one here.",
+                model, providerCode, !string.IsNullOrEmpty(row.EncryptedApiKey), row.EncryptedApiKey?.Length ?? 0);
+            return false;
+        }
         var allowed = (row.AllowedModelsCsv ?? string.Empty)
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        return allowed.Length == 0 || (model is not null && allowed.Contains(model, StringComparer.OrdinalIgnoreCase));
+        if (allowed.Length > 0 && (model is null || !allowed.Contains(model, StringComparer.OrdinalIgnoreCase)))
+        {
+            logger?.LogWarning(
+                "Assistant model {Model}: not in the allow-list for '{Provider}' ({AllowList}).",
+                model, providerCode, row.AllowedModelsCsv);
+            return false;
+        }
+        return true;
     }
 
     private static string AssistantFeatureCodeForRole(string role) => role switch
