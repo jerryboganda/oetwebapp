@@ -5,7 +5,7 @@ Goal: Admin can run the AI pipelines without a developer and sees Writing/Speaki
 Mode: verify
 Updated: 2026-10-10T09:10:00Z
 Branch: main
-HEAD: 3862b10d6
+HEAD: 36caf0151
 
 <!--
 The current run's working memory. Layer 2 of three: AGENTS.md (rules), this file + TASKS.json (run),
@@ -57,13 +57,13 @@ Speaking Claude API grading must be Opus 5.5 High (not Sonnet), and Usage & Cost
 | Gate | Command / workflow | Evidence | Result |
 | --- | --- | --- | --- |
 | ship-gate | pnpm run ship:gate | local:ship:gate | PASS |
-| compilation | build-images.yml | 38039636187 | PASS |
-| deploy | production-deploy.yml | 38039914662 | PASS |
+| compilation | build-images.yml | 38041241678 | PASS |
+| deploy | production-deploy.yml | 38041488615 | PASS |
 | functional acceptance | Owner manual QA | open /admin/ai-pipelines, Model check, Cost by stage, Live voice rate | NOT TESTED |
 
 ## Blockers
 
-- None. Live 3862b10d6 on blue (web + API serving-image proof, ready/live HTTP 200). Functional acceptance and production reconciliation remain owner QA (no admin login on this workstation).
+- None. Live 36caf0151 on green (includes 3862b10d6; 3edaa1394 of another session needed four compile fixes) (web + API serving-image proof, ready/live HTTP 200). Functional acceptance and production reconciliation remain owner QA (no admin login on this workstation).
 
 ## Next action
 
