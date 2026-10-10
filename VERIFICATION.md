@@ -6,6 +6,17 @@ Append-only. Every row is machine-written by `pnpm run ax:record` from GitHub Ac
 
 | Date (UTC) | Claim / gate | Workflow | Run | Job(s) | Conclusion | SHA |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-10 00:59 | CI triage | CI triage | 38011377135 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 04401bf0f |
+| 2026-10-10 00:56 | CI triage | CI triage | 38011173333 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 04401bf0f |
+| 2026-10-10 00:56 | Deploy production | Deploy production | 38011173338 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 04401bf0f |
+| 2026-10-10 00:51 | CI triage | CI triage | 38010830367 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 04401bf0f |
+| 2026-10-10 00:51 | Deploy production | Deploy production | 38010826506 | Resolve the build to deploy=skipped Roll out to the VPS=skipped Apply migration SQL (if the API changed)=skipped | SKIPPED | 04401bf0f |
+| 2026-10-10 00:51 | CI triage | CI triage | 38010826479 | Classify the failed run (jev-1.13.0)=success | SUCCESS | 04401bf0f |
+| 2026-10-10 00:45 | CI triage | CI triage | 38010427743 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 04401bf0f |
+| 2026-10-10 00:45 | Deploy production | Deploy production | 38010423811 | Resolve the build to deploy=skipped Apply migration SQL (if the API changed)=skipped Roll out to the VPS=skipped | SKIPPED | 04401bf0f |
+| 2026-10-10 00:45 | CI triage | CI triage | 38010423792 | Classify the failed run (jev-1.13.0)=success | SUCCESS | 04401bf0f |
+| 2026-10-10 00:40 | Speaking Module CI | Speaking Module CI | 38010052634 | migrations-check=success secrets-scan=success | SUCCESS | 04401bf0f |
+| 2026-10-10 00:40 | Build images | Build images | 38010052685 | build-web=success Typecheck + lint=success Detect what changed=success build-api=success Retag unchanged db-backup=success build-backup=skipped build-agent-gateway=skipped Retag unchanged agent-gateway=success Syntax gate (seconds)=success Deployment contract guards=success Publish verified release provenance=success | SUCCESS | 04401bf0f |
 | 2026-10-09 23:39 | CI triage | CI triage | 38005474531 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 2c67f80ed |
 | 2026-10-09 23:36 | CI triage | CI triage | 38005218760 | Classify the failed run (jev-1.13.0)=skipped | SKIPPED | 2c67f80ed |
 | 2026-10-09 23:36 | Deploy production | Deploy production | 38005218832 | Resolve the build to deploy=success Apply migration SQL (if the API changed)=success Roll out to the VPS=success | SUCCESS | 2c67f80ed |
