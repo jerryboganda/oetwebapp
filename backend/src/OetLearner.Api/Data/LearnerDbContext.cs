@@ -1762,6 +1762,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiRawResponses.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiRawResponses(ModelBuilder modelBuilder);
+    partial void OnModelCreatingAiAssistantIndexing(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.FreeSamples.cs (partial).

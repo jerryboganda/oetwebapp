@@ -1,5 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using OetLearner.Api.Domain.AiAssistant;
+using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Data;
 

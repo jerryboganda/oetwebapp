@@ -1,4 +1,5 @@
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiTools;
 
 namespace OetLearner.Api.Services.AiAssistant.Tools;
 
