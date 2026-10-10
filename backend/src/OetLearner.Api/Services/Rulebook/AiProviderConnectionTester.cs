@@ -803,6 +803,10 @@ public sealed class AiProviderConnectionTester(
         var req = new HttpRequestMessage(HttpMethod.Post, url);
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         var maxTokens = fullPipeline ? 16 : 1;
+        // The probe must mirror the runtime payload's token-limit parameter: strict first-party
+        // OpenAI reasoning models (gpt-5/6, o-series) reject max_tokens with HTTP 400, and the admin
+        // would read a valid key as broken (observed live 10 Oct 2026 on the openai-platform row).
+        var maxTokensParameter = AiProviderPayloadBuilder.MaxTokensParameter(model);
         var messages = new[]
         {
             new { role = "system", content = "Reply with the single word OK." },
@@ -823,7 +827,12 @@ public sealed class AiProviderConnectionTester(
             maxTokens = 512;
             if (OpenCodeProviderDefaults.IsOpenCodeBaseUrl(baseUrl))
                 OpenCodeGatewayHeaders.Apply(req.Headers, sessionKey: null);
-            req.Content = JsonContent.Create(new { model, max_tokens = maxTokens, messages });
+            req.Content = JsonContent.Create(new Dictionary<string, object?>
+            {
+                ["model"] = model,
+                [maxTokensParameter] = maxTokens,
+                ["messages"] = messages,
+            });
             return req;
         }
 
@@ -837,9 +846,14 @@ public sealed class AiProviderConnectionTester(
         // 400, so the nonce goes ONLY to the UBAG facade host (the same
         // condition the runtime dispatch uses) and keeps each admin Test
         // click an independent run there.
-        object body = IsUbagFacadeBaseUrl(baseUrl)
-            ? new { model, max_tokens = maxTokens, messages, ubag_nonce = Guid.NewGuid().ToString("N") }
-            : new { model, max_tokens = maxTokens, messages };
+        var body = new Dictionary<string, object?>
+        {
+            ["model"] = model,
+            [maxTokensParameter] = maxTokens,
+            ["messages"] = messages,
+        };
+        if (IsUbagFacadeBaseUrl(baseUrl))
+            body["ubag_nonce"] = Guid.NewGuid().ToString("N");
         req.Content = JsonContent.Create(body);
         return req;
     }
