@@ -183,7 +183,12 @@ public class GamificationService(LearnerDbContext db)
                 VocabAdded = db.LearnerVocabularies.Count(v => v.UserId == user.Id),
                 VocabMastered = db.LearnerVocabularies.Count(v =>
                     v.UserId == user.Id &&
-                    v.Mastery == "mastered")
+                    v.Mastery == "mastered"),
+                ForumPosts = db.ForumThreads.Count(t => t.AuthorUserId == user.Id)
+                    + db.ForumReplies.Count(r => r.AuthorUserId == user.Id),
+                ReferralsConverted = db.Referrals.Count(r => r.ReferrerUserId == user.Id),
+                PronunciationDrills = db.PronunciationAttempts.Count(p =>
+                    p.UserId == user.Id && p.Status == "completed")
             })
             .SingleOrDefaultAsync(ct);
 
@@ -206,7 +211,10 @@ public class GamificationService(LearnerDbContext db)
                 mergedStreak,
                 prerequisites?.AttemptCount ?? 0,
                 prerequisites?.VocabAdded ?? 0,
-                prerequisites?.VocabMastered ?? 0))
+                prerequisites?.VocabMastered ?? 0,
+                prerequisites?.ForumPosts ?? 0,
+                prerequisites?.ReferralsConverted ?? 0,
+                prerequisites?.PronunciationDrills ?? 0))
                 toAward.Add(ach);
         }
 
@@ -231,6 +239,23 @@ public class GamificationService(LearnerDbContext db)
             }
         }
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Fire-and-forget-safe wrapper around <see cref="CheckAndAwardAchievementsAsync"/>: an
+    /// achievement evaluation must never break the learner flow that triggered it.
+    /// </summary>
+    public async Task TryAwardSafeAsync(string userId, string trigger, CancellationToken ct)
+    {
+        try
+        {
+            await CheckAndAwardAchievementsAsync(userId, trigger, ct);
+        }
+        catch
+        {
+            // Deliberately swallowed: a gamification failure must not fail a vocabulary
+            // word, a forum post, a referral apply or a pronunciation attempt.
+        }
     }
 
     // ── Leaderboard ──────────────────────────────────────────────────────
@@ -536,6 +561,9 @@ public class GamificationService(LearnerDbContext db)
         "total_xp",
         "vocab_added",
         "vocab_mastered",
+        "forum_posts",
+        "referrals_converted",
+        "pronunciation_drills",
     };
 
     /// <summary>
@@ -563,7 +591,10 @@ public class GamificationService(LearnerDbContext db)
         int currentStreak,
         int attemptCount,
         int vocabAdded,
-        int vocabMastered)
+        int vocabMastered,
+        int forumPosts,
+        int referralsConverted,
+        int pronunciationDrills)
     {
         try
         {
@@ -576,6 +607,9 @@ public class GamificationService(LearnerDbContext db)
                 "total_xp" => (xp?.TotalXP ?? 0) >= criteria.GetProperty("threshold").GetInt64(),
                 "vocab_added" => vocabAdded >= criteria.GetProperty("threshold").GetInt32(),
                 "vocab_mastered" => vocabMastered >= criteria.GetProperty("threshold").GetInt32(),
+                "forum_posts" => forumPosts >= criteria.GetProperty("threshold").GetInt32(),
+                "referrals_converted" => referralsConverted >= criteria.GetProperty("threshold").GetInt32(),
+                "pronunciation_drills" => pronunciationDrills >= criteria.GetProperty("threshold").GetInt32(),
                 _ => false
             };
         }

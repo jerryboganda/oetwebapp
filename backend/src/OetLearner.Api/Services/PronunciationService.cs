@@ -36,7 +36,8 @@ public class PronunciationService(
     IPronunciationEntitlementService entitlement,
     IFileStorage storage,
     IOptions<PronunciationOptions> options,
-    ILogger<PronunciationService> logger)
+    ILogger<PronunciationService> logger,
+    GamificationService? gamification = null)
 {
     private readonly PronunciationOptions _opts = options.Value;
 
@@ -470,6 +471,9 @@ public class PronunciationService(
         attempt.CompletedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(ct);
+
+        if (gamification is not null)
+            await gamification.TryAwardSafeAsync(userId, "pronunciation_drill", ct);
 
         // ── Grounded AI feedback (cached on the assessment) ──────────────
         try

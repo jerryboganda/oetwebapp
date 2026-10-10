@@ -76,7 +76,7 @@ public static class CommunityEndpoints
             return Results.Ok(new { id = thread.Id, categoryId = thread.CategoryId, authorUserId = thread.AuthorUserId, authorDisplayName = thread.AuthorDisplayName, authorRole = thread.AuthorRole, title = thread.Title, body = thread.Body, isPinned = thread.IsPinned, isLocked = thread.IsLocked, replyCount = thread.ReplyCount, viewCount = thread.ViewCount, likeCount = thread.LikeCount, createdAt = thread.CreatedAt, lastActivityAt = thread.LastActivityAt });
         });
 
-        community.MapPost("/threads", async (HttpContext http, CreateCommunityThreadRequest req, LearnerDbContext db, CancellationToken ct) =>
+        community.MapPost("/threads", async (HttpContext http, CreateCommunityThreadRequest req, LearnerDbContext db, GamificationService gamification, CancellationToken ct) =>
         {
             ValidateForumText(req.Title, MaxForumTitleLength, "title");
             ValidateForumText(req.Body, MaxForumBodyLength, "body");
@@ -95,6 +95,7 @@ public static class CommunityEndpoints
             };
             db.ForumThreads.Add(thread);
             await db.SaveChangesAsync(ct);
+            await gamification.TryAwardSafeAsync(http.UserId(), "forum_post", ct);
             return Results.Ok(new { id = thread.Id });
         }).RequireRateLimiting("PerUserWrite");
 
@@ -113,7 +114,7 @@ public static class CommunityEndpoints
             return Results.Ok(new { total, replies = replies.Select(r => new { id = r.Id, authorDisplayName = r.AuthorDisplayName, authorRole = r.AuthorRole, body = r.Body, isExpertVerified = r.IsExpertVerified, likeCount = r.LikeCount, createdAt = r.CreatedAt, editedAt = r.EditedAt }) });
         });
 
-        community.MapPost("/threads/{threadId}/replies", async (HttpContext http, string threadId, CreateReplyRequest req, LearnerDbContext db, CancellationToken ct) =>
+        community.MapPost("/threads/{threadId}/replies", async (HttpContext http, string threadId, CreateReplyRequest req, LearnerDbContext db, GamificationService gamification, CancellationToken ct) =>
         {
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
             if (thread == null) return new ApiErrorResult(404, "THREAD_NOT_FOUND", "Thread not found.");
@@ -135,6 +136,7 @@ public static class CommunityEndpoints
             thread.ReplyCount++;
             thread.LastActivityAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
+            await gamification.TryAwardSafeAsync(http.UserId(), "forum_post", ct);
             return Results.Ok(new { id = reply.Id });
         }).RequireRateLimiting("PerUserWrite");
 

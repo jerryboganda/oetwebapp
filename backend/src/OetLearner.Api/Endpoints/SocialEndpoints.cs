@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -61,7 +62,7 @@ public static class SocialEndpoints
             return Results.Ok(refs.Select(r => new { id = r.Id, referredEmail = r.ReferredEmail, status = r.Status, creditAmount = r.CreditAmount, createdAt = r.CreatedAt, convertedAt = r.ConvertedAt }));
         });
 
-        referrals.MapPost("/apply", async (HttpContext http, ApplyReferralRequest req, LearnerDbContext db, CancellationToken ct) =>
+        referrals.MapPost("/apply", async (HttpContext http, ApplyReferralRequest req, LearnerDbContext db, GamificationService gamification, CancellationToken ct) =>
         {
             var code = await db.ReferralCodes.FirstOrDefaultAsync(rc => rc.Code == req.Code, ct);
             if (code == null) return new ApiErrorResult(400, "INVALID_CODE", "This referral code is not valid.");
@@ -88,6 +89,7 @@ public static class SocialEndpoints
             });
             code.TotalReferrals++;
             await db.SaveChangesAsync(ct);
+            await gamification.TryAwardSafeAsync(code.UserId, "referral_applied", ct);
             return Results.Ok(new { applied = true });
         });
 
