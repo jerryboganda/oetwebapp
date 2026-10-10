@@ -71,4 +71,25 @@ public sealed class HostStore
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }
+
+    /// <summary>Atomic, durable grant revision. Renewals do not bump; every changed payload does.
+    /// The first revision exceeds the legacy DesiredRevision so an existing UBAG grant is replaced.</summary>
+    public async Task<long> AcceptUbagAllocationAsync(string id, string fingerprint, CancellationToken cancellationToken)
+    {
+        await using var db = await _factory.CreateDbContextAsync(cancellationToken);
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        var changed = await db.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE hosts SET
+                ubag_allocation_revision = CASE
+                    WHEN ubag_allocation_revision = 0 THEN desired_revision + 1
+                    WHEN ubag_allocation_fingerprint = {fingerprint} THEN ubag_allocation_revision
+                    ELSE ubag_allocation_revision + 1 END,
+                ubag_allocation_fingerprint = {fingerprint}
+            WHERE id = {id}", cancellationToken);
+        if (changed != 1) throw new InvalidOperationException("UBAG allocation host no longer exists");
+        var revision = await db.Hosts.AsNoTracking().Where(h => h.Id == id)
+            .Select(h => h.UbagAllocationRevision).SingleAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
+        return revision;
+    }
 }

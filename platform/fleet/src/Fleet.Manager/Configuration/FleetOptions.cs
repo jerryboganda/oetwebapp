@@ -222,6 +222,15 @@ public sealed class WorkerOptions
 /// </summary>
 public sealed class UbagOptions
 {
+    public string PrimaryTlsDirectory { get; set; } = string.Empty;
+    public string PrimaryId { get; set; } = "ubag-primary";
+    public string HelperImageDigest { get; set; } = string.Empty;
+    public string HelperWorkloadVersion { get; set; } = string.Empty;
+    public string PrimaryWireguardPublicKey { get; set; } = string.Empty;
+    public string PrimaryWireguardEndpoint { get; set; } = string.Empty;
+    public string PrimaryWireguardAddress { get; set; } = "10.253.240.1";
+    public Dictionary<string, string> HelperWireguardAddresses { get; set; } = new(StringComparer.Ordinal);
+    public string WireguardPeersDirectory { get; set; } = string.Empty;
     /// <summary>Master switch. False: the endpoint answers 503 and nothing is ever published.</summary>
     public bool Enabled { get; set; }
 

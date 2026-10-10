@@ -50,6 +50,10 @@ public sealed class HostEntity
 
     public int AppliedRevision { get; set; }
 
+    public long UbagAllocationRevision { get; set; }
+
+    public string UbagAllocationFingerprint { get; set; } = string.Empty;
+
     public DateTimeOffset? LastStatusAt { get; set; }
 
     public string? LastStatusJson { get; set; }

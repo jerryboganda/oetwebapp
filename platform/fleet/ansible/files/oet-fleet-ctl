@@ -19,6 +19,8 @@ Output: one JSON object on stdout (logs print plain text). Exit 0 = ok, 1 = the 
 No job content or secret is ever printed.
 """
 import json
+import base64
+import ipaddress
 import os
 import platform
 import re
@@ -50,6 +52,7 @@ VERBS = {
     "logout": r"",
     "put-env": r"",
     "put-certs": r"",
+    "ubag-reconcile": r"",
     "run": r"sha256:[0-9a-f]{64}",
     "stop": r"(--grace ([1-9]|[1-9][0-9]|1[01][0-9]|120))?",
     "restart": r"",
@@ -463,6 +466,86 @@ def start_agent(values, digest):
     return out.strip()[:64]
 
 
+def verb_ubag_reconcile(args):
+    """One pinned UBAG workload, isolated from the existing OET agent."""
+    value = json.loads(read_stdin(8192))
+    required = {"digest", "workload_version", "node_id", "primary_uri_san", "address", "primary_address", "primary_public_key", "primary_endpoint", "cpu_millis", "memory_bytes"}
+    if set(value) != required:
+        raise Refused("invalid UBAG workload fields")
+    if not DIGEST.fullmatch(value["digest"]) or not re.fullmatch(r"sha-[a-f0-9]{40}", value["workload_version"]):
+        raise Refused("UBAG requires an immutable digest and workload version")
+    if not re.fullmatch(r"ubag-[A-Za-z0-9._-]{1,58}", value["node_id"]) or not re.fullmatch(r"spiffe://ubag/primary/[A-Za-z0-9._-]{1,64}", value["primary_uri_san"]):
+        raise Refused("invalid UBAG identities")
+    for k in ("address", "primary_address"):
+        if not ipaddress.IPv4Address(value[k]) in ipaddress.IPv4Network("10.253.240.0/24"):
+            raise Refused("UBAG address must be in its private tunnel subnet")
+    if value["address"] == value["primary_address"]:
+        raise Refused("UBAG peer addresses overlap")
+    if not re.fullmatch(r"[A-Za-z0-9+/]{43}=", value["primary_public_key"]) or len(base64.b64decode(value["primary_public_key"], validate=True)) != 32:
+        raise Refused("invalid WireGuard public key")
+    peer, port = value["primary_endpoint"].rsplit(":", 1)
+    ipaddress.IPv4Address(peer)
+    if port != "51821": raise Refused("invalid primary WireGuard port")
+    cpu, memory = value["cpu_millis"], value["memory_bytes"]
+    if type(cpu) is not int or type(memory) is not int or not 1000 <= cpu <= 3000 or not 2684354560 <= memory <= 5368709120:
+        raise Refused("UBAG grant cannot hold one bounded browser workload")
+    if any(not os.path.isfile(os.path.join(CERT_DIR, f)) for f in CERT_FILES.values()):
+        raise Failed("UBAG certificate bundle is not provisioned")
+    if shutil.which("wg", path=SAFE_PATH) is None:
+        run(["/usr/bin/apt-get", "update", "-qq"])
+        run(["/usr/bin/apt-get", "install", "-y", "wireguard-tools"])
+    os.makedirs("/etc/wireguard", mode=0o700, exist_ok=True)
+    private_path = "/etc/wireguard/ubagwg.key"
+    if not os.path.exists(private_path):
+        _, private, _ = run(["/usr/bin/wg", "genkey"])
+        with open(private_path, "w") as handle: handle.write(private.strip())
+        os.chmod(private_path, 0o600)
+    with open(private_path) as handle: private = handle.read().strip()
+    tunnel = "[Interface]\nAddress = %s/32\nListenPort = 443\nPrivateKey = %s\n[Peer]\nPublicKey = %s\nAllowedIPs = %s/32\nEndpoint = %s\nPersistentKeepalive = 25\n" % (value["address"], private, value["primary_public_key"], value["primary_address"], value["primary_endpoint"])
+    wg_path = "/etc/wireguard/ubagwg.conf"
+    old = open(wg_path).read() if os.path.exists(wg_path) else ""
+    if old != tunnel:
+        with open(wg_path, "w") as handle: handle.write(tunnel)
+        os.chmod(wg_path, 0o600)
+        run(["/usr/bin/systemctl", "enable", "wg-quick@ubagwg"])
+        run(["/usr/bin/systemctl", "restart", "wg-quick@ubagwg"])
+    else:
+        run(["/usr/bin/systemctl", "start", "wg-quick@ubagwg"])
+    config_dir = "/etc/oet-fleet/ubag-workload"
+    os.makedirs(config_dir, mode=0o700, exist_ok=True)
+    config_path = config_dir + "/config.json"
+    previous = json.load(open(config_path)) if os.path.exists(config_path) else None
+    code, inspect, _ = docker("inspect", "ubag-helper", check=False)
+    running = code == 0 and json.loads(inspect)[0]["State"]["Running"]
+    if previous != value or not running:
+        repo = "ghcr.io/sub-organization-maternal-mind/ubag-helper@" + value["digest"]
+        if docker("image", "inspect", repo, check=False)[0] != 0:
+            docker("--config", DOCKER_CONFIG_DIR, "pull", repo)
+        docker("volume", "create", "ubag-helper-profiles")
+        docker("run", "--rm", "--user", "0", "--entrypoint", "/bin/sh", "-v", "ubag-helper-profiles:/profiles", repo, "-c", "chown 10001:10001 /profiles")
+        if running:
+            docker("stop", "-t", "30", "ubag-helper")
+        docker("rm", "ubag-helper", check=False)
+        env = {
+            "UBAG_HELPER_LISTEN": value["address"] + ":7444", "UBAG_HELPER_NODE_ID": value["node_id"],
+            "UBAG_HELPER_CA_FILE": "/etc/ubag-helper/tls/ca.crt", "UBAG_HELPER_TLS_CERT_FILE": "/etc/ubag-helper/tls/node.crt",
+            "UBAG_HELPER_TLS_KEY_FILE": "/etc/ubag-helper/tls/node.key", "UBAG_HELPER_PRIMARY_URI_SAN": value["primary_uri_san"],
+            "UBAG_HELPER_WORKLOAD_VERSION": value["workload_version"], "UBAG_HELPER_MAX_ATTEMPTS": "1",
+            "UBAG_WORKER_STRICT_SUBMIT": "true", "UBAG_WORKER_STAGE_TIMINGS": "true", "DISPLAY": ":99",
+        }
+        env_args = [arg for k,v in env.items() for arg in ("--env", k+"="+v)]
+        docker("run", "-d", "--name", "ubag-helper", "--restart", "unless-stopped", "--init", "--network", "host", "--read-only",
+               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--user", "10001:10001", "--pids-limit", "512",
+               "--cpus", str(cpu/1000), "--memory", str(memory), "--memory-swap", str(memory),
+               "--volume", CERT_DIR+":/etc/ubag-helper/tls:ro", "--volume", "ubag-helper-profiles:/var/lib/ubag-helper/profiles",
+               "--tmpfs", "/tmp:rw,nosuid,nodev,size=1073741824,uid=10001,gid=10001,mode=1777",
+               "--tmpfs", "/var/lib/ubag-helper/home:rw,nosuid,nodev,size=67108864,uid=10001,gid=10001,mode=0700",
+               *env_args, repo)
+        with open(config_path, "w") as handle: json.dump(value, handle)
+    _, public, _ = run(["/usr/bin/wg", "pubkey"], stdin_text=private+"\n")
+    emit({"ok": True, "wireguardPublicKey": public.strip(), "endpoint": value["address"]+":7444"})
+
+
 def verb_run(args):
     digest = args[0]
     if not os.path.exists(ENV_FILE):
@@ -605,6 +688,7 @@ HANDLERS = {
     "logout": verb_logout,
     "put-env": verb_put_env,
     "put-certs": verb_put_certs,
+    "ubag-reconcile": verb_ubag_reconcile,
     "run": verb_run,
     "stop": verb_stop,
     "restart": verb_restart,

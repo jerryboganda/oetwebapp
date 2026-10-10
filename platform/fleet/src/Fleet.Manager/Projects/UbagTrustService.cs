@@ -38,10 +38,10 @@ public sealed record UbagNodeBundle(
 public sealed class UbagTrustService
 {
     /// <summary>Leaf lifetime; short by design, rotated by re-running the agent step (rollout or repair).</summary>
-    public static readonly TimeSpan LeafLifetime = TimeSpan.FromDays(90);
+    public static readonly TimeSpan LeafLifetime = TimeSpan.FromHours(71);
 
     /// <summary>A leaf younger than this is reused instead of re-issued at the next S10.</summary>
-    public static readonly TimeSpan LeafRenewBefore = TimeSpan.FromDays(30);
+    public static readonly TimeSpan LeafRenewBefore = TimeSpan.FromHours(24);
 
     private const string CaPemBegin = "-----BEGIN CERTIFICATE-----";
     // PEM MARKERS for shape validation, not key material — the annotation below is the scanner's own opt-out.
@@ -53,6 +53,7 @@ public sealed class UbagTrustService
     private readonly TimeProvider _time;
     private readonly ILogger<UbagTrustService> _logger;
     private readonly SemaphoreSlim _caGate = new(1, 1);
+    private readonly SemaphoreSlim _issueGate = new(1, 1);
 
     private (X509Certificate2 Cert, string Pem)? _ca;
 
@@ -97,6 +98,13 @@ public sealed class UbagTrustService
     /// </summary>
     public async Task<UbagNodeBundle> EnsureBundleAsync(string hostId, CancellationToken cancellationToken)
     {
+        await _issueGate.WaitAsync(cancellationToken);
+        try { return await EnsureBundleCoreAsync(hostId, cancellationToken); }
+        finally { _issueGate.Release(); }
+    }
+
+    private async Task<UbagNodeBundle> EnsureBundleCoreAsync(string hostId, CancellationToken cancellationToken)
+    {
         if (!_options.Value.Ubag.TrustEnabled)
         {
             throw new InvalidOperationException("the UBAG trust plane is not enabled");
@@ -110,7 +118,8 @@ public sealed class UbagTrustService
         if (stored is { } reusable)
         {
             using var probe = X509Certificate2.CreateFromPem(reusable.CertPem);
-            if (probe.NotAfter.ToUniversalTime() - _time.GetUtcNow() >= LeafRenewBefore)
+            if (probe.NotAfter.ToUniversalTime() - probe.NotBefore.ToUniversalTime() <= TimeSpan.FromHours(72)
+                && probe.NotAfter.ToUniversalTime() - _time.GetUtcNow() >= LeafRenewBefore)
             {
                 return new UbagNodeBundle(nodeId, uriSan, reusable.CertPem, reusable.KeyPem, ca.Pem, probe.NotAfter);
             }
@@ -166,6 +175,69 @@ public sealed class UbagTrustService
         return (
             Encoding.ASCII.GetString(certPem.AsSpan()),
             Encoding.ASCII.GetString(keyPem.AsSpan()));
+    }
+
+    /// <summary>Primary certificates stay on the primary's restricted shared mount, never in an API response.</summary>
+    public async Task EnsurePrimaryBundleAsync(CancellationToken cancellationToken)
+    {
+        var options = _options.Value.Ubag;
+        if (string.IsNullOrWhiteSpace(options.PrimaryTlsDirectory)) return;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(options.PrimaryId, @"\A[A-Za-z0-9._-]{1,64}\z"))
+            throw new InvalidOperationException("invalid UBAG primary identity");
+        await _issueGate.WaitAsync(cancellationToken);
+        try
+        {
+            var ca = await LoadCaAsync(cancellationToken);
+            var dir = options.PrimaryTlsDirectory;
+            Directory.CreateDirectory(dir);
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            var certPath = Path.Combine(dir, "primary.crt");
+            var keyPath = Path.Combine(dir, "primary.key");
+            try
+            {
+                using var old = X509Certificate2.CreateFromPemFile(certPath, keyPath);
+                if (old.NotAfter.ToUniversalTime() - old.NotBefore.ToUniversalTime() <= TimeSpan.FromHours(72)
+                    && old.NotAfter.ToUniversalTime() - _time.GetUtcNow() >= LeafRenewBefore
+                    && HasUriSan(old, "spiffe://ubag/primary/" + options.PrimaryId))
+                    return;
+            }
+            catch (Exception ex) when (ex is IOException or CryptographicException) { }
+            using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+            var request = new CertificateRequest("CN=" + options.PrimaryId, key, HashAlgorithmName.SHA256);
+            var san = new SubjectAlternativeNameBuilder();
+            san.AddUri(new Uri("spiffe://ubag/primary/" + options.PrimaryId));
+            request.CertificateExtensions.Add(san.Build(critical: true));
+            request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+            request.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature, true));
+            request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new("1.3.6.1.5.5.7.3.1"), new("1.3.6.1.5.5.7.3.2") }, true));
+            using var leaf = request.Create(ca.Cert, _time.GetUtcNow().AddMinutes(-5), _time.GetUtcNow().Add(LeafLifetime), RandomNumberGenerator.GetBytes(16));
+            foreach (var item in new[] { (certPath, leaf.ExportCertificatePem()), (keyPath, key.ExportPkcs8PrivateKeyPem()), (Path.Combine(dir, "ca.pem"), ca.Pem) })
+            {
+                var temporary = item.Item1 + ".new";
+                await File.WriteAllTextAsync(temporary, item.Item2, cancellationToken);
+                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                File.Move(temporary, item.Item1, overwrite: true);
+            }
+            _logger.LogInformation("Renewed UBAG primary certificate; expires {NotAfter:O}.", leaf.NotAfter);
+        }
+        finally { _issueGate.Release(); }
+    }
+
+    private static bool HasUriSan(X509Certificate2 cert, string expected)
+    {
+        var extension = cert.Extensions.Cast<X509Extension>().FirstOrDefault(e => e.Oid?.Value == "2.5.29.17");
+        if (extension is null) return false;
+        var reader = new System.Formats.Asn1.AsnReader(extension.RawData, System.Formats.Asn1.AsnEncodingRules.DER).ReadSequence();
+        while (reader.HasData)
+        {
+            var tag = reader.PeekTag();
+            if (tag.HasSameClassAndValue(new System.Formats.Asn1.Asn1Tag(System.Formats.Asn1.TagClass.ContextSpecific, 6)))
+            {
+                if (reader.ReadCharacterString(System.Formats.Asn1.UniversalTagNumber.IA5String, tag) == expected) return true;
+            }
+            else reader.ReadEncodedValue();
+        }
+        return false;
     }
 
     /// <summary>Loads and validates the CA pair from the secrets directory, caching it for the process lifetime.</summary>

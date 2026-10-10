@@ -27,6 +27,7 @@ VERBS = {
     "logout": r"",
     "put-env": r"",
     "put-certs": r"",
+    "ubag-reconcile": r"",
     "run": r"sha256:[0-9a-f]{64}",
     "stop": r"(--grace ([1-9]|[1-9][0-9]|1[01][0-9]|120))?",
     "restart": r"",

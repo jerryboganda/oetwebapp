@@ -137,6 +137,7 @@ public static class ServiceRegistration
         // Startup checks first: hosted services start in registration order, and nothing else may touch the database before them.
         services.AddHostedService<StartupChecks>();
         services.AddHostedService<OperationWorker>();
+        services.AddHostedService<Projects.UbagWorkloadMaintenance>();
         services.AddSingleton<NodeMonitor>();
         services.AddHostedService(sp => sp.GetRequiredService<NodeMonitor>());
         return services;

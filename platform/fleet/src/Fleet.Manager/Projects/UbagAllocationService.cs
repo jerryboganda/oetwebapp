@@ -180,6 +180,15 @@ public sealed class UbagAllocationService
             var allocation = await BuildForAsync(host, nodes, options, now, cancellationToken);
             if (allocation is not null)
             {
+                // All serialized grant fields except renewal timestamps participate.
+                // DesiredRevision cannot fence endpoint/policy/health/certificate changes.
+                var validity = allocation.ValidUntil;
+                allocation.ValidUntil = default;
+                allocation.Generation = 0;
+                var fingerprint = Convert.ToHexString(SHA256.HashData(
+                    Encoding.UTF8.GetBytes(FleetJson.Serialize(allocation))));
+                allocation.Generation = await _hosts.AcceptUbagAllocationAsync(host.Id, fingerprint, cancellationToken);
+                allocation.ValidUntil = validity;
                 allocations.Add(allocation);
             }
         }

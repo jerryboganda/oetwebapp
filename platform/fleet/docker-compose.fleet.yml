@@ -62,6 +62,15 @@ services:
       # Trust plane (decision D3): off unless the owner sets FLEET_UBAG_TRUST_ENABLED=true; the CA pair
       # comes in through the secrets block below (empty files = the plane refuses to start, loudly).
       Fleet__Ubag__TrustEnabled: ${FLEET_UBAG_TRUST_ENABLED:-false}
+      Fleet__Ubag__PrimaryTlsDirectory: ${FLEET_UBAG_PRIMARY_TLS_DIRECTORY:-}
+      Fleet__Ubag__PrimaryId: ${FLEET_UBAG_PRIMARY_ID:-ubag-primary}
+      Fleet__Ubag__HelperImageDigest: ${FLEET_UBAG_HELPER_IMAGE_DIGEST:-}
+      Fleet__Ubag__HelperWorkloadVersion: ${FLEET_UBAG_HELPER_WORKLOAD_VERSION:-}
+      Fleet__Ubag__PrimaryWireguardPublicKey: ${FLEET_UBAG_PRIMARY_WIREGUARD_PUBLIC_KEY:-}
+      Fleet__Ubag__PrimaryWireguardEndpoint: ${FLEET_UBAG_PRIMARY_WIREGUARD_ENDPOINT:-}
+      Fleet__Ubag__PrimaryWireguardAddress: ${FLEET_UBAG_PRIMARY_WIREGUARD_ADDRESS:-10.253.240.1}
+      Fleet__Ubag__WireguardPeersDirectory: ${FLEET_UBAG_WIREGUARD_PEERS_DIRECTORY:-}
+      Fleet__Ubag__HelperWireguardAddresses__1b7e58f5-f984-4474-b9b4-6e93bdbf89d8: ${FLEET_UBAG_HELPER_WIREGUARD_ADDRESS_1B7E58F5:-}
       # Trial-firewall workaround: the helper's provider firewall is immutable and allows only
       # 22/80/443/ICMP, so the upcloud-singapore dial endpoint is published on 443 (S5 redirects
       # 443 -> the 7443 listener). Empty = the endpoint template ({address}:7443) wins.

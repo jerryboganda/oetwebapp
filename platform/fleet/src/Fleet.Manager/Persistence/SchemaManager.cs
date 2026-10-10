@@ -19,10 +19,17 @@ public sealed record SchemaUpgrade(int ToVersion, IReadOnlyList<string> Statemen
 /// </summary>
 public sealed class SchemaManager
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     /// <summary>Empty at version 1. Add <c>new(2, new[] { "ALTER TABLE ..." })</c> and bump <see cref="CurrentVersion"/> together.</summary>
-    public static readonly IReadOnlyList<SchemaUpgrade> Upgrades = Array.Empty<SchemaUpgrade>();
+    public static readonly IReadOnlyList<SchemaUpgrade> Upgrades = new[]
+    {
+        new SchemaUpgrade(2, new[]
+        {
+            "ALTER TABLE hosts ADD COLUMN ubag_allocation_revision INTEGER NOT NULL DEFAULT 0;",
+            "ALTER TABLE hosts ADD COLUMN ubag_allocation_fingerprint TEXT NOT NULL DEFAULT '';",
+        }),
+    };
 
     private readonly IDbContextFactory<FleetDbContext> _factory;
     private readonly TimeProvider _time;
