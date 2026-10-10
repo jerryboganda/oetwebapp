@@ -133,7 +133,7 @@ public Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext 
                     truncated,
                     // Say so when the listing was cut short. Without this the model cannot tell a
                     // complete listing from a partial one and may conclude a file is absent.
-                    ...(truncated ? new { note = $"Listing truncated at {MaxEntries} entries; list a subdirectory for more." } : new { })
+                    note = truncated ? $"Listing truncated at {MaxEntries} entries; list a subdirectory for more." : null
                 })));
         }
         catch (Exception ex)
