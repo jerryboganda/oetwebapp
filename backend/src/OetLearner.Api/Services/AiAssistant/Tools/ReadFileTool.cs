@@ -83,7 +83,15 @@ public Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext 
         }
 
         // Resolve relative to repository root
-        var repoRoot = RepoRootResolver.Resolve(_configuration);
+        var resolution = RepoRootResolver.Resolve(_configuration);
+        if (!resolution.HasSource)
+        {
+            return Task.FromResult(new AiToolExecutionResult(
+                AiToolOutcome.ProviderError, null, "codebase_source_unavailable",
+                "No project source is available in this deployment. " + resolution.Reason));
+        }
+
+        var repoRoot = resolution.Root!;
         var fullPath = Path.GetFullPath(Path.Combine(repoRoot, path));
 
         // Ensure resolved path is still within repo

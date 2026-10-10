@@ -120,7 +120,15 @@ public sealed class WriteFileTool : IAiToolExecutor
             // working directory with no root and no post-resolution check,
             // so filesystem safety depended entirely on SafetyGuard with no
             // second line of defense inside the tool that actually writes.
-            var repoRoot = RepoRootResolver.Resolve(_configuration);
+            var resolution = RepoRootResolver.Resolve(_configuration);
+            if (!resolution.HasSource)
+            {
+                return new AiToolExecutionResult(AiToolOutcome.ProviderError, null,
+                    "codebase_source_unavailable",
+                    "No project source is available in this deployment. " + resolution.Reason);
+            }
+
+            var repoRoot = resolution.Root!;
             var fullPath = Path.GetFullPath(Path.Combine(repoRoot, relativePath));
             if (!fullPath.StartsWith(repoRoot, StringComparison.OrdinalIgnoreCase))
             {
