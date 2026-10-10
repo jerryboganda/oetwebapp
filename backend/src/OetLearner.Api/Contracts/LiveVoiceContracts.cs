@@ -62,6 +62,24 @@ public sealed record LiveVoiceTurnResponse(
     bool Duplicate,
     string? AdvisoryStatus);
 
+/// <summary>
+/// Provider-reported token usage of one live voice conversation, sent by the browser (the realtime media and
+/// its events never pass through this API). It is used for cost REPORTING only: every number is clamped, and a
+/// wrong or missing report can never affect grading, credits or the candidate. <c>Basis</c> is <c>final</c>
+/// (the provider's end-of-session total), <c>sum</c> (the sum of per-response usage events) or <c>mixed</c>.
+/// </summary>
+public sealed record LiveVoiceUsageRequest(
+    string ProviderSessionId,
+    long? InputTokens,
+    long? OutputTokens,
+    long? CachedInputTokens,
+    long? InputAudioTokens,
+    long? OutputAudioTokens,
+    string? Basis = null,
+    int? Responses = null);
+
+public sealed record LiveVoiceUsageResponse(bool Accepted);
+
 public sealed record LiveVoiceTranscriptRequest(
     string Provider,
     string ProviderSessionId,

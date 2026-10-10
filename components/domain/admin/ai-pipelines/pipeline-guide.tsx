@@ -122,6 +122,79 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
+function Mark({ n }: { n: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--admin-danger)] text-[11px] font-bold text-white"
+    >
+      {n}
+    </span>
+  );
+}
+
+/**
+ * An annotated replica of one pipeline card (Speaking grading). It is drawn from the same elements as the real
+ * page, so it can never show a stale layout the way a screenshot would; the numbers match the legend below it.
+ */
+function ScreenTour() {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-admin-lg border border-admin-border bg-admin-bg-surface p-4 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="flex items-center gap-2 text-base font-semibold text-admin-fg-strong">
+            Speaking grading <Mark n={1} />
+          </p>
+          <span className="flex items-center gap-2">
+            <Badge variant="muted">v12</Badge>
+            <Mark n={2} />
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div>
+            <p className="text-2xs font-semibold uppercase tracking-wider text-admin-fg-muted">Next run starts on</p>
+            <p className="mt-1 flex items-center gap-2 font-medium text-admin-fg-strong">Claude API (Anthropic) <Mark n={3} /></p>
+          </div>
+          <div>
+            <p className="text-2xs font-semibold uppercase tracking-wider text-admin-fg-muted">Last served by</p>
+            <p className="mt-1 flex items-center gap-2 text-admin-fg-default">Claude API (claude-opus-5-5) <Mark n={4} /></p>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-admin-lg border border-emerald-600/40 bg-emerald-500/5 p-2">
+          <span className="font-semibold text-admin-fg-strong">Model check</span>
+          <Badge variant="success">Claude API uses claude-opus-5-5</Badge>
+          <Mark n={5} />
+        </div>
+        <div className="mt-3 space-y-1.5">
+          <MockRow n={1} name="Claude API (Anthropic)" status="Ready · claude-opus-5-5 · 1 attempt · 900 s" hot />
+          <MockRow n={2} name="Claude Max subscription" status="Ready · Subscription" />
+          <MockRow n={3} name="Z.AI GLM" status="Ready" />
+        </div>
+        <p className="mt-2 flex items-center gap-2 text-2xs text-admin-fg-muted">
+          Each row: grip / arrows to reorder, on/off switch, model, attempts, seconds <Mark n={6} />
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="rounded-admin-md bg-[var(--admin-primary)] px-3 py-1.5 text-xs font-semibold text-white">Save order</span>
+          <Mark n={7} />
+          <span className="rounded-admin-md border border-admin-border px-3 py-1.5 text-xs">Restore built-in order</span>
+          <span className="rounded-admin-md border border-admin-border px-3 py-1.5 text-xs">History</span>
+          <Mark n={8} />
+        </div>
+      </div>
+      <ol className="grid gap-1.5 text-sm text-admin-fg-default sm:grid-cols-2">
+        <li className="flex gap-2"><Mark n={1} /><span>The pipeline. Each card is one of the five.</span></li>
+        <li className="flex gap-2"><Mark n={2} /><span>Version. Every save makes a new version; History lists them.</span></li>
+        <li className="flex gap-2"><Mark n={3} /><span>Where the next submission starts: the first step that is on and ready.</span></li>
+        <li className="flex gap-2"><Mark n={4} /><span>The provider and exact model that last answered, read from the call record.</span></li>
+        <li className="flex gap-2"><Mark n={5} /><span>Green = the Claude API step sends the approved model. Amber lists any other model seen in the last 7 days.</span></li>
+        <li className="flex gap-2"><Mark n={6} /><span>The ordered steps. Top is tried first; drag or use the arrows; the switch turns a step on or off here only.</span></li>
+        <li className="flex gap-2"><Mark n={7} /><span>Nothing changes until you press Save order. Discard abandons edits.</span></li>
+        <li className="flex gap-2"><Mark n={8} /><span>Undo tools: factory order, or any earlier version from History.</span></li>
+      </ol>
+    </div>
+  );
+}
+
 function nameOf(provider: string, names: Record<string, string> | undefined): string {
   return names?.[provider] ?? FRIENDLY_NAMES[provider] ?? provider;
 }
@@ -277,12 +350,16 @@ export function PipelineGuide({ stages, providerNames }: PipelineGuideProps) {
             </Callout>
           </Section>
 
+          <Section id="tour" title="2. A tour of one pipeline card (what each part of the screen is)">
+            <ScreenTour />
+          </Section>
+
           {/* A — the five pipelines */}
-          <Section id="pipelines" title="2. The five pipelines: who is primary, who is backup, how fallback works">
+          <Section id="pipelines" title="3. The five pipelines: who is primary, who is backup, how fallback works">
             <div className="space-y-6">
               <div className="space-y-2">
                 <p className="font-semibold text-admin-fg-strong">Pipeline 1 — Writing grading</p>
-                <p className="text-sm text-admin-fg-default">Grades every submitted letter. It cannot be switched off as a whole.</p>
+                <p className="text-sm text-admin-fg-default">Grades every submitted letter. It cannot be switched off as a whole. The approved model is Claude Opus 5.5 at HIGH effort on every Claude route (subscription and paid API).</p>
                 <Flow
                   label="Writing grading flow"
                   nodes={stageFlow(
@@ -374,7 +451,7 @@ export function PipelineGuide({ stages, providerNames }: PipelineGuideProps) {
           </Section>
 
           {/* B — enable / disable */}
-          <Section id="onoff" title="3. Switching providers on and off — and what each switch really does">
+          <Section id="onoff" title="4. Switching providers on and off — and what each switch really does">
             <div className="grid gap-3 md:grid-cols-2">
               <Callout title="Switch on one step (this pipeline only)">
                 <p>Each row has an on/off switch. It affects only that pipeline. The provider stays available everywhere else. Use this to take one provider out of one stage.</p>
@@ -404,7 +481,7 @@ export function PipelineGuide({ stages, providerNames }: PipelineGuideProps) {
           </Section>
 
           {/* C — priorities */}
-          <Section id="priorities" title="4. Changing priorities — worked example (Claude API first, Claude Max second)">
+          <Section id="priorities" title="5. Changing priorities — worked example (Claude API first, Claude Max second)">
             <p className="text-sm text-admin-fg-default">Goal: while the promotional credit lasts, answer Speaking grading with the paid Claude API first, keep the Claude Max subscription as the second step, and keep an approved model as the third.</p>
             <div className="grid gap-3 md:grid-cols-2">
               <Mock caption="Before: Claude Max is first.">
@@ -426,7 +503,7 @@ export function PipelineGuide({ stages, providerNames }: PipelineGuideProps) {
               items={[
                 <>Find the <strong>Speaking grading</strong> card. Click the up arrow (or drag the grip) on <strong>Claude API</strong> until it is row 1.</>,
                 <>Check <strong>Claude Max subscription</strong> is row 2. Use the arrows if it is not.</>,
-                <>Leave the third row (the approved fallback) as it is. A model that leaves Claude must have a passing benchmark run before it can be enabled: see section 5.</>,
+                <>Leave the third row (the approved fallback) as it is. A model that leaves Claude must have a passing benchmark run before it can be enabled: see section 6.</>,
                 <>Check the model of the Claude API row says <strong>claude-opus-5-5</strong>. The &ldquo;Model check&rdquo; strip under the card must be green.</>,
                 <>Type a short reason (for example &ldquo;Use promo credit first&rdquo;) and press <strong>Save order</strong>. The header shows the new version.</>,
                 <><strong>Verify:</strong> &ldquo;Next run starts on&rdquo; shows Claude API. After the next candidate submission, &ldquo;Last served by&rdquo; shows <strong>Claude API · claude-opus-5-5</strong>.</>,
@@ -443,7 +520,7 @@ export function PipelineGuide({ stages, providerNames }: PipelineGuideProps) {
           </Section>
 
           {/* D — providers and keys */}
-          <Section id="providers" title="5. Providers, API keys, models, connection tests and benchmarks">
+          <Section id="providers" title="6. Providers, API keys, models, connection tests and benchmarks">
             <Steps
               items={[
                 <><strong>Add or rotate a key.</strong> In <strong>Keys &amp; providers</strong> press <em>Update key</em> (or <em>Add key</em>), paste the key and Save. It is encrypted on the server and never shown again; only a hint such as the last four characters is displayed.</>,
@@ -486,7 +563,7 @@ export function PipelineGuide({ stages, providerNames }: PipelineGuideProps) {
           </Section>
 
           {/* E — usage and credits */}
-          <Section id="costs" title="6. Usage, credits and costs — what every number means">
+          <Section id="costs" title="7. Usage, credits and costs — what every number means">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -524,12 +601,13 @@ export function PipelineGuide({ stages, providerNames }: PipelineGuideProps) {
             </Callout>
             <Callout title="Reading the Cost by stage section" tone="info">
               <p>The headline table shows Today, 7 days, 30 days and all time side by side. Below it, each component lists provider, model, requests, failed attempts, retries, tokens and cost. Totals include every call: failures, retries and paid reviewer fallbacks.</p>
-              <p>Live voice audio goes straight from the candidate&rsquo;s browser to OpenAI or Gemini, so the server meters connected minutes. Calibrate the rate once: the provider&rsquo;s live-voice invoice ÷ metered minutes, then save it under <strong>Live voice rate</strong>.</p>
+              <p>Live voice audio goes straight from the candidate&rsquo;s browser to OpenAI or Gemini, so the server meters connected minutes and, when the provider reports it, the token usage. Calibrate once: the provider&rsquo;s live-voice invoice ÷ metered minutes (and ÷ reported tokens), then save the rates under <strong>Live voice rate</strong>. Until you do, the row is labelled &ldquo;Assumed&rdquo;.</p>
+              <p>Press <strong>Run reconciliation</strong> for an on-demand check that the stage totals add up to the full usage ledger and that letters match completed evaluations.</p>
             </Callout>
           </Section>
 
           {/* Safety */}
-          <Section id="safety" title="7. What is protected, and what to do if something looks wrong">
+          <Section id="safety" title="8. What is protected, and what to do if something looks wrong">
             <ul className="list-disc space-y-1 pl-5 text-sm text-admin-fg-default">
               <li>A grading stage always keeps at least one working step; you cannot save an order that would leave it empty.</li>
               <li>Every save is versioned and audited; History shows who changed what and why. Nothing is ever deleted by Restore.</li>

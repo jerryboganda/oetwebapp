@@ -24,10 +24,17 @@ live-voice rate, which is an audited setting. Nothing here writes the saved prov
   ("Subscription — $0 incremental API cost"); for Claude models an API-equivalent value is shown separately.
 - **Promotional credits**: gross API consumption, credits consumed in the window, estimated remaining and estimated
   out-of-pocket (gross − credits consumed) are four separate numbers. Spend is matched to a grant by provider code.
-- **Live voice** audio goes browser → provider and never passes through the API, so it is metered in connected
-  minutes (first provider-session mint → last saved turn, capped at 25 min) × the per-minute rate. Until the owner
-  saves a rate the row is labelled "Assumed" (OpenAI $0.12/min, Gemini $0.04/min starting estimates). Calibrate once:
-  provider live-voice invoice ÷ metered minutes.
+- **Live voice** audio goes browser → provider and never passes through the API, so two inputs are combined:
+  connected minutes (first provider-session mint → last saved turn, capped at 25 min) × the per-minute rate, and
+  the token usage the browser forwards at stop (`POST /v1/speaking/realtime/sessions/{id}/usage`, stored as a
+  `SpeakingPatientTurns` row with role `live_usage`: provider, model, token counts, no content). When the owner has
+  saved BOTH token rates for a provider and the report is a known kind (the provider's own end-of-session total, or
+  OpenAI's per-response usage), the session is priced from tokens; Gemini's per-message metadata is shown but not
+  priced because its cumulative/per-turn meaning is not established. Everything else is priced from minutes.
+  Until the owner saves a rate the row is labelled "Assumed" (OpenAI $0.12/min, Gemini $0.04/min starting
+  estimates). Sessions whose mint audit was wiped by retention before this release have no recorded provider and are
+  shown as "Not priced" (the Speaking total is flagged partial). From this release the sweep keeps the
+  `provider:model` text of the mint row (no personal data), so newer sessions stay attributable.
 - **Per-unit averages**: letter = (grading + reviewer) ÷ letters. Speaking card = single-card grading + review +
   audio judgement + one live session. Full mock = combined grading + one review + 2 × (audio judgement + live
   session). Shared items are counted once; totals are sums of the same rows, so they reconcile.
@@ -40,5 +47,14 @@ live-voice rate, which is an audited setting. Nothing here writes the saved prov
 model on the `anthropic` hop now resolves to `claude-opus-5-5` (`AiPipelineStore.ResolvePlanAsync`), never to the
 provider row's Sonnet-class default. An explicit saved model is never overridden; the Model check flags it.
 
-Writing grading: the paid-API hop sends no explicit effort, so Claude's own default (medium on Opus 5.5) applies.
-This is reported, not changed: forcing high there changes grading behaviour and the 150 s hop budget.
+Writing grading (`writing.grade`, `writing.sample_score`) now runs the same approved effort on the paid API: adaptive
+thinking at **high** with the 128k output ceiling (it sent no effort before, so Claude's default applied). The
+built-in default time limit of the Writing API hop is 300 s (was 150 s); a saved order keeps its own number, so raise
+"Seconds per attempt" on that step if high-effort grades hit the limit.
+
+## Reconciliation
+
+`GET /v1/admin/ai/pipelines/cost-breakdown/reconciliation?window=` (button "Run reconciliation") recomputes the totals
+through independent paths: stage components + other features vs the full usage ledger, gross vs ledger + live voice,
+call counts, Claude models missing from the rate card, the re-pricing delta vs stored estimates, graded letters vs
+completed Writing evaluations, and live voice attribution/reporting. It is admin-only, on demand, read-only.

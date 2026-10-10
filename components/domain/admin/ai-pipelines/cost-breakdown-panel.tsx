@@ -24,9 +24,11 @@ import { Tabs } from '@/components/ui/tabs';
 import { toast } from '@/components/ui/toaster';
 import {
   fetchCostBreakdown,
+  fetchCostReconciliation,
   saveLiveVoiceRate,
   type CostBreakdownResponse,
   type CostComponent,
+  type CostReconciliation,
   type CostRow,
   type CostRun,
   type CostRunPart,
@@ -72,12 +74,17 @@ const BASIS_LABEL: Record<CostRow['basis'], string> = {
   stored_estimate: 'Estimated: stored per-call estimate',
   duration_estimate: 'Estimated: connected minutes × your rate',
   duration_assumed: 'Assumed: connected minutes × starting rate (not yet set by you)',
+  reported_tokens: 'Estimated: provider-reported tokens × your token rates',
+  mixed: 'Estimated: reported tokens where available, otherwise connected minutes × your rate',
+  unpriced: 'Not priced: the provider of these sessions is no longer recorded',
 };
 
 function KindBadge({ row }: { row: CostRow }) {
   if (row.kind === 'subscription') return <Badge variant="info">{SUBSCRIPTION_LABEL}</Badge>;
   if (row.kind === 'live_voice') {
-    return <Badge variant={row.basis === 'duration_assumed' ? 'warning' : 'muted'}>{row.basis === 'duration_assumed' ? 'Assumed estimate' : 'Estimated'}</Badge>;
+    if (row.basis === 'unpriced') return <Badge variant="warning">Not priced</Badge>;
+    if (row.basis === 'duration_assumed') return <Badge variant="warning">Assumed estimate</Badge>;
+    return <Badge variant="muted">{row.basis === 'reported_tokens' ? 'From reported tokens' : 'Estimated'}</Badge>;
   }
   return <Badge variant="muted">Paid API</Badge>;
 }
@@ -131,9 +138,19 @@ function ComponentTable({ component, emptyText }: { component: CostComponent; em
                     : `${num(row.failedAttempts)} / ${num(row.retries)}`}
                 </td>
                 <td className="px-3 py-2 text-2xs text-admin-fg-muted">
-                  {live
-                    ? BASIS_LABEL[row.basis]
-                    : `${tokens(row.promptTokens)} / ${tokens(row.completionTokens)} / ${tokens(row.cacheTokens)}`}
+                  {live ? (
+                    <>
+                      {BASIS_LABEL[row.basis]}
+                      {row.reportedSessions > 0 && (
+                        <span className="block">
+                          {tokens(row.promptTokens)} in / {tokens(row.completionTokens)} out reported by the provider in{' '}
+                          {num(row.reportedSessions)} of {num(row.requests)} sessions
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    `${tokens(row.promptTokens)} / ${tokens(row.completionTokens)} / ${tokens(row.cacheTokens)}`
+                  )}
                 </td>
                 <td className="px-3 py-2 tabular-nums">
                   {row.kind === 'subscription' ? (
@@ -143,6 +160,8 @@ function ComponentTable({ component, emptyText }: { component: CostComponent; em
                         <span className="block text-2xs text-admin-fg-muted">API-equivalent {usd(row.apiEquivalentUsd)}, not charged</span>
                       )}
                     </>
+                  ) : row.basis === 'unpriced' ? (
+                    <span className="text-admin-fg-muted">Not priced</span>
                   ) : (
                     <>
                       {usd(row.costUsd)}
@@ -237,11 +256,15 @@ function RunsTable({ runs }: { runs: CostRun[] }) {
 
 function RateEditor({ rate, onSaved }: { rate: LiveVoiceRateView; onSaved: () => void }) {
   const [value, setValue] = useState(String(rate.perMinuteUsd));
+  const [inRate, setInRate] = useState(rate.inputPerMillionUsd === null ? '' : String(rate.inputPerMillionUsd));
+  const [outRate, setOutRate] = useState(rate.outputPerMillionUsd === null ? '' : String(rate.outputPerMillionUsd));
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setValue(String(rate.perMinuteUsd));
-  }, [rate.perMinuteUsd]);
+    setInRate(rate.inputPerMillionUsd === null ? '' : String(rate.inputPerMillionUsd));
+    setOutRate(rate.outputPerMillionUsd === null ? '' : String(rate.outputPerMillionUsd));
+  }, [rate.perMinuteUsd, rate.inputPerMillionUsd, rate.outputPerMillionUsd]);
 
   async function save() {
     const n = Number(value);
@@ -249,10 +272,22 @@ function RateEditor({ rate, onSaved }: { rate: LiveVoiceRateView; onSaved: () =>
       toast.error('Enter a rate between 0 and 100 USD per minute.');
       return;
     }
+    const hasIn = inRate.trim() !== '';
+    const hasOut = outRate.trim() !== '';
+    if (hasIn !== hasOut) {
+      toast.error('Enter both token rates (input and output), or leave both blank.');
+      return;
+    }
+    const inN = hasIn ? Number(inRate) : null;
+    const outN = hasOut ? Number(outRate) : null;
+    if ((inN !== null && (!Number.isFinite(inN) || inN < 0)) || (outN !== null && (!Number.isFinite(outN) || outN < 0))) {
+      toast.error('Token rates must be zero or more USD per million tokens.');
+      return;
+    }
     setBusy(true);
     try {
-      await saveLiveVoiceRate(rate.provider, n);
-      toast.success(`${rate.name} rate saved. Live voice costs are recomputed with it.`);
+      await saveLiveVoiceRate(rate.provider, n, { inputPerMillionUsd: inN, outputPerMillionUsd: outN });
+      toast.success(`${rate.name} rates saved. Live voice costs are recomputed with them.`);
       onSaved();
     } catch (err) {
       toast.error(errorText(err));
@@ -262,32 +297,110 @@ function RateEditor({ rate, onSaved }: { rate: LiveVoiceRateView; onSaved: () =>
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-admin-lg border border-admin-border p-3">
-      <div className="min-w-[10rem] flex-1">
-        <p className="font-medium text-admin-fg-strong">{rate.name}</p>
-        <p className="text-2xs text-admin-fg-muted">{rate.model}</p>
-        <p className="mt-1">
-          {rate.ownerSet ? (
-            <Badge variant="success">Set by you{rate.updatedBy ? ` (${rate.updatedBy})` : ''}</Badge>
-          ) : (
-            <Badge variant="warning">Assumed starting estimate — replace with your own figure</Badge>
-          )}
-        </p>
+    <div className="space-y-3 rounded-admin-lg border border-admin-border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-[10rem]">
+          <p className="font-medium text-admin-fg-strong">{rate.name}</p>
+          <p className="text-2xs text-admin-fg-muted">{rate.model}</p>
+        </div>
+        {rate.ownerSet ? (
+          <Badge variant="success">Set by you{rate.updatedBy ? ` (${rate.updatedBy})` : ''}</Badge>
+        ) : (
+          <Badge variant="warning">Assumed starting estimate — replace with your own figure</Badge>
+        )}
       </div>
-      <Input
-        label="USD per connected minute"
-        type="number"
-        min={0}
-        max={100}
-        step="0.01"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        className="w-44"
-      />
-      <Button size="sm" disabled={busy} onClick={() => void save()}>
-        {busy ? 'Saving…' : 'Save rate'}
-      </Button>
+      <div className="flex flex-wrap items-end gap-3">
+        <Input
+          label="USD per connected minute"
+          type="number"
+          min={0}
+          max={100}
+          step="0.01"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="w-44"
+        />
+        <Input
+          label="USD per 1M input tokens (optional)"
+          type="number"
+          min={0}
+          step="0.01"
+          value={inRate}
+          onChange={(e) => setInRate(e.target.value)}
+          className="w-52"
+        />
+        <Input
+          label="USD per 1M output tokens (optional)"
+          type="number"
+          min={0}
+          step="0.01"
+          value={outRate}
+          onChange={(e) => setOutRate(e.target.value)}
+          className="w-52"
+        />
+        <Button size="sm" disabled={busy} onClick={() => void save()}>
+          {busy ? 'Saving…' : 'Save rates'}
+        </Button>
+      </div>
+      <p className="text-2xs text-admin-fg-muted">
+        Token rates are blended (audio and text together). When both are set, sessions whose provider-reported usage
+        was received are priced from tokens; every other session is priced from connected minutes.
+      </p>
     </div>
+  );
+}
+
+function ReconciliationCard({ period }: { period: OverviewWindow }) {
+  const [result, setResult] = useState<CostReconciliation | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setResult(null);
+  }, [period]);
+
+  async function run() {
+    setBusy(true);
+    try {
+      setResult(await fetchCostReconciliation(period));
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <p className="text-base font-semibold text-admin-fg-strong">Reconciliation check</p>
+            <InfoTip label="the reconciliation check">
+              Recomputes the totals through independent paths on your production data and compares them: the stage
+              components against the full usage ledger, call counts, rate-card coverage, letters against completed
+              Writing evaluations, and live voice attribution. Read-only; nothing is written.
+            </InfoTip>
+          </div>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => void run()}>
+            {busy ? 'Checking…' : 'Run reconciliation'}
+          </Button>
+        </div>
+        {result ? (
+          <ul className="space-y-2 text-sm">
+            {result.checks.map((c) => (
+              <li key={c.name} className="flex flex-wrap items-start gap-2">
+                {c.ok ? <Badge variant="success">Pass</Badge> : <Badge variant="warning">Review</Badge>}
+                <span className="min-w-0 flex-1 text-admin-fg-default">
+                  <span className="font-medium">{c.name.replace(/_/g, ' ')}</span>: {c.detail}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-admin-fg-muted">Not run for this window yet.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -434,6 +547,14 @@ export function CostBreakdownPanel() {
                 <KpiTile label="Avg per full mock" value={usd(b.speaking.avgPerFullMockUsd)} hint={`single card ${usd(b.speaking.avgPerSingleCardUsd)}`} />
               </div>
               <ComponentTable component={b.speaking.liveVoice} emptyText="No live voice sessions in this window." />
+              {b.speaking.liveVoiceUnpricedMinutes > 0 && (
+                <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm" role="status">
+                  <strong className="font-semibold">Total Speaking cost is partial.</strong>{' '}
+                  {b.speaking.liveVoiceUnpricedMinutes.toFixed(1)} of {b.speaking.liveVoiceMinutes.toFixed(1)} live voice minutes
+                  belong to sessions older than the retention window whose provider was erased before it was kept, so they
+                  are not priced. Newer sessions keep their provider and are priced.
+                </p>
+              )}
               <ComponentTable component={b.speaking.grading} emptyText="No Speaking grading calls in this window." />
               <ComponentTable component={b.speaking.reviewer} emptyText="No Speaking reviewer calls in this window." />
               <ComponentTable component={b.speaking.audioModel} emptyText="The audio model is off or made no calls in this window." />
@@ -488,6 +609,8 @@ export function CostBreakdownPanel() {
               ))}
             </CardContent>
           </Card>
+
+          <ReconciliationCard period={period} />
 
           {/* Runs */}
           <Card>

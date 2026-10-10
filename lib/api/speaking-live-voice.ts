@@ -133,6 +133,28 @@ export function persistLiveVoiceTranscript(
   return apiClient.post<LiveVoiceTranscriptResponse>(`${sessionPath(sessionId)}/transcript`, input);
 }
 
+/**
+ * Provider-reported token usage of a finished conversation, for cost REPORTING only. Best-effort: the caller
+ * ignores a failure, and nothing else (grading, credits, the transcript) depends on it.
+ */
+export interface LiveVoiceUsageInput {
+  providerSessionId: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  inputAudioTokens: number;
+  outputAudioTokens: number;
+  basis: 'final' | 'sum' | 'mixed';
+  responses: number;
+}
+
+export function persistLiveVoiceUsage(
+  sessionId: string,
+  input: LiveVoiceUsageInput,
+): Promise<{ accepted: boolean }> {
+  return apiClient.post<{ accepted: boolean }>(`${sessionPath(sessionId)}/usage`, input);
+}
+
 export function captureLiveVoiceAudioTurn(
   sessionId: string,
   input: { providerSessionId: string; audio: Blob; durationMs: number },

@@ -125,7 +125,11 @@ public sealed class SpeakingAudioRetentionWorker(
             .ToArray();
         foreach (var turn in due)
         {
-            turn.Text = string.Empty;
+            // The mint audit row's text is only "{provider}:{model}" (no personal data). Keeping it lets the
+            // cost dashboard still attribute an expired session to its provider; the JSON (provider session id,
+            // hashes) is wiped like every other row.
+            if (!string.Equals(turn.Role, LiveVoiceService.LiveVoiceSessionRole, StringComparison.Ordinal))
+                turn.Text = string.Empty;
             turn.ResponseJson = "{\"retention\":\"expired\"}";
         }
 

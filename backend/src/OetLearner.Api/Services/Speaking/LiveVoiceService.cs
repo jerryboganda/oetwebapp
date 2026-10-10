@@ -51,6 +51,9 @@ public sealed class LiveVoiceService(
     // conversation could start in production (25 Sep 2026).
     internal const string LiveVoiceSessionRole = "live_session";
     internal const string LiveVoiceTurnRole = "realtime_turn";
+    // Provider-reported token usage of a finished conversation (cost reporting only). Holds provider, model and
+    // token counts, never conversation content, so the retention sweep leaves it in place.
+    internal const string LiveVoiceUsageRole = "live_usage";
     // A transcript saved by this service is labelled this prefix plus the provider ("realtime-openai").
     // The results endpoint reads it to tell a live conversation, which has no audio, from a recording.
     internal const string TranscriptProviderPrefix = "realtime-";
@@ -406,6 +409,52 @@ public sealed class LiveVoiceService(
             Duplicate: false,
             AdvisoryStatus: "queued");
     }
+
+    /// <summary>
+    /// Stores the provider-reported token usage of this conversation so the cost dashboard can price it from real
+    /// numbers instead of connected minutes. Idempotent per provider session. Best-effort by design: the browser
+    /// ignores a refusal and nothing else depends on it.
+    /// </summary>
+    public async Task<LiveVoiceUsageResponse> PersistUsageAsync(
+        string userId,
+        string sessionId,
+        LiveVoiceUsageRequest request,
+        CancellationToken ct)
+    {
+        var context = await LoadContextAsync(userId, sessionId, LiveVoiceAccess.Write, ct);
+        if (request is null)
+        {
+            throw ApiException.Validation("live_voice_usage_required", "A usage report is required.");
+        }
+
+        var provider = await EnsureProviderSessionAsync(context.Session.Id, request.ProviderSessionId, ct);
+        var hash = HashProviderSession(request.ProviderSessionId);
+        var model = Describe(provider).Model;
+        var basis = (request.Basis is "final" or "sum" or "mixed") ? request.Basis : "sum";
+        var report = new
+        {
+            provider,
+            providerSessionIdHash = hash,
+            inputTokens = ClampTokenCount(request.InputTokens),
+            outputTokens = ClampTokenCount(request.OutputTokens),
+            cachedInputTokens = ClampTokenCount(request.CachedInputTokens),
+            inputAudioTokens = ClampTokenCount(request.InputAudioTokens),
+            outputAudioTokens = ClampTokenCount(request.OutputAudioTokens),
+            basis,
+            responses = Math.Clamp(request.Responses ?? 0, 0, 100_000),
+            reportedAt = clock.GetUtcNow(),
+        };
+        await patientTurns.PersistAsync(
+            context.Session.Id,
+            $"live-voice-usage:{hash}",
+            LiveVoiceUsageRole,
+            $"{provider}:{model}",
+            report,
+            ct);
+        return new LiveVoiceUsageResponse(true);
+    }
+
+    private static long ClampTokenCount(long? value) => value is > 0 ? Math.Min(value.Value, 200_000_000L) : 0L;
 
     public async Task<LiveVoiceTranscriptResponse> PersistTranscriptAsync(
         string userId,

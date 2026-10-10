@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -29,7 +30,9 @@ public sealed record CostRow(
     // Basis: subscription | rate_card | stored_estimate | duration_estimate | duration_assumed
     string Basis,
     // Minutes: metered connected minutes (live voice only).
-    double? Minutes);
+    double? Minutes,
+    // ReportedSessions: live voice sessions whose provider-reported token usage was received.
+    long ReportedSessions = 0);
 
 /// <summary>One pipeline component (e.g. Writing grading, Speaking live voice) with its provider/model lines.</summary>
 public sealed record CostComponent(
@@ -66,7 +69,10 @@ public sealed record SpeakingCostBlock(
     decimal? AvgPerFullMockUsd,
     decimal? AvgPerAssessmentUsd,
     long LiveVoiceSessions,
-    double LiveVoiceMinutes);
+    double LiveVoiceMinutes,
+    // Minutes of live voice whose provider is no longer recorded (audit expired before it was kept): not priced.
+    double LiveVoiceUnpricedMinutes = 0,
+    long LiveVoiceReportedSessions = 0);
 
 public sealed record PromoGrantCost(
     string GrantId,
@@ -96,7 +102,10 @@ public sealed record LiveVoiceRateView(
     decimal PerMinuteUsd,
     bool OwnerSet,
     string? UpdatedBy,
-    DateTimeOffset? UpdatedAt);
+    DateTimeOffset? UpdatedAt,
+    // Optional blended USD per 1M tokens; when set, sessions with provider-reported usage are priced from tokens.
+    decimal? InputPerMillionUsd = null,
+    decimal? OutputPerMillionUsd = null);
 
 public sealed record CostBreakdown(
     string Window,
@@ -154,9 +163,22 @@ public sealed record CostBreakdownResponse(
     IReadOnlyList<LiveVoiceRateView> LiveVoiceRates,
     string RateCardVerifiedOn);
 
+public sealed record ReconciliationCheck(string Name, bool Ok, string Detail);
+
+public sealed record CostReconciliation(
+    string Window,
+    DateTimeOffset GeneratedAt,
+    IReadOnlyList<ReconciliationCheck> Checks);
+
 public interface ICostBreakdownService
 {
     Task<CostBreakdownResponse> BuildAsync(string? window, CancellationToken ct);
+
+    /// <summary>
+    /// On-demand evidence (admin-only, never scheduled, nothing written): recomputes the figures through
+    /// independent paths and compares them with each other and with the domain records they describe.
+    /// </summary>
+    Task<CostReconciliation> ReconcileAsync(string? window, CancellationToken ct);
 
     /// <summary>Drops cached payloads after a rate or credit-grant write.</summary>
     void InvalidateCache();
@@ -239,6 +261,101 @@ public sealed class AiCostBreakdownService(
         return response;
     }
 
+    public async Task<CostReconciliation> ReconcileAsync(string? window, CancellationToken ct)
+    {
+        var key = Windows.Any(w => string.Equals(w.Id, window, StringComparison.OrdinalIgnoreCase)) ? window!.ToLowerInvariant() : "7d";
+        var now = clock.GetUtcNow();
+        var start = StartOf(key, now);
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var names = await db.AiProviders.AsNoTracking()
+            .Select(p => new { p.Code, p.Name })
+            .ToDictionaryAsync(p => p.Code, p => p.Name, StringComparer.OrdinalIgnoreCase, ct);
+        var rates = await LoadRatesAsync(db, ct);
+
+        var groups = await AiUsageLedger.LoadGroupsAsync(db, start, null, null, ct);
+        var b = await BuildWindowAsync(db, key, now, names, rates, ct);
+        var checks = new List<ReconciliationCheck>();
+
+        static string Usd(decimal v) => "$" + v.ToString("0.0000", CultureInfo.InvariantCulture);
+
+        // 1. The stage components plus "other features" must add up to everything the ledger priced.
+        var ledgerApi = groups.Sum(g => g.IncrementalApiUsd);
+        var componentsApi = b.Writing.TotalUsd + b.Speaking.Grading.ApiUsd + b.Speaking.Reviewer.ApiUsd + b.Speaking.AudioModel.ApiUsd
+                            + b.Money.OtherFeaturesApiUsd;
+        checks.Add(new ReconciliationCheck(
+            "components_plus_other_equal_ledger",
+            Math.Abs(ledgerApi - componentsApi) < 0.0001m,
+            $"ledger {Usd(ledgerApi)} vs Writing + Speaking grading/review/audio + other features {Usd(componentsApi)}."));
+
+        // 2. Gross API consumption = ledger + live voice.
+        var expectedGross = ledgerApi + b.Speaking.LiveVoice.ApiUsd;
+        checks.Add(new ReconciliationCheck(
+            "gross_equals_ledger_plus_live_voice",
+            Math.Abs(b.Money.GrossApiUsd - expectedGross) < 0.0001m,
+            $"gross {Usd(b.Money.GrossApiUsd)} vs ledger {Usd(ledgerApi)} + live voice {Usd(b.Speaking.LiveVoice.ApiUsd)}."));
+
+        // 3. Call counts: nothing in a stage bucket may be lost or counted twice.
+        var ledgerCalls = groups.Sum(g => g.Calls);
+        var componentCalls = b.Writing.Grading.Requests + b.Writing.Reviewer.Requests + b.Speaking.Grading.Requests
+                             + b.Speaking.Reviewer.Requests + b.Speaking.AudioModel.Requests
+                             + groups.Where(g => AiUsageStageBuckets.For(g.FeatureCode) == AiUsageStageBuckets.Other).Sum(g => g.Calls);
+        checks.Add(new ReconciliationCheck(
+            "call_counts_match",
+            ledgerCalls == componentCalls,
+            $"{ledgerCalls:N0} recorded calls vs {componentCalls:N0} across the stage components and other features."));
+
+        // 4. Models that are not on the rate card fall back to the stored per-call estimate.
+        var unpriced = groups
+            .Where(g => g.ProviderId == AiPipelineDefaults.ClaudeApiProvider && !g.FromRateCard && g.PromptTokens + g.CompletionTokens > 0)
+            .GroupBy(g => g.Model ?? "unknown")
+            .Select(g => $"{g.Key} x{g.Sum(x => x.Calls):N0}")
+            .ToList();
+        checks.Add(new ReconciliationCheck(
+            "claude_models_on_rate_card",
+            unpriced.Count == 0,
+            unpriced.Count == 0
+                ? $"Every Claude API call used a model on the rate card (verified {AiModelRateCard.VerifiedOn})."
+                : "Priced from the stored estimate because the model is not on the rate card: " + string.Join(", ", unpriced) + "."));
+
+        // 5. Information: how far re-pricing moved the numbers relative to the stored per-call estimate.
+        var stored = groups.Where(g => !g.IsSubscription).Sum(g => g.StoredCostUsd);
+        var priced = groups.Where(g => !g.IsSubscription).Sum(g => g.PricedUsd);
+        checks.Add(new ReconciliationCheck(
+            "repricing_delta_vs_stored_estimate",
+            true,
+            $"Stored per-call estimates total {Usd(stored)}; list-price re-pricing (model rates + cache tokens) totals {Usd(priced)}. " +
+            "The stored estimate is what /admin/ai-usage shows; the difference is expected."));
+
+        // 6. Units: letters counted from usage rows vs completed Writing evaluations in the domain tables.
+        var evalQuery = db.Evaluations.AsNoTracking()
+            .Where(e => e.SubtestCode == "writing" && e.State == AsyncState.Completed);
+        if (start is { } windowStart) evalQuery = evalQuery.Where(e => e.GeneratedAt >= windowStart);
+        var evaluations = await evalQuery.LongCountAsync(ct);
+        var tolerance = Math.Max(2L, (long)Math.Ceiling(evaluations * 0.10));
+        checks.Add(new ReconciliationCheck(
+            "writing_letters_vs_completed_evaluations",
+            Math.Abs(b.Writing.Letters - evaluations) <= tolerance,
+            $"{b.Writing.Letters:N0} graded letters in the usage ledger vs {evaluations:N0} completed Writing evaluations " +
+            $"(tolerance {tolerance:N0}: free samples and retries are counted differently)."));
+
+        // 7. Live voice: provider known for every minute, and how many sessions carry provider-reported tokens.
+        checks.Add(new ReconciliationCheck(
+            "live_voice_fully_attributed",
+            b.Speaking.LiveVoiceUnpricedMinutes <= 0.0,
+            b.Speaking.LiveVoiceUnpricedMinutes <= 0.0
+                ? $"All {b.Speaking.LiveVoiceMinutes:N1} metered minutes belong to a recorded provider."
+                : $"{b.Speaking.LiveVoiceUnpricedMinutes:N1} of {b.Speaking.LiveVoiceMinutes:N1} minutes are from sessions whose provider was wiped by retention before it was kept; they are not priced."));
+        checks.Add(new ReconciliationCheck(
+            "live_voice_reported_tokens",
+            true,
+            $"{b.Speaking.LiveVoiceReportedSessions:N0} of {b.Speaking.LiveVoiceSessions:N0} live voice sessions carry provider-reported token usage; " +
+            "the rest are priced from connected minutes."));
+
+        return new CostReconciliation(key, now, checks);
+    }
+
     private static DateTimeOffset? StartOf(string window, DateTimeOffset now) => window switch
     {
         "today" => new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero),
@@ -249,7 +366,12 @@ public sealed class AiCostBreakdownService(
 
     // ── rates ────────────────────────────────────────────────────────────────
 
-    private sealed record StoredRate(decimal PerMinuteUsd, string? UpdatedBy, DateTimeOffset UpdatedAt);
+    private sealed record StoredRate(
+        decimal PerMinuteUsd,
+        decimal? InputPerMillionUsd,
+        decimal? OutputPerMillionUsd,
+        string? UpdatedBy,
+        DateTimeOffset UpdatedAt);
 
     private static async Task<Dictionary<string, StoredRate>> LoadRatesAsync(LearnerDbContext db, CancellationToken ct)
     {
@@ -263,24 +385,52 @@ public sealed class AiCostBreakdownService(
         {
             if (!f.Enabled) continue;
             var provider = f.Key[LiveVoiceRateFlagPrefix.Length..];
-            if (TryParseRate(f.Description, out var rate))
-                map[provider] = new StoredRate(rate, f.Owner, f.UpdatedAt);
+            if (TryParseRate(f.Description, out var perMinute, out var inPerM, out var outPerM))
+                map[provider] = new StoredRate(perMinute, inPerM, outPerM, f.Owner, f.UpdatedAt);
         }
 
         return map;
     }
 
-    /// <summary>The flag stores the rate as the first token of its description: "0.1200 | text".</summary>
-    internal static bool TryParseRate(string? description, out decimal rate)
+    /// <summary>
+    /// The flag stores the rates in its description: <c>"0.1200 | in=40.0000;out=80.0000 | text"</c> — the
+    /// per-minute rate first, then optional blended per-million-token rates (blank = not set).
+    /// </summary>
+    internal static bool TryParseRate(string? description, out decimal perMinute, out decimal? inPerMillion, out decimal? outPerMillion)
     {
-        rate = 0m;
+        perMinute = 0m;
+        inPerMillion = null;
+        outPerMillion = null;
         if (string.IsNullOrWhiteSpace(description)) return false;
-        var head = description.Split('|', 2)[0].Trim();
-        return decimal.TryParse(head, NumberStyles.Number, CultureInfo.InvariantCulture, out rate) && rate >= 0m && rate <= 100m;
+
+        var parts = description.Split('|');
+        if (!decimal.TryParse(parts[0].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out perMinute)
+            || perMinute < 0m || perMinute > 100m)
+            return false;
+
+        if (parts.Length > 1)
+        {
+            foreach (var pair in parts[1].Split(';'))
+            {
+                var kv = pair.Split('=', 2);
+                if (kv.Length != 2) continue;
+                if (!decimal.TryParse(kv[1].Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var value)
+                    || value < 0m || value > 100_000m)
+                    continue;
+                if (kv[0].Trim() == "in") inPerMillion = value;
+                else if (kv[0].Trim() == "out") outPerMillion = value;
+            }
+        }
+
+        return true;
     }
 
-    internal static string FormatRateDescription(decimal perMinuteUsd, string provider) =>
-        $"{perMinuteUsd.ToString("0.0000", CultureInfo.InvariantCulture)} | Estimated USD per connected minute of {provider} live voice (AI Pipelines page).";
+    internal static string FormatRateDescription(decimal perMinuteUsd, string provider, decimal? inPerMillion, decimal? outPerMillion)
+    {
+        static string Fmt(decimal? v) => v is { } d ? d.ToString("0.0000", CultureInfo.InvariantCulture) : string.Empty;
+        return $"{perMinuteUsd.ToString("0.0000", CultureInfo.InvariantCulture)} | in={Fmt(inPerMillion)};out={Fmt(outPerMillion)} | " +
+               $"Estimated USD per connected minute / per 1M tokens of {provider} live voice (AI Pipelines page).";
+    }
 
     private static decimal RateFor(string provider, Dictionary<string, StoredRate> rates, out bool ownerSet)
     {
@@ -307,7 +457,9 @@ public sealed class AiCostBreakdownService(
         {
             var perMinute = RateFor(provider, rates, out var ownerSet);
             rates.TryGetValue(provider, out var stored);
-            views.Add(new LiveVoiceRateView(provider, name, model, perMinute, ownerSet, stored?.UpdatedBy, stored?.UpdatedAt));
+            views.Add(new LiveVoiceRateView(
+                provider, name, model, perMinute, ownerSet, stored?.UpdatedBy, stored?.UpdatedAt,
+                stored?.InputPerMillionUsd, stored?.OutputPerMillionUsd));
         }
 
         return views;
@@ -340,7 +492,7 @@ public sealed class AiCostBreakdownService(
         var speakingReview = Component("speaking-reviewer", "Speaking reviewer", groups.Where(g => BucketOf(g) == AiUsageStageBuckets.SpeakingReview), names);
         var speakingAudio = Component("speaking-audio", "Speaking audio model (acoustic half of grading)", groups.Where(g => BucketOf(g) == AiUsageStageBuckets.SpeakingAudio), names);
 
-        var (live, liveSessions, liveMinutes) = await LiveVoiceAsync(db, start, now, rates, ct);
+        var (live, liveSessions, liveMinutes, liveUnpricedMinutes, liveReported) = await LiveVoiceAsync(db, start, now, rates, ct);
 
         // Units. A successful graded letter is one unit; for Speaking, one successful combined (two-card) grade is a
         // full mock and every other successful grade is a single card. Failed attempts add cost but never a unit.
@@ -377,7 +529,8 @@ public sealed class AiCostBreakdownService(
             letters > 0 ? Math.Round(writingTotal / letters, 4) : null);
         var speaking = new SpeakingCostBlock(
             live, speakingGrade, speakingReview, speakingAudio, speakingTotal,
-            singleCards, fullMocks, avgSingle, avgMock, avgAssessment, liveSessions, liveMinutes);
+            singleCards, fullMocks, avgSingle, avgMock, avgAssessment, liveSessions, liveMinutes,
+            liveUnpricedMinutes, liveReported);
 
         var money = await MoneyAsync(db, groups, writingTotal + speakingTotal, start, ct);
         logger.LogDebug("AI cost breakdown built (window={Window}): writing ${Writing}, speaking ${Speaking}.", window, writingTotal, speakingTotal);
@@ -431,19 +584,24 @@ public sealed class AiCostBreakdownService(
         rows.Sum(r => r.ApiEquivalentUsd ?? 0m),
         rows);
 
-    // ── live voice (connected-minutes metering) ──────────────────────────────
+    // ── live voice (connected minutes + provider-reported tokens) ─────────────
 
-    private async Task<(CostComponent Component, long Sessions, double Minutes)> LiveVoiceAsync(
-        LearnerDbContext db,
-        DateTimeOffset? start,
-        DateTimeOffset now,
-        Dictionary<string, StoredRate> rates,
-        CancellationToken ct)
+    private sealed record LiveUsage(string Provider, string Model, long Input, long Output, long Cached, long InAudio, long OutAudio, string Basis);
+
+    private sealed record LiveLeg(string Provider, string Model, double Minutes);
+
+    private sealed record LiveSessionFacts(string SessionId, List<LiveLeg> Legs, LiveUsage? Usage);
+
+    private sealed record LiveLegCost(string Provider, string Model, double Minutes, decimal? CostUsd, bool TokenPriced, LiveUsage? Usage);
+
+    /// <summary>
+    /// Every live voice session in the window as the server knows it: the provider-session mint audit rows give
+    /// the connected minutes (first mint to last saved turn, capped), and the browser's usage report, when it
+    /// arrived, gives the provider-reported tokens. The server created every session, so the mint row is the one
+    /// provider-agnostic proof a session was billed.
+    /// </summary>
+    private static async Task<List<LiveSessionFacts>> LoadLiveSessionsAsync(LearnerDbContext db, DateTimeOffset since, CancellationToken ct)
     {
-        var since = start ?? now.AddDays(-365);
-
-        // Provider-session mints are the metering anchor: the server created every live session, so its audit row
-        // is the one durable, provider-agnostic proof that a session was billed ("{provider}:{model}").
         var mints = await db.SpeakingPatientTurns.AsNoTracking()
             .Where(t => t.Role == LiveVoiceService.LiveVoiceSessionRole && t.CreatedAt >= since)
             .OrderBy(t => t.CreatedAt)
@@ -456,11 +614,31 @@ public sealed class AiCostBreakdownService(
             .Select(g => new { SessionId = g.Key, Last = g.Max(t => t.CreatedAt) })
             .ToListAsync(ct);
         var lastTurnBySession = lastTurns.ToDictionary(x => x.SessionId, x => x.Last, StringComparer.Ordinal);
+        var usageRows = await db.SpeakingPatientTurns.AsNoTracking()
+            .Where(t => t.Role == LiveVoiceService.LiveVoiceUsageRole && t.CreatedAt >= since)
+            .OrderBy(t => t.CreatedAt)
+            .Take(20000)
+            .Select(t => new { t.SessionId, t.Text, t.ResponseJson })
+            .ToListAsync(ct);
 
-        // (provider, model) -> minutes and the distinct sessions that used it.
-        var minutes = new Dictionary<(string Provider, string Model), double>();
-        var sessions = new Dictionary<(string Provider, string Model), HashSet<string>>();
+        var usageBySession = new Dictionary<string, LiveUsage>(StringComparer.Ordinal);
+        foreach (var row in usageRows)
+        {
+            if (!TryReadUsage(row.Text, row.ResponseJson, out var usage)) continue;
+            if (usageBySession.TryGetValue(row.SessionId, out var previous) && previous.Provider == usage.Provider)
+            {
+                usage = new LiveUsage(
+                    usage.Provider, usage.Model,
+                    previous.Input + usage.Input, previous.Output + usage.Output, previous.Cached + usage.Cached,
+                    previous.InAudio + usage.InAudio, previous.OutAudio + usage.OutAudio,
+                    previous.Basis == usage.Basis ? usage.Basis : "mixed");
+            }
 
+            usageBySession[row.SessionId] = usage;
+        }
+
+        var facts = new List<LiveSessionFacts>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var session in mints.GroupBy(m => m.SessionId, StringComparer.Ordinal))
         {
             var ordered = session.OrderBy(m => m.CreatedAt).ToList();
@@ -468,56 +646,218 @@ public sealed class AiCostBreakdownService(
             if (lastTurnBySession.TryGetValue(session.Key, out var lastTurn) && lastTurn > lastActivity)
                 lastActivity = lastTurn;
 
+            usageBySession.TryGetValue(session.Key, out var reported);
+            var legs = new List<LiveLeg>();
             var remaining = MaxLiveSessionSpan;
             for (var i = 0; i < ordered.Count; i++)
             {
                 var (provider, model) = ParseMint(ordered[i].Text);
+                // A wiped audit row lost its provider; the usage report still knows it.
+                if (provider == "unknown" && reported is not null)
+                {
+                    provider = reported.Provider;
+                    model = reported.Model;
+                }
+
                 var until = i + 1 < ordered.Count ? ordered[i + 1].CreatedAt : lastActivity;
                 var span = until - ordered[i].CreatedAt;
                 if (span < TimeSpan.Zero) span = TimeSpan.Zero;
                 if (span > remaining) span = remaining;
                 remaining -= span;
+                legs.Add(new LiveLeg(provider, model, span.TotalMinutes));
+            }
 
-                var k = (provider, model);
-                minutes[k] = minutes.GetValueOrDefault(k) + span.TotalMinutes;
-                if (!sessions.TryGetValue(k, out var sessionSet))
+            facts.Add(new LiveSessionFacts(session.Key, legs, reported));
+            seen.Add(session.Key);
+        }
+
+        // A usage report whose mint audit is gone entirely: tokens only, no minutes.
+        foreach (var (sessionId, usage) in usageBySession)
+        {
+            if (!seen.Contains(sessionId)) facts.Add(new LiveSessionFacts(sessionId, [], usage));
+        }
+
+        return facts;
+    }
+
+    private static bool TryReadUsage(string text, string json, out LiveUsage usage)
+    {
+        usage = null!;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+
+            long Read(string name) =>
+                root.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n) && n > 0 ? n : 0L;
+
+            var (provider, model) = ParseMint(text);
+            if (root.TryGetProperty("provider", out var p) && p.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(p.GetString()))
+                provider = p.GetString()!.Trim().ToLowerInvariant();
+
+            var basis = root.TryGetProperty("basis", out var b) && b.ValueKind == JsonValueKind.String ? b.GetString() ?? "sum" : "sum";
+            usage = new LiveUsage(
+                provider, model, Read("inputTokens"), Read("outputTokens"), Read("cachedInputTokens"),
+                Read("inputAudioTokens"), Read("outputAudioTokens"), basis);
+            return usage.Input + usage.Output > 0;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Provider-reported tokens x the owner's blended per-million rates; null unless BOTH rates are set AND the
+    /// report is one whose meaning is known: the provider's own end-of-session total (<c>final</c>), or OpenAI's
+    /// per-response usage, which is billed per response. Gemini's per-message metadata is shown but never priced,
+    /// because whether it is cumulative or per turn is not established.
+    /// </summary>
+    private static decimal? TokenCost(LiveUsage usage, string provider, Dictionary<string, StoredRate> rates)
+    {
+        var meaningKnown = usage.Basis == "final" || provider == "openai";
+        if (!meaningKnown) return null;
+        if (!rates.TryGetValue(provider, out var r) || r.InputPerMillionUsd is null || r.OutputPerMillionUsd is null)
+            return null;
+        return usage.Input / 1_000_000m * r.InputPerMillionUsd.Value + usage.Output / 1_000_000m * r.OutputPerMillionUsd.Value;
+    }
+
+    /// <summary>
+    /// One session priced per provider leg: reported tokens x token rates when both exist, else connected
+    /// minutes x the per-minute rate, and unpriced (null) when the provider is no longer recorded.
+    /// </summary>
+    private static List<LiveLegCost> PriceSession(LiveSessionFacts facts, Dictionary<string, StoredRate> rates)
+    {
+        var result = new List<LiveLegCost>();
+        var usageApplied = false;
+        var legs = facts.Legs
+            .GroupBy(l => (l.Provider, l.Model))
+            .Select(g => new LiveLeg(g.Key.Provider, g.Key.Model, g.Sum(x => x.Minutes)))
+            .ToList();
+
+        foreach (var leg in legs)
+        {
+            if (leg.Provider == "unknown")
+            {
+                result.Add(new LiveLegCost(leg.Provider, leg.Model, leg.Minutes, null, false, null));
+                continue;
+            }
+
+            LiveUsage? usage = null;
+            if (!usageApplied && facts.Usage is { } reported && reported.Provider == leg.Provider)
+            {
+                usage = reported;
+                usageApplied = true;
+            }
+
+            var tokenCost = usage is not null ? TokenCost(usage, leg.Provider, rates) : null;
+            var cost = tokenCost ?? (decimal)leg.Minutes * RateFor(leg.Provider, rates, out _);
+            result.Add(new LiveLegCost(leg.Provider, leg.Model, leg.Minutes, cost, tokenCost is not null, usage));
+        }
+
+        if (!usageApplied && facts.Usage is { } orphan)
+        {
+            var tokenCost = orphan.Provider != "unknown" ? TokenCost(orphan, orphan.Provider, rates) : null;
+            result.Add(new LiveLegCost(orphan.Provider, orphan.Model, 0, tokenCost, tokenCost is not null, orphan));
+        }
+
+        return result;
+    }
+
+    private sealed class LiveAggregate
+    {
+        public HashSet<string> Sessions { get; } = new(StringComparer.Ordinal);
+        public double Minutes { get; set; }
+        public decimal Cost { get; set; }
+        public long Input { get; set; }
+        public long Output { get; set; }
+        public long Cached { get; set; }
+        public long Reported { get; set; }
+        public long TokenPriced { get; set; }
+    }
+
+    private async Task<(CostComponent Component, long Sessions, double Minutes, double UnpricedMinutes, long ReportedSessions)> LiveVoiceAsync(
+        LearnerDbContext db,
+        DateTimeOffset? start,
+        DateTimeOffset now,
+        Dictionary<string, StoredRate> rates,
+        CancellationToken ct)
+    {
+        var facts = await LoadLiveSessionsAsync(db, start ?? now.AddDays(-365), ct);
+
+        var aggregates = new Dictionary<(string Provider, string Model), LiveAggregate>();
+        foreach (var session in facts)
+        {
+            foreach (var leg in PriceSession(session, rates))
+            {
+                var key = (leg.Provider, leg.Model);
+                if (!aggregates.TryGetValue(key, out var agg))
                 {
-                    sessionSet = new HashSet<string>(StringComparer.Ordinal);
-                    sessions[k] = sessionSet;
+                    agg = new LiveAggregate();
+                    aggregates[key] = agg;
                 }
 
-                sessionSet.Add(session.Key);
+                agg.Sessions.Add(session.SessionId);
+                agg.Minutes += leg.Minutes;
+                agg.Cost += leg.CostUsd ?? 0m;
+                if (leg.Usage is { } u)
+                {
+                    agg.Reported++;
+                    agg.Input += u.Input;
+                    agg.Output += u.Output;
+                    agg.Cached += u.Cached;
+                }
+
+                if (leg.TokenPriced) agg.TokenPriced++;
             }
         }
 
         var rows = new List<CostRow>();
-        foreach (var (k, mins) in minutes.OrderByDescending(x => x.Value))
+        double unpricedMinutes = 0;
+        foreach (var entry in aggregates.OrderByDescending(x => x.Value.Cost).ThenByDescending(x => x.Value.Minutes))
         {
-            var perMinute = RateFor(k.Provider, rates, out var ownerSet);
+            var provider = entry.Key.Provider;
+            var model = entry.Key.Model;
+            var agg = entry.Value;
+            var unknown = provider == "unknown";
+            RateFor(provider, rates, out var ownerSet);
+            if (unknown) unpricedMinutes += agg.Minutes;
+            var basis = unknown
+                ? "unpriced"
+                : agg.TokenPriced > 0 && agg.TokenPriced >= agg.Sessions.Count ? "reported_tokens"
+                : agg.TokenPriced > 0 ? "mixed"
+                : ownerSet ? "duration_estimate" : "duration_assumed";
             rows.Add(new CostRow(
-                ProviderId: k.Provider,
-                ProviderName: k.Provider == "openai" ? "OpenAI GPT Live" : k.Provider == "gemini" ? "Gemini Live" : k.Provider,
-                Model: k.Model,
+                ProviderId: provider,
+                ProviderName: provider == "openai" ? "OpenAI GPT Live" : provider == "gemini" ? "Gemini Live" : unknown ? "Provider not recorded" : provider,
+                Model: model,
                 Kind: "live_voice",
-                Requests: sessions[k].Count,
-                Successes: sessions[k].Count,
+                Requests: agg.Sessions.Count,
+                Successes: agg.Sessions.Count,
                 FailedAttempts: 0,
                 Retries: 0,
-                PromptTokens: 0,
-                CompletionTokens: 0,
-                CacheTokens: 0,
-                CostUsd: Math.Round((decimal)mins * perMinute, 4),
+                PromptTokens: agg.Input,
+                CompletionTokens: agg.Output,
+                CacheTokens: agg.Cached,
+                CostUsd: unknown ? 0m : Math.Round(agg.Cost, 4),
                 ApiEquivalentUsd: null,
-                Basis: ownerSet ? "duration_estimate" : "duration_assumed",
-                Minutes: Math.Round(mins, 2)));
+                Basis: basis,
+                Minutes: Math.Round(agg.Minutes, 2),
+                ReportedSessions: agg.Reported));
         }
 
-        var totalSessions = mints.Select(m => m.SessionId).Distinct(StringComparer.Ordinal).LongCount();
-        return (Total("speaking-live-voice", "Speaking live voice agent", rows), totalSessions, Math.Round(minutes.Values.Sum(), 2));
+        return (
+            Total("speaking-live-voice", "Speaking live voice agent", rows),
+            facts.Count,
+            Math.Round(aggregates.Values.Sum(a => a.Minutes), 2),
+            Math.Round(unpricedMinutes, 2),
+            rows.Sum(r => r.ReportedSessions));
     }
 
-    private static (string Provider, string Model) ParseMint(string text)
+    private static (string Provider, string Model) ParseMint(string? text)
     {
+        if (string.IsNullOrWhiteSpace(text)) return ("unknown", "unknown");
         var sep = text.IndexOf(':');
         return sep > 0
             ? (text[..sep].Trim().ToLowerInvariant(), text[(sep + 1)..].Trim())
@@ -670,40 +1010,32 @@ public sealed class AiCostBreakdownService(
             }).ToList();
 
             // Live voice sessions per learner (mint audit joined to the speaking session owner), for attribution
-            // to the speaking runs reconstructed below.
+            // to the speaking runs reconstructed below; priced exactly like the live voice component.
             var since = start ?? now.AddDays(-365);
-            var mintRows = await db.SpeakingPatientTurns.AsNoTracking()
+            var facts = await LoadLiveSessionsAsync(db, since, ct);
+            var owners = await db.SpeakingPatientTurns.AsNoTracking()
                 .Where(m => m.Role == LiveVoiceService.LiveVoiceSessionRole && m.CreatedAt >= since)
                 .Join(
                     db.SpeakingSessions.AsNoTracking(),
                     m => m.SessionId,
                     s => s.Id,
-                    (m, s) => new { s.UserId, m.SessionId, m.Text, m.CreatedAt })
+                    (m, s) => new { m.SessionId, s.UserId, m.CreatedAt })
                 .Take(20000)
                 .ToListAsync(ct);
-            var lastTurns = await db.SpeakingPatientTurns.AsNoTracking()
-                .Where(t => t.Role == LiveVoiceService.LiveVoiceTurnRole && t.CreatedAt >= since)
-                .GroupBy(t => t.SessionId)
-                .Select(g => new { SessionId = g.Key, Last = g.Max(t => t.CreatedAt) })
-                .ToListAsync(ct);
-            var lastTurnBySession = lastTurns.ToDictionary(x => x.SessionId, x => x.Last, StringComparer.Ordinal);
+            var ownerBySession = owners
+                .GroupBy(o => o.SessionId, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => (UserId: g.First().UserId, At: g.Min(x => x.CreatedAt)), StringComparer.Ordinal);
 
-            var liveSessions = mintRows
-                .GroupBy(m => m.SessionId, StringComparer.Ordinal)
-                .Select(g =>
-                {
-                    var ordered = g.OrderBy(x => x.CreatedAt).ToList();
-                    var first = ordered[0];
-                    var end = ordered[^1].CreatedAt;
-                    if (lastTurnBySession.TryGetValue(g.Key, out var lt) && lt > end) end = lt;
-                    var span = end - first.CreatedAt;
-                    if (span > MaxLiveSessionSpan) span = MaxLiveSessionSpan;
-                    if (span < TimeSpan.Zero) span = TimeSpan.Zero;
-                    var (provider, model) = ParseMint(first.Text);
-                    var perMinute = RateFor(provider, rates, out _);
-                    return new LiveSession(first.UserId, first.CreatedAt, provider, model, (decimal)span.TotalMinutes * perMinute);
-                })
-                .ToList();
+            var liveSessions = new List<LiveSession>();
+            foreach (var session in facts)
+            {
+                if (!ownerBySession.TryGetValue(session.SessionId, out var owner)) continue;
+                var legs = PriceSession(session, rates);
+                var main = legs.OrderByDescending(l => l.Minutes).FirstOrDefault();
+                liveSessions.Add(new LiveSession(
+                    owner.UserId, owner.At, main?.Provider ?? "unknown", main?.Model ?? "unknown",
+                    legs.Sum(l => l.CostUsd ?? 0m)));
+            }
 
             var runs = new List<CostRun>();
             foreach (var user in rows.GroupBy(r => r.UserId, StringComparer.Ordinal))

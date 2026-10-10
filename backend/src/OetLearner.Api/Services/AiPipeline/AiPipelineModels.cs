@@ -136,7 +136,9 @@ public static class AiPipelineDefaults
         AiPipelineStageKeys.WritingGrade =>
         [
             new(MaxProvider, ClaudeModel, true, 2, 420),
-            new(ClaudeApiProvider, ClaudeModel, true, 1, 150),
+            // 300 s (was 150): the paid-API hop now runs extended thinking at the approved HIGH effort
+            // (owner directive 2026-10-10), which takes longer than Claude's default depth.
+            new(ClaudeApiProvider, ClaudeModel, true, 1, 300),
             new(CodexProvider, CodexModel, true, 2, 420),
             new(ZaiProvider, ZaiModel, true, 1, 180),
         ],

@@ -50,6 +50,11 @@ public static class LiveVoiceEndpoints
             .Produces<LiveVoiceTranscriptResponse>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status409Conflict);
 
+        learner.MapPost("/{id}/usage", PersistUsageAsync)
+            .WithSummary("Persist provider-reported token usage of a finished live conversation (cost reporting only).")
+            .Produces<LiveVoiceUsageResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status409Conflict);
+
         learner.MapPost("/{id}/audio-turns", CaptureCandidateAudioAsync)
             .WithSummary("Persist a consented short microphone clip captured during a live-voice candidate turn.")
             .Produces<LiveVoiceAudioCaptureResponse>(StatusCodes.Status200OK)
@@ -101,6 +106,17 @@ public static class LiveVoiceEndpoints
         CancellationToken ct)
     {
         var result = await liveVoice.PersistTurnAsync(ResolveUserId(http), id, request, ct);
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> PersistUsageAsync(
+        HttpContext http,
+        string id,
+        [FromBody] LiveVoiceUsageRequest request,
+        LiveVoiceService liveVoice,
+        CancellationToken ct)
+    {
+        var result = await liveVoice.PersistUsageAsync(ResolveUserId(http), id, request, ct);
         return Results.Ok(result);
     }
 

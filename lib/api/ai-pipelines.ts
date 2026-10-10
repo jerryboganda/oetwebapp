@@ -356,7 +356,15 @@ export function deleteCreditGrant(id: string): Promise<void> {
 // charge: its cost is 0 and its API-equivalent value is reported separately.
 
 export type CostRowKind = 'subscription' | 'api' | 'live_voice';
-export type CostBasis = 'subscription' | 'rate_card' | 'stored_estimate' | 'duration_estimate' | 'duration_assumed';
+export type CostBasis =
+  | 'subscription'
+  | 'rate_card'
+  | 'stored_estimate'
+  | 'duration_estimate'
+  | 'duration_assumed'
+  | 'reported_tokens'
+  | 'mixed'
+  | 'unpriced';
 
 export interface CostRow {
   providerId: string;
@@ -374,6 +382,8 @@ export interface CostRow {
   apiEquivalentUsd: number | null;
   basis: CostBasis;
   minutes: number | null;
+  /** Live voice sessions that carried provider-reported token usage. */
+  reportedSessions: number;
 }
 
 export interface CostComponent {
@@ -413,6 +423,9 @@ export interface SpeakingCostBlock {
   avgPerAssessmentUsd: number | null;
   liveVoiceSessions: number;
   liveVoiceMinutes: number;
+  /** Minutes whose provider is no longer recorded: they are not priced. */
+  liveVoiceUnpricedMinutes: number;
+  liveVoiceReportedSessions: number;
 }
 
 export interface PromoGrantCost {
@@ -508,6 +521,9 @@ export interface LiveVoiceRateView {
   ownerSet: boolean;
   updatedBy: string | null;
   updatedAt: string | null;
+  /** Optional blended USD per 1M tokens; both set = sessions with reported usage are priced from tokens. */
+  inputPerMillionUsd: number | null;
+  outputPerMillionUsd: number | null;
 }
 
 export interface CostBreakdownResponse {
@@ -526,13 +542,32 @@ export function fetchCostBreakdown(window: OverviewWindow = '7d'): Promise<CostB
 export function saveLiveVoiceRate(
   provider: 'openai' | 'gemini',
   perMinuteUsd: number,
-  reason?: string,
+  options?: { inputPerMillionUsd?: number | null; outputPerMillionUsd?: number | null; reason?: string },
 ): Promise<{ provider: string; perMinuteUsd: number }> {
   return apiClient.put<{ provider: string; perMinuteUsd: number }>(`${base}/live-voice-rates`, {
     provider,
     perMinuteUsd,
-    reason,
+    inputPerMillionUsd: options?.inputPerMillionUsd ?? null,
+    outputPerMillionUsd: options?.outputPerMillionUsd ?? null,
+    reason: options?.reason,
   });
+}
+
+export interface ReconciliationCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface CostReconciliation {
+  window: OverviewWindow;
+  generatedAt: string;
+  checks: ReconciliationCheck[];
+}
+
+/** On-demand evidence: recomputes the cost figures through independent paths and compares them. Read-only. */
+export function fetchCostReconciliation(window: OverviewWindow = '7d'): Promise<CostReconciliation> {
+  return apiClient.get<CostReconciliation>(`${base}/cost-breakdown/reconciliation?window=${encodeURIComponent(window)}`);
 }
 
 // ── Route benchmarks (the gate a model that leaves Claude must pass) ─────────

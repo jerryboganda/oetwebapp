@@ -90,10 +90,8 @@ public static class AiPipelineAdminEndpoints
 
                 var effortNote = key switch
                 {
-                    AiPipelineStageKeys.SpeakingGrade =>
+                    AiPipelineStageKeys.SpeakingGrade or AiPipelineStageKeys.WritingGrade =>
                         "Claude API runs adaptive thinking at effort HIGH. The Claude Max sidecar is pinned to effort HIGH (WRITING_CLAUDE_EFFORT).",
-                    AiPipelineStageKeys.WritingGrade =>
-                        "The Claude Max sidecar is pinned to effort HIGH. The paid-API hop sends no explicit effort, so Claude's own default applies.",
                     _ => null,
                 };
 
@@ -308,6 +306,11 @@ public static class AiPipelineAdminEndpoints
         group.MapGet("/cost-breakdown", async (ICostBreakdownService breakdown, string? window, CancellationToken ct) =>
             Results.Ok(await breakdown.BuildAsync(window, ct)));
 
+        // On-demand reconciliation evidence (admin-only, nothing written, never scheduled): recomputes the figures
+        // through independent paths and compares them with each other and with the domain records they describe.
+        group.MapGet("/cost-breakdown/reconciliation", async (ICostBreakdownService breakdown, string? window, CancellationToken ct) =>
+            Results.Ok(await breakdown.ReconcileAsync(window, ct)));
+
         // The operator's per-minute live voice rate (the realtime audio never passes through this API, so live
         // voice is metered in connected minutes). Audited like every other pipeline control; never writes the
         // saved provider order.
@@ -323,6 +326,11 @@ public static class AiPipelineAdminEndpoints
                 return new ApiErrorResult(400, "live_voice_rate_provider_invalid", "Provider must be openai or gemini.");
             if (dto.PerMinuteUsd < 0m || dto.PerMinuteUsd > 100m)
                 return new ApiErrorResult(400, "live_voice_rate_invalid", "The rate must be between 0 and 100 USD per minute.");
+            if ((dto.InputPerMillionUsd is { } inRate && (inRate < 0m || inRate > 100_000m))
+                || (dto.OutputPerMillionUsd is { } outRate && (outRate < 0m || outRate > 100_000m))
+                || (dto.InputPerMillionUsd is null) != (dto.OutputPerMillionUsd is null))
+                return new ApiErrorResult(400, "live_voice_token_rate_invalid",
+                    "Token rates need BOTH an input and an output rate, each between 0 and 100000 USD per million tokens (or leave both blank).");
 
             var now = DateTimeOffset.UtcNow;
             var actor = Actor(http);
@@ -344,7 +352,8 @@ public static class AiPipelineAdminEndpoints
             flag.Enabled = true;
             flag.RolloutPercentage = 0;
             flag.Owner = actor.Name.Length > 128 ? actor.Name[..128] : actor.Name;
-            flag.Description = AiCostBreakdownService.FormatRateDescription(dto.PerMinuteUsd, provider);
+            flag.Description = AiCostBreakdownService.FormatRateDescription(
+                dto.PerMinuteUsd, provider, dto.InputPerMillionUsd, dto.OutputPerMillionUsd);
             flag.UpdatedAt = now;
 
             db.AuditEvents.Add(new AuditEvent
@@ -360,6 +369,8 @@ public static class AiPipelineAdminEndpoints
                 {
                     provider,
                     perMinuteUsd = dto.PerMinuteUsd,
+                    inputPerMillionUsd = dto.InputPerMillionUsd,
+                    outputPerMillionUsd = dto.OutputPerMillionUsd,
                     reason = dto.Reason,
                 }, AiPipelineJson.Options),
             });
@@ -663,7 +674,12 @@ public static class AiPipelineAdminEndpoints
 
     public sealed record DrainAccountDto(string ProviderCode, bool Drain, string? Reason);
 
-    public sealed record LiveVoiceRateDto(string Provider, decimal PerMinuteUsd, string? Reason);
+    public sealed record LiveVoiceRateDto(
+        string Provider,
+        decimal PerMinuteUsd,
+        string? Reason,
+        decimal? InputPerMillionUsd = null,
+        decimal? OutputPerMillionUsd = null);
 
     public sealed record ThresholdDto(double SwitchPercent, string? Reason);
 }

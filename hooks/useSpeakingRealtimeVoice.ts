@@ -9,8 +9,10 @@ import {
   getLiveVoicePreflight,
   persistLiveVoiceTranscript,
   persistLiveVoiceTurn,
+  persistLiveVoiceUsage,
   type LiveVoicePreflight,
   type LiveVoiceProvider,
+  type LiveVoiceUsageInput,
   type LiveVoiceTranscriptSegmentInput,
 } from '@/lib/api/speaking-live-voice';
 
@@ -158,6 +160,105 @@ function asConnectFailure(caught: unknown): unknown {
 const failureCode = (error: unknown) => apiErrorInfo(error)?.code || (error instanceof ProviderConnectError ? 'connect_failed' : 'unknown');
 
 const delay = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+// ── Provider-reported usage (cost reporting only) ──────────────────────────────────────────────
+// The realtime media and its events never pass through the API, so the browser forwards the token usage the provider
+// reports. It is read defensively (snake or camel case, any missing field is 0) and sent once at stop(); nothing about
+// grading, credits or the transcript depends on it, and a failure is ignored.
+interface UsageTotals {
+  input: number;
+  output: number;
+  cached: number;
+  inputAudio: number;
+  outputAudio: number;
+}
+
+const emptyUsage = (): UsageTotals => ({ input: 0, output: 0, cached: 0, inputAudio: 0, outputAudio: 0 });
+
+function usageCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+}
+
+function usageRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function addUsage(a: UsageTotals, b: UsageTotals): UsageTotals {
+  return {
+    input: a.input + b.input,
+    output: a.output + b.output,
+    cached: a.cached + b.cached,
+    inputAudio: a.inputAudio + b.inputAudio,
+    outputAudio: a.outputAudio + b.outputAudio,
+  };
+}
+
+/** OpenAI realtime style usage (a response's or the session's `usage`). */
+function readOpenAiUsage(raw: unknown): UsageTotals | null {
+  const usage = usageRecord(raw);
+  if (!usage) return null;
+  const inDetails = usageRecord(usage.input_token_details ?? usage.inputTokenDetails ?? usage.input_tokens_details);
+  const outDetails = usageRecord(usage.output_token_details ?? usage.outputTokenDetails ?? usage.output_tokens_details);
+  const totals: UsageTotals = {
+    input: usageCount(usage.input_tokens ?? usage.inputTokens ?? usage.prompt_tokens),
+    output: usageCount(usage.output_tokens ?? usage.outputTokens ?? usage.completion_tokens),
+    cached: usageCount(inDetails?.cached_tokens ?? inDetails?.cachedTokens),
+    inputAudio: usageCount(inDetails?.audio_tokens ?? inDetails?.audioTokens),
+    outputAudio: usageCount(outDetails?.audio_tokens ?? outDetails?.audioTokens),
+  };
+  return totals.input + totals.output > 0 ? totals : null;
+}
+
+/** Gemini Live `usageMetadata`. */
+function readGeminiUsage(raw: unknown): UsageTotals | null {
+  const usage = usageRecord(raw);
+  if (!usage) return null;
+  const audioOf = (details: unknown): number => {
+    if (!Array.isArray(details)) return 0;
+    let sum = 0;
+    for (const item of details) {
+      const entry = usageRecord(item);
+      const modality = typeof entry?.modality === 'string' ? entry.modality.toUpperCase() : '';
+      if (modality === 'AUDIO') sum += usageCount(entry?.tokenCount ?? entry?.token_count);
+    }
+    return sum;
+  };
+  const totals: UsageTotals = {
+    input: usageCount(usage.promptTokenCount ?? usage.prompt_token_count),
+    output: usageCount(
+      usage.responseTokenCount ?? usage.response_token_count ?? usage.candidatesTokenCount ?? usage.candidates_token_count,
+    ),
+    cached: usageCount(usage.cachedContentTokenCount ?? usage.cached_content_token_count),
+    inputAudio: audioOf(usage.promptTokensDetails ?? usage.prompt_tokens_details),
+    outputAudio: audioOf(
+      usage.responseTokensDetails ?? usage.response_tokens_details ?? usage.candidatesTokensDetails ?? usage.candidates_tokens_details,
+    ),
+  };
+  return totals.input + totals.output > 0 ? totals : null;
+}
+
+/** The larger of the per-response sum and the provider's own end-of-session total, per field. */
+function snapshotUsage(
+  sum: UsageTotals,
+  closing: UsageTotals,
+  responses: number,
+): Omit<LiveVoiceUsageInput, 'providerSessionId'> | null {
+  const input = Math.max(sum.input, closing.input);
+  const output = Math.max(sum.output, closing.output);
+  if (input + output <= 0) return null;
+  const closingTotal = closing.input + closing.output;
+  const sumTotal = sum.input + sum.output;
+  const basis: LiveVoiceUsageInput['basis'] = closingTotal > 0 && closingTotal >= sumTotal ? 'final' : closingTotal > 0 ? 'mixed' : 'sum';
+  return {
+    inputTokens: input,
+    outputTokens: output,
+    cachedInputTokens: Math.max(sum.cached, closing.cached),
+    inputAudioTokens: Math.max(sum.inputAudio, closing.inputAudio),
+    outputAudioTokens: Math.max(sum.outputAudio, closing.outputAudio),
+    basis,
+    responses,
+  };
+}
 
 /**
  * Runs a live-voice write, retrying it when the per-user limiter (one live-voice request at a time) answered 429 because another
@@ -786,6 +887,11 @@ export function useSpeakingRealtimeVoice(
   const clipUploadChainRef = useRef<Promise<unknown>>(Promise.resolve());
   // Diagnostics only: which event types the OpenAI link sent (logged once at stop()).
   const openAiEventTypesRef = useRef<Set<string>>(new Set());
+  // Provider-reported usage of this card (see snapshotUsage): per-response events summed, and the provider's own
+  // end-of-session totals. Cost reporting only.
+  const usageSumRef = useRef<UsageTotals>(emptyUsage());
+  const usageFinalRef = useRef<UsageTotals>(emptyUsage());
+  const usageResponsesRef = useRef(0);
   const assignedBurstStartRef = useRef(-1);
   // One clock for the whole role-play (see markSessionLive): performance.now() when the FIRST provider session went live,
   // the same instant as Date.now() (a reload rebuilds the clock from it), and how long after the origin the CURRENT
@@ -1297,6 +1403,17 @@ export function useSpeakingRealtimeVoice(
   const handleOpenAiEvent = useCallback((value: Record<string, unknown>) => {
     const type = providerEventType(value).toLowerCase();
     if (type && openAiEventTypesRef.current.size < 50) openAiEventTypesRef.current.add(type);
+    // Usage for cost reporting: each response's usage adds up; the session's closing total is kept separately.
+    if (type === 'response.done') {
+      const reported = readOpenAiUsage(usageRecord(value.response)?.usage ?? value.usage);
+      if (reported) {
+        usageSumRef.current = addUsage(usageSumRef.current, reported);
+        usageResponsesRef.current += 1;
+      }
+    } else if (type === 'session.closed' || type === 'session.ended' || type === 'session.usage') {
+      const reported = readOpenAiUsage(value.usage ?? usageRecord(value.session)?.usage);
+      if (reported) usageFinalRef.current = addUsage(usageFinalRef.current, reported);
+    }
     if (
       (type.includes('output_audio') || type.includes('response.audio'))
       && !type.endsWith('.done')
@@ -1374,6 +1491,11 @@ export function useSpeakingRealtimeVoice(
   }, [addCaption, beginPatientAudioPlayback, finishPatientAudioPlayback, flushIfLong, queueFlush]);
 
   const handleGeminiMessage = useCallback((value: Record<string, unknown>) => {
+    const reportedUsage = readGeminiUsage(value.usageMetadata ?? value.usage_metadata);
+    if (reportedUsage) {
+      usageSumRef.current = addUsage(usageSumRef.current, reportedUsage);
+      usageResponsesRef.current += 1;
+    }
     if (value.setupComplete || value.setup_complete) {
       geminiReadyRef.current = true;
       pendingAttemptOf(attemptRef)?.live();
@@ -2042,6 +2164,17 @@ export function useSpeakingRealtimeVoice(
         audioSaved,
         openAiEventTypes: departingEventTypes,
       });
+      // Provider-reported usage, for cost reporting only: bounded and best-effort, it can never keep the transcript
+      // from being saved.
+      if (finalSegments.length > 0 && current()) {
+        const usage = snapshotUsage(usageSumRef.current, usageFinalRef.current, usageResponsesRef.current);
+        if (usage) {
+          await Promise.race([
+            persistLiveVoiceUsage(sessionId, { providerSessionId, ...usage }).catch(() => undefined),
+            delay(2_500),
+          ]);
+        }
+      }
       if (finalSegments.length > 0) {
         await persistLiveVoiceTranscript(sessionId, {
           provider,
@@ -2122,6 +2255,9 @@ export function useSpeakingRealtimeVoice(
     window.clearTimeout(clipHangoverTimerRef.current);
     clipHangoverTimerRef.current = undefined;
     openAiEventTypesRef.current = new Set();
+    usageSumRef.current = emptyUsage();
+    usageFinalRef.current = emptyUsage();
+    usageResponsesRef.current = 0;
     // A departing card's uploads keep running on their own; the next card's must not queue behind them.
     clipUploadChainRef.current = Promise.resolve();
     patientAudioPlaybackRef.current = false;
