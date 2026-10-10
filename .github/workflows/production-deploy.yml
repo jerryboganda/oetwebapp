@@ -256,13 +256,21 @@ jobs:
               if [ -f '$REMOTE_DIR/source.tar.gz' ]; then \
                 src_root='$APP_DIR/source'; sha='$SHA'; \
                 mkdir -p \"\$src_root\"; \
-                rm -rf \"\$src_root/\$sha.tmp\"; \
-                mkdir -p \"\$src_root/\$sha.tmp\"; \
-                tar -xzf '$REMOTE_DIR/source.tar.gz' -C \"\$src_root/\$sha.tmp\"; \
-                rm -rf \"\$src_root/\$sha\"; \
-                mv \"\$src_root/\$sha.tmp\" \"\$src_root/\$sha\"; \
+                if [ -d \"\$src_root/\$sha\" ] && [ -n \"\$(ls -A \"\$src_root/\$sha\" 2>/dev/null)\" ]; then \
+                  echo \"SOURCE_EXISTS reusing \$src_root/\$sha\"; \
+                else \
+                  rm -rf \"\$src_root/\$sha.tmp\"; mkdir -p \"\$src_root/\$sha.tmp\"; \
+                  tar -xzf '$REMOTE_DIR/source.tar.gz' -C \"\$src_root/\$sha.tmp\"; \
+                  test -n \"\$(ls -A \"\$src_root/\$sha.tmp\" 2>/dev/null)\" || { echo 'SOURCE_ARCHIVE_EMPTY' >&2; exit 1; }; \
+                  rm -rf \"\$src_root/\$sha\"; mv \"\$src_root/\$sha.tmp\" \"\$src_root/\$sha\"; \
+                  echo \"SOURCE_EXTRACTED \$src_root/\$sha (\$(ls -A \"\$src_root/\$sha\" | wc -l) entries)\"; \
+                fi; \
                 ln -sfn \"\$src_root/\$sha\" \"\$src_root/current.new\" && mv -Tf \"\$src_root/current.new\" \"\$src_root/current\"; \
-                ls -1 \"\$src_root\" | grep -E '^[0-9a-f]{7,40}\$' | sort | head -n -2 | xargs -r -I{} rm -rf \"\$src_root/{}\"; \
+                # Prune by MTIME, newest kept. Sorting by name was wrong: SHA hashes are hex, so a
+                # lexicographic sort kept arbitrary SHAs and could delete the one a running slot
+                # still has mounted. Guard the count so a first-ever export is never pruned.
+                old=\$(find \"\$src_root\" -maxdepth 1 -mindepth 1 -type d -name '[0-9a-f]*' -printf '%T@ %p\n' | sort -rn | tail -n +4 | cut -d' ' -f2-); \
+                if [ -n \"\$old\" ]; then echo \"\$old\" | xargs -r rm -rf; fi; \
                 echo SOURCE_MOUNT_OK=\"\$(readlink -f \"\$src_root/current\")\"; \
               else \
                 echo 'SOURCE_MOUNT_SKIPPED no source archive in this rollout'; \
