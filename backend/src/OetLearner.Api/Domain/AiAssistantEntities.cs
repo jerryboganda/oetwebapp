@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
+using Pgvector;
 
 namespace OetLearner.Api.Domain;
 
@@ -195,9 +196,11 @@ public class AiCodebaseChunk
     /// <summary>
     /// pgvector embedding (1536 dimensions for text-embedding-3-small).
     /// Null until the embedding service processes this chunk.
-    /// Stored as float[] and mapped via Pgvector.EntityFrameworkCore.
+    /// Native pgvector column (<c>vector(1536)</c>), the same <see cref="Vector"/> mapping as
+    /// <c>CompanionChunk.Embedding</c> and <c>WritingScenarioEmbedding.Embedding</c>; a plain
+    /// float[] cannot be mapped to <c>vector(1536)</c>.
     /// </summary>
-    public float[]? Embedding { get; set; }
+    public Vector? Embedding { get; set; }
 
     public DateTimeOffset IndexedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? EmbeddedAt { get; set; }

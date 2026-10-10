@@ -244,7 +244,7 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
                 Language = chunk.Language,
                 ChunkType = "block",
                 SymbolName = chunk.Symbol,
-                Embedding = embeddings[i],
+                Embedding = embeddings[i] is { Length: > 0 } embedding ? new Pgvector.Vector(embedding) : null,
                 ContentHash = hash,
                 IndexedAt = DateTimeOffset.UtcNow
             };

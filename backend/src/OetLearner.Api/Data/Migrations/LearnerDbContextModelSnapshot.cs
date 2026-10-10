@@ -996,7 +996,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("EmbeddedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.PrimitiveCollection<float[]>("Embedding")
+                    b.Property<Vector>("Embedding")
                         .HasColumnType("vector(1536)");
 
                     b.Property<int>("EndLine")
