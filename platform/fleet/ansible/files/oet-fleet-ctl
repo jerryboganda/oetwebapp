@@ -494,6 +494,18 @@ def verb_ubag_reconcile(args):
     if shutil.which("wg", path=SAFE_PATH) is None:
         run(["/usr/bin/apt-get", "update", "-qq"])
         run(["/usr/bin/apt-get", "install", "-y", "wireguard-tools"])
+    firewall = "/usr/local/sbin/ubag-helper-firewall"
+    with open(firewall, "w") as handle:
+        handle.write("#!/bin/sh\nset -eu\n" + "\n".join(
+            "/usr/sbin/iptables -C INPUT -i ubagwg -s %s/32 -p %s %s -j ACCEPT 2>/dev/null || /usr/sbin/iptables -I INPUT -i ubagwg -s %s/32 -p %s %s -j ACCEPT" % (value["primary_address"], protocol, port_arg, value["primary_address"], protocol, port_arg)
+            for protocol, port_arg in (("tcp", "--dport 7444"), ("icmp", ""))) + "\n")
+    os.chmod(firewall, 0o755)
+    unit_dir = "/etc/systemd/system/wg-quick@ubagwg.service.d"
+    os.makedirs(unit_dir, mode=0o755, exist_ok=True)
+    with open(unit_dir + "/ubag-firewall.conf", "w") as handle:
+        handle.write("[Service]\nExecStartPost=" + firewall + "\n")
+    run(["/usr/bin/systemctl", "daemon-reload"])
+    run([firewall])
     os.makedirs("/etc/wireguard", mode=0o700, exist_ok=True)
     private_path = "/etc/wireguard/ubagwg.key"
     if not os.path.exists(private_path):

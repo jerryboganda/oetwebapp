@@ -190,7 +190,7 @@ public sealed class UbagTrustService
             var ca = await LoadCaAsync(cancellationToken);
             var dir = options.PrimaryTlsDirectory;
             Directory.CreateDirectory(dir);
-            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(dir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute);
             var certPath = Path.Combine(dir, "primary.crt");
             var keyPath = Path.Combine(dir, "primary.key");
             try
@@ -215,7 +215,7 @@ public sealed class UbagTrustService
             {
                 var temporary = item.Item1 + ".new";
                 await File.WriteAllTextAsync(temporary, item.Item2, cancellationToken);
-                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead);
                 File.Move(temporary, item.Item1, overwrite: true);
             }
             _logger.LogInformation("Renewed UBAG primary certificate; expires {NotAfter:O}.", leaf.NotAfter);
