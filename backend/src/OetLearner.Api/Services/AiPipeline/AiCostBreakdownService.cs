@@ -329,9 +329,14 @@ public sealed class AiCostBreakdownService(
             "The stored estimate is what /admin/ai-usage shows; the difference is expected."));
 
         // 6. Units: letters counted from usage rows vs completed Writing evaluations in the domain tables.
-        var evalQuery = db.Evaluations.AsNoTracking()
-            .Where(e => e.SubtestCode == "writing" && e.State == AsyncState.Completed);
-        if (start is { } windowStart) evalQuery = evalQuery.Where(e => e.GeneratedAt >= windowStart);
+        //    Writing grades never land in Evaluations — that table holds the exam subtests (listening/
+        //    reading/speaking, full-mock units) and had exactly one writing row ever, so this check read 0
+        //    forever and always failed (observed 10 Oct 2026: "170 letters vs 0 evaluations"). A graded
+        //    letter's domain row is the v1.1 assessment report, and CandidateReady is the status meaning
+        //    graded and released to the candidate.
+        var evalQuery = db.WritingAssessmentReportsV11.AsNoTracking()
+            .Where(r => r.Status == WritingAssessmentV11Status.CandidateReady);
+        if (start is { } windowStart) evalQuery = evalQuery.Where(r => r.CreatedAt >= windowStart);
         var evaluations = await evalQuery.LongCountAsync(ct);
         var tolerance = Math.Max(2L, (long)Math.Ceiling(evaluations * 0.10));
         checks.Add(new ReconciliationCheck(

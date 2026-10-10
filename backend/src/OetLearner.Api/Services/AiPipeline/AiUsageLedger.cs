@@ -40,10 +40,27 @@ public static class AiModelRateCard
 
     public static bool TryGet(string? model, out Rate rate)
     {
-        if (!string.IsNullOrWhiteSpace(model) && Rates.TryGetValue(model.Trim(), out var found))
+        if (!string.IsNullOrWhiteSpace(model))
         {
-            rate = found;
-            return true;
+            var key = model.Trim();
+            if (Rates.TryGetValue(key, out var found))
+            {
+                rate = found;
+                return true;
+            }
+
+            // Anthropic serves models under dated snapshot ids ("claude-haiku-4-5-20251001") while the
+            // card keys on the base family, so a trailing -YYYYMMDD suffix is stripped before giving up;
+            // otherwise the call silently falls back to the stored estimate and the reconciliation's
+            // rate-card check flags a priced model as unpriced (observed 10 Oct 2026).
+            var dash = key.LastIndexOf('-');
+            if (dash > 0 && key.Length - dash - 1 == 8
+                && key[(dash + 1)..].All(char.IsDigit)
+                && Rates.TryGetValue(key[..dash], out found))
+            {
+                rate = found;
+                return true;
+            }
         }
 
         rate = null!;
