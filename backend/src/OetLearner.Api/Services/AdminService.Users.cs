@@ -2099,6 +2099,28 @@ public partial class AdminService
             .Where(w => userIds.Contains(w.UserId))
             .ToListAsync(ct);
 
+        // Same invariant as AdjustUserCreditsCoreAsync: a manual adjustment may never leave a negative
+        // balance (the DB also enforces CK_Wallets_CreditBalance_NonNegative, which would otherwise fail
+        // the whole SaveChanges with a 500). Checked before any write so one bad wallet rejects the whole
+        // batch, and in long so an int overflow cannot wrap past the check.
+        var outOfRange = wallets
+            .Where(w =>
+            {
+                var projected = (long)w.CreditBalance + creditAmount;
+                return projected < 0 || projected > int.MaxValue;
+            })
+            .ToList();
+        if (outOfRange.Count > 0)
+        {
+            throw ApiException.Validation(
+                "insufficient_credits",
+                $"Credit adjustment would leave {outOfRange.Count} wallet balance(s) negative or above the maximum. No wallets were changed.",
+                outOfRange.Take(20).Select(w => new ApiFieldError(
+                    "userIds",
+                    "insufficient",
+                    $"User {w.UserId}: current balance ({w.CreditBalance}) plus adjustment ({creditAmount}) is out of range.")));
+        }
+
         var results = new List<object>();
         foreach (var wallet in wallets)
         {

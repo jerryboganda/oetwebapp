@@ -17,6 +17,8 @@ import {
   updateAdminBillingAddOn,
   fetchAdminBillingAddOns,
 } from '@/lib/api';
+import { describeAiPackageIncludes, parseBillingPrice } from '@/lib/api/admin-users';
+import { CREDITS_PER_WRITING_OR_SPEAKING_ACTIVITY } from '@/lib/format-allowance';
 
 // The admin add-on read projection is loosely typed; AI packages are add-ons with
 // addonKind === 'ai_package' plus the new aiPackageGroup / aiFeatures fields.
@@ -85,6 +87,8 @@ interface FormState {
   personalisedStudyRecs: boolean;
   features: string[];
   packageManaged: boolean;
+  /** The row's stored entitlement JSON; keys the form does not model are carried through a save. */
+  entitlements: Record<string, unknown>;
 }
 
 function emptyForm(): FormState {
@@ -116,6 +120,7 @@ function emptyForm(): FormState {
     personalisedStudyRecs: false,
     features: [],
     packageManaged: false,
+    entitlements: {},
   };
 }
 
@@ -142,7 +147,9 @@ function toForm(row: AdminAddOnRow): FormState {
     flexibleCredits: readInt('flexible_credits'),
     writingCredits: readInt('writing_only_credits'),
     speakingCredits: readInt('speaking_only_credits'),
-    mocks: readInt('mock_exams'),
+    // The server resolves mocks as mock_exams ?? mockFull, so a legacy row that only
+    // carries the mockFull alias opens with its real count instead of a blank box.
+    mocks: readInt('mock_exams') || readInt('mockFull'),
     listeningTests: ent.listening_tests == null ? '' : readInt('listening_tests'),
     readingTests: ent.reading_tests == null ? '' : readInt('reading_tests'),
     passGuaranteeMonths: readInt('pass_guarantee_extension_months'),
@@ -155,6 +162,7 @@ function toForm(row: AdminAddOnRow): FormState {
     features: Array.isArray(row.aiFeatures) ? row.aiFeatures.filter((f) => typeof f === 'string') : [],
     packageManaged: row.packageManaged === true
       || (!!row.code && resolveWebsitePackageByCode(row.code) !== undefined),
+    entitlements: { ...ent },
   };
 }
 
@@ -166,12 +174,13 @@ function intOrNull(v: string): number | null {
 }
 
 function buildEntitlementsJson(f: FormState): string {
+  const writingCredits = intOrNull(f.writingCredits) ?? 0;
+  const speakingCredits = intOrNull(f.speakingCredits) ?? 0;
   const obj: Record<string, unknown> = {
+    // Keys the form does not model (ai_credits, ...) survive a save. A mockFull alias is
+    // kept too but is shadowed by the mock_exams written below (server: mock_exams ?? mockFull).
+    ...f.entitlements,
     package_type: f.packageType.trim() || f.group,
-    shared_credits: intOrNull(f.sharedCredits) ?? 0,
-    flexible_credits: intOrNull(f.flexibleCredits) ?? 0,
-    writing_only_credits: intOrNull(f.writingCredits) ?? 0,
-    speaking_only_credits: intOrNull(f.speakingCredits) ?? 0,
     listening_tests: f.unlimitedListening ? null : (intOrNull(f.listeningTests) ?? 0),
     reading_tests: f.unlimitedReading ? null : (intOrNull(f.readingTests) ?? 0),
     mock_exams: intOrNull(f.mocks) ?? 0,
@@ -182,8 +191,27 @@ function buildEntitlementsJson(f: FormState): string {
     feedback_reports: f.feedbackReports,
     personalised_study_recs: f.personalisedStudyRecs,
   };
+  // A credit pool is written when it holds credits or the row already stated it. A new explicit
+  // `shared_credits: 0` would otherwise win the storefront's shared ?? flexible fallback and hide
+  // the Flexible pool of a package that never had a Shared pool.
+  const pools: Array<[string, number]> = [
+    ['shared_credits', intOrNull(f.sharedCredits) ?? 0],
+    ['flexible_credits', intOrNull(f.flexibleCredits) ?? 0],
+    ['writing_only_credits', writingCredits],
+    ['speaking_only_credits', speakingCredits],
+  ];
+  for (const [key, value] of pools) {
+    if (value > 0 || Object.prototype.hasOwnProperty.call(f.entitlements, key)) obj[key] = value;
+  }
+  // writing_items / speaking_items are the letter / card counts the learner storefront shows,
+  // so they follow the credit pools (2 credits per letter or card) instead of going stale.
+  if (writingCredits > 0) obj.writing_items = Math.floor(writingCredits / CREDITS_PER_WRITING_OR_SPEAKING_ACTIVITY);
+  else delete obj.writing_items;
+  if (speakingCredits > 0) obj.speaking_items = Math.floor(speakingCredits / CREDITS_PER_WRITING_OR_SPEAKING_ACTIVITY);
+  else delete obj.speaking_items;
   const pg = intOrNull(f.passGuaranteeMonths);
   if (pg != null && pg > 0) obj.pass_guarantee_extension_months = pg;
+  else delete obj.pass_guarantee_extension_months;
   return JSON.stringify(obj);
 }
 
@@ -269,9 +297,10 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
       setFeedback({ tone: 'error', message: 'Name is required.' });
       return;
     }
-    const price = Number(form.price);
-    if (!Number.isFinite(price) || price < 0) {
-      setFeedback({ tone: 'error', message: 'Price must be a non-negative number.' });
+    // parseBillingPrice rejects a blank box: Number('') is 0 and would publish a free package.
+    const price = parseBillingPrice(form.price);
+    if (price === null) {
+      setFeedback({ tone: 'error', message: 'Enter a price of 0 or more, for example 49 or 49.99.' });
       return;
     }
 
@@ -283,7 +312,6 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
       currency: form.currency.trim().toUpperCase() || 'GBP',
       interval: 'one_time',
       durationDays: intOrNull(form.validityDays) ?? 0,
-      grantCredits: intOrNull(form.sharedCredits) ?? intOrNull(form.flexibleCredits) ?? 0,
       displayOrder: intOrNull(form.displayOrder) ?? 0,
       isRecurring: false,
       appliesToAllPlans: true,
@@ -291,8 +319,12 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
       status: form.status,
       grantEntitlementsJson: buildEntitlementsJson(form),
       addonKind: 'ai_package',
-      lettersGranted: intOrNull(form.writingCredits) ?? 0,
-      sessionsGranted: intOrNull(form.speakingCredits) ?? 0,
+      // Credits reach the learner only through the AI package wallet, from the entitlement JSON.
+      // These legacy columns feed the tutor-review / private-speaking counters on every purchase
+      // (SubscriptionBundleInitializer.ApplyAddOnEntitlements), so they must stay 0 for an AI package.
+      grantCredits: 0,
+      lettersGranted: 0,
+      sessionsGranted: 0,
       aiPackageGroup: form.group,
       aiFeaturesJson: JSON.stringify(cleanFeatures),
     };
@@ -386,7 +418,7 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
                 <th scope="col" className="px-3 py-3">Name</th>
                 <th scope="col" className="px-3 py-3">Group</th>
                 <th scope="col" className="px-3 py-3">Price</th>
-                <th scope="col" className="px-3 py-3">Credits</th>
+                <th scope="col" className="px-3 py-3">Includes</th>
                 <th scope="col" className="px-3 py-3">Validity</th>
                 <th scope="col" className="px-3 py-3">Status</th>
                 <th scope="col" className="px-3 py-3 sr-only">Actions</th>
@@ -399,8 +431,7 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
                 <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">No AI packages yet. Create one to populate the learner AI Credits tab.</td></tr>
               ) : (
                 sortedRows.map((row) => {
-                  const ent = (row.grantEntitlements ?? {}) as Record<string, unknown>;
-                  const credits = numOrBlank(ent.shared_credits) || numOrBlank(ent.flexible_credits) || numOrBlank(ent.writing_only_credits) || numOrBlank(ent.speaking_only_credits) || '0';
+                  const includes = describeAiPackageIncludes(row.grantEntitlements);
                   return (
                     <tr key={row.id} className="align-middle">
                       <td className="px-3 py-3">
@@ -409,7 +440,11 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
                       </td>
                       <td className="px-3 py-3"><Badge variant="info">{row.aiPackageGroup || 'full'}</Badge></td>
                       <td className="px-3 py-3 tabular-nums">{row.currency} {row.price}</td>
-                      <td className="px-3 py-3 tabular-nums">{credits}</td>
+                      <td className="px-3 py-3 text-xs" data-testid={`ai-package-includes-${row.code}`}>
+                        {includes.length > 0
+                          ? includes.map((line) => <div key={line}>{line}</div>)
+                          : <span className="text-muted">Nothing granted</span>}
+                      </td>
                       <td className="px-3 py-3">{validityLabel(row.durationDays ?? 0)}</td>
                       <td className="px-3 py-3">
                         <Badge variant={(row.status ?? 'active').toLowerCase() === 'active' ? 'success' : 'default'}>

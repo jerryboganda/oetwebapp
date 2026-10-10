@@ -902,7 +902,25 @@ public partial class AdminService
         var interval = ValidateCatalogInterval(errors, request.Interval, AddOnIntervals);
         var status = ValidateCatalogEnum(errors, "status", request.Status, fallbackStatus);
         var compatiblePlanCodes = ValidateCatalogStringArrayJson(errors, "compatiblePlanCodesJson", request.CompatiblePlanCodesJson);
-        var grantEntitlementsJson = ValidateCatalogObjectJson(errors, "grantEntitlementsJson", request.GrantEntitlementsJson);
+
+        // An update that omits the entitlement JSON or the add-on kind keeps the stored value, so a
+        // partial save (for example a non-AI add-on editor that never loads the JSON) cannot wipe it.
+        string? storedAddonKind = null;
+        string? storedGrantEntitlementsJson = null;
+        if (existingAddOnId is not null)
+        {
+            var stored = await db.BillingAddOns.AsNoTracking()
+                .Where(addOn => addOn.Id == existingAddOnId)
+                .Select(addOn => new { addOn.AddonKind, addOn.GrantEntitlementsJson })
+                .FirstOrDefaultAsync(ct);
+            storedAddonKind = stored?.AddonKind;
+            storedGrantEntitlementsJson = stored?.GrantEntitlementsJson;
+        }
+
+        var grantEntitlementsJson = ValidateCatalogObjectJson(
+            errors,
+            "grantEntitlementsJson",
+            request.GrantEntitlementsJson ?? storedGrantEntitlementsJson);
 
         if (request.Price < 0)
         {
@@ -958,6 +976,25 @@ public partial class AdminService
 
         ThrowIfCatalogInvalid(errors, "billing_addon_invalid", "Billing add-on catalog data is invalid.");
 
+        // AI packages are granted only through the AI package wallet, from GrantEntitlementsJson.
+        // LettersGranted / SessionsGranted feed the legacy tutor-review and private-speaking counters
+        // (SubscriptionBundleInitializer.ApplyAddOnEntitlements / ApplyAddOnGrant) on every purchase,
+        // so a non-zero value would hand out free tutor reviews and live sessions with an AI package.
+        var oet2026 = request.Oet2026;
+        var grantCredits = request.GrantCredits;
+        var effectiveAddonKind = string.IsNullOrWhiteSpace(oet2026.AddonKind) ? storedAddonKind : oet2026.AddonKind;
+        if (string.Equals(effectiveAddonKind?.Trim(), "ai_package", StringComparison.OrdinalIgnoreCase))
+        {
+            oet2026 = oet2026 with { LettersGranted = 0, SessionsGranted = 0 };
+            // GrantCredits is a fallback authority while the JSON does not state every pool (the grant
+            // reader and the storefront both fall back to it), so clearing it there would change what a
+            // buyer receives. It is cleared only once the JSON is the complete authority.
+            if (CarriesEveryAiPackagePool(grantEntitlementsJson))
+            {
+                grantCredits = 0;
+            }
+        }
+
         return new ValidatedBillingAddOnCatalog(
             code,
             name,
@@ -966,7 +1003,7 @@ public partial class AdminService
             currency,
             interval,
             request.DurationDays,
-            request.GrantCredits,
+            grantCredits,
             request.DisplayOrder,
             request.IsRecurring,
             request.AppliesToAllPlans,
@@ -976,7 +1013,52 @@ public partial class AdminService
             status,
             compatiblePlanCodes.Json,
             grantEntitlementsJson,
-            request.Oet2026);
+            oet2026);
+    }
+
+    private static readonly string[] AiPackagePoolKeys =
+    [
+        "shared_credits",
+        "flexible_credits",
+        "writing_only_credits",
+        "speaking_only_credits",
+    ];
+
+    /// <summary>
+    /// True when the entitlement JSON states every AI credit pool as a number. Only then is the legacy
+    /// GrantCredits column redundant (AiPackageGrant.FromAddOn and the storefront read it as a fallback
+    /// for any pool key that is missing).
+    /// </summary>
+    private static bool CarriesEveryAiPackagePool(string grantEntitlementsJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(grantEntitlementsJson);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            foreach (var key in AiPackagePoolKeys)
+            {
+                // Must match AiPackageGrant.ReadInt exactly: it only honours a number that fits Int32
+                // (TryGetInt32 fails for a fraction or an out-of-range value), otherwise the reader falls
+                // back to GrantCredits, so such a value is not a stated pool.
+                if (!root.TryGetProperty(key, out var value)
+                    || value.ValueKind != JsonValueKind.Number
+                    || !value.TryGetInt32(out _))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private async Task<ValidatedBillingCouponCatalog> ValidateBillingCouponCatalogAsync(

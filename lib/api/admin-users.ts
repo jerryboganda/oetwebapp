@@ -12,6 +12,7 @@ import {
 } from './client';
 import { fetchWithTimeout } from '../network/fetch-with-timeout';
 import { ensureFreshAccessToken } from '../auth-client';
+import { describeCreditsAsActivities } from '../format-allowance';
 
 export interface AdminSponsorDto {
   id: string;
@@ -383,6 +384,57 @@ export async function fetchAdminBillingAddOnVersions(addOnId: string) {
   return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}/versions`);
 }
 
+/**
+ * Parses a typed catalog price. Blank, negative or non-numeric text is null, so an empty
+ * box can never publish a free package. A trailing decimal point ("12.") is accepted while typing.
+ */
+export function parseBillingPrice(raw: string): number | null {
+  let text = raw.trim();
+  // A comma is a decimal separator only as "49,99" (one or two digits after it). "1,299" is a
+  // thousands separator and is rejected, never silently published as 1.299.
+  if (/^\d+,\d{1,2}$/.test(text)) text = text.replace(',', '.');
+  if (!/^\d+(\.\d*)?$/.test(text)) return null;
+  const value = Number(text.replace(/\.$/, ''));
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * One line per AI credit pool a package grants, read from its entitlement JSON. Zero pools are
+ * skipped and Writing / Speaking / Flexible credits also read as letters / cards / attempts
+ * (2 credits each). The legacy grantCredits column is deliberately not read: it is 0 by design.
+ */
+export function describeAiPackageIncludes(ent: Record<string, unknown> | null | undefined): string[] {
+  if (!ent) return [];
+  const count = (key: string): number => {
+    const value = ent[key];
+    return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+  };
+  const lines: string[] = [];
+  const pool = (label: string, key: string, bucketKey?: string) => {
+    const credits = count(key);
+    if (credits <= 0) return;
+    const activities = bucketKey ? describeCreditsAsActivities(bucketKey, credits) : null;
+    lines.push(`${label}: ${credits} credit${credits === 1 ? '' : 's'}${activities ? ` (${activities})` : ''}`);
+  };
+  const tests = (label: string, key: string, unlimitedKey: string) => {
+    // An explicit JSON null is how the catalog stores "unlimited" for Listening / Reading.
+    if (ent[unlimitedKey] === true || (Object.prototype.hasOwnProperty.call(ent, key) && ent[key] === null)) {
+      lines.push(`${label}: unlimited`);
+    } else if (count(key) > 0) {
+      lines.push(`${label}: ${count(key)}`);
+    }
+  };
+  if (ent.unlimited_grading === true) lines.push('Unlimited Writing/Speaking grading');
+  pool('Shared', 'shared_credits');
+  pool('Flexible W/S', 'flexible_credits', 'flexible_ws');
+  pool('Writing', 'writing_only_credits', 'writing');
+  pool('Speaking', 'speaking_only_credits', 'speaking');
+  tests('Listening', 'listening_tests', 'unlimited_listening');
+  tests('Reading', 'reading_tests', 'unlimited_reading');
+  if (count('mock_exams') > 0) lines.push(`Full mock exams: ${count('mock_exams')}`);
+  return lines;
+}
+
 export interface AdminBillingAddOnOet2026Fields {
   originalPriceGbp?: number | null;
   addonKind?: string;
@@ -485,7 +537,9 @@ export async function updateAdminBillingAddOn(addOnId: string, payload: {
       maxQuantity: payload.maxQuantity ?? null,
       status: payload.status ?? 'active',
       compatiblePlanCodesJson: payload.compatiblePlanCodesJson ?? '[]',
-      grantEntitlementsJson: payload.grantEntitlementsJson ?? '{}',
+      // Left out (not defaulted to '{}') when the caller has none: the API keeps the stored
+      // entitlement JSON for an update that omits it, so a partial save can never wipe it.
+      grantEntitlementsJson: payload.grantEntitlementsJson,
       originalPriceGbp: payload.originalPriceGbp ?? null,
       addonKind: payload.addonKind ?? null,
       requiresEligibleParent: payload.requiresEligibleParent ?? null,

@@ -1,7 +1,12 @@
 'use client';
 
 import { Fragment } from 'react';
-import type { AiPackageCreditBucket, AiPackageCreditSnapshot } from '@/lib/billing-types';
+import type {
+  AiPackageCreditBucket,
+  AiPackageCreditGrantSource,
+  AiPackageCreditSnapshot,
+} from '@/lib/billing-types';
+import { describeCreditsAsActivities } from '@/lib/format-allowance';
 
 const BUCKET_ORDER = ['reading', 'listening', 'writing', 'speaking', 'shared', 'flexible_ws', 'mock'] as const;
 
@@ -13,13 +18,18 @@ function sortBuckets(buckets: AiPackageCreditBucket[]): AiPackageCreditBucket[] 
   );
 }
 
+// The API clamps daysLeft to 0 once the validity end has passed (a still-open end
+// is always >= 1 because it is rounded up), so 0 means "expired", never "today".
 function daysLeftLabel(bucket: Pick<AiPackageCreditBucket, 'daysLeft' | 'expiresAt'>): string | null {
   if (bucket.daysLeft < 0 || !bucket.expiresAt) return null;
-  if (bucket.daysLeft === 0) return 'expires today';
+  if (bucket.daysLeft === 0) return 'expired';
   return `${bucket.daysLeft} day${bucket.daysLeft === 1 ? '' : 's'} left`;
 }
 
 function validityLabel(bucket: AiPackageCreditBucket): string | null {
+  // Nothing live is left and the credits lapsed: the wallet-level window the API
+  // falls back to would contradict the "expired unused" figure.
+  if (!bucket.unlimited && bucket.remaining === 0 && (bucket.expired ?? 0) > 0) return 'expired';
   const start = bucket.validFrom ? new Date(bucket.validFrom).toLocaleDateString() : null;
   const end = bucket.expiresAt ? new Date(bucket.expiresAt).toLocaleDateString() : null;
   const left = daysLeftLabel(bucket);
@@ -27,16 +37,35 @@ function validityLabel(bucket: AiPackageCreditBucket): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
-function grantValidityLabel(grant: { validFrom?: string | null; expiresAt?: string | null; daysLeft?: number | null }): string | null {
+const GRANT_STATUS_LABEL: Record<NonNullable<AiPackageCreditGrantSource['status']>, string> = {
+  active: 'Active',
+  scheduled: 'Scheduled',
+  expired: 'Expired',
+  reversed: 'Reversed',
+};
+
+function grantValidityLabel(
+  grant: Pick<AiPackageCreditGrantSource, 'validFrom' | 'expiresAt' | 'daysLeft' | 'status'>,
+): string | null {
   const start = grant.validFrom ? new Date(grant.validFrom).toLocaleDateString() : null;
   const end = grant.expiresAt ? new Date(grant.expiresAt).toLocaleDateString() : null;
+  const expired = grant.status === 'expired' || (grant.daysLeft === 0 && Boolean(grant.expiresAt));
+  // A scheduled grant has not started and a reversed one is refunded, so "N days left" would
+  // read as usable time for credits the learner cannot spend.
   const left =
-    grant.daysLeft == null || grant.daysLeft < 0 || !grant.expiresAt
+    expired ||
+    grant.status === 'scheduled' ||
+    grant.status === 'reversed' ||
+    grant.daysLeft == null ||
+    grant.daysLeft < 0 ||
+    !grant.expiresAt
       ? null
-      : grant.daysLeft === 0
-        ? 'expires today'
-        : `${grant.daysLeft} day${grant.daysLeft === 1 ? '' : 's'} left`;
-  const parts = [start ? `from ${start}` : null, end ? `to ${end}` : null, left].filter(Boolean);
+      : `${grant.daysLeft} day${grant.daysLeft === 1 ? '' : 's'} left`;
+  const parts = [
+    start ? `from ${start}` : null,
+    end ? `${expired ? 'ended' : 'to'} ${end}` : null,
+    left,
+  ].filter(Boolean);
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
@@ -77,23 +106,31 @@ export function AiCreditSummary({
       {buckets.length === 0 ? (
         <p className="text-sm text-admin-fg-muted">No active credit buckets.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-admin-border">
-          <table className="w-full text-left text-xs">
+        <div
+          role="region"
+          aria-label="AI credit balances"
+          tabIndex={0}
+          className="overflow-x-auto rounded-lg border border-admin-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-admin-primary"
+        >
+          <table className="w-full min-w-[40rem] text-left text-xs">
+            <caption className="sr-only">
+              AI credit balances by bucket: total granted, used, remaining, source package and validity.
+            </caption>
             <thead className="bg-admin-bg-subtle text-2xs uppercase tracking-wide text-admin-fg-muted">
               <tr>
-                <th className="px-3 py-2 font-medium">Balance</th>
-                <th className="px-3 py-2 font-medium">Total</th>
-                <th className="px-3 py-2 font-medium">Used</th>
-                <th className="px-3 py-2 font-medium">Remaining</th>
-                <th className="px-3 py-2 font-medium">Source</th>
-                <th className="px-3 py-2 font-medium">Validity</th>
+                <th scope="col" className="px-3 py-2 text-left font-medium">Balance</th>
+                <th scope="col" className="px-3 py-2 text-left font-medium">Total</th>
+                <th scope="col" className="px-3 py-2 text-left font-medium">Used</th>
+                <th scope="col" className="px-3 py-2 text-left font-medium">Remaining</th>
+                <th scope="col" className="px-3 py-2 text-left font-medium">Source</th>
+                <th scope="col" className="px-3 py-2 text-left font-medium">Validity</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-admin-border">
               {buckets.map((bucket) => (
                 <Fragment key={bucket.key}>
                   <tr data-testid={`admin-bucket-${bucket.key}`}>
-                    <td className="px-3 py-2 font-medium text-admin-fg-strong">{bucket.label}</td>
+                    <th scope="row" className="px-3 py-2 text-left font-medium text-admin-fg-strong">{bucket.label}</th>
                     {bucket.unlimited ? (
                       <>
                         <td className="px-3 py-2 text-admin-fg-muted">—</td>
@@ -102,9 +139,34 @@ export function AiCreditSummary({
                       </>
                     ) : (
                       <>
-                        <td className="px-3 py-2 tabular-nums">{bucket.totalGranted}</td>
+                        <td className="px-3 py-2 tabular-nums">
+                          {bucket.totalGranted + (bucket.expired ?? 0)}
+                          {(bucket.expired ?? 0) > 0 ? (
+                            <span
+                              className="block text-2xs font-normal text-admin-fg-muted"
+                              data-testid={`admin-bucket-${bucket.key}-total-expired`}
+                            >
+                              incl. {bucket.expired} expired
+                            </span>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2 tabular-nums">{bucket.used}</td>
-                        <td className="px-3 py-2 font-semibold tabular-nums">{bucket.remaining}</td>
+                        <td className="px-3 py-2 font-semibold tabular-nums">
+                          {bucket.remaining}
+                          {describeCreditsAsActivities(bucket.key, bucket.remaining) ? (
+                            <span className="block text-2xs font-normal text-admin-fg-muted">
+                              = {describeCreditsAsActivities(bucket.key, bucket.remaining)}
+                            </span>
+                          ) : null}
+                          {(bucket.expired ?? 0) > 0 ? (
+                            <span
+                              className="block text-2xs font-normal text-amber-700 dark:text-amber-300"
+                              data-testid={`admin-bucket-${bucket.key}-expired`}
+                            >
+                              {bucket.expired} expired unused
+                            </span>
+                          ) : null}
+                        </td>
                       </>
                     )}
                     <td className="max-w-[16rem] truncate px-3 py-2 text-admin-fg-muted" title={bucket.sourcePackages ?? undefined}>
@@ -120,15 +182,27 @@ export function AiCreditSummary({
                             Grants · {bucket.grants.length}
                           </p>
                           <ul className="space-y-1">
-                            {bucket.grants.map((grant, index) => (
+                            {bucket.grants.map((grant, index) => {
+                              const status = grant.status ?? 'active';
+                              const grantActivities = describeCreditsAsActivities(bucket.key, grant.totalGranted);
+                              return (
                               <li
                                 key={`${grant.sourceReferenceId ?? grant.packageId ?? grant.description}-${index}`}
                                 data-testid={`admin-bucket-${bucket.key}-grant-${index}`}
                                 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs leading-4 text-admin-fg-muted"
                               >
-                                <span className="font-medium text-admin-fg-default">
+                                <span className={`font-medium text-admin-fg-default ${status === 'reversed' ? 'line-through' : ''}`}>
                                   {grant.description || grant.packageId || 'grant'} · {grant.totalGranted}
+                                  {grantActivities ? ` (${grantActivities})` : ''}
                                 </span>
+                                {status !== 'active' ? (
+                                  <span
+                                    className="rounded-full border border-admin-border px-1.5 text-3xs font-semibold uppercase tracking-wide"
+                                    data-testid={`admin-bucket-${bucket.key}-grant-${index}-status`}
+                                  >
+                                    {GRANT_STATUS_LABEL[status]}
+                                  </span>
+                                ) : null}
                                 {grant.sourceReferenceId ? (
                                   <span
                                     className="max-w-[14rem] truncate font-mono text-3xs text-admin-fg-muted"
@@ -139,10 +213,11 @@ export function AiCreditSummary({
                                 ) : null}
                                 <span className="text-admin-fg-muted">{grantValidityLabel(grant) ?? '—'}</span>
                                 <span className="text-admin-fg-muted">
-                                  {new Date(grant.grantedAt).toLocaleDateString()}
+                                  granted {new Date(grant.grantedAt).toLocaleDateString()}
                                 </span>
                               </li>
-                            ))}
+                              );
+                            })}
                           </ul>
                         </div>
                       </td>

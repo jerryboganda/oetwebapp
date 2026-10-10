@@ -11,7 +11,13 @@ import { LinesTextarea } from '@/components/admin/ui/lines-textarea';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { Textarea } from '@/components/admin/ui/textarea';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchAdminCatalogPresentation, isApiError, saveAdminWebsitePackages } from '@/lib/api';
+import {
+  fetchAdminBillingAddOns,
+  fetchAdminCatalogPresentation,
+  isApiError,
+  saveAdminWebsitePackages,
+} from '@/lib/api';
+import { describeAiPackageIncludes, parseBillingPrice as parsePrice } from '@/lib/api/admin-users';
 import type {
   AdminCatalogAddOnSummary,
   AdminCatalogPlanSummary,
@@ -270,14 +276,6 @@ function validatePackageNo(raw: string): string | undefined {
   return /^\d{1,3}$/.test(text) && Number(text) >= 1 ? undefined : 'Use a whole number from 1 to 999, or leave empty.';
 }
 
-/** A trailing decimal point is accepted so a price such as "12." is not an error while it is being typed. */
-function parsePrice(raw: string): number | null {
-  const text = raw.trim().replace(',', '.');
-  if (!/^\d+(\.\d*)?$/.test(text)) return null;
-  const value = Number(text.replace(/\.$/, ''));
-  return Number.isFinite(value) ? value : null;
-}
-
 /** True when an edit patch value would change what learners see: blank text and values equal to the current ones (ignoring stray outer spaces in text) do not. */
 function isMeaningfulEdit(current: unknown, next: unknown): boolean {
   if (next === undefined) return false;
@@ -352,7 +350,13 @@ function planRow(plan: AdminCatalogPlanSummary): LiveRow {
   };
 }
 
-function addOnRow(addOn: AdminCatalogAddOnSummary): LiveRow {
+/**
+ * `grants` is the add-on's entitlement JSON (the catalog summary does not carry it). An AI package
+ * is granted from those pools, never from the legacy grantCredits column, which is 0 by design.
+ */
+function addOnRow(addOn: AdminCatalogAddOnSummary, grants?: Record<string, unknown>): LiveRow {
+  const isAiPackage = (addOn.addonKind ?? '').toLowerCase() === 'ai_package';
+  const includes = isAiPackage && grants ? describeAiPackageIncludes(grants) : null;
   return {
     kind: 'addon',
     code: addOn.code,
@@ -366,7 +370,9 @@ function addOnRow(addOn: AdminCatalogAddOnSummary): LiveRow {
     activeSubscribers: 0,
     access: accessFacts([
       ['Duration', amount(addOn.durationDays, 'day', 'Not set')],
-      ['Credits granted', amount(addOn.grantCredits, '')],
+      isAiPackage
+        ? ['Includes', includes ? (includes.length > 0 ? includes.join(' · ') : 'Nothing granted') : 'Credit pools are set in Billing > Pricing > AI packages']
+        : ['Credits granted', amount(addOn.grantCredits, '')],
       ['Applies to all plans', typeof addOn.appliesToAllPlans === 'boolean' ? (addOn.appliesToAllPlans ? 'Yes' : 'No') : null],
     ]),
   };
@@ -496,6 +502,8 @@ export function SubscriptionsPackagesEditor({ canWrite = true }: { canWrite?: bo
   const [sections, setSections] = useState<SectionMap>({});
   const [plans, setPlans] = useState<AdminCatalogPlanSummary[]>([]);
   const [addOns, setAddOns] = useState<AdminCatalogAddOnSummary[]>([]);
+  // Entitlement pools by lower-cased add-on code; the catalog summary does not carry them.
+  const [grantsByCode, setGrantsByCode] = useState<Record<string, Record<string, unknown>>>({});
   const [revision, setRevision] = useState('');
   const [commercial, setCommercial] = useState<Record<string, CommercialDraft>>({});
   const [packageNoDrafts, setPackageNoDrafts] = useState<Record<string, string>>({});
@@ -547,6 +555,17 @@ export function SubscriptionsPackagesEditor({ canWrite = true }: { canWrite?: bo
         setConflict(false);
         setDroppedCodes([]);
         setMirroredCodes([]);
+        // Best effort: without it an AI package row shows a pointer instead of its credit pools.
+        void fetchAdminBillingAddOns()
+          .then((rows) => {
+            if (!aliveRef.current || !Array.isArray(rows)) return;
+            const next: Record<string, Record<string, unknown>> = {};
+            for (const row of rows as Array<{ code?: string; grantEntitlements?: Record<string, unknown> | null }>) {
+              if (row.code && row.grantEntitlements) next[row.code.toLowerCase()] = row.grantEntitlements;
+            }
+            setGrantsByCode(next);
+          })
+          .catch(() => undefined);
       } catch (err) {
         if (!aliveRef.current) return;
         setError(err instanceof Error ? err.message : 'Failed to load package settings.');
@@ -572,8 +591,11 @@ export function SubscriptionsPackagesEditor({ canWrite = true }: { canWrite?: bo
   }, [loadLatest]);
 
   const liveRows = useMemo(
-    () => ({ plans: plans.map(planRow), addOns: addOns.map(addOnRow) }),
-    [plans, addOns],
+    () => ({
+      plans: plans.map(planRow),
+      addOns: addOns.map((addOn) => addOnRow(addOn, grantsByCode[addOn.code.toLowerCase()])),
+    }),
+    [plans, addOns, grantsByCode],
   );
   const entries = useMemo(() => buildEntries(plans, liveRows), [plans, liveRows]);
   const rowIndex = useMemo(

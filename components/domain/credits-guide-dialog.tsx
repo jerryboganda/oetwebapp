@@ -23,7 +23,7 @@ import { Modal } from '@/components/ui/modal';
 //   Reading / Listening — 1 credit per PAPER (parts + re-tries free)
 //   Writing             — 2 credits per letter (no parts)
 //   Speaking            — 2 credits per card; full two-card exam = 4 credits
-//   Mock                — 1 mock credit; Writing/Speaking are tutor-marked
+//   Mock                — 1 mock credit; Writing/Speaking are AI-graded inside it (no AI credits)
 
 type Accent = 'blue' | 'violet' | 'amber' | 'emerald' | 'rose';
 
@@ -85,7 +85,8 @@ const ROWS: CreditRow[] = [
     accent: 'amber',
     name: 'Writing',
     cost: '2 credits',
-    detail: 'Charged per exam — one AI-marked letter. Writing has no parts.',
+    detail:
+      'Charged per exam — one AI-marked letter. Writing has no parts. Packages are sold in letters but shown in credits: 6 Writing credits = 3 letters.',
   },
   {
     icon: Mic,
@@ -93,7 +94,7 @@ const ROWS: CreditRow[] = [
     name: 'Speaking',
     cost: '2 credits',
     detail:
-      'A single Speaking card uses 2 AI credits. A full Speaking exam contains two cards and uses 4 AI credits in total.',
+      'A single Speaking card uses 2 AI credits (6 Speaking credits = 3 cards). A full Speaking exam contains two cards and uses 4 AI credits in total.',
   },
   {
     icon: ClipboardCheck,
@@ -101,7 +102,7 @@ const ROWS: CreditRow[] = [
     name: 'Mock exam',
     cost: '1 mock credit',
     detail:
-      'A full mock uses one Mock credit. Writing & Speaking in a mock are marked by a real tutor, so they don’t use your AI credits.',
+      'A full mock uses one Mock credit, a separate allowance. Writing & Speaking in a mock are AI-graded within that mock credit, so they don’t use your AI credits.',
   },
   {
     icon: Gift,

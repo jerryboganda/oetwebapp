@@ -1,28 +1,35 @@
 namespace OetLearner.Api.Services.Billing;
 
 /// <summary>
-/// Credit cost of AI-graded Writing / Speaking exams. Single source of truth so
-/// the start-of-exam gate and the submit-time debit stay in lockstep.
+/// Cost of AI-graded Writing / Speaking exams. Single source of truth so the
+/// start-of-exam gate and the submit-time debit stay in lockstep.
+/// <see cref="WritingExam"/>, <see cref="SpeakingExam"/> and
+/// <see cref="SpeakingCard"/> are ACTIVITY COUNTS (letters / cards), not credits;
+/// credits = activities x <see cref="CreditsPerWritingOrSpeakingActivity"/>.
 /// </summary>
 public static class AiGradingCreditCost
 {
     /// <summary>
-    /// One Writing activity (one AI-marked letter / case note) costs
-    /// <see cref="CreditsPerWritingOrSpeakingActivity"/> AI credits from any
-    /// pool. FINAL 2026-09-06: 1 Writing letter = 2 AI credits.
+    /// ACTIVITY COUNT, not a credit cost: one Writing letter (one AI-marked
+    /// letter / case note) is one activity. Pass it as the debit
+    /// <c>quantity</c>; the ledger charges
+    /// <see cref="CreditsPerWritingOrSpeakingActivity"/> AI credits for it from
+    /// any pool. FINAL 2026-09-06: 1 Writing letter = 2 AI credits.
     /// </summary>
     public const int WritingExam = 1;
 
     /// <summary>
-    /// A full AI Speaking exam is two activities — one per card at each card
-    /// reveal in <c>SpeakingExamService</c>. FINAL 2026-09-06: 2 cards =
-    /// 4 AI credits. Single-card practice stays at
-    /// <see cref="SpeakingCard"/>.
+    /// ACTIVITY COUNT, not a credit cost: a full AI Speaking exam is two cards
+    /// (activities), one taken at each card reveal in <c>SpeakingExamService</c>.
+    /// FINAL 2026-09-06: 2 cards = 4 AI credits
+    /// (<c>SpeakingExam * CreditsPerWritingOrSpeakingActivity</c>). Single-card
+    /// practice is <see cref="SpeakingCard"/>.
     /// </summary>
     public const int SpeakingExam = 2;
 
     /// <summary>
-    /// One AI Speaking card (practice or exam slot) is one activity costing
+    /// ACTIVITY COUNT, not a credit cost: one AI Speaking card (practice or exam
+    /// slot) is one activity, charged
     /// <see cref="CreditsPerWritingOrSpeakingActivity"/> AI credits.
     /// FINAL 2026-09-06: 1 Speaking card = 2 AI credits.
     /// </summary>

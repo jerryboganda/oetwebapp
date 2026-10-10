@@ -1,4 +1,8 @@
-import type { AiPackageCreditBucket, AiPackageCreditSnapshot } from './billing-types';
+import type {
+  AiPackageCreditBucket,
+  AiPackageCreditGrantStatus,
+  AiPackageCreditSnapshot,
+} from './billing-types';
 import { asArray, asRecord, toNullableString, type ApiRecord } from './api/client';
 
 function mapNamedBucket(value: unknown) {
@@ -61,6 +65,8 @@ export function mapAiPackageCreditSnapshot(data: ApiRecord): AiPackageCreditSnap
     creditsRemaining,
     writingUnlimited: data.writingUnlimited === true,
     speakingUnlimited: data.speakingUnlimited === true,
+    availableWritingActivities: data.availableWritingActivities == null ? undefined : Number(data.availableWritingActivities),
+    availableSpeakingActivities: data.availableSpeakingActivities == null ? undefined : Number(data.availableSpeakingActivities),
     sharedCreditsGranted: Number(data.sharedCreditsGranted ?? 0),
     sharedCreditsUsed: Number(data.sharedCreditsUsed ?? 0),
     buckets: mapBuckets(data.buckets),
@@ -99,6 +105,7 @@ function mapBuckets(value: unknown): AiPackageCreditBucket[] | null {
     validFrom: toNullableString(bucket.validFrom),
     expiresAt: toNullableString(bucket.expiresAt),
     daysLeft: Number(bucket.daysLeft ?? -1),
+    expired: Number(bucket.expired ?? 0),
     grants: asArray(bucket.grants).map((grant) => ({
       packageId: toNullableString(grant.packageId),
       description: String(grant.description ?? ''),
@@ -108,6 +115,11 @@ function mapBuckets(value: unknown): AiPackageCreditBucket[] | null {
       sourceReferenceId: toNullableString(grant.sourceReferenceId),
       validFrom: toNullableString(grant.validFrom),
       daysLeft: grant.daysLeft == null ? null : Number(grant.daysLeft),
+      status: mapGrantStatus(grant.status),
     })),
   }));
+}
+
+function mapGrantStatus(value: unknown): AiPackageCreditGrantStatus {
+  return value === 'expired' || value === 'reversed' || value === 'scheduled' ? value : 'active';
 }

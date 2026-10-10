@@ -415,7 +415,7 @@ export default function MockSetup() {
         title="Start from a published mock bundle"
         description="Choose your mock paper, exam mode, timing, and whether to reserve tutor review before you start."
         highlights={[
-          { icon: Award, label: 'Credits', value: `${availableCredits} available` },
+          { icon: Award, label: 'Review credits', value: `${availableCredits} available` },
           { icon: Layers, label: 'Bundles', value: `${options?.availableBundles.length ?? 0} published` },
           { icon: Clock, label: 'Timer', value: strictTimer ? 'Strict' : 'Flexible' },
         ]}
@@ -919,7 +919,7 @@ export default function MockSetup() {
                 className="mb-4"
               />
               <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 tile-label tabular-nums text-warning-strong">
-                {availableCredits} credits available
+                {availableCredits} review credits available
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {reviewOptions.map((option) => {

@@ -30,7 +30,7 @@ import { AdminSettingsLayout, SettingsSection } from '@/components/admin/layout/
 import { Card, CardContent } from '@/components/admin/ui/card';
 import { AdminQuickAction } from '@/components/domain/admin-quick-action';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Toast } from '@/components/ui/alert';
+import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Checkbox } from '@/components/ui/form-controls';
@@ -234,6 +234,7 @@ export default function UserDetailPage() {
   const [advancedAccessOpen, setAdvancedAccessOpen] = useState(false);
   const [aiCredits, setAiCredits] = useState<AiPackageCreditSnapshot | null>(null);
   const [aiCreditsLoading, setAiCreditsLoading] = useState(false);
+  const [aiCreditsError, setAiCreditsError] = useState<string | null>(null);
   const [securitySessions, setSecuritySessions] = useState<AdminSecuritySession[]>([]);
   const [securityDevices, setSecurityDevices] = useState<AdminSecurityDevice[]>([]);
   const [isLoadingSecurityDetail, setIsLoadingSecurityDetail] = useState(false);
@@ -291,6 +292,7 @@ export default function UserDetailPage() {
           setAccess(null);
           setOriginalAccess(null);
           setAiCredits(null);
+          setAiCreditsError(null);
         }
 
         // Security spec §4.4: sessions/devices list only makes sense for an
@@ -362,11 +364,14 @@ export default function UserDetailPage() {
 
   async function refreshAiCredits(id: string) {
     setAiCreditsLoading(true);
+    setAiCreditsError(null);
     try {
       setAiCredits(await fetchAdminUserAiCredits(id));
     } catch (error) {
       console.error(error);
       setAiCredits(null);
+      // Surfaced in place of the summary so a failed fetch never reads as "no credits".
+      setAiCreditsError(readErrorMessage(error, 'Unable to load AI credits for this learner.'));
     } finally {
       setAiCreditsLoading(false);
     }
@@ -1541,8 +1546,28 @@ export default function UserDetailPage() {
                     }
                   >
                     <div className="space-y-3">
-                      <AiCreditSummary snapshot={aiCredits} loading={aiCreditsLoading} />
-                      <CreditBucketAdjuster userId={user.id} onAdjusted={(snapshot) => setAiCredits(snapshot)} />
+                      {aiCreditsError ? (
+                        <InlineAlert
+                          variant="error"
+                          title="Could not load AI credits"
+                          action={(
+                            <Button size="sm" variant="outline" onClick={() => void refreshAiCredits(user.id)}>
+                              Retry
+                            </Button>
+                          )}
+                        >
+                          {aiCreditsError}
+                        </InlineAlert>
+                      ) : (
+                        <AiCreditSummary snapshot={aiCredits} loading={aiCreditsLoading} />
+                      )}
+                      {/* Disabled until balances have loaded, so a failed fetch is not mistaken for an empty wallet. */}
+                      <CreditBucketAdjuster
+                        userId={user.id}
+                        snapshot={aiCredits}
+                        disabled={!aiCredits || aiCreditsLoading}
+                        onAdjusted={(snapshot) => setAiCredits(snapshot)}
+                      />
                     </div>
                     <button
                      type="button"

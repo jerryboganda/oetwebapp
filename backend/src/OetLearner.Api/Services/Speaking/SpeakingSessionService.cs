@@ -296,7 +296,9 @@ public sealed class SpeakingSessionService(
                 if (creditReservations is not null)
                 {
                     var operationId = Guid.NewGuid().ToString("N");
-                    await creditReservations.ReserveSpeakingAsync(userId, operationId, refId, ct);
+                    var ticket = await creditReservations.ReserveSpeakingAsync(userId, operationId, refId, ct);
+                    // Rule E: the hold's "N credits used, M remaining" line (null on a retry or unlimited).
+                    feedbackMessage = ticket.FeedbackMessage;
                 }
                 else if (aiPackageCreditService is not null)
                 {
@@ -367,7 +369,7 @@ public sealed class SpeakingSessionService(
             {
                 throw ApiException.PaymentRequired(
                     "ai_credits_insufficient",
-                    "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+                    "Not enough AI credits: one Writing letter or Speaking card costs 2 AI credits. Purchase an AI Credits package to continue.");
             }
 
             return;

@@ -74,8 +74,10 @@ public sealed partial class AiPackageCreditService
             .Where(lot => lot.UserId == userId)
             .ToListAsync(ct);
         var liveLots = lots.Where(lot => IsLive(lot, now)).ToList();
-        var listeningUnlimited = liveLots.Any(lot => lot.UnlimitedListening);
-        var readingUnlimited = liveLots.Any(lot => lot.UnlimitedReading);
+        // Same exclusion the gates use (HasLiveRealUnlimited): the synthetic legacy lot
+        // only mirrors a pre-lot balance, so it never makes the card say Unlimited.
+        var listeningUnlimited = liveLots.Any(lot => IsRealLot(lot) && lot.UnlimitedListening);
+        var readingUnlimited = liveLots.Any(lot => IsRealLot(lot) && lot.UnlimitedReading);
         var activities = debitRows
             .OrderByDescending(row => row.CreatedAt)
             .Take(20)
@@ -89,7 +91,7 @@ public sealed partial class AiPackageCreditService
                 Math.Max(0, -row.SharedCreditsDelta) + Math.Max(0, -row.FlexibleCreditsDelta) + Math.Max(0, -row.WritingOnlyCreditsDelta) + Math.Max(0, -row.SpeakingOnlyCreditsDelta),
                 creditsRemaining))
             .ToList();
-        var buckets = BuildBucketDtos(account, grantRows, usage, unlimitedGrading, listeningUnlimited, readingUnlimited);
+        var buckets = BuildBucketDtos(account, grantRows, usage, unlimitedGrading, listeningUnlimited, readingUnlimited, lots, ledgerRows);
 
         return new AiPackageCreditSnapshot(
             account.UserId,
@@ -114,13 +116,13 @@ public sealed partial class AiPackageCreditService
             buckets,
             listeningUnlimited,
             readingUnlimited,
-            BuildBucket(liveLots, lots, "shared", unlimitedGrading, now),
-            BuildBucket(liveLots, lots, "flexible", unlimitedGrading, now),
-            BuildBucket(liveLots, lots, "writing", unlimitedGrading, now),
-            BuildBucket(liveLots, lots, "speaking", unlimitedGrading, now),
-            BuildBucket(liveLots, lots, "listening", unlimitedGrading, now),
-            BuildBucket(liveLots, lots, "reading", unlimitedGrading, now),
-            BuildBucket(liveLots, lots, "mocks", unlimitedGrading, now),
+            BuildBucket(liveLots, usage.Shared, "shared", unlimitedGrading, now),
+            BuildBucket(liveLots, usage.Flexible, "flexible", unlimitedGrading, now),
+            BuildBucket(liveLots, usage.Writing, "writing", unlimitedGrading, now),
+            BuildBucket(liveLots, usage.Speaking, "speaking", unlimitedGrading, now),
+            BuildBucket(liveLots, usage.Listening, "listening", unlimitedGrading, now),
+            BuildBucket(liveLots, usage.Reading, "reading", unlimitedGrading, now),
+            BuildBucket(liveLots, usage.Mocks, "mocks", unlimitedGrading, now),
             activities);
     }
 
@@ -175,13 +177,20 @@ public sealed partial class AiPackageCreditService
     /// </summary>
     private static CreditUsage ComputeUsage(IReadOnlyList<LedgerRow> ledgerRows)
         => new(
-            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.SharedCreditsDelta))),
-            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.FlexibleCreditsDelta))),
-            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.WritingOnlyCreditsDelta))),
-            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.SpeakingOnlyCreditsDelta))),
-            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.ListeningTestsDelta))),
-            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.ReadingTestsDelta))),
-            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.MockExamsDelta))));
+            NetConsumed(ledgerRows, row => row.SharedCreditsDelta),
+            NetConsumed(ledgerRows, row => row.FlexibleCreditsDelta),
+            NetConsumed(ledgerRows, row => row.WritingOnlyCreditsDelta),
+            NetConsumed(ledgerRows, row => row.SpeakingOnlyCreditsDelta),
+            NetConsumed(ledgerRows, row => row.ListeningTestsDelta),
+            NetConsumed(ledgerRows, row => row.ReadingTestsDelta),
+            NetConsumed(ledgerRows, row => row.MockExamsDelta));
+
+    // Debits are negative and refunds positive, so summing the SIGNED deltas nets a
+    // refunded activity to 0 used. Clamping each row at 0 first (the old code)
+    // dropped every refund row, so Used stayed inflated after a refund while
+    // Remaining was restored and Total = Remaining + Used overstated the package.
+    private static int NetConsumed(IReadOnlyList<LedgerRow> ledgerRows, Func<LedgerRow, int> delta)
+        => Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(delta));
 
     private static IReadOnlyList<AiPackageCreditBucketDto> BuildBucketDtos(
         AiPackageCreditAccount account,
@@ -189,9 +198,72 @@ public sealed partial class AiPackageCreditService
         CreditUsage usage,
         bool writingSpeakingUnlimited,
         bool listeningUnlimited,
-        bool readingUnlimited)
+        bool readingUnlimited,
+        IReadOnlyList<AiPackageCreditLot> lots,
+        IReadOnlyList<LedgerRow> ledgerRows)
     {
         var now = DateTimeOffset.UtcNow;
+
+        // A Purchase row is reversed once its GrantReversed row exists (same key
+        // shape ReverseOneGrantAsync writes). Without this a refunded package kept
+        // showing as a live grant, because the reversal row is negative and the
+        // grant list only keeps positive deltas.
+        var reversalReferences = grantRows
+            .Where(row => row.Reason == AiPackageCreditReason.GrantReversed && row.ReferenceId is not null)
+            .Select(row => row.ReferenceId!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        bool IsReversedPurchase(LedgerRow row)
+            => row.Reason == AiPackageCreditReason.Purchase
+                && row.ReferenceId is { } reference
+                && (reversalReferences.Contains(reference)
+                    || reversalReferences.Contains(AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{reference}")));
+
+        // Source keys that belong ONLY to reversed purchases: a refunded purchase's
+        // lapsed lot must not be reported as "expired unused" credits.
+        var liveSources = grantRows
+            .Where(row => row.Reason == AiPackageCreditReason.Purchase && !IsReversedPurchase(row))
+            .SelectMany(row => new[] { row.ReferenceId, row.SourceReferenceId })
+            .Where(value => value is not null)
+            .Select(value => value!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var refundedOnlySources = grantRows
+            .Where(IsReversedPurchase)
+            .SelectMany(row => new[] { row.ReferenceId, row.SourceReferenceId })
+            .Where(value => value is not null && !liveSources.Contains(value))
+            .Select(value => value!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // ExpireIfNeededAsync stamps "expiry:{lotId}:..." on every lot it lapses, which
+        // also covers lots with no ExpiresAt of their own (wallet-level expiry).
+        var expiryReferences = ledgerRows
+            .Where(row => row.Reason == AiPackageCreditReason.Expiry && row.ReferenceId is not null)
+            .Select(row => row.ReferenceId!)
+            .ToList();
+
+        // Exam-pass expiry zeroes lots and records the loss only as PassExpiry rows
+        // (negative deltas), so it has to be read from the ledger, not the lots.
+        var passExpiryRows = ledgerRows
+            .Where(row => row.Reason == AiPackageCreditReason.PassExpiry)
+            .ToList();
+        DateTimeOffset? latestPassExpiry = passExpiryRows.Count > 0
+            ? passExpiryRows.Max(row => row.CreatedAt)
+            : null;
+
+        // Credits sitting in a lot whose validity ended unused. Lots keep their
+        // balance when they lapse (so an admin date extension can revive them),
+        // which makes them the exact source for "expired". Parked (suspended)
+        // lots are still inside their validity window and are not counted.
+        bool LotExpiredByDate(AiPackageCreditLot lot)
+            => lot.Expired
+                && !(lot.SourceReferenceId is { } lotSource && refundedOnlySources.Contains(lotSource))
+                && ((lot.ExpiresAt is { } end && end <= now)
+                    || expiryReferences.Any(reference =>
+                        reference.StartsWith($"expiry:{lot.Id}:", StringComparison.Ordinal)));
+
+        int ExpiredCredits(Func<AiPackageCreditLot, int> lotSelector, Func<LedgerRow, int> passSelector)
+            => lots.Where(LotExpiredByDate).Sum(lotSelector)
+                + Math.Max(0, -passExpiryRows.Sum(passSelector));
 
         List<AiPackageCreditGrantSourceDto> GrantsFor(Func<LedgerRow, int> deltaSelector)
             => grantRows
@@ -199,21 +271,41 @@ public sealed partial class AiPackageCreditService
                 .GroupBy(row => new { row.PackageId, row.SourceReferenceId, row.Description })
                 .Select(group =>
                 {
-                    var first = group.First();
+                    // Reversal is per purchase row, so a re-bought package can be
+                    // partly refunded: total and state come from the rows still live.
+                    var rows = group.ToList();
+                    var liveRows = rows.Where(row => !IsReversedPurchase(row)).ToList();
+                    var basis = liveRows.Count > 0 ? liveRows : rows;
+                    var first = basis[0];
+                    // A null ExpiresAt is open-ended; Max() alone would skip it and
+                    // mislabel the whole line as expired.
+                    var expiresAt = basis.Any(row => row.ExpiresAt is null)
+                        ? (DateTimeOffset?)null
+                        : basis.Max(row => row.ExpiresAt);
+                    var validFrom = basis.Min(row => row.ValidFrom ?? row.CreatedAt);
+                    var lapsedByPass = latestPassExpiry is { } passedAt
+                        && liveRows.Count > 0
+                        && liveRows.All(row => row.CreatedAt <= passedAt);
+                    var status = liveRows.Count == 0
+                        ? "reversed"
+                        : ((expiresAt is { } end && end <= now) || lapsedByPass)
+                            ? "expired"
+                            : (validFrom > now ? "scheduled" : "active");
                     return new AiPackageCreditGrantSourceDto(
                         first.PackageId,
                         first.Description,
-                        group.Sum(row => deltaSelector(row)),
-                        group.Min(row => row.CreatedAt),
-                        group.Max(row => row.ExpiresAt),
+                        basis.Sum(row => deltaSelector(row)),
+                        basis.Min(row => row.CreatedAt),
+                        expiresAt,
                         first.SourceReferenceId,
-                        group.Min(row => row.ValidFrom ?? row.CreatedAt),
-                        DaysLeft(group.Max(row => row.ExpiresAt), now));
+                        validFrom,
+                        DaysLeft(expiresAt, now),
+                        status);
                 })
                 .OrderBy(source => source.GrantedAt)
                 .ToList();
 
-        AiPackageCreditBucketDto Bucket(string key, string label, int remaining, bool unlimited, int used, List<AiPackageCreditGrantSourceDto> grants)
+        AiPackageCreditBucketDto Bucket(string key, string label, int remaining, bool unlimited, int used, List<AiPackageCreditGrantSourceDto> grants, int expired = 0)
         {
             // Admin AI credits fix: Total = Used + Remaining is the invariant that the
             // UI reports. Admin ± / Set adjustments change `remaining` (the pool), so
@@ -222,15 +314,18 @@ public sealed partial class AiPackageCreditService
             // learner-usage number (see ProjectSnapshotAsync.ComputeUsage).
             var effectiveUsed = unlimited ? 0 : Math.Clamp(used, 0, int.MaxValue);
             var totalGranted = remaining + effectiveUsed;
-            var activeGrants = grants.Where(source =>
-                (source.ValidFrom is null || source.ValidFrom <= now)
-                && (source.ExpiresAt is null || source.ExpiresAt > now)).ToList();
+            // "active" already encodes started + not past its end + not refunded + not
+            // wiped by an exam-pass expiry.
+            var activeGrants = grants.Where(source => source.Status == "active").ToList();
             DateTimeOffset? validFrom = activeGrants.Count > 0
                 ? activeGrants.Min(source => source.ValidFrom ?? source.GrantedAt)
                 : null;
             DateTimeOffset? expiresAt = activeGrants.Any(source => source.ExpiresAt is null)
                 ? null
                 : activeGrants.Select(source => source.ExpiresAt).Max();
+            // A refunded package no longer sources this balance; an expired one still
+            // explains where the lapsed credits came from.
+            var sourceGrants = grants.Where(source => source.Status != "reversed").ToList();
             return new(
                 key,
                 label,
@@ -238,42 +333,52 @@ public sealed partial class AiPackageCreditService
                 totalGranted,
                 effectiveUsed,
                 remaining,
-                grants.Count == 0 ? null : string.Join(", ", grants
+                sourceGrants.Count == 0 ? null : string.Join(", ", sourceGrants
                     .Select(source => HumanizePackageName(source.PackageId, source.Description))
                     .Distinct(StringComparer.OrdinalIgnoreCase)),
                 validFrom,
                 expiresAt ?? account.ExpiresAt,
                 DaysLeft(expiresAt ?? account.ExpiresAt, now),
-                grants);
+                grants,
+                unlimited ? 0 : Math.Max(0, expired));
         }
 
         var buckets = new List<AiPackageCreditBucketDto>
         {
-            Bucket("reading", "Reading Credits", account.ReadingTestsRemaining ?? 0, readingUnlimited || account.ReadingTestsRemaining is null, usage.Reading, GrantsFor(row => row.ReadingTestsDelta)),
-            Bucket("listening", "Listening Credits", account.ListeningTestsRemaining ?? 0, listeningUnlimited || account.ListeningTestsRemaining is null, usage.Listening, GrantsFor(row => row.ListeningTestsDelta)),
+            // Unlimited only with a real live unlimited lot: a null pool alone is a ghost
+            // sentinel (legacy lot / deleted source) that the gates refuse.
+            Bucket("reading", "Reading Credits", account.ReadingTestsRemaining ?? 0, readingUnlimited, usage.Reading, GrantsFor(row => row.ReadingTestsDelta),
+                ExpiredCredits(lot => lot.ReadingTestsRemaining ?? 0, row => row.ReadingTestsDelta)),
+            Bucket("listening", "Listening Credits", account.ListeningTestsRemaining ?? 0, listeningUnlimited, usage.Listening, GrantsFor(row => row.ListeningTestsDelta),
+                ExpiredCredits(lot => lot.ListeningTestsRemaining ?? 0, row => row.ListeningTestsDelta)),
             Bucket("writing", "Writing Credits",
                 writingSpeakingUnlimited ? 0 : account.WritingOnlyCredits,
                 writingSpeakingUnlimited,
                 usage.Writing,
-                GrantsFor(row => row.WritingOnlyCreditsDelta)),
+                GrantsFor(row => row.WritingOnlyCreditsDelta),
+                ExpiredCredits(lot => lot.WritingOnlyCredits, row => row.WritingOnlyCreditsDelta)),
             Bucket("speaking", "Speaking Credits",
                 writingSpeakingUnlimited ? 0 : account.SpeakingOnlyCredits,
                 writingSpeakingUnlimited,
                 usage.Speaking,
-                GrantsFor(row => row.SpeakingOnlyCreditsDelta)),
-            Bucket("shared", "Shared Credits", account.SharedCredits, false, usage.Shared, GrantsFor(row => row.SharedCreditsDelta)),
+                GrantsFor(row => row.SpeakingOnlyCreditsDelta),
+                ExpiredCredits(lot => lot.SpeakingOnlyCredits, row => row.SpeakingOnlyCreditsDelta)),
+            Bucket("shared", "Shared Credits", account.SharedCredits, false, usage.Shared, GrantsFor(row => row.SharedCreditsDelta),
+                ExpiredCredits(lot => lot.SharedCredits, row => row.SharedCreditsDelta)),
         };
 
         var flexibleWsGrants = GrantsFor(row => row.FlexibleCreditsDelta);
         if (account.FlexibleCredits > 0 || flexibleWsGrants.Count > 0)
         {
-            buckets.Add(Bucket("flexible_ws", "Flexible W/S Credits", account.FlexibleCredits, false, usage.Flexible, flexibleWsGrants));
+            buckets.Add(Bucket("flexible_ws", "Flexible W/S Credits", account.FlexibleCredits, false, usage.Flexible, flexibleWsGrants,
+                ExpiredCredits(lot => lot.FlexibleCredits, row => row.FlexibleCreditsDelta)));
         }
 
         var mockGrants = GrantsFor(row => row.MockExamsDelta);
         if (account.MockExamsRemaining > 0 || mockGrants.Count > 0)
         {
-            buckets.Add(Bucket("mock", "Full Mock Attempts", account.MockExamsRemaining, false, usage.Mocks, mockGrants));
+            buckets.Add(Bucket("mock", "Full Mock Attempts", account.MockExamsRemaining, false, usage.Mocks, mockGrants,
+                ExpiredCredits(lot => lot.MockExamsRemaining, row => row.MockExamsDelta)));
         }
 
         return buckets;
@@ -302,19 +407,12 @@ public sealed partial class AiPackageCreditService
             && (lot.ValidFrom is null || lot.ValidFrom <= now)
             && (lot.ExpiresAt is null || lot.ExpiresAt > now);
 
+    // Same definition as LotRetainsValue. A null Listening/Reading balance only means
+    // "unlimited" together with its Unlimited flag (every creation path sets both), so
+    // counting null as value made a reversed lot - whose flags were cleared but whose
+    // pool was left null - look like it still held credits.
     private static bool LotHasRemaining(AiPackageCreditLot lot)
-        => lot.SharedCredits > 0
-            || lot.FlexibleCredits > 0
-            || lot.WritingOnlyCredits > 0
-            || lot.SpeakingOnlyCredits > 0
-            || lot.MockExamsRemaining > 0
-            || lot.ListeningTestsRemaining is null
-            || lot.ListeningTestsRemaining > 0
-            || lot.ReadingTestsRemaining is null
-            || lot.ReadingTestsRemaining > 0
-            || lot.UnlimitedGrading
-            || lot.UnlimitedListening
-            || lot.UnlimitedReading;
+        => LotRetainsValue(lot);
 
     private static bool SourceMatches(AiPackageCreditTransaction row, string sourceReferenceId)
     {

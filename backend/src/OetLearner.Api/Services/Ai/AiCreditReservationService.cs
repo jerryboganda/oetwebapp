@@ -5,13 +5,19 @@ using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Services.Ai;
 
+/// <summary>
+/// A credit hold. <c>FeedbackMessage</c> is the ledger's "N credits used, M remaining"
+/// line (master catalogue Rule E) when THIS call took the debit; null when the hold was
+/// reused, adopted or free.
+/// </summary>
 public sealed record AiCreditReservationTicket(
     string ReservationId,
     string OperationId,
     string BucketKind,
     int Units,
     AiCreditReservationState State,
-    bool AlreadyExisted);
+    bool AlreadyExisted,
+    string? FeedbackMessage = null);
 
 public interface IAiCreditReservationService
 {
@@ -127,14 +133,14 @@ public sealed class AiCreditReservationService(
         {
             throw ApiException.PaymentRequired(
                 "ai_credits_insufficient",
-                "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+                "Not enough AI credits: one Writing letter or Speaking card costs 2 AI credits. Purchase an AI Credits package to continue.");
         }
 
         if (!snapshot.HasWritingActivity)
         {
             throw ApiException.PaymentRequired(
                 "ai_credits_insufficient",
-                "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+                "Not enough AI credits: one Writing letter or Speaking card costs 2 AI credits. Purchase an AI Credits package to continue.");
         }
 
         // Nothing has paid this reference yet (a revision, or a letter submitted
@@ -210,14 +216,14 @@ public sealed class AiCreditReservationService(
         {
             throw ApiException.PaymentRequired(
                 "ai_credits_insufficient",
-                "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+                "Not enough AI credits: one Writing letter or Speaking card costs 2 AI credits. Purchase an AI Credits package to continue.");
         }
 
         if (!snapshot.HasSpeakingActivity)
         {
             throw ApiException.PaymentRequired(
                 "ai_credits_insufficient",
-                "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+                "Not enough AI credits: one Writing letter or Speaking card costs 2 AI credits. Purchase an AI Credits package to continue.");
         }
 
         await EnsureSpeakingOperationAsync(operationId, userId, businessReference, ct);
@@ -253,11 +259,23 @@ public sealed class AiCreditReservationService(
 
         if (row.Units > 0)
         {
+            // The hold's operation records which subtest it paid for (writing / speaking), so the
+            // refund row never says "Writing" for a Speaking card or exam hold.
+            var module = await db.AiOperations.AsNoTracking()
+                .Where(x => x.Id == row.OperationId)
+                .Select(x => x.Module)
+                .FirstOrDefaultAsync(ct);
+            var subtest = module switch
+            {
+                "speaking" => "Speaking",
+                "writing" => "Writing",
+                _ => "AI",
+            };
             await packageCredits.RefundAsync(
                 row.UserId,
                 originalReferenceId: row.BusinessReference,
                 refundReferenceId: $"{row.BusinessReference}:release",
-                description: "Writing grade reservation released after terminal failure.",
+                description: $"{subtest} grade reservation released after terminal failure.",
                 ct);
         }
 
@@ -395,22 +413,27 @@ public sealed class AiCreditReservationService(
             throw ApiException.PaymentRequired(
                 debitResult.ErrorCode ?? "ai_credits_insufficient",
                 debitResult.ErrorMessage
-                ?? "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+                ?? "Not enough AI credits: one Writing letter or Speaking card costs 2 AI credits. Purchase an AI Credits package to continue.");
         }
 
         var bucketKind = debitResult.BalanceSource switch
         {
             "flexible_ws" => "flexible_ws",
             "shared" => "shared",
-            _ => subtest, // dedicated, mixed (unreachable at quantity 1), or sourceless
+            // dedicated, mixed, or sourceless. "mixed" IS reachable at one activity (2 credits): a lone
+            // dedicated credit plus one Flexible credit fund it together (only Shared never pairs with a
+            // stranded credit), so the hold is labelled by the subtest and Units carries the real total.
+            _ => subtest,
         };
         var units = debitResult.CreditsUsed > 0 ? debitResult.CreditsUsed : 1;
         // The debit above is already committed, so the request's cancellation (client timeout, refresh,
         // deploy drain) must not lose the reservation row: a debit without a row is an orphan that no
         // commit or sweep can ever settle.
-        return released is null
+        var ticket = released is null
             ? await InsertRowAsync(userId, operationId, businessReference, bucketKind, units, CancellationToken.None)
             : await HoldAsync(released, userId, operationId, businessReference, bucketKind, units, CancellationToken.None);
+        // Rule E: hand the "credits used / remaining" line to the caller instead of dropping it.
+        return ticket with { FeedbackMessage = debitResult.FeedbackMessage };
     }
 
     private async Task EnsureSpeakingOperationAsync(

@@ -556,10 +556,11 @@ export const startListeningAttempt = (paperId: string, mode: ListeningSessionMod
     }),
   }).then((attempt) => {
     if (!options.mockAttemptId && !options.mockSectionId && attempt.feedbackMessage !== FREE_SAMPLE_FEEDBACK) {
-      // Live balance feedback (Rule E): announce the debit, never for mocks
-      // which spend their separate allowance, nor for the free sample (no debit;
-      // the toast would read a stale ledger row).
-      void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('listening'));
+      // Rule E: every caller toasts the authoritative attempt.feedbackMessage (empty
+      // on a free reopen), so only refresh the credit-card caches here; announcing
+      // the latest ledger debit as well would double the toast and misreport a
+      // reopen. Mocks spend their separate allowance; the free sample has no debit.
+      void import('@/lib/credit-feedback').then((m) => m.refreshCreditCards());
     }
     return attempt;
   });

@@ -17,6 +17,7 @@ import {
   updateAdminBillingPlan,
   fetchAdminBillingPlans,
 } from '@/lib/api';
+import { parseBillingPrice } from '@/lib/api/admin-users';
 import {
   fetchProfessionCatalog,
   professionCatalogOptions,
@@ -419,8 +420,9 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
     if (!canWrite) { setFeedback({ tone: 'error', message: 'You have read-only billing access.' }); return; }
     const name = form.name.trim();
     if (!name) { setFeedback({ tone: 'error', message: 'Name is required.' }); return; }
-    const price = Number(form.price);
-    if (!Number.isFinite(price) || price < 0) { setFeedback({ tone: 'error', message: 'Price must be a non-negative number.' }); return; }
+    // parseBillingPrice rejects a blank box: Number('') is 0 and would publish a free plan.
+    const price = parseBillingPrice(form.price);
+    if (price === null) { setFeedback({ tone: 'error', message: 'Enter a price of 0 or more, for example 49 or 49.99.' }); return; }
 
     // Invalid JSON must never reach the API: the backend silently ignores overrides it cannot
     // parse, so a typo here would look saved but grant nothing.

@@ -164,22 +164,45 @@ public sealed class CompanionSupportKnowledgeIndexer(
             "Do not describe any other route to the content, and do not speculate about what their package includes — " +
             "their account is the authority on that.");
 
+        // Writing and Speaking packages are SOLD as letters/cards but GRANTED as credits (master catalogue
+        // §1): Writing Starter is 3 letters, which the ledger grants as 3 x CreditsPerWritingOrSpeakingActivity.
+        const int writingStarterLetters = 3;
+        var perActivity = AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+        static string CreditsText(int count) => $"{count} credit{(count == 1 ? string.Empty : "s")}";
+
         var credits = new StringBuilder();
-        credits.AppendLine("AI Credits pay for AI marking. The current costs are:");
-        credits.AppendLine($"- One Writing letter marked by AI: {AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity} credits.");
-        credits.AppendLine($"- One Speaking role-play card marked by AI: {AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity} credits.");
         credits.AppendLine(
-            $"- A full two-card Speaking exam: {AiGradingCreditCost.SpeakingExam * AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity} credits, " +
-            "because it is two cards and each card is charged as it is revealed.");
-        credits.AppendLine($"- One Reading paper: {AiGradingCreditCost.ReadingExam} credit.");
-        credits.AppendLine($"- One Listening paper: {AiGradingCreditCost.ListeningExam} credit.");
+            "Credits are what the platform spends when a learner starts a chargeable attempt. Writing letters and Speaking " +
+            "cards are marked by AI and are charged in AI credits. Reading and Listening papers are marked automatically " +
+            "from the answer key rather than by AI, but each paper still uses one credit from the Reading, Listening or " +
+            "Shared balance. The current costs are:");
+        credits.AppendLine($"- One Writing letter marked by AI: {CreditsText(perActivity)}.");
+        credits.AppendLine($"- One Speaking role-play card marked by AI: {CreditsText(perActivity)}.");
+        credits.AppendLine(
+            $"- A full two-card Speaking exam: {CreditsText(AiGradingCreditCost.SpeakingExam * perActivity)} " +
+            $"({AiGradingCreditCost.SpeakingExam} cards at {CreditsText(perActivity)} each), because each card is charged " +
+            "as it is revealed.");
+        credits.AppendLine($"- One Reading paper: {CreditsText(AiGradingCreditCost.ReadingExam)}.");
+        credits.AppendLine($"- One Listening paper: {CreditsText(AiGradingCreditCost.ListeningExam)}.");
+        credits.AppendLine(
+            "Letters and cards are not the same unit as credits. Writing and Speaking packages are sold as a number of " +
+            $"letters or cards but granted as credits at {perActivity} per letter or card: the Writing Starter package is " +
+            $"{writingStarterLetters} letters, which is {CreditsText(writingStarterLetters * perActivity)}. Always convert " +
+            $"before quoting a figure — {CreditsText(writingStarterLetters * perActivity)} is {writingStarterLetters} letters, " +
+            $"never {writingStarterLetters * perActivity} letters — and a single leftover credit cannot pay for a letter or " +
+            "card on its own.");
+        credits.AppendLine(
+            "The cost is the same whichever balance pays: the matching subject balance is used first, then the Flexible " +
+            "Writing/Speaking balance (only some packages have one), then Shared credits, which can be used for any subject.");
         credits.AppendLine(
             "Always state the exact cost before starting anything chargeable and get the learner's agreement first. " +
-            "If a chargeable action fails for a technical reason, the credits are returned — say so rather than leaving " +
-            "the learner to ask.");
+            "If a chargeable action fails for a technical reason the learner is not charged twice: a Writing letter that " +
+            "failed to mark is retried on the same letter at no extra cost, and a Speaking card or exam that could not be " +
+            "marked is refunded — say so rather than leaving the learner to ask.");
         credits.AppendLine(
-            "Credits are bought in packages and spending is itemised in the learner's AI usage view. Practising without AI " +
-            "marking does not cost credits.");
+            "Credits are bought in packages and spending is itemised in the learner's AI usage view. A credit is taken only " +
+            "when an attempt actually starts: looking at a paper or card does not cost anything, and reopening or resuming " +
+            "the same attempt does not take another credit.");
 
         var problems = new StringBuilder();
         problems.AppendLine(

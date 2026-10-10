@@ -3,6 +3,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { toast } from '@/components/ui/toaster';
 import { queryKeys } from '@/lib/query/keys';
+import { describeCreditsAsActivities } from '@/lib/format-allowance';
 import type { AiPackageCreditSnapshot, AiPackageCreditTransaction } from '@/lib/billing-types';
 
 export type MeteredSubtest = 'reading' | 'listening' | 'writing' | 'speaking' | 'mock';
@@ -62,7 +63,8 @@ export function buildConsumptionMessage(
 
   // Writing / Speaking graded activity.
   if (consumedDedicated > 0 && consumedFlexible === 0 && consumedShared === 0) {
-    return `${consumedDedicated} ${label} Credit${consumedDedicated === 1 ? '' : 's'} used.`;
+    const remaining = bucketRemaining(snapshot, subtest);
+    return `${consumedDedicated} ${label} Credit${consumedDedicated === 1 ? '' : 's'} used.${remaining >= 0 ? ` ${remaining} ${label} Credit${remaining === 1 ? '' : 's'} remaining.` : ''}`;
   }
   if (consumedShared > 0 && consumedDedicated === 0 && consumedFlexible === 0) {
     const remaining = snapshot.sharedCredits ?? 0;
@@ -73,11 +75,22 @@ export function buildConsumptionMessage(
     return `${consumedFlexible} Flexible W/S Credit${consumedFlexible === 1 ? '' : 's'} used for ${label}.${remaining >= 0 ? ` ${remaining} remaining.` : ''}`;
   }
 
-  const parts: string[] = [];
-  if (consumedDedicated > 0) parts.push(`${consumedDedicated} ${label}`);
-  if (consumedFlexible > 0) parts.push(`${consumedFlexible} Flexible W/S`);
-  if (consumedShared > 0) parts.push(`${consumedShared} Shared`);
-  return `${label} activity used ${parts.join(' + ')} credit${parts.length === 1 ? '' : 's'}.`;
+  // Mixed pools: name each pool used and what it has left, plus the letters/cards
+  // that remainder still buys (2 credits each).
+  const used: string[] = [];
+  const left: string[] = [];
+  const addPool = (consumed: number, name: string, remaining: number) => {
+    if (consumed <= 0) return;
+    used.push(`${consumed} ${name}`);
+    if (remaining < 0) return;
+    const buys = describeCreditsAsActivities(subtest, remaining);
+    left.push(`${remaining} ${name}${buys ? ` (= ${buys})` : ''}`);
+  };
+  addPool(consumedDedicated, label, bucketRemaining(snapshot, subtest));
+  addPool(consumedFlexible, 'Flexible W/S', bucketRemaining(snapshot, 'flexible_ws'));
+  addPool(consumedShared, 'Shared', snapshot.sharedCredits ?? 0);
+  const total = consumedDedicated + consumedFlexible + consumedShared;
+  return `${label} activity used ${used.join(' + ')} credit${total === 1 ? '' : 's'}.${left.length > 0 ? ` Remaining: ${left.join(', ')}.` : ''}`;
 }
 
 async function latestMatchingDebit(

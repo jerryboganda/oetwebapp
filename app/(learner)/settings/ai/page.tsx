@@ -24,6 +24,7 @@ import {
   type AiCredentialMode,
 } from '@/lib/ai-management-api';
 import { fetchMyAiPackageCredits, type AiPackageCreditSnapshot } from '@/lib/api';
+import { describeCreditsAsActivities } from '@/lib/format-allowance';
 
 const PROVIDER_PRESETS: { code: string; name: string; hint: string }[] = [
   { code: 'openai-platform', name: 'OpenAI Platform', hint: 'platform.openai.com · keys starting sk-…' },
@@ -31,12 +32,15 @@ const PROVIDER_PRESETS: { code: string; name: string; hint: string }[] = [
   { code: 'openrouter', name: 'OpenRouter', hint: 'openrouter.ai · aggregates dozens of models' },
 ];
 
-function CreditRow({ label, value }: { label: string; value: number | null }) {
+function CreditRow({ label, value, hint }: { label: string; value: number | null; hint?: string | null }) {
   return (
     <li className="flex items-baseline justify-between gap-3 rounded-xl bg-background-light px-4 py-3">
       <span className="text-sm font-semibold text-muted">{label}</span>
-      <span className={`text-sm font-bold tabular-nums ${value === null ? 'text-success-strong' : 'text-navy'}`}>
-        {value === null ? 'Unlimited' : <CountUp value={value} />}
+      <span className="text-right">
+        <span className={`text-sm font-bold tabular-nums ${value === null ? 'text-success-strong' : 'text-navy'}`}>
+          {value === null ? 'Unlimited' : <CountUp value={value} />}
+        </span>
+        {hint ? <span className="block text-xs font-normal text-muted">= {hint}</span> : null}
       </span>
     </li>
   );
@@ -149,13 +153,27 @@ export default function AiSettingsPage() {
             ) : aiCredits ? (
               <Card>
                 <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <CreditRow label="Reading Credits" value={aiCredits.readingUnlimited ? null : aiCredits.readingTestsRemaining} />
-                  <CreditRow label="Listening Credits" value={aiCredits.listeningUnlimited ? null : aiCredits.listeningTestsRemaining} />
-                  <CreditRow label="Writing Credits" value={aiCredits.writingUnlimited ? null : aiCredits.writingOnlyCredits} />
-                  <CreditRow label="Speaking Credits" value={aiCredits.speakingUnlimited ? null : aiCredits.speakingOnlyCredits} />
+                  {/* A null pool with the unlimited flag off is a ghost sentinel the gates refuse: show 0,
+                      the same as the dashboard card, never "Unlimited". */}
+                  <CreditRow label="Reading Credits" value={aiCredits.readingUnlimited ? null : (aiCredits.readingTestsRemaining ?? 0)} />
+                  <CreditRow label="Listening Credits" value={aiCredits.listeningUnlimited ? null : (aiCredits.listeningTestsRemaining ?? 0)} />
+                  <CreditRow
+                    label="Writing Credits"
+                    value={aiCredits.writingUnlimited ? null : aiCredits.writingOnlyCredits}
+                    hint={aiCredits.writingUnlimited ? null : describeCreditsAsActivities('writing', aiCredits.writingOnlyCredits)}
+                  />
+                  <CreditRow
+                    label="Speaking Credits"
+                    value={aiCredits.speakingUnlimited ? null : aiCredits.speakingOnlyCredits}
+                    hint={aiCredits.speakingUnlimited ? null : describeCreditsAsActivities('speaking', aiCredits.speakingOnlyCredits)}
+                  />
                   <CreditRow label="Shared Credits" value={aiCredits.sharedCredits ?? 0} />
-                  {(aiCredits.flexibleCredits > 0 || (aiCredits.sharedCredits ?? 0) === 0) && (
-                    <CreditRow label="Flexible W/S Credits" value={aiCredits.flexibleCredits} />
+                  {aiCredits.flexibleCredits > 0 && (
+                    <CreditRow
+                      label="Flexible W/S Credits"
+                      value={aiCredits.flexibleCredits}
+                      hint={describeCreditsAsActivities('flexible_ws', aiCredits.flexibleCredits)}
+                    />
                   )}
                   {aiCredits.mockExamsRemaining > 0 && (
                     <CreditRow label="Full Mock Attempts" value={aiCredits.mockExamsRemaining} />
@@ -166,7 +184,14 @@ export default function AiSettingsPage() {
                 </p>
               </Card>
             ) : (
-              <EmptyState icon={<Cpu className="h-8 w-8" />} title="No active AI credit packages." />
+              // The API always answers with a snapshot (zeros for a learner with no
+              // package), so null here means the balance request failed, not "empty".
+              <ErrorState
+                title="AI credit balances could not be loaded"
+                message="We couldn't read your credit balances just now. Please try again."
+                onRetry={() => void load()}
+                retryLabel="Try again"
+              />
             )}
           </MotionSection>
 

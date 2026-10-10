@@ -745,12 +745,13 @@ export default function WritingPracticeSessionPage() {
       <Modal
         open={noCreditsOpen}
         onClose={() => setNoCreditsOpen(false)}
-        title="No AI credits remaining"
+        title="Not enough AI credits"
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-muted">
-            You have no AI grading credits remaining. AI Credits are used to assess your Writing letters
-            and Speaking cards. Purchase a package to continue. Your draft has been saved.
+            Assessing one Writing letter costs 2 AI credits, and your available balance does not cover it.
+            AI credits are used to assess your Writing letters and Speaking cards. Purchase a package to
+            continue. Your draft has been saved.
           </p>
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={() => setNoCreditsOpen(false)}>

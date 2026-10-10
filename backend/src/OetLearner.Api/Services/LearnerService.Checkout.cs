@@ -309,15 +309,25 @@ public partial class LearnerService
             ?? extras.FlexibleCredits
             ?? x.GrantCredits;
         // FINAL 2026-09-06: Writing/Speaking activities cost 2 AI credits
-        // each from any pool (dedicated, Flexible W/S, or Shared).
-        var writingCredits = extras.WritingItems ?? extras.WritingCredits ?? x.LettersGranted;
-        var speakingCredits = extras.SpeakingItems ?? extras.SpeakingCredits ?? x.SessionsGranted;
-        if (group == "writing" && writingCredits == 0) writingCredits = credits;
-        if (group == "speaking" && speakingCredits == 0) speakingCredits = credits;
+        // each from any pool (dedicated, Flexible W/S, or Shared). A package is SOLD as
+        // letters/cards but GRANTED as credits, so writingCredits/speakingCredits here are
+        // LETTER / CARD counts (the field names are the storefront contract): writing_items /
+        // speaking_items are already activity counts; every other source is a CREDIT count and is
+        // converted, never shown raw as "letters".
+        static int ToActivities(int creditCount) => creditCount / AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+        var writingCredits = extras.WritingItems
+            ?? (extras.WritingCredits is { } writingOnly ? ToActivities(writingOnly) : x.LettersGranted);
+        var speakingCredits = extras.SpeakingItems
+            ?? (extras.SpeakingCredits is { } speakingOnly ? ToActivities(speakingOnly) : x.SessionsGranted);
+        if (group == "writing" && writingCredits == 0) writingCredits = ToActivities(credits);
+        if (group == "speaking" && speakingCredits == 0) speakingCredits = ToActivities(credits);
+        // `credits` falls back to the Flexible pool for display, so the Shared line is derived apart
+        // from it: Flexible credits must never be advertised as the universal Shared pool.
+        var sharedCredits = extras.SharedCredits ?? (extras.FlexibleCredits is null ? x.GrantCredits : 0);
         // Prefer admin-authored feature bullets; fall back to auto-generated copy when none stored.
         var features = ReadAiFeatures(x.AiFeaturesJson) ?? BuildAiPackageFeatures(
             group,
-            credits,
+            sharedCredits,
             extras.FlexibleCredits ?? 0,
             writingCredits,
             speakingCredits,
@@ -325,7 +335,8 @@ public partial class LearnerService
             x.DurationDays,
             extras.PriorityQueue,
             extras.ListeningTests,
-            extras.ReadingTests);
+            extras.ReadingTests,
+            extras.UnlimitedGrading);
         return new AiPackageView(
             x.Code, x.Name, x.Description ?? string.Empty,
             x.Price, x.Currency, credits, writingCredits,
@@ -346,7 +357,7 @@ public partial class LearnerService
 
     private static IReadOnlyList<string> BuildAiPackageFeatures(
         string group,
-        int credits,
+        int sharedCredits,
         int flexibleCredits,
         int writingCredits,
         int speakingCredits,
@@ -354,7 +365,8 @@ public partial class LearnerService
         int validityDays,
         bool priorityQueue,
         int? listeningTests,
-        int? readingTests)
+        int? readingTests,
+        bool unlimitedGrading)
     {
         var features = new List<string>();
         var validity = validityDays >= 180 ? "6-month validity" : $"{validityDays}-day validity";
@@ -363,13 +375,26 @@ public partial class LearnerService
             case "full":
                 // FINAL 2026-09-06: candidates count attempts, not credits.
                 // One attempt (1 letter OR 1 card) costs 2 AI credits.
-                var attempts = flexibleCredits / AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
-                if (attempts > 0)
-                    features.Add($"{attempts} flexible AI practice attempts for Writing or Speaking");
-                else if (credits > 0)
-                    features.Add($"{credits} Shared AI credits (Writing, Speaking, Listening or Reading)");
-                else
+                var perAttempt = AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+                var attempts = flexibleCredits / perAttempt;
+                // Only an explicit unlimited_grading grant advertises Unlimited (the ledger ignores any credit
+                // counts on such a package); a package that simply carries no AI credits must not be sold as
+                // unlimited.
+                if (unlimitedGrading)
+                {
                     features.Add("Unlimited AI assessment for Writing and Speaking");
+                }
+                else
+                {
+                    if (attempts > 0)
+                        features.Add($"{attempts} flexible AI practice attempt{(attempts == 1 ? string.Empty : "s")} for Writing or Speaking"
+                            // A leftover credit is not a whole attempt but is still granted: state the credit total.
+                            + (flexibleCredits % perAttempt == 0 ? string.Empty : $" ({flexibleCredits} Flexible credits, {perAttempt} per attempt)"));
+                    else if (flexibleCredits > 0)
+                        features.Add($"{flexibleCredits} Flexible AI credit{(flexibleCredits == 1 ? string.Empty : "s")} for Writing or Speaking ({perAttempt} credits fund one attempt)");
+                    if (sharedCredits > 0)
+                        features.Add($"{sharedCredits} Shared AI credit{(sharedCredits == 1 ? string.Empty : "s")} (Writing, Speaking, Listening or Reading)");
+                }
                 if (mocks > 0) features.Add($"{mocks} full mock exam{(mocks == 1 ? string.Empty : "s")} included");
                 // Only advertise unlimited L&R when the package actually grants it (both allowances null = unlimited).
                 if (listeningTests is null && readingTests is null)
@@ -383,13 +408,13 @@ public partial class LearnerService
                 features.Add(validity);
                 break;
             case "writing":
-                features.Add($"{writingCredits} AI-graded Writing letters");
+                features.Add($"{writingCredits} AI-graded Writing letter{(writingCredits == 1 ? string.Empty : "s")}");
                 features.Add("Instant specialised feedback on every letter");
                 features.Add("Detailed per-criterion feedback");
                 features.Add(validity);
                 break;
             case "speaking":
-                features.Add($"{speakingCredits} AI-graded Speaking cards");
+                features.Add($"{speakingCredits} AI-graded Speaking card{(speakingCredits == 1 ? string.Empty : "s")}");
                 features.Add("Instant specialised feedback on every card");
                 features.Add("Detailed transcript-based feedback aligned with OET Speaking criteria");
                 features.Add(validity);

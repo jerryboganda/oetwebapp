@@ -115,7 +115,15 @@ public sealed partial class AiPackageCreditService
 
         RebuildAccountFromLots(account);
         RepairNullSentinels(account);
-        if (preservedAccountExpiry is { } kept && (account.ExpiresAt is null || account.ExpiresAt < kept))
+        // Keep the lapsed date so gates answer "expired" - but only once nothing that
+        // holds value is left (live, or scheduled and not yet started). The Max() in
+        // RebuildAccountFromLots skips an open-ended lot (ExpiresAt == null), so
+        // restoring the stale date unconditionally made every gate refuse with
+        // ai_package_expired while that lot still held credits, and the next call
+        // then expired the lot too.
+        if (preservedAccountExpiry is { } kept
+            && (account.ExpiresAt is null || account.ExpiresAt < kept)
+            && !AccountLots(account).Any(lot => !lot.Expired && LotRetainsValue(lot)))
         {
             account.ExpiresAt = kept;
         }
@@ -160,7 +168,8 @@ public sealed partial class AiPackageCreditService
         return value[..(maxLength - hash.Length - 1)] + "-" + hash;
     }
 
-    private async Task<bool> ReverseOneGrantAsync(string userId, string sourceReferenceId, CancellationToken ct)
+    private async Task<bool> ReverseOneGrantAsync(
+        string userId, string sourceReferenceId, bool clearLapsedLots, CancellationToken ct)
     {
         return await InLedgerTransactionAsync<bool>(async () =>
         {
@@ -190,15 +199,32 @@ public sealed partial class AiPackageCreditService
             }
 
             await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+            Func<AiPackageCreditLot, bool> matchesPurchase = lot =>
+                string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
+                || (purchase.SourceReferenceId is not null
+                    && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase));
             var matchingLots = AccountLots(account)
-                .Where(lot => !lot.Expired
-                    && LotHasRemaining(lot)
-                    && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
-                        || (purchase.SourceReferenceId is not null
-                            && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))))
+                .Where(lot => !lot.Expired && LotHasRemaining(lot) && matchesPurchase(lot))
                 .ToList();
 
-            if (matchingLots.Count == 0)
+            // Expired lots of this purchase that still carry value: parked ones come back on
+            // unpark, lapsed ones (past their own validity end) never do.
+            var lapsedCutoff = DateTimeOffset.UtcNow;
+            var expiredHeldLots = AccountLots(account)
+                .Where(lot => lot.Expired && LotRetainsValue(lot) && matchesPurchase(lot))
+                .ToList();
+            var lapsedLots = expiredHeldLots
+                .Where(lot => lot.ExpiresAt is { } lapsedAt && lapsedAt <= lapsedCutoff)
+                .ToList();
+
+            // Expired lots that still hold value once this step is done. An explicit
+            // revocation clears the lapsed ones below, so only parked lots are left; the
+            // orphan sweep (clearLapsedLots == false) leaves every one of them in place.
+            var heldAfterThisStep = clearLapsedLots
+                ? expiredHeldLots.Count - lapsedLots.Count
+                : expiredHeldLots.Count;
+
+            if (matchingLots.Count == 0 && heldAfterThisStep > 0)
             {
                 // Parked lots (suspended/cancelled-but-restorable sources) still
                 // carry value behind the Expired flag. Do NOT mark the purchase
@@ -206,15 +232,31 @@ public sealed partial class AiPackageCreditService
                 // revive them, and the later removal must still find the purchase
                 // unmarked so it reverses for real. Lots already contribute nothing
                 // while flagged, so there is nothing to reverse right now.
-                var hasParkedLots = AccountLots(account).Any(lot =>
-                    lot.Expired
-                    && LotRetainsValue(lot)
-                    && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
-                        || (purchase.SourceReferenceId is not null
-                            && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))));
-                if (hasParkedLots)
+                // The orphan sweep also lands here for a purchase whose only held
+                // lots are lapsed: it does not clear them, so recording the reversal
+                // would let an admin "extend" revive them (UpdateGrantWindowAsync
+                // revives any lot that still has value) behind a purchase already
+                // marked reversed, and a later removal/refund would never zero them.
+                // An explicit revocation clears lapsed lots first (heldAfterThisStep
+                // excludes them), so a refund of an expired purchase still records its
+                // reversal and ReverseGrantsAsync reaches any later live purchase.
+                return false;
+            }
+
+            // A lapsed lot of a purchase being revoked (refund, removal) must be dead too:
+            // it keeps its balance behind Expired, and an admin date edit
+            // (UpdateGrantWindowAsync revives any lot that still has value) would hand
+            // the refunded purchase's credits back. Its loss is already booked by its
+            // Expiry row, so it is cleared here but not added to the reversal deltas below.
+            // The orphan sweep deliberately keeps them (and, with nothing live to
+            // reverse, keeps the purchase unmarked above): "expire now" followed by
+            // "extend" on an Expired package is a supported date override that revives
+            // its unused credits, and the later removal must still find the purchase.
+            if (clearLapsedLots)
+            {
+                foreach (var lapsed in lapsedLots)
                 {
-                    return false;
+                    ClearLotValue(lapsed);
                 }
             }
 
@@ -240,16 +282,7 @@ public sealed partial class AiPackageCreditService
                 {
                     reading += -readingRemaining;
                 }
-                lot.SharedCredits = 0;
-                lot.FlexibleCredits = 0;
-                lot.WritingOnlyCredits = 0;
-                lot.SpeakingOnlyCredits = 0;
-                lot.MockExamsRemaining = 0;
-                lot.ListeningTestsRemaining = lot.UnlimitedListening ? null : 0;
-                lot.ReadingTestsRemaining = lot.UnlimitedReading ? null : 0;
-                lot.UnlimitedGrading = false;
-                lot.UnlimitedListening = false;
-                lot.UnlimitedReading = false;
+                ClearLotValue(lot);
                 lot.Expired = true;
                 lot.ExpiredAt = DateTimeOffset.UtcNow;
             }
@@ -282,6 +315,23 @@ public sealed partial class AiPackageCreditService
         }, ct);
     }
 
+    private static void ClearLotValue(AiPackageCreditLot lot)
+    {
+        lot.SharedCredits = 0;
+        lot.FlexibleCredits = 0;
+        lot.WritingOnlyCredits = 0;
+        lot.SpeakingOnlyCredits = 0;
+        lot.MockExamsRemaining = 0;
+        // 0, not null: null only means "unlimited" while the Unlimited flag is
+        // set, and the flags are cleared right below. A null left here made a
+        // reversed lot read as still holding value (LotHasRemaining).
+        lot.ListeningTestsRemaining = 0;
+        lot.ReadingTestsRemaining = 0;
+        lot.UnlimitedGrading = false;
+        lot.UnlimitedListening = false;
+        lot.UnlimitedReading = false;
+    }
+
     private async Task ReverseOrphanedGrantsAsync(string userId, DateTimeOffset now, CancellationToken ct)
     {
         var ownedSources = await ComputeOwnedSourceReferencesAsync(userId, now, ct);
@@ -300,7 +350,7 @@ public sealed partial class AiPackageCreditService
                 continue;
             }
 
-            await ReverseGrantsAsync(userId, sourceReference, ct);
+            await ReverseGrantsCoreAsync(userId, sourceReference, clearLapsedLots: false, ct);
         }
     }
 
@@ -658,6 +708,56 @@ public sealed partial class AiPackageCreditService
     private async Task<bool> TransactionExistsAsync(string userId, string referenceId, AiPackageCreditReason reason, CancellationToken ct)
         => await db.AiPackageCreditTransactions.AsNoTracking()
             .AnyAsync(row => row.UserId == userId && row.ReferenceId == referenceId && row.Reason == reason, ct);
+
+    /// <summary>
+    /// A plan's course gift is once per order, but checkout ("plan:{quote}:{code}"),
+    /// manual approval ("manual:{request}:{code}") and Mark fulfilled
+    /// ("plan:{subscription}:{code}") each build their own reference while sharing one
+    /// <see cref="AiPackageCreditSources.Plan"/> source, so reference dedupe alone let a
+    /// manually delivered order gift twice. Mark fulfilled is the only path whose
+    /// reference IS the source key, so the same order is delivered twice exactly when
+    /// one of the pair is the source-key reference and the other is not. Two checkouts or
+    /// two manual approvals are separate orders reusing the subscription (a quote-less
+    /// re-purchase resolves to the same one) and each keeps its gift. Only plan sources
+    /// are guarded: add-on gifts ("addon:...") legitimately repeat under one source.
+    /// </summary>
+    private async Task<bool> PlanGiftAlreadyGrantedAsync(
+        string userId, string source, string referenceId, CancellationToken ct)
+    {
+        if (!source.StartsWith("plan:", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var incomingIsSourceKey = string.Equals(referenceId, source, StringComparison.Ordinal);
+        var grantedReferences = await db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(row => row.UserId == userId
+                          && row.Reason == AiPackageCreditReason.Purchase
+                          && row.SourceReferenceId == source
+                          && row.ReferenceId != null)
+            .Select(row => row.ReferenceId!)
+            .ToListAsync(ct);
+        foreach (var granted in grantedReferences)
+        {
+            // Neither or both being the source key is not the same-order pair.
+            if (string.Equals(granted, source, StringComparison.Ordinal) == incomingIsSourceKey)
+            {
+                continue;
+            }
+
+            // Same reversal key ReverseOneGrantAsync writes: a refunded gift no longer counts.
+            if (!await TransactionExistsAsync(
+                    userId,
+                    AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{granted}"),
+                    AiPackageCreditReason.GrantReversed,
+                    ct))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private async Task<bool> HasActiveUnlimitedGradingAsync(string userId, DateTimeOffset now, CancellationToken ct)
     {

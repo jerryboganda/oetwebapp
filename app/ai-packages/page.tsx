@@ -15,6 +15,7 @@ import { formatMoney } from '@/lib/money';
 import { useAddToCart } from '@/lib/cart/use-add-to-cart';
 import { useRevalidateOnResume } from '@/hooks/use-revalidate-on-resume';
 import { CartNavButton } from '@/components/cart';
+import { CreditBalanceCard, hasVisibleCreditActivity } from '@/components/domain/billing/credit-balance-card';
 import type { CatalogPresentation } from '@/lib/catalog-presentation';
 import {
   resolveWebsitePackageByCode,
@@ -42,20 +43,6 @@ const SEPARATE_SECTIONS: Array<{
   { key: 'writing', sectionKey: 'writing-ai', label: 'Separate Writing Packages', icon: <ClipboardCheck className="h-4 w-4" /> },
   { key: 'speaking', sectionKey: 'speaking-ai', label: 'Separate Speaking Packages', icon: <Mic2 className="h-4 w-4" /> },
 ];
-
-function formatAllowance(
-  unlimited: boolean | undefined,
-  value: number | null | undefined,
-  label: string,
-) {
-  return unlimited ? `Unlimited ${label}` : `${value ?? 0} ${label}`;
-}
-
-function formatDate(value?: string | null) {
-  if (!value) return 'No active expiry';
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? 'No active expiry' : parsed.toLocaleDateString();
-}
 
 // Static package: decides which rows belong on this page and in what order.
 function canonicalAiPackage(pkg: AiPackage): WebsitePackage | undefined {
@@ -329,15 +316,7 @@ export default function AiPackagesPage() {
             </div>
           </div>
 
-          {credits ? (
-            <div className="grid gap-3 rounded-lg border border-border bg-background-light p-4 text-sm md:grid-cols-5">
-              <div><span className="text-muted">Shared</span><p className="font-semibold">{credits.sharedCredits ?? 0}</p></div>
-              <div><span className="text-muted">Flexible W/S</span><p className="font-semibold">{credits.flexibleCredits}</p></div>
-              <div><span className="text-muted">Writing / Speaking</span><p className="font-semibold">{credits.writingUnlimited ? 'Unlimited' : credits.writingOnlyCredits} / {credits.speakingUnlimited ? 'Unlimited' : credits.speakingOnlyCredits}</p></div>
-              <div><span className="text-muted">Listening / Reading</span><p className="font-semibold">{formatAllowance(credits.listeningUnlimited, credits.listeningTestsRemaining, 'L')} / {formatAllowance(credits.readingUnlimited, credits.readingTestsRemaining, 'R')}</p></div>
-              <div><span className="text-muted">Mocks / Expiry</span><p className="font-semibold">{credits.mockExamsRemaining} / {formatDate(credits.expiresAt)}</p></div>
-            </div>
-          ) : null}
+          {credits && hasVisibleCreditActivity(credits) ? <CreditBalanceCard snapshot={credits} /> : null}
 
           {message ? <InlineAlert variant={message.variant}>{message.text}</InlineAlert> : null}
         </div>

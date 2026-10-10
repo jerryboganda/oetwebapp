@@ -47,6 +47,7 @@ import {
   type SubscriptionMe,
 } from '@/lib/api';
 import { queryKeys } from '@/lib/query/hooks';
+import { calculateDaysLeft } from '@/lib/format-allowance';
 import { formatMoney } from '@/lib/money';
 import type { SubTest } from '@/lib/mock-data';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
@@ -81,14 +82,11 @@ function taskAllowedByEntitlement(task: { subTest: SubTest }, entitlement: MyEnt
   return subTest === 'speaking' && modules.has('speakingsession');
 }
 
-function calculateDaysLeft(value: string | null | undefined): string {
-  if (!value) return 'Not scheduled';
-  const target = new Date(value);
-  if (Number.isNaN(target.getTime())) return 'Not scheduled';
-  const today = new Date();
-  const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  const targetUtc = Date.UTC(target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate());
-  const days = Math.max(0, Math.ceil((targetUtc - todayUtc) / 86_400_000));
+function daysLeftLabel(value: string | null | undefined): string {
+  // Shared semantics: calculateDaysLeft clamps to 0 once the end has passed, so 0 is "expired".
+  const days = calculateDaysLeft(value);
+  if (days === null) return 'Not scheduled';
+  if (days === 0) return 'Expired';
   return days === 1 ? '1 day left' : `${days} days left`;
 }
 
@@ -132,7 +130,7 @@ function DashboardSubscriptionStrip({
     ? `${formatMoney(subscription.price, { currency: subscription.currency })} / ${subscription.interval}`
     : null;
   const facts = [
-    !isLoading && !hasError ? { icon: Timer, label: calculateDaysLeft(expiryDate) } : null,
+    !isLoading && !hasError ? { icon: Timer, label: daysLeftLabel(expiryDate) } : null,
     priceLabel ? { icon: Wallet, label: priceLabel } : null,
     entitlement?.writingAssessmentsRemaining && entitlement.writingAssessmentsRemaining > 0
       ? { icon: FilePenLine, label: `${entitlement.writingAssessmentsRemaining} writing` }
@@ -140,9 +138,8 @@ function DashboardSubscriptionStrip({
     entitlement?.speakingSessionsRemaining && entitlement.speakingSessionsRemaining > 0
       ? { icon: Mic, label: `${entitlement.speakingSessionsRemaining} speaking` }
       : null,
-    entitlement?.aiCreditsRemaining && entitlement.aiCreditsRemaining > 0
-      ? { icon: Sparkles, label: `${entitlement.aiCreditsRemaining} AI credits` }
-      : null,
+    // No legacy "AI credits" chip: entitlement.aiCreditsRemaining is never decremented on
+    // spend, so it overstates the balance. The ledger-backed card below is authoritative.
     entitlement?.tutorBookUnlocked ? { icon: BookOpen, label: 'Tutor Book' } : null,
   ].filter(Boolean) as { icon: typeof Timer; label: string }[];
 
@@ -424,9 +421,7 @@ export default function Dashboard() {
           ) : null}
           {purchaseSuccess ? (
             <InlineAlert variant="success">
-              AI package purchase received. Current balances: {aiPackageCredits
-                ? `${aiPackageCredits.readingUnlimited ? 'unlimited' : (aiPackageCredits.readingTestsRemaining ?? 0)} reading, ${aiPackageCredits.listeningUnlimited ? 'unlimited' : (aiPackageCredits.listeningTestsRemaining ?? 0)} listening, ${aiPackageCredits.writingUnlimited ? 'unlimited' : aiPackageCredits.writingOnlyCredits + aiPackageCredits.flexibleCredits} writing, ${aiPackageCredits.speakingUnlimited ? 'unlimited' : aiPackageCredits.speakingOnlyCredits + aiPackageCredits.flexibleCredits} speaking, ${(aiPackageCredits.sharedCredits ?? 0)} shared, ${aiPackageCredits.mockExamsRemaining} mocks.`
-                : 'refreshing your package balance.'}
+              Payment received. Your plan, credits and access appear below once the purchase is confirmed.
             </InlineAlert>
           ) : null}
           {freeze ? (

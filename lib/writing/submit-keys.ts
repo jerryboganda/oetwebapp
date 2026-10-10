@@ -47,7 +47,7 @@ export function toCandidateSafeWritingErrorMessage(err: unknown, fallback: strin
     case 'writing_submission_locked':
       return 'You have already submitted this task. Submitted attempts are locked; use Practice this again to start a new attempt.';
     case 'ai_credits_insufficient':
-      return 'You have no AI grading credits remaining. Purchase an AI Credits package to continue.';
+      return 'Not enough AI credits: one Writing letter or Speaking card costs 2 AI credits. Purchase an AI Credits package to continue.';
     default:
       break;
   }

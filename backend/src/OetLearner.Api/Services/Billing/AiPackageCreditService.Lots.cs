@@ -166,8 +166,15 @@ public sealed partial class AiPackageCreditService
     /// </summary>
     private bool HasLiveRealUnlimited(AiPackageCreditAccount account, string subtest)
         => LiveLots(account).Any(lot =>
-            !string.Equals(lot.PackageId, LegacySyntheticPackageId, StringComparison.OrdinalIgnoreCase)
+            IsRealLot(lot)
             && (subtest == "listening" ? lot.UnlimitedListening : lot.UnlimitedReading));
+
+    /// <summary>
+    /// The one exclusion every "is this unlimited" answer shares - gates and the
+    /// snapshot card alike - so the card can never promise what the gate refuses.
+    /// </summary>
+    private static bool IsRealLot(AiPackageCreditLot lot)
+        => !string.Equals(lot.PackageId, LegacySyntheticPackageId, StringComparison.OrdinalIgnoreCase);
 
     private List<AiPackageCreditLot> LiveLots(AiPackageCreditAccount account)
         => db.AiPackageCreditLots.Local
@@ -222,28 +229,53 @@ public sealed partial class AiPackageCreditService
         return Math.Max(1, quantity);
     }
 
+    /// <summary>
+    /// Account-level (fungible across lots) pool balances that can fund
+    /// <paramref name="subtest"/> activities. Read by the gate and the debit
+    /// alike, so they cannot be fed different numbers.
+    /// </summary>
+    private (int Dedicated, int Flexible, int Shared) WritingOrSpeakingPools(AiPackageCreditAccount account, string subtest)
+    {
+        var lots = LiveLots(account);
+        return (
+            lots.Sum(lot => subtest == "writing" ? lot.WritingOnlyCredits : lot.SpeakingOnlyCredits),
+            lots.Sum(lot => lot.FlexibleCredits),
+            lots.Sum(lot => lot.SharedCredits));
+    }
+
     private bool CanFundWritingOrSpeaking(AiPackageCreditAccount account, string subtest, int quantity)
     {
-        // FINAL 2026-09-06: 2 AI credits per letter/card from any pool.
-        // Uses the exact greedy simulation the debit uses so gates and
-        // debits can never disagree.
-        var dedicated = subtest == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
-        return AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(dedicated, account.FlexibleCredits, account.SharedCredits) >= quantity;
+        // FINAL 2026-09-06: 2 AI credits per letter/card from any pool, by the
+        // same account-level rule the debit applies, so gates and debits can
+        // never disagree.
+        var pools = WritingOrSpeakingPools(account, subtest);
+        return AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(pools.Dedicated, pools.Flexible, pools.Shared) >= quantity;
     }
 
     private SpendResult SpendWritingOrSpeaking(AiPackageCreditAccount account, string subtest, int quantity)
     {
         // FINAL 2026-09-06: every pool is denominated in AI credits and one
-        // activity (one Writing letter / one Speaking card) costs exactly 2
-        // from whichever pool funds it. Priority is unchanged: dedicated
-        // pool first, then Flexible W/S, then Shared (whole activities only —
-        // a lone stranded credit can never pair with Shared).
+        // activity (one Writing letter / one Speaking card) costs exactly 2.
+        // Priority: dedicated, then Flexible W/S (together they fund an
+        // activity, so 1 + 1 is a letter), then Shared for whole activities.
+        // Every pool is fungible ACROSS lots: a Shared activity may be funded
+        // by one credit from each of two lots (Full Course gifts are odd).
         var unitsPerActivity = AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
-        var remainingUnits = quantity * unitsPerActivity;
+        var lots = LiveLots(account);
+        var pools = WritingOrSpeakingPools(account, subtest);
+        if (AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(pools.Dedicated, pools.Flexible, pools.Shared) < quantity)
+        {
+            // Refuse BEFORE touching any lot: the caller sees CreditsUsed != cost.
+            return new SpendResult(0, 0, 0, 0, SerializeAllocations([]), string.Empty, "none", 0);
+        }
+
+        var poolActivities = AiPackageCreditSnapshot.PoolFundedWritingOrSpeakingActivities(pools.Dedicated, pools.Flexible, quantity);
+        var remainingUnits = poolActivities * unitsPerActivity;
+        var remainingSharedUnits = (quantity - poolActivities) * unitsPerActivity;
         var writing = 0;
         var speaking = 0;
         var flexible = 0;
-        var sharedActivities = 0;
+        var shared = 0;
         var allocations = new Dictionary<string, LotAllocation>(StringComparer.Ordinal);
 
         LotAllocation Track(AiPackageCreditLot lot) =>
@@ -251,7 +283,7 @@ public sealed partial class AiPackageCreditService
                 ? existing
                 : allocations[lot.Id] = new LotAllocation(lot.Id, 0, 0, 0, 0, 0, 0, 0);
 
-        foreach (var lot in LiveLots(account))
+        foreach (var lot in lots)
         {
             if (remainingUnits <= 0) break;
             var dedicated = subtest == "writing" ? lot.WritingOnlyCredits : lot.SpeakingOnlyCredits;
@@ -272,7 +304,7 @@ public sealed partial class AiPackageCreditService
             remainingUnits -= takeDedicated;
         }
 
-        foreach (var lot in LiveLots(account))
+        foreach (var lot in lots)
         {
             if (remainingUnits <= 0) break;
             var takeFlexible = Math.Min(lot.FlexibleCredits, remainingUnits);
@@ -283,55 +315,81 @@ public sealed partial class AiPackageCreditService
             allocations[lot.Id] = Track(lot) with { Flexible = Track(lot).Flexible + takeFlexible };
         }
 
-        foreach (var lot in LiveLots(account))
+        foreach (var lot in lots)
         {
-            if (remainingUnits <= 0) break;
-            var takeSharedActivities = Math.Min(remainingUnits / unitsPerActivity, lot.SharedCredits / unitsPerActivity);
-            if (takeSharedActivities <= 0) continue;
-            var sharedUnitsTaken = takeSharedActivities * unitsPerActivity;
-            lot.SharedCredits -= sharedUnitsTaken;
-            remainingUnits -= sharedUnitsTaken;
-            sharedActivities += takeSharedActivities;
-            allocations[lot.Id] = Track(lot) with { Shared = Track(lot).Shared + sharedUnitsTaken };
+            if (remainingSharedUnits <= 0) break;
+            var takeShared = Math.Min(lot.SharedCredits, remainingSharedUnits);
+            if (takeShared <= 0) continue;
+            lot.SharedCredits -= takeShared;
+            remainingSharedUnits -= takeShared;
+            shared += takeShared;
+            allocations[lot.Id] = Track(lot) with { Shared = Track(lot).Shared + takeShared };
         }
 
         RebuildAccountFromLots(account);
-        var sharedUnits = sharedActivities * unitsPerActivity;
         var label = subtest == "writing" ? "Writing" : "Speaking";
-        string feedback;
+        var dedicatedRemaining = subtest == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
+        string spent;
+        string remaining;
         string balanceSource;
-        if (sharedActivities > 0 && writing + speaking + flexible == 0)
+        int remainingActivities;
+        if (shared > 0 && writing + speaking + flexible == 0)
         {
-            feedback = FormatSharedUsed(label, sharedUnits, account.SharedCredits);
+            spent = CountText(shared, "Shared Credit");
+            remaining = $"{CountText(account.SharedCredits, "Shared Credit")} remaining";
+            remainingActivities = account.SharedCredits / unitsPerActivity;
             balanceSource = "shared";
         }
-        else if (writing + speaking > 0 && flexible == 0 && sharedActivities == 0)
+        else if (writing + speaking > 0 && flexible == 0 && shared == 0)
         {
-            feedback = FormatUsedRemaining($"{label} Credit", writing + speaking, subtest == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits);
+            spent = CountText(writing + speaking, $"{label} Credit");
+            remaining = $"{CountText(dedicatedRemaining, $"{label} Credit")} remaining";
+            remainingActivities = dedicatedRemaining / unitsPerActivity;
             balanceSource = "dedicated";
         }
-        else if (flexible > 0 && writing + speaking == 0 && sharedActivities == 0)
+        else if (flexible > 0 && writing + speaking == 0 && shared == 0)
         {
-            feedback = FormatUsedRemaining("Flexible Writing/Speaking Credit", flexible, account.FlexibleCredits);
+            spent = CountText(flexible, "Flexible Writing/Speaking Credit");
+            remaining = $"{CountText(account.FlexibleCredits, "Flexible Writing/Speaking Credit")} remaining";
+            remainingActivities = account.FlexibleCredits / unitsPerActivity;
             balanceSource = "flexible_ws";
         }
         else
         {
-            var unitsSpent = writing + speaking + flexible + sharedUnits;
-            feedback = FormatUsedRemaining($"{label} Credit", unitsSpent, RemainingAfterSpend(account, subtest));
+            var parts = new List<string>();
+            if (writing + speaking > 0) parts.Add(CountText(writing + speaking, $"{label} Credit"));
+            if (flexible > 0) parts.Add(CountText(flexible, "Flexible Writing/Speaking Credit"));
+            if (shared > 0) parts.Add(CountText(shared, "Shared Credit"));
+            spent = string.Join(" + ", parts);
+            // Credits across every pool that can still fund this subtest, with the
+            // whole activities the same rule makes of them (same as RemainingAfter).
+            var remainingCredits = dedicatedRemaining + account.FlexibleCredits + account.SharedCredits;
+            remaining = $"{CountText(remainingCredits, "credit")} remaining for {label}";
+            remainingActivities = RemainingAfterSpend(account, subtest);
             balanceSource = "mixed";
         }
 
+        var noun = subtest == "writing" ? "letter" : "card";
+        var feedback =
+            $"{quantity} {Pluralize(noun, quantity)} used ({spent}). " +
+            $"{remaining} ({remainingActivities} {Pluralize(noun, remainingActivities)}).";
+
         return new SpendResult(
-            -sharedUnits,
+            -shared,
             -flexible,
             -writing,
             -speaking,
             SerializeAllocations(allocations.Values),
             feedback,
             balanceSource,
-            writing + speaking + flexible + sharedUnits);
+            writing + speaking + flexible + shared);
     }
+
+    private static string Pluralize(string noun, int count)
+        => count == 1 ? noun : noun + "s";
+
+    private static string CountText(int count, string unit)
+        => $"{count} {Pluralize(unit, count)}";
 
     private static int RemainingAfterSpend(AiPackageCreditAccount account, string subtest)
         // Complete activities still fundable — same simulation as the gates.
@@ -438,8 +496,13 @@ public sealed partial class AiPackageCreditService
                 lot = CreateAdminLot(account, debit.ExpiresAt);
             }
 
-            lot.Expired = false;
-            lot.ExpiredAt = null;
+            // The credit goes back exactly where it came from and the lot's own
+            // state is left alone. This used to clear Expired, which revived the
+            // WHOLE lot (its remaining balance and unlimited flags) whenever it
+            // was parked (suspended/cancelled), reversed (refunded purchase) or
+            // past its validity end. A refund restores the status quo ante: a
+            // live lot gets the credit back, a parked lot returns it on unpark,
+            // a lapsed or reversed lot keeps it inert like the rest of its balance.
             lot.SharedCredits += allocation.Shared;
             lot.FlexibleCredits += allocation.Flexible;
             lot.WritingOnlyCredits += allocation.Writing;
@@ -458,6 +521,10 @@ public sealed partial class AiPackageCreditService
         RebuildAccountFromLots(account);
     }
 
+    // Refund fallback only (RestoreAllocation). The account expiry is inherited even
+    // when it is already past: the refunded credit must stay as inert as the package
+    // it came from, never become an open-ended top-up. Admin top-ups go through
+    // ApplyAdminAdjustmentToLots, which never inherits a past date.
     private AiPackageCreditLot CreateAdminLot(AiPackageCreditAccount account, DateTimeOffset? expiresAt)
     {
         var lot = new AiPackageCreditLot
@@ -472,7 +539,8 @@ public sealed partial class AiPackageCreditService
         return lot;
     }
 
-    private void ApplyAdminAdjustmentToLots(
+    /// <summary>Returns the top-up lot it created, or null when nothing was added.</summary>
+    private AiPackageCreditLot? ApplyAdminAdjustmentToLots(
         AiPackageCreditAccount account,
         int sharedDelta,
         int flexibleDelta,
@@ -483,9 +551,16 @@ public sealed partial class AiPackageCreditService
         int mockDelta,
         DateTimeOffset? expiresAt)
     {
+        AiPackageCreditLot? topUpLot = null;
         if (sharedDelta > 0 || flexibleDelta > 0 || writingDelta > 0 || speakingDelta > 0 || listeningDelta > 0 || readingDelta > 0 || mockDelta > 0)
         {
-            AddLot(account, new AiPackageCreditLot
+            // A top-up inherits the account expiry only while it is still ahead.
+            // After everything lapsed that date is past, and the new lot would be
+            // born expired: the admin granted credits the learner can never use.
+            var inheritedExpiry = account.ExpiresAt is { } accountExpiry && accountExpiry > DateTimeOffset.UtcNow
+                ? accountExpiry
+                : (DateTimeOffset?)null;
+            topUpLot = new AiPackageCreditLot
             {
                 Id = NewId("aipkg-lot"),
                 PackageId = "admin",
@@ -497,10 +572,11 @@ public sealed partial class AiPackageCreditService
                 ListeningTestsRemaining = listeningDelta > 0 ? listeningDelta : 0,
                 ReadingTestsRemaining = readingDelta > 0 ? readingDelta : 0,
                 MockExamsRemaining = Math.Max(0, mockDelta),
-                ExpiresAt = expiresAt ?? account.ExpiresAt,
+                ExpiresAt = expiresAt ?? inheritedExpiry,
                 SourceReferenceId = $"admin-adjust:{account.Id}",
                 CreatedAt = DateTimeOffset.UtcNow,
-            });
+            };
+            AddLot(account, topUpLot);
         }
 
         if (sharedDelta < 0)
@@ -543,6 +619,7 @@ public sealed partial class AiPackageCreditService
         if (listeningDelta < 0) SpendDedicatedObjective(account, "listening", -listeningDelta);
         if (readingDelta < 0) SpendDedicatedObjective(account, "reading", -readingDelta);
         if (mockDelta < 0) SpendMockFromLots(account, -mockDelta);
+        return topUpLot;
     }
 
     private void ZeroAllLots(AiPackageCreditAccount account, DateTimeOffset now)
@@ -675,7 +752,7 @@ public sealed partial class AiPackageCreditService
 
     private static AiPackageCreditBucketSnapshot BuildBucket(
         IReadOnlyList<AiPackageCreditLot> liveLots,
-        IReadOnlyList<AiPackageCreditLot> allLots,
+        int usedCredits,
         string kind,
         bool unlimitedGrading,
         DateTimeOffset now)
@@ -683,8 +760,8 @@ public sealed partial class AiPackageCreditService
         var unlimited = kind switch
         {
             "writing" or "speaking" or "flexible" => unlimitedGrading || liveLots.Any(lot => lot.UnlimitedGrading),
-            "listening" => liveLots.Any(lot => lot.UnlimitedListening),
-            "reading" => liveLots.Any(lot => lot.UnlimitedReading),
+            "listening" => liveLots.Any(lot => IsRealLot(lot) && lot.UnlimitedListening),
+            "reading" => liveLots.Any(lot => IsRealLot(lot) && lot.UnlimitedReading),
             _ => false,
         };
         int Remaining(AiPackageCreditLot lot) => kind switch
@@ -699,8 +776,12 @@ public sealed partial class AiPackageCreditService
             _ => 0,
         };
         var remaining = unlimited && kind is "writing" or "speaking" or "flexible" ? 0 : liveLots.Sum(Remaining);
-        var granted = allLots.Sum(Remaining);
-        var used = Math.Max(0, granted - remaining);
+        // Total = Remaining + genuine learner usage (ledger consumption), the same
+        // invariant the bucket cards report. Used used to be derived as
+        // all-lots minus live-lots, which reported credits that merely EXPIRED or
+        // were parked as "used".
+        var used = unlimited ? 0 : Math.Max(0, usedCredits);
+        var granted = remaining + used;
         var expires = liveLots
             .Where(lot => Remaining(lot) > 0 || (unlimited && kind is "writing" or "speaking" or "listening" or "reading"))
             .Select(lot => lot.ExpiresAt)

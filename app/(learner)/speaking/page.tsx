@@ -3,14 +3,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { BookOpen, ClipboardList, Clock, History, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
-import { fetchSpeakingHome, type SpeakingHome } from '@/lib/api';
-import { useEntitlementSnapshot } from '@/lib/query/hooks';
+import { fetchMyAiPackageCredits, fetchSpeakingHome, type SpeakingHome } from '@/lib/api';
+import { queryKeys, useEntitlementSnapshot } from '@/lib/query/hooks';
 import { CreditsGuideButton, LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
@@ -126,6 +127,15 @@ export default function SpeakingHome() {
   const { data: entitlement } = useEntitlementSnapshot(identity, { enabled: Boolean(identity) });
   const tutorEligible = entitlement ? entitlement.speakingAddonsEnabled === true : true;
 
+  // A Speaking card is paid from the AI credit ledger (2 credits), not the tutor-review
+  // wallet in home.reviewCredits. Same cache key as the dashboard, so it is shared.
+  const { data: aiCredits } = useQuery({
+    queryKey: queryKeys.dashboard.aiPackageCredits(identity || 'current'),
+    queryFn: fetchMyAiPackageCredits,
+    staleTime: 2 * 60_000,
+    enabled: Boolean(identity),
+  });
+
   useEffect(() => {
     if (needsProfession) {
       router.replace('/speaking/select-profession');
@@ -146,7 +156,11 @@ export default function SpeakingHome() {
   }
 
   // Real balance only: a failed load shows no chip rather than "0 available".
-  const credits = home?.reviewCredits?.available;
+  const speakingCards = aiCredits?.speakingUnlimited
+    ? 'Unlimited'
+    : aiCredits?.availableSpeakingActivities != null
+      ? `${aiCredits.availableSpeakingActivities} available`
+      : null;
 
   // Resume an in-progress role play — kept because it's necessary for progress
   // (backend surfaces pastAttempts[].state='in_progress'/'draft').
@@ -203,7 +217,7 @@ export default function SpeakingHome() {
         accent="speaking"
         title="Get assessed by AI or book a live tutor"
         description="Practise any role-play card on the platform, take a full two-card Speaking exam marked by AI, or book a tutor to play your patient."
-        highlights={credits != null ? [{ icon: Star, label: 'AI credits', value: `${credits} available` }] : undefined}
+        highlights={speakingCards ? [{ icon: Star, label: 'Speaking cards', value: speakingCards }] : undefined}
       />
 
       {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}

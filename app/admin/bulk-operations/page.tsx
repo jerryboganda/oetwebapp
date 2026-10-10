@@ -63,10 +63,10 @@ export default function BulkOperationsPage() {
       const result = await adminRequest<{ processed: number; skipped: number }>('/v1/admin/bulk/credits', {
         userIds: ids, creditAmount: Number(creditAmount), reason: creditReason,
       });
-      setToast({ variant: 'success', message: `Adjusted credits for ${result.processed} users (${result.skipped} skipped).` });
+      setToast({ variant: 'success', message: `Adjusted review-credit wallets for ${result.processed} users (${result.skipped} skipped).` });
       setCreditUserIds(''); setCreditAmount(''); setCreditReason('');
     } catch {
-      setToast({ variant: 'error', message: 'Bulk credit operation failed.' });
+      setToast({ variant: 'error', message: 'Bulk review-credit operation failed.' });
     } finally {
       setSubmitting(false);
     }
@@ -107,7 +107,7 @@ export default function BulkOperationsPage() {
   }
 
   const tabs: { key: ActiveTab; label: string; icon: React.ReactNode }[] = [
-    { key: 'credits', label: 'Credit Adjustments', icon: <CreditCard className="w-4 h-4" /> },
+    { key: 'credits', label: 'Review-credit wallets', icon: <CreditCard className="w-4 h-4" /> },
     { key: 'notifications', label: 'Notifications', icon: <Bell className="w-4 h-4" /> },
     { key: 'status', label: 'Status Changes', icon: <UserX className="w-4 h-4" /> },
   ];
@@ -118,7 +118,7 @@ export default function BulkOperationsPage() {
 
       <AdminOperationsLayout
         title="Bulk learner operations"
-        description="Apply credit adjustments, notifications, or status changes to multiple learners at once."
+        description="Adjust review-credit wallets, send notifications, or change status for multiple learners at once."
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'Bulk operations' },
@@ -150,15 +150,17 @@ export default function BulkOperationsPage() {
               <Card>
                 <CardHeader>
                   <div className="min-w-0">
-                    <CardTitle>Credit adjustments</CardTitle>
+                    <CardTitle>Review-credit wallet adjustments</CardTitle>
                     <CardDescription>
-                      Add or deduct credits across many learner accounts in one operation.
+                      Add or deduct tutor-review wallet credits across many learner accounts in one operation.
                     </CardDescription>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <InlineAlert variant="info" title="Bulk credit adjustment">
-                    Add or deduct credits from multiple learner accounts at once. Use negative values to debit.
+                  <InlineAlert variant="info" title="Bulk review-credit adjustment">
+                    Adds or deducts tutor-review wallet credits for many learners at once. Use negative values to debit.
+                    This does not change AI package credits (Writing, Speaking, Shared, Listening, Reading, mock):
+                    adjust those per learner on their profile under Access &amp; Allocation.
                   </InlineAlert>
                   <div className="space-y-2">
                     <Textarea
@@ -172,7 +174,7 @@ export default function BulkOperationsPage() {
                   </div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Input
-                      label="Credit amount"
+                      label="Review credits (+ add, - deduct)"
                       type="number"
                       value={creditAmount}
                       onChange={(e) => setCreditAmount(e.target.value)}
@@ -190,7 +192,7 @@ export default function BulkOperationsPage() {
                     disabled={submitting || parseUserIds(creditUserIds).length === 0}
                     loading={submitting}
                   >
-                    {submitting ? 'Processing…' : 'Apply credits'}
+                    {submitting ? 'Processing…' : 'Apply to wallets'}
                   </Button>
                 </CardContent>
               </Card>

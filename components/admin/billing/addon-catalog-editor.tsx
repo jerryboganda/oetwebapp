@@ -17,6 +17,7 @@ import {
   updateAdminBillingAddOn,
   fetchAdminBillingAddOns,
 } from '@/lib/api';
+import { parseBillingPrice } from '@/lib/api/admin-users';
 
 interface AdminAddOnRow {
   id: string;
@@ -32,9 +33,11 @@ interface AdminAddOnRow {
   isRecurring?: boolean;
   appliesToAllPlans?: boolean;
   isStackable?: boolean;
+  quantityStep?: number;
   maxQuantity?: number | null;
   status?: string;
   addonKind?: string;
+  grantEntitlements?: Record<string, unknown> | null;
   compatiblePlanCodes?: string[];
   // Server flag: Name/Description are owned by Subscriptions & Packages.
   packageManaged?: boolean;
@@ -74,6 +77,9 @@ interface FormState {
   addonKind: string;
   compatiblePlanCodes: string;
   packageManaged: boolean;
+  // Not edited here, but a save is a full PUT: carried through so it is never reset to a default.
+  grantEntitlementsJson: string;
+  quantityStep: number;
 }
 
 function emptyForm(): FormState {
@@ -82,6 +88,7 @@ function emptyForm(): FormState {
     interval: 'one_time', durationDays: '0', grantCredits: '0', displayOrder: '0',
     isRecurring: false, appliesToAllPlans: true, isStackable: true, maxQuantity: '',
     status: 'active', addonKind: 'review_credits', compatiblePlanCodes: '', packageManaged: false,
+    grantEntitlementsJson: '{}', quantityStep: 1,
   };
 }
 
@@ -113,6 +120,8 @@ function toForm(row: AdminAddOnRow): FormState {
     addonKind: row.addonKind || 'review_credits',
     compatiblePlanCodes: Array.isArray(row.compatiblePlanCodes) ? row.compatiblePlanCodes.join(', ') : '',
     packageManaged: isCopyManaged(row),
+    grantEntitlementsJson: JSON.stringify(row.grantEntitlements ?? {}),
+    quantityStep: typeof row.quantityStep === 'number' && row.quantityStep >= 1 ? row.quantityStep : 1,
   };
 }
 
@@ -173,8 +182,9 @@ export function AddOnCatalogEditor({ canWrite = true }: AddOnCatalogEditorProps)
     if (!canWrite) { setFeedback({ tone: 'error', message: 'You have read-only billing access.' }); return; }
     const name = form.name.trim();
     if (!name) { setFeedback({ tone: 'error', message: 'Name is required.' }); return; }
-    const price = Number(form.price);
-    if (!Number.isFinite(price) || price < 0) { setFeedback({ tone: 'error', message: 'Price must be a non-negative number.' }); return; }
+    // parseBillingPrice rejects a blank box: Number('') is 0 and would publish a free add-on.
+    const price = parseBillingPrice(form.price);
+    if (price === null) { setFeedback({ tone: 'error', message: 'Enter a price of 0 or more, for example 49 or 49.99.' }); return; }
 
     const compatibleCodes = form.compatiblePlanCodes.split(',').map((c) => c.trim()).filter(Boolean);
     const maxQ = form.maxQuantity.trim() === '' ? null : intOr(form.maxQuantity);
@@ -191,9 +201,11 @@ export function AddOnCatalogEditor({ canWrite = true }: AddOnCatalogEditorProps)
       isRecurring: form.isRecurring,
       appliesToAllPlans: form.appliesToAllPlans,
       isStackable: form.isStackable,
+      quantityStep: form.quantityStep,
       maxQuantity: maxQ,
       status: form.status,
       compatiblePlanCodesJson: JSON.stringify(compatibleCodes),
+      grantEntitlementsJson: form.grantEntitlementsJson,
       addonKind: form.addonKind.trim() || undefined,
     };
 
@@ -352,7 +364,13 @@ export function AddOnCatalogEditor({ canWrite = true }: AddOnCatalogEditorProps)
             <Input label="Price" inputMode="decimal" value={form.price} onChange={(e) => setField('price', e.target.value)} />
             <Input label="Currency" value={form.currency} maxLength={3} onChange={(e) => setField('currency', e.target.value.toUpperCase())} className="uppercase" />
             <Select label="Interval" value={form.interval} onChange={(e) => setField('interval', e.target.value)} options={INTERVAL_OPTIONS} />
-            <Input label="Grant credits" inputMode="numeric" value={form.grantCredits} onChange={(e) => setField('grantCredits', e.target.value)} />
+            <Input
+              label="Grant credits"
+              inputMode="numeric"
+              value={form.grantCredits}
+              onChange={(e) => setField('grantCredits', e.target.value)}
+              hint="Review credits per purchase (the legacy AI-credit counter if the entitlement JSON has ai_credits). Not AI Writing/Speaking credits - those come only from AI packages."
+            />
             <Input label="Duration (days)" inputMode="numeric" value={form.durationDays} onChange={(e) => setField('durationDays', e.target.value)} hint="0 = no expiry" />
             <Input label="Add-on kind" value={form.addonKind} onChange={(e) => setField('addonKind', e.target.value)} hint="e.g. review_credits" />
             <Input label="Display order" inputMode="numeric" value={form.displayOrder} onChange={(e) => setField('displayOrder', e.target.value)} />

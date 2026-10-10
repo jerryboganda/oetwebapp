@@ -44,37 +44,45 @@ public sealed class WritingEntitlementService(
         if (aiPackageCreditService is not null)
         {
             var snapshot = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
+            // Unlimited is decided BEFORE the wallet expiry, exactly as
+            // DeductGradingCreditAsync / CheckGradingCreditAsync do: the unlimited
+            // entitlement is sufficient, and a lapsed wallet date must not turn the
+            // learner away at the start gate that the debit itself would have allowed.
+            if (snapshot.WritingUnlimited)
+            {
+                return new WritingEntitlement(
+                    Allowed: true,
+                    Tier: entitlement.HasEligibleSubscription
+                        ? (entitlement.IsTrial ? "trial" : "paid")
+                        : "ai_package",
+                    Remaining: int.MaxValue,
+                    LimitPerWindow: int.MaxValue,
+                    WindowDays: opts.FreeTierWindowDays,
+                    ResetAt: snapshot.ExpiresAt,
+                    Reason: "Catalogue unlimited writing grant.");
+            }
+
             var expired = snapshot.ExpiredBecausePassed
                 || (snapshot.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow);
             if (!expired)
             {
-                if (snapshot.WritingUnlimited)
+                // Remaining / LimitPerWindow are WRITING LETTERS (whole activities the pools can
+                // fund), not credits: one letter costs 2 AI credits from any pool.
+                var writingLettersRemaining = snapshot.AvailableWritingActivities;
+                if (writingLettersRemaining > 0)
                 {
+                    var creditsPerLetter = AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
                     return new WritingEntitlement(
                         Allowed: true,
                         Tier: entitlement.HasEligibleSubscription
                             ? (entitlement.IsTrial ? "trial" : "paid")
                             : "ai_package",
-                        Remaining: int.MaxValue,
-                        LimitPerWindow: int.MaxValue,
+                        Remaining: writingLettersRemaining,
+                        LimitPerWindow: writingLettersRemaining,
                         WindowDays: opts.FreeTierWindowDays,
                         ResetAt: snapshot.ExpiresAt,
-                        Reason: "Catalogue unlimited writing grant.");
-                }
-
-                var writingCreditsRemaining = snapshot.AvailableWritingActivities;
-                if (writingCreditsRemaining > 0)
-                {
-                    return new WritingEntitlement(
-                        Allowed: true,
-                        Tier: entitlement.HasEligibleSubscription
-                            ? (entitlement.IsTrial ? "trial" : "paid")
-                            : "ai_package",
-                        Remaining: writingCreditsRemaining,
-                        LimitPerWindow: writingCreditsRemaining,
-                        WindowDays: opts.FreeTierWindowDays,
-                        ResetAt: snapshot.ExpiresAt,
-                        Reason: $"{writingCreditsRemaining} writing grading credit(s) remaining.");
+                        Reason: $"{writingLettersRemaining} Writing letter(s) remaining "
+                            + $"({writingLettersRemaining * creditsPerLetter} AI credits at {creditsPerLetter} per letter).");
                 }
             }
         }

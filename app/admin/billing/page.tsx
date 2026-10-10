@@ -44,6 +44,7 @@ import {
   adminResumeSubscription,
 } from '@/lib/api';
 import { adminAdjustSubscriptionEntitlements } from '@/lib/admin-subscription-entitlements';
+import { parseBillingPrice } from '@/lib/api/admin-users';
 import {
   fetchProfessionCatalog,
   professionCatalogOptions,
@@ -465,11 +466,11 @@ export default function BillingPage() {
             }
             return value;
           };
-          const writing = parseCounter(subscriptionActionForm.entWriting, 'Writing assessments');
+          const writing = parseCounter(subscriptionActionForm.entWriting, 'Tutor writing reviews');
           if (writing === null) { setIsSubmittingSubscriptionAction(false); return; }
-          const speaking = parseCounter(subscriptionActionForm.entSpeaking, 'Speaking sessions');
+          const speaking = parseCounter(subscriptionActionForm.entSpeaking, 'Live speaking sessions');
           if (speaking === null) { setIsSubmittingSubscriptionAction(false); return; }
-          const aiCredits = parseCounter(subscriptionActionForm.entAiCredits, 'AI credits');
+          const aiCredits = parseCounter(subscriptionActionForm.entAiCredits, 'Legacy AI-credit counter');
           if (aiCredits === null) { setIsSubmittingSubscriptionAction(false); return; }
 
           const flag = (value: 'unchanged' | 'true' | 'false'): boolean | undefined =>
@@ -2007,13 +2008,20 @@ export default function BillingPage() {
       }
     }
 
+    // A blank price is not 0: toNumber('') would publish a free plan.
+    const price = parseBillingPrice(planForm.price);
+    if (price === null) {
+      setToast({ variant: 'error', message: 'Enter a price of 0 or more, for example 49 or 49.99.' });
+      return;
+    }
+
     setIsSavingPlan(true);
     try {
       const payload = {
         code: normalizedCode(planForm.code || planForm.name),
         name: planForm.name,
         description: planForm.description,
-        price: toNumber(planForm.price),
+        price,
         currency: planForm.currency,
         interval: planForm.interval,
         durationMonths: toNumber(planForm.durationMonths, 1),
@@ -2094,13 +2102,20 @@ export default function BillingPage() {
       }
     }
 
+    // A blank price is not 0: toNumber('') would publish a free add-on.
+    const price = parseBillingPrice(addOnForm.price);
+    if (price === null) {
+      setToast({ variant: 'error', message: 'Enter a price of 0 or more, for example 49 or 49.99.' });
+      return;
+    }
+
     setIsSavingAddOn(true);
     try {
       const payload = {
         code: normalizedCode(addOnForm.code || addOnForm.name),
         name: addOnForm.name,
         description: addOnForm.description,
-        price: toNumber(addOnForm.price),
+        price,
         currency: addOnForm.currency,
         interval: addOnForm.interval,
         durationDays: toNumber(addOnForm.durationDays),
@@ -2942,7 +2957,7 @@ export default function BillingPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-4">
             <Input label="Duration days" type="number" min={0} value={addOnForm.durationDays} onChange={(event) => setAddOnForm((current) => ({ ...current, durationDays: event.target.value }))} />
-            <Input label="Grant credits" type="number" min={0} value={addOnForm.grantCredits} onChange={(event) => setAddOnForm((current) => ({ ...current, grantCredits: event.target.value }))} />
+            <Input label="Grant credits" type="number" min={0} value={addOnForm.grantCredits} onChange={(event) => setAddOnForm((current) => ({ ...current, grantCredits: event.target.value }))} hint="Review credits per purchase (legacy AI-credit counter if the JSON has ai_credits). Not AI Writing/Speaking credits." />
             <Input label="Display order" type="number" min={0} value={addOnForm.displayOrder} onChange={(event) => setAddOnForm((current) => ({ ...current, displayOrder: event.target.value }))} />
             <Input label="Quantity step" type="number" min={1} value={addOnForm.quantityStep} onChange={(event) => setAddOnForm((current) => ({ ...current, quantityStep: event.target.value }))} />
           </div>
@@ -2994,8 +3009,8 @@ export default function BillingPage() {
               />
             </div>
             <div className="mt-3 grid gap-4 md:grid-cols-2">
-              <Input label="Letters granted per purchase" type="number" min={0} value={addOnForm.lettersGranted} onChange={(event) => setAddOnForm((current) => ({ ...current, lettersGranted: event.target.value }))} />
-              <Input label="Sessions granted per purchase" type="number" min={0} value={addOnForm.sessionsGranted} onChange={(event) => setAddOnForm((current) => ({ ...current, sessionsGranted: event.target.value }))} />
+              <Input label="Letters granted per purchase" type="number" min={0} value={addOnForm.lettersGranted} onChange={(event) => setAddOnForm((current) => ({ ...current, lettersGranted: event.target.value }))} hint="Adds to the learner's tutor writing review counter. Not AI Writing credits; always saved as 0 for AI packages." />
+              <Input label="Sessions granted per purchase" type="number" min={0} value={addOnForm.sessionsGranted} onChange={(event) => setAddOnForm((current) => ({ ...current, sessionsGranted: event.target.value }))} hint="Adds to the learner's live speaking session counter. Not AI Speaking credits; always saved as 0 for AI packages." />
             </div>
             <div className="mt-3 flex flex-wrap gap-4">
               <Checkbox label="Requires eligible parent enrolment" checked={addOnForm.requiresEligibleParent} onChange={(event) => setAddOnForm((current) => ({ ...current, requiresEligibleParent: event.target.checked }))} />
@@ -3290,11 +3305,15 @@ export default function BillingPage() {
             {subscriptionAction.kind === 'entitlements' ? (
               <>
                 <p className="text-sm text-muted">
-                  Absolute set of the remaining-counter and unlock entitlements on this subscription.
+                  Absolute set of the legacy remaining-counters and unlock entitlements on this subscription.
                   Leave a counter blank to keep its current value; counters are clamped to 0 or more.
                 </p>
+                <InlineAlert variant="info">
+                  These counters are not the learner&apos;s AI package credits. AI Writing / Speaking / Shared
+                  credits are adjusted on the learner&apos;s profile under Access &amp; Allocation.
+                </InlineAlert>
                 <Input
-                  label="Writing assessments remaining (blank = unchanged)"
+                  label="Tutor writing reviews remaining - legacy counter (blank = unchanged)"
                   type="number"
                   min={0}
                   value={subscriptionActionForm.entWriting}
@@ -3302,7 +3321,7 @@ export default function BillingPage() {
                   placeholder="unchanged"
                 />
                 <Input
-                  label="Speaking sessions remaining (blank = unchanged)"
+                  label="Live speaking sessions remaining - legacy counter (blank = unchanged)"
                   type="number"
                   min={0}
                   value={subscriptionActionForm.entSpeaking}
@@ -3310,7 +3329,7 @@ export default function BillingPage() {
                   placeholder="unchanged"
                 />
                 <Input
-                  label="AI credits remaining (blank = unchanged)"
+                  label="Legacy AI-credit counter - does not fund AI grading (blank = unchanged)"
                   type="number"
                   min={0}
                   value={subscriptionActionForm.entAiCredits}

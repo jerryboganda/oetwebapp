@@ -2199,7 +2199,7 @@ private async Task AttachTaskModelAnswerAsync(
                 submission.Id, quotaEx.ErrorCode);
             throw ApiException.PaymentRequired(
                 "ai_credits_insufficient",
-                "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+                "Not enough AI credits: one Writing letter or Speaking card costs 2 AI credits. Purchase an AI Credits package to continue.");
         }
         catch (OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx)
         {

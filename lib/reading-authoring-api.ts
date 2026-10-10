@@ -1122,10 +1122,11 @@ export const startReadingAttempt = (
   return api<ReadingAttemptStarted>(`/v1/reading-papers/papers/${paperId}/attempts${suffix}`, { method: 'POST' })
     .then((attempt) => {
       if (!options.mockAttemptId && !options.mockSectionId && attempt.feedbackMessage !== FREE_SAMPLE_FEEDBACK) {
-        // Live balance feedback (Rule E): announce the debit; mocks spend
-        // their separate allowance, and the free sample has no debit at all
-        // (the toast would read a stale ledger row).
-        void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('reading'));
+        // Rule E: every caller toasts the authoritative attempt.feedbackMessage (empty
+        // on a free reopen), so only refresh the credit-card caches here; announcing
+        // the latest ledger debit as well would double the toast and misreport a
+        // reopen. Mocks spend their separate allowance; the free sample has no debit.
+        void import('@/lib/credit-feedback').then((m) => m.refreshCreditCards());
       }
       return attempt;
     });

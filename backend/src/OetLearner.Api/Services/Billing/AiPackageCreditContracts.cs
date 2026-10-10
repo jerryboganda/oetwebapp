@@ -65,8 +65,11 @@ public interface IAiPackageCreditService
 
     /// <summary>
     /// Grant Full Course gifted AI credits into the Shared pool. Idempotent on
-    /// <paramref name="referenceId"/>. Dedicated/Flexible W/S cost 1 activity;
-    /// Shared Writing/Speaking cost 2; Listening/Reading cost 1 Shared.
+    /// <paramref name="referenceId"/>, and a plan-sourced gift
+    /// (<see cref="AiPackageCreditSources.Plan"/>) is also once per source: a second path
+    /// fulfilling the same order under a different reference returns false. One Writing
+    /// letter / Speaking card costs 2 credits from ANY pool (dedicated, Flexible W/S or
+    /// Shared); Listening/Reading cost 1 Shared credit per paper.
     /// </summary>
     Task<bool> GrantCourseGiftCreditsAsync(
         string userId,
@@ -82,8 +85,9 @@ public interface IAiPackageCreditService
 
     /// <summary>
     /// Consume <paramref name="quantity"/> Writing/Speaking activities in one
-    /// atomic debit. Priority: dedicated ΓåÆ Flexible W/S ΓåÆ Shared last.
-    /// One activity costs 1 dedicated/Flexible unit or 2 Shared units.
+    /// atomic debit. Priority: dedicated -> Flexible W/S -> Shared last.
+    /// One activity costs <see cref="AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity"/>
+    /// (2) credits from any of those pools.
     /// </summary>
     Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, int quantity, CancellationToken ct);
 
@@ -117,6 +121,10 @@ public interface IAiPackageCreditService
     /// <summary>
     /// Reverse unreversed Purchase rows for the exact grant source. Product
     /// codes are not sufficient because a learner may own the same package twice.
+    /// This is an explicit revocation (refund, removal): it also clears the lapsed
+    /// lots of every purchase it reverses. It reverses EVERY unreversed purchase
+    /// sharing the source, so a per-order refund of a repeated add-on is not
+    /// expressible through it.
     /// </summary>
     Task<int> ReverseGrantsAsync(string userId, string sourceReferenceId, CancellationToken ct);
 
@@ -227,10 +235,8 @@ public sealed record AiPackageCreditSnapshot(
     IReadOnlyList<AiPackageOpenedActivityDto>? Activities = null)
 {
     // FINAL 2026-09-06: one Writing letter / one Speaking card costs 2 AI
-    // credits from ANY pool. A lone single credit can never fund an
-    // activity on its own (shared funds whole activities only), so
-    // fundability is simulated with the same greedy order the debit uses:
-    // dedicated first, then Flexible W/S, then Shared.
+    // credits from ANY pool. Fundability is the single account-level rule in
+    // FundableWritingOrSpeakingActivities, which the gate and the debit share.
     public bool HasWritingActivity =>
         WritingUnlimited || FundableWritingOrSpeakingActivities(WritingOnlyCredits, FlexibleCredits, SharedCredits) >= 1;
 
@@ -244,46 +250,39 @@ public sealed record AiPackageCreditSnapshot(
         SpeakingUnlimited ? int.MaxValue : FundableWritingOrSpeakingActivities(SpeakingOnlyCredits, FlexibleCredits, SharedCredits);
 
     /// <summary>
-    /// Complete Writing/Speaking activities fundable from raw pool balances.
-    /// Mirrors <c>SpendWritingOrSpeaking</c> exactly (dedicated, then
-    /// Flexible W/S, then whole Shared activities) so gates and debits agree.
+    /// Complete Writing/Speaking activities fundable from raw ACCOUNT-level pool
+    /// balances (credits are fungible across lots). The one rule the gate, this
+    /// simulation and <c>SpendWritingOrSpeaking</c> all share: dedicated and
+    /// Flexible W/S credits fund an activity together (dedicated first, so a lone
+    /// dedicated credit plus one Flexible credit is a letter), and Shared funds
+    /// whole activities of its own — Shared never pairs with a dedicated/Flexible
+    /// remainder, and a stranded dedicated/Flexible credit never blocks Shared.
     /// </summary>
     public static int FundableWritingOrSpeakingActivities(int dedicated, int flexible, int shared)
     {
         var units = AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
-        var remainingDedicated = dedicated;
-        var remainingFlexible = flexible;
-        var remainingShared = shared;
-        var activities = 0;
-        while (true)
-        {
-            var need = units;
-            var takeDedicated = Math.Min(remainingDedicated, need);
-            need -= takeDedicated;
-            var takeFlexible = Math.Min(remainingFlexible, need);
-            need -= takeFlexible;
-            if (need == 0)
-            {
-                remainingDedicated -= takeDedicated;
-                remainingFlexible -= takeFlexible;
-                activities++;
-                continue;
-            }
-            if (need == units && remainingShared >= units)
-            {
-                remainingShared -= units;
-                activities++;
-                continue;
-            }
-            return activities;
-        }
+        return Math.Max(0, dedicated + flexible) / units + Math.Max(0, shared) / units;
     }
+
+    /// <summary>
+    /// How many of <paramref name="activities"/> the dedicated + Flexible pools
+    /// fund; the remainder must come from Shared (see
+    /// <see cref="FundableWritingOrSpeakingActivities"/>).
+    /// </summary>
+    public static int PoolFundedWritingOrSpeakingActivities(int dedicated, int flexible, int activities)
+        => Math.Min(activities, Math.Max(0, dedicated + flexible) / AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity);
 }
 
 /// <summary>
 /// Candidate/admin-visible per-bucket balance conforming to the Master
 /// Catalogue dashboard card: Total granted/purchased, Used, Remaining (or
 /// Unlimited), source package(s), validity window and days left.
+/// <para>
+/// <c>TotalGranted</c> stays <c>Remaining + Used</c> (admin "Set exact" targets
+/// it). <c>Expired</c> is the credits that lapsed UNUSED when a lot passed its
+/// validity end; they are in neither Remaining nor Used, so without it a lapsed
+/// package would vanish from the card while the grant list still shows it.
+/// </para>
 /// </summary>
 public sealed record AiPackageCreditBucketDto(
     string Key,
@@ -296,8 +295,16 @@ public sealed record AiPackageCreditBucketDto(
     DateTimeOffset? ValidFrom,
     DateTimeOffset? ExpiresAt,
     int DaysLeft,
-    IReadOnlyList<AiPackageCreditGrantSourceDto> Grants);
+    IReadOnlyList<AiPackageCreditGrantSourceDto> Grants,
+    int Expired = 0);
 
+/// <summary>
+/// One purchased/granted package line. <c>DaysLeft</c> is clamped to 0 once the
+/// validity end has passed, so it cannot tell "expires today" from "expired";
+/// <c>Status</c> is the authoritative state: <c>active</c>, <c>scheduled</c>
+/// (starts in the future), <c>expired</c> (validity ended) or <c>reversed</c>
+/// (refunded / revoked).
+/// </summary>
 public sealed record AiPackageCreditGrantSourceDto(
     string? PackageId,
     string Description,
@@ -306,7 +313,8 @@ public sealed record AiPackageCreditGrantSourceDto(
     DateTimeOffset? ExpiresAt,
     string? SourceReferenceId = null,
     DateTimeOffset? ValidFrom = null,
-    int? DaysLeft = null);
+    int? DaysLeft = null,
+    string Status = "active");
 
 public sealed record AiPackageCreditTransactionDto(
     string Id,

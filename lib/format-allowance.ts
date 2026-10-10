@@ -21,6 +21,42 @@ export function formatBucketRemaining(unlimited: boolean, remaining: number): st
   return unlimited ? 'Unlimited' : String(Math.max(0, remaining));
 }
 
+/**
+ * One Writing letter / Speaking card costs this many credits from ANY pool
+ * (mirrors `AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity` on the API;
+ * Reading/Listening cost 1 per paper). Packages are SOLD as letters/cards but
+ * GRANTED as credits, so 6 Writing credits = 3 letters.
+ */
+export const CREDITS_PER_WRITING_OR_SPEAKING_ACTIVITY = 2;
+
+const ACTIVITY_NOUN: Record<string, string> = {
+  writing: 'letter',
+  speaking: 'card',
+  flexible_ws: 'attempt',
+};
+
+/**
+ * What a credit balance buys, e.g. `6` Writing credits -> "3 letters". Null for
+ * pools that are 1 credit per item (Reading/Listening/Mock) or an empty balance.
+ * A lone spare credit is surfaced so an odd balance never looks like a rounding error.
+ */
+export function describeCreditsAsActivities(bucketKey: string, credits: number): string | null {
+  const noun = ACTIVITY_NOUN[bucketKey];
+  if (!noun || !Number.isFinite(credits) || credits <= 0) return null;
+  const whole = Math.floor(credits / CREDITS_PER_WRITING_OR_SPEAKING_ACTIVITY);
+  const spare = credits % CREDITS_PER_WRITING_OR_SPEAKING_ACTIVITY;
+  const spareLabel = `${spare} spare credit${spare === 1 ? '' : 's'}`;
+  // Flexible/Shared credits can top a spare credit up, so state what is missing
+  // rather than claiming it can never be used.
+  if (whole === 0) {
+    const missing = CREDITS_PER_WRITING_OR_SPEAKING_ACTIVITY - spare;
+    const article = /^[aeiou]/i.test(noun) ? 'an' : 'a';
+    return `${spareLabel} — ${missing} more makes ${article} ${noun}`;
+  }
+  const wholeLabel = `${whole} ${noun}${whole === 1 ? '' : 's'}`;
+  return spare > 0 ? `${wholeLabel} + ${spareLabel}` : wholeLabel;
+}
+
 const MS_PER_DAY = 86_400_000;
 
 /** Whole days between now and the expiry instant; null when no expiry. */

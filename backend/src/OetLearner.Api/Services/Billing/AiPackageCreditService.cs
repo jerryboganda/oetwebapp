@@ -135,7 +135,8 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
             var giftValidFrom = validFrom ?? now;
             var source = AddonGrantProcessor.FitDatabaseKey(sourceReferenceId ?? referenceId);
             await ExpireIfNeededAsync(account, now, ct);
-            if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.Purchase, ct))
+            if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.Purchase, ct)
+                || await PlanGiftAlreadyGrantedAsync(userId, source, referenceId, ct))
             {
                 return false;
             }
@@ -182,7 +183,13 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
         }, ct);
     }
 
-    public async Task<int> ReverseGrantsAsync(string userId, string sourceReferenceId, CancellationToken ct)
+    // Explicit revocation (refund, package/add-on removal): a reversed purchase's lapsed
+    // lots are cleared too, so nothing of it can ever be revived.
+    public Task<int> ReverseGrantsAsync(string userId, string sourceReferenceId, CancellationToken ct)
+        => ReverseGrantsCoreAsync(userId, sourceReferenceId, clearLapsedLots: true, ct);
+
+    private async Task<int> ReverseGrantsCoreAsync(
+        string userId, string sourceReferenceId, bool clearLapsedLots, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(sourceReferenceId))
         {
@@ -190,7 +197,7 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
         }
 
         var reversed = 0;
-        while (await ReverseOneGrantAsync(userId, sourceReferenceId, ct))
+        while (await ReverseOneGrantAsync(userId, sourceReferenceId, clearLapsedLots, ct))
         {
             reversed++;
         }
@@ -764,7 +771,7 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
                 BalanceSource: "mock",
                 CreditsUsed: 1,
                 RemainingAfter: account.MockExamsRemaining,
-                FeedbackMessage: $"1 Full Mock attempt used. {account.MockExamsRemaining} Mock Attempts remaining.");
+                FeedbackMessage: $"1 Full Mock attempt used. {CountText(account.MockExamsRemaining, "Mock Attempt")} remaining.");
         }, ct);
     }
 
@@ -824,6 +831,15 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
 
     public async Task<AiPackageCreditSnapshot> AdjustAsync(string userId, AiPackageCreditAdjustmentRequest request, string adminId, CancellationToken ct)
     {
+        // An expiry already in the past would stamp the top-up lot expired at birth:
+        // the save succeeds and the admin sees a success toast, but nothing is spendable.
+        if (request.ExpiresAt is { } requestedExpiry && requestedExpiry <= DateTimeOffset.UtcNow)
+        {
+            throw ApiException.Validation(
+                "expiry_in_past",
+                "The expiry for credits added now must be a future date and time.");
+        }
+
         return await InLedgerTransactionAsync<AiPackageCreditSnapshot>(async () =>
         {
             var account = await GetOrCreateAccountAsync(userId, ct);
@@ -861,7 +877,7 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
             var listeningDelta = ResolveAdminDelta(account.ListeningTestsRemaining ?? 0, usage.Listening, request.ListeningTestsDelta, request.ListeningTestsSet, "Listening Credits");
             var readingDelta = ResolveAdminDelta(account.ReadingTestsRemaining ?? 0, usage.Reading, request.ReadingTestsDelta, request.ReadingTestsSet, "Reading Credits");
 
-            ApplyAdminAdjustmentToLots(
+            var topUpLot = ApplyAdminAdjustmentToLots(
                 account,
                 sharedDelta,
                 flexibleDelta,
@@ -871,6 +887,14 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
                 readingDelta,
                 mockDelta,
                 request.ExpiresAt);
+            if (topUpLot is not null)
+            {
+                // Same as both grant paths: new credits lift an exam-pass expiry. Left set,
+                // every gate refuses with ai_package_expired and ExpireIfNeededAsync returns
+                // early, so the admin's top-up would sit there unusable.
+                account.ExpiredBecausePassed = false;
+                account.PassedAt = null;
+            }
 
             // "Set exact" also replaces the expiry when explicitly provided; otherwise the
             // pool expiry is retained. This is the only admin mutation that can rewrite
@@ -896,7 +920,10 @@ public sealed partial class AiPackageCreditService(LearnerDbContext db, ILogger<
                 Reason = AiPackageCreditReason.AdminAdjustment,
                 ReferenceId = $"admin:{adminId}:{Guid.NewGuid():N}",
                 Description = string.IsNullOrWhiteSpace(request.Reason) ? "Admin AI package credit adjustment" : request.Reason,
-                ExpiresAt = request.ExpiresAt,
+                // The date the credits really lapse: the top-up lot inherits the wallet
+                // expiry when none was given, and the grant list reads this row.
+                ValidFrom = topUpLot?.CreatedAt,
+                ExpiresAt = topUpLot?.ExpiresAt ?? request.ExpiresAt,
                 CreatedAt = DateTimeOffset.UtcNow,
                 CreatedByAdminId = adminId
             });

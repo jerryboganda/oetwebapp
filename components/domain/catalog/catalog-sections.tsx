@@ -190,7 +190,9 @@ export function CatalogEntitlementSummary({ snapshot }: { snapshot: MyEntitlemen
   const stats: Array<{ label: string; value: string }> = [];
   if (snapshot.writingAssessmentsRemaining > 0) stats.push({ label: 'Writing left', value: String(snapshot.writingAssessmentsRemaining) });
   if (snapshot.speakingSessionsRemaining > 0) stats.push({ label: 'Speaking left', value: String(snapshot.speakingSessionsRemaining) });
-  if (snapshot.aiCreditsRemaining > 0) stats.push({ label: 'AI credits', value: String(snapshot.aiCreditsRemaining) });
+  // No legacy "AI credits" stat: snapshot.aiCreditsRemaining is incremented on grant and
+  // never decremented on spend (spend goes through the AiPackageCredit ledger), so it
+  // overstates the balance. The ledger-backed AI Credits card is authoritative.
 
   const expiry = snapshot.expiresAt
     ? new Date(snapshot.expiresAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })

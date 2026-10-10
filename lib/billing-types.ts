@@ -256,6 +256,13 @@ export interface AiPackageOpenedActivity {
   remainingAfterStart: number;
 }
 
+/**
+ * `expired` = validity ended; `reversed` = refunded/revoked; `scheduled` = starts
+ * in the future. `daysLeft` is clamped to 0 once the end has passed, so it cannot
+ * tell "expires today" from "expired" — read this instead.
+ */
+export type AiPackageCreditGrantStatus = 'active' | 'scheduled' | 'expired' | 'reversed';
+
 export interface AiPackageCreditGrantSource {
   packageId?: string | null;
   description: string;
@@ -265,6 +272,7 @@ export interface AiPackageCreditGrantSource {
   sourceReferenceId?: string | null;
   validFrom?: string | null;
   daysLeft?: number | null;
+  status?: AiPackageCreditGrantStatus;
 }
 
 export type AiPackageCreditBucketKey =
@@ -288,6 +296,12 @@ export interface AiPackageCreditBucket {
   expiresAt?: string | null;
   daysLeft: number; // -1 = no expiry
   grants: AiPackageCreditGrantSource[];
+  /**
+   * Credits that lapsed UNUSED when a package passed its validity end. They are in
+   * neither `remaining` nor `used` (and `totalGranted` stays remaining + used), so
+   * this is what explains a 0 balance next to a listed purchase.
+   */
+  expired?: number;
 }
 
 export interface AiPackageCreditSnapshot {
@@ -308,6 +322,13 @@ export interface AiPackageCreditSnapshot {
   creditsRemaining: number;
   writingUnlimited?: boolean;
   speakingUnlimited?: boolean;
+  /**
+   * Whole letters / cards the learner can still START, funded greedily from
+   * dedicated -> Flexible W/S -> Shared at 2 credits each (server-authoritative;
+   * `int.MaxValue` when unlimited). Prefer this over dividing a single bucket.
+   */
+  availableWritingActivities?: number;
+  availableSpeakingActivities?: number;
   sharedCreditsGranted?: number;
   sharedCreditsUsed?: number;
   buckets?: AiPackageCreditBucket[] | null;
