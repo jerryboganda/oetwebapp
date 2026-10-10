@@ -3253,6 +3253,11 @@ app.MapAiToolsAdminEndpoints();
 app.MapTypeSafeAdminEndpoints();
 app.MapUserStateCacheAdminEndpoints();
 app.MapCompanionKnowledgeAdminEndpoints();
+
+// Admin control surface for the codebase index behind the admin assistant's search tools:
+// status (including WHY source is unavailable) and an on-demand re-index. Both were previously
+// unreachable - ICodebaseIndexer.TriggerReindex/GetStatusAsync had zero callers.
+app.MapAiCodebaseAdminEndpoints();
 app.MapCompanionAccessAdminEndpoints();
 // SAMI §13.2 operator dashboards (F-127 quality, F-128 content gap, F-129 teaching gap):
 // read-only aggregates over existing telemetry, no new storage.

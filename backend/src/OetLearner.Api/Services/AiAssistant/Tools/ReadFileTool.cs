@@ -27,13 +27,8 @@ public sealed class ReadFileTool : IAiToolExecutor
     }
     """;
 
-    private static readonly string[] AllowedPrefixes = {
-        "app/", "components/", "lib/", "hooks/", "contexts/", "types/",
-        "backend/", "tests/", "docs/", "rulebooks/", "scripts/",
-        "messages/", "config/", "public/", "agent-gateway/",
-        "android/", "ios/", "capacitor-web/", "tools/", "ops/", "agents/"
-    };
-    private static readonly string[] BlockedSegments = { ".env", "secrets", "node_modules", ".git", ".next", "dist", "coverage", "bin", "obj" };
+    private static readonly string[] AllowedPrefixes = RepoRootResolver.AllowedPrefixes;
+    private static readonly string[] BlockedSegments = RepoRootResolver.BlockedSegments;
     private const int MaxLines = 500;
 
     private readonly IConfiguration _configuration;
@@ -45,9 +40,13 @@ public sealed class ReadFileTool : IAiToolExecutor
         _logger = logger;
     }
 
-    public Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
+public Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
     {
-        var path = args.GetProperty("path").GetString()!.Trim();
+    // Source tree is admin-only, enforced here and not only by the grant table.
+    var refusal = AdminOnlyToolGuard.Refusal(ctx, Code);
+    if (refusal is not null) return Task.FromResult(refusal);
+
+    var path = args.GetProperty("path").GetString()!.Trim();
         var startLine = args.TryGetProperty("startLine", out var s) ? s.GetInt32() : 1;
         var endLine = args.TryGetProperty("endLine", out var e) ? e.GetInt32() : (int?)null;
 

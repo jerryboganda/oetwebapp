@@ -26,13 +26,8 @@ public sealed class ListDirectoryTool : IAiToolExecutor
     }
     """;
 
-    private static readonly string[] AllowedPrefixes = {
-        "app/", "components/", "lib/", "hooks/", "contexts/", "types/",
-        "backend/", "tests/", "docs/", "rulebooks/", "scripts/",
-        "messages/", "config/", "public/", "agent-gateway/",
-        "android/", "ios/", "capacitor-web/", "tools/", "ops/", "agents/"
-    };
-    private static readonly string[] BlockedSegments = { ".env", "secrets", "node_modules", ".git", ".next", "dist", "coverage", "bin", "obj" };
+    private static readonly string[] AllowedPrefixes = RepoRootResolver.AllowedPrefixes;
+    private static readonly string[] BlockedSegments = RepoRootResolver.BlockedSegments;
     private const int DefaultMaxDepth = 2;
     private const int AbsoluteMaxDepth = 3;
 
@@ -45,9 +40,13 @@ public sealed class ListDirectoryTool : IAiToolExecutor
         _logger = logger;
     }
 
-    public Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
+public Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
     {
-        var path = args.GetProperty("path").GetString()!.Trim();
+    // Source tree is admin-only, enforced here and not only by the grant table.
+    var refusal = AdminOnlyToolGuard.Refusal(ctx, Code);
+    if (refusal is not null) return Task.FromResult(refusal);
+
+    var path = args.GetProperty("path").GetString()!.Trim();
         var recursive = args.TryGetProperty("recursive", out var r) && r.GetBoolean();
         var maxDepth = args.TryGetProperty("maxDepth", out var d) ? d.GetInt32() : DefaultMaxDepth;
         if (maxDepth > AbsoluteMaxDepth) maxDepth = AbsoluteMaxDepth;
@@ -85,7 +84,19 @@ public sealed class ListDirectoryTool : IAiToolExecutor
             }
         }
 
-        var repoRoot = RepoRootResolver.Resolve(_configuration);
+        var resolution = RepoRootResolver.Resolve(_configuration);
+
+        // No source mounted: say so plainly. The old code resolved the root to the publish
+        // directory and happily listed ~60 DLLs, which is what an admin assistant sees today.
+        if (!resolution.HasSource)
+        {
+            _logger.LogWarning("list_directory refused: no project source available. {Reason}", resolution.Reason);
+            return Task.FromResult(new AiToolExecutionResult(
+                AiToolOutcome.ProviderError, null, "codebase_source_unavailable",
+                "No project source is available in this deployment. " + resolution.Reason));
+        }
+
+        var repoRoot = resolution.Root!;
         var fullPath = Path.GetFullPath(Path.Combine(repoRoot, path));
 
         if (!fullPath.StartsWith(repoRoot, StringComparison.OrdinalIgnoreCase))
@@ -95,21 +106,35 @@ public sealed class ListDirectoryTool : IAiToolExecutor
                 "Resolved path escapes the repository root."));
         }
 
+        // A missing path is a FAILURE, not a success that happens to say "not found"
+        // (owner directive 2026-10-09). As a Success it was indistinguishable from an empty
+        // directory, so the model kept probing prefixes that do not exist in this deployment.
+        // The response names which prefixes DO exist, so it stops guessing.
         if (!Directory.Exists(fullPath))
         {
             return Task.FromResult(new AiToolExecutionResult(
-                AiToolOutcome.Success,
-                ToJson(new { found = false, path, error = "Directory not found." })));
+                AiToolOutcome.ProviderError, null, "directory_not_found",
+                $"'{path}' does not exist in this checkout. Available source roots are: "
+                + string.Join(", ", resolution.SearchablePrefixes) + "."));
         }
 
         try
         {
             var entries = new List<object>();
-            CollectEntries(fullPath, repoRoot, entries, recursive, maxDepth, currentDepth: 0);
+            CollectEntries(fullPath, repoRoot, entries, recursive, maxDepth, currentDepth: 0, out var truncated);
 
             return Task.FromResult(new AiToolExecutionResult(
                 AiToolOutcome.Success,
-                ToJson(new { found = true, path, entries })));
+                ToJson(new
+                {
+                    found = true,
+                    path,
+                    entries,
+                    truncated,
+                    // Say so when the listing was cut short. Without this the model cannot tell a
+                    // complete listing from a partial one and may conclude a file is absent.
+                    ...(truncated ? new { note = $"Listing truncated at {MaxEntries} entries; list a subdirectory for more." } : new { })
+                })));
         }
         catch (Exception ex)
         {
@@ -119,12 +144,17 @@ public sealed class ListDirectoryTool : IAiToolExecutor
         }
     }
 
-    private static void CollectEntries(string dirPath, string repoRoot, List<object> entries, bool recursive, int maxDepth, int currentDepth)
+    private const int MaxEntries = 200;
+
+    private static void CollectEntries(
+        string dirPath, string repoRoot, List<object> entries, bool recursive, int maxDepth, int currentDepth, out bool truncated)
     {
+        truncated = false;
         if (currentDepth > maxDepth) return;
 
         foreach (var dir in Directory.GetDirectories(dirPath))
         {
+            if (entries.Count >= MaxEntries) { truncated = true; return; }
             var name = Path.GetFileName(dir);
             if (BlockedSegments.Any(b => name.Equals(b, StringComparison.OrdinalIgnoreCase))) continue;
 
@@ -133,12 +163,14 @@ public sealed class ListDirectoryTool : IAiToolExecutor
 
             if (recursive && currentDepth < maxDepth)
             {
-                CollectEntries(dir, repoRoot, entries, recursive, maxDepth, currentDepth + 1);
+                CollectEntries(dir, repoRoot, entries, recursive, maxDepth, currentDepth + 1, out var deeperTruncated);
+                if (deeperTruncated) { truncated = true; return; }
             }
         }
 
         foreach (var file in Directory.GetFiles(dirPath))
         {
+            if (entries.Count >= MaxEntries) { truncated = true; return; }
             var fileName = Path.GetFileName(file);
             if (BlockedSegments.Any(b => fileName.StartsWith(b, StringComparison.OrdinalIgnoreCase))) continue;
 

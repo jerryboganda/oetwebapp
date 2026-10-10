@@ -294,8 +294,25 @@ x-learner-api-slot: &learner-api-slot
     # App-only playback attestation key map: {"platform:keyId":"<hmac secret>"}.
     # Must match the OET_DESKTOP/MOBILE_ATTEST_SECRET baked into the app builds.
     VideoAttestation__KeysJson: ${VIDEOATTESTATION__KEYSJSON:-}
+    # ── Admin assistant codebase search (owner directive 2026-10-09) ──────────────────────────
+    # The admin assistant can read and search THIS repository's source, but only when a checkout is
+    # present. production-deploy.yml extracts the exact released SHA to
+    # /opt/oetwebapp/source/<sha> and repoints /opt/oetwebapp/source/current at it atomically;
+    # this is the read-only bind mount of that symlink.
+    #
+    # Read-only is the important part: the container can search the tree and cannot alter it. The
+    # tools are additionally restricted to the admin assistant in code (AdminOnlyToolGuard), so a
+    # learner or tutor chat cannot reach this mount even though the container can see it.
+    #
+    # If the deploy has never exported a checkout the directory is empty, RepoRootResolver reports
+    # "source unavailable" and the tools refuse with that reason - never a zero-match result, which
+    # is what previously let the assistant answer codebase questions with confidence.
+    CODEBASE_INDEX_ROOT: ${CODEBASE_INDEX_ROOT:-/srv/source}
   volumes:
     - oet_learner_storage:/var/opt/oet-learner/storage
+    # Optional host path: absent until the first deploy exports a checkout. Docker creates an empty
+    # directory in that case, which the resolver treats as "no source".
+    - /opt/oetwebapp/source/current:/srv/source:ro
   expose:
     - "8080"
   networks:

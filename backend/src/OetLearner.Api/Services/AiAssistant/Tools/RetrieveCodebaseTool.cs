@@ -13,6 +13,7 @@ namespace OetLearner.Api.Services.AiAssistant.Tools;
 public sealed class RetrieveCodebaseTool : IAiToolExecutor
 {
     private readonly ICodebaseRetriever _retriever;
+    private readonly ICodebaseIndexer _indexer;
     private readonly ILogger<RetrieveCodebaseTool> _logger;
 
     public string Code => "retrieve_codebase";
@@ -42,17 +43,23 @@ public sealed class RetrieveCodebaseTool : IAiToolExecutor
 
     public RetrieveCodebaseTool(
         ICodebaseRetriever retriever,
+        ICodebaseIndexer indexer,
         ILogger<RetrieveCodebaseTool> logger)
     {
-        _retriever = retriever ?? throw new ArgumentNullException(nameof(retriever));
-        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _retriever = retriever;
+        _indexer = indexer;
+        _logger = logger;
     }
 
-    public async Task<AiToolExecutionResult> ExecuteAsync(
-        JsonElement args, AiToolContext ctx, CancellationToken ct)
+public async Task<AiToolExecutionResult> ExecuteAsync(
+    JsonElement args, AiToolContext ctx, CancellationToken ct)
     {
-        string? query = null;
-        int maxResults = 10;
+    // Source tree is admin-only, enforced here and not only by the grant table.
+    var refusal = AdminOnlyToolGuard.Refusal(ctx, Code);
+    if (refusal is not null) return refusal;
+
+    string? query = null;
+    int maxResults = 10;
 
         if (args.TryGetProperty("query", out var queryProp))
             query = queryProp.GetString();
@@ -75,9 +82,25 @@ public sealed class RetrieveCodebaseTool : IAiToolExecutor
 
             if (results.Count == 0)
             {
+                // An EMPTY INDEX and a search that genuinely matched nothing are different states and
+                // must not both read as "No relevant code chunks found" (owner directive 2026-10-09).
+                // With no source mounted the index is always empty, so the old message told the model
+                // the code did not contain the answer when in fact nobody had ever looked.
+                var status = await _indexer.GetStatusAsync(ct);
+                if (!status.SourceAvailable)
+                {
+                    _logger.LogWarning("retrieve_codebase refused: no source available. {Reason}", status.SourceRootReason);
+                    return new AiToolExecutionResult(
+                        AiToolOutcome.ProviderError, null, "codebase_source_unavailable",
+                        "Codebase retrieval is unavailable in this deployment: "
+                        + (status.SourceRootReason ?? "no project source could be resolved")
+                        + " Nothing has been indexed, so this is NOT evidence that the code lacks the answer. "
+                        + "Say the source is unavailable here rather than guessing.");
+                }
+
                 var emptyResult = JsonSerializer.SerializeToElement(new
                 {
-                    message = "No relevant code chunks found for the query.",
+                    message = "No relevant code chunks found for the query. The index is populated, so this means the indexed source genuinely did not match.",
                     query,
                     results = Array.Empty<object>()
                 });

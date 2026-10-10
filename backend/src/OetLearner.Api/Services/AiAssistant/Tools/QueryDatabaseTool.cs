@@ -83,10 +83,25 @@ public sealed class QueryDatabaseTool : IAiToolExecutor
                 "Multiple SQL statements are not allowed.");
         }
 
+        // The connection MUST be closed here even on the success path (owner directive 2026-10-09).
+        //
+        // `GetDbConnection()` returns the SAME connection EF uses, and EF tracks its own opened
+        // count. A manual OpenAsync here does not increment that count, so if we opened without
+        // closing, EF still believed the connection was closed and tried to open it again on the
+        // next SaveChangesAsync in the same turn - producing "Connection already open" for every
+        // remaining tool call and query in that turn. Symptom seen in production 2026-10-09.
+        //
+        // CodebaseRetriever does this correctly in both of its raw paths; this tool did not, which
+        // is why the leak was invisible until the admin chatbot used query_database.
+        var connection = _db.Database.GetDbConnection();
+        var openedHere = false;
         try
         {
-            var connection = _db.Database.GetDbConnection();
-            await connection.OpenAsync(ct);
+            if (connection.State != System.Data.ConnectionState.Open)
+            {
+                await connection.OpenAsync(ct);
+                openedHere = true;
+            }
 
             // Use a transaction that we will ALWAYS roll back
             await using var transaction = await connection.BeginTransactionAsync(ct);
@@ -156,6 +171,15 @@ public sealed class QueryDatabaseTool : IAiToolExecutor
             return new AiToolExecutionResult(
                 AiToolOutcome.ProviderError, null, "execution_error",
                 $"Query failed: {ex.Message}");
+        }
+        finally
+        {
+            // Only close what we opened. If the connection was already open when we arrived (the
+            // request-scoped context owns it), closing it here would break the rest of the turn.
+            if (openedHere && connection.State == System.Data.ConnectionState.Open)
+            {
+                await connection.CloseAsync();
+            }
         }
     }
 

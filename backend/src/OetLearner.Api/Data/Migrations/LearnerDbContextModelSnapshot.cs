@@ -997,7 +997,7 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.PrimitiveCollection<float[]>("Embedding")
-                        .HasColumnType("real[]");
+                        .HasColumnType("vector(1536)");
 
                     b.Property<int>("EndLine")
                         .HasColumnType("integer");
@@ -1030,6 +1030,8 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ContentHash");
 
                     b.HasIndex("FilePath");
 

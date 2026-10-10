@@ -220,8 +220,7 @@ jobs:
               "rm -f '$REMOTE_SCRIPT' '$REMOTE_COMPOSE' '$REMOTE_VALIDATE' '$REMOTE_NGINX' '$REMOTE_NGINX_API' \
                '$REMOTE_DIR/docker-auth-prepare/config.json' '$REMOTE_DIR/docker-auth-promote/config.json'; \
                rmdir '$REMOTE_DIR/docker-auth-prepare' '$REMOTE_DIR/docker-auth-promote' 2>/dev/null || true; \
-               rmdir '$REMOTE_DIR' 2>/dev/null || true" \
-              >/dev/null 2>&1 || true
+               rmdir '$REMOTE_DIR' 2>/dev/null || true" \              >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
           # One tar stream instead of five sequential ssh round-trips; the file
@@ -234,6 +233,12 @@ jobs:
           cp scripts/deploy/validate-production-env.sh "$STAGE/validate-production-env.sh"
           cp scripts/deploy/nginx/web-bluegreen.conf.template "$STAGE/web-bluegreen.conf.template"
           cp scripts/deploy/nginx/api-bluegreen.conf.template "$STAGE/api-bluegreen.conf.template"
+          # Source checkout for the admin assistant's codebase tools (owner directive 2026-10-09).
+          # A git archive of the EXACT released SHA, not a clone: no .git, no history, no remotes,
+          # and it is byte-for-byte what was built. Build-output directories and secrets are excluded
+          # at the source (see .gitattributes export-ignore) so the VPS never receives them.
+          git archive --format=tar.gz -o "$STAGE/source.tar.gz" HEAD
+          echo "source archive: $(du -h "$STAGE/source.tar.gz" | cut -f1)"
           tar -czf - -C "$STAGE" . | ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "umask 077; mkdir -p '$REMOTE_DIR'; tar -xzf - -C '$REMOTE_DIR'; \
              chmod 700 '$REMOTE_SCRIPT' '$REMOTE_VALIDATE'; \
@@ -248,7 +253,21 @@ jobs:
                  echo 'Temporary registry authorization cleanup failed' >&2; [ \"\$status\" -ne 0 ] || status=1; \
                fi; exit \"\$status\"; }; trap cleanup_registry EXIT; \
              echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
-             WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' \
+              if [ -f '$REMOTE_DIR/source.tar.gz' ]; then \
+                src_root='$APP_DIR/source'; sha='$SHA'; \
+                mkdir -p \"\$src_root\"; \
+                rm -rf \"\$src_root/\$sha.tmp\"; \
+                mkdir -p \"\$src_root/\$sha.tmp\"; \
+                tar -xzf '$REMOTE_DIR/source.tar.gz' -C \"\$src_root/\$sha.tmp\"; \
+                rm -rf \"\$src_root/\$sha\"; \
+                mv \"\$src_root/\$sha.tmp\" \"\$src_root/\$sha\"; \
+                ln -sfn \"\$src_root/\$sha\" \"\$src_root/current.new\" && mv -Tf \"\$src_root/current.new\" \"\$src_root/current\"; \
+                ls -1 \"\$src_root\" | grep -E '^[0-9a-f]{7,40}\$' | sort | head -n -2 | xargs -r -I{} rm -rf \"\$src_root/{}\"; \
+                echo SOURCE_MOUNT_OK=\"\$(readlink -f \"\$src_root/current\")\"; \
+              else \
+                echo 'SOURCE_MOUNT_SKIPPED no source archive in this rollout'; \
+              fi; \
+              WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' \
              AGENT_GATEWAY_IMAGE='$AGENT_GATEWAY_IMAGE' RELEASE_SHA='$SHA' DEPLOY_PHASE='$phase' \
              VPS_APP_DIR='$APP_DIR' VPS_COMPOSE_FILE='$REMOTE_COMPOSE' VPS_VALIDATE_ENV_SCRIPT='$REMOTE_VALIDATE' \
              NGINX_TEMPLATE_SRC='$REMOTE_NGINX' NGINX_API_TEMPLATE_SRC='$REMOTE_NGINX_API' \

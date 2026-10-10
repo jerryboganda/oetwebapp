@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiAssistant.Tools;
 
 namespace OetLearner.Api.Services.AiAssistant.Indexing;
 
@@ -26,7 +27,7 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
 
     // Logged once per process lifetime (not per 6-hour cycle) so a
     // permanently-missing root (e.g. the production image, which ships
-    // compiled output only — see FindRepositoryRoot) reads as one informative
+    // compiled output only — see ResolveRepositoryRoot) reads as one informative
     // line instead of recurring "failure" spam in the logs.
     private static int _missingRootWarned;
 
@@ -74,7 +75,15 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
 
     public Task<IndexingStatus> GetStatusAsync(CancellationToken ct)
     {
-        return Task.FromResult(new IndexingStatus(_isRunning, _totalFiles, _indexedFiles, _lastCompleted));
+        var resolution = ResolveRepositoryRoot();
+        return Task.FromResult(new IndexingStatus(_isRunning, _totalFiles, _indexedFiles, _lastCompleted)
+        {
+            // Surfaced so an operator can tell "indexed nothing" from "there is nothing here to
+            // index". Those were indistinguishable before: both reported 0 files.
+            SourceAvailable = resolution.HasSource,
+            SourceRootReason = resolution.Reason,
+            SourceRoot = resolution.Root,
+        });
     }
 
     public async Task IndexFullAsync(CancellationToken ct)
@@ -90,13 +99,14 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
 
         try
         {
-            var repoRoot = FindRepositoryRoot();
-            if (repoRoot == null)
+            var resolution = ResolveRepositoryRoot();
+            if (!resolution.HasSource)
             {
-                LogMissingRepositoryRootOnce();
+                LogMissingRepositoryRootOnce(resolution.Reason);
                 return;
             }
 
+            var repoRoot = resolution.Root!;
             var files = DiscoverFiles(repoRoot);
             _totalFiles = files.Count;
             _logger.LogInformation("Starting full codebase indexing: {Count} files found.", files.Count);
@@ -132,12 +142,14 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
         if (string.IsNullOrWhiteSpace(filePath))
             return;
 
-        var repoRoot = FindRepositoryRoot();
-        if (repoRoot == null)
+        var resolution = ResolveRepositoryRoot();
+        if (!resolution.HasSource)
         {
-            LogMissingRepositoryRootOnce();
+            LogMissingRepositoryRootOnce(resolution.Reason);
             return;
         }
+
+        var repoRoot = resolution.Root!;
 
         var fullPath = Path.IsPathRooted(filePath)
             ? filePath
@@ -283,62 +295,41 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
     }
 
     /// <summary>
-    /// Resolves the source tree to scan. The production image is a multi-stage
-    /// `dotnet publish` output (see backend/Dockerfile's `final` stage) — it
-    /// contains only compiled DLLs, never a .git directory or the repo's .cs/.ts
-    /// source, so the walk-up-for-.git heuristic below can never succeed there.
-    /// CODEBASE_INDEX_ROOT is the explicit escape hatch: set it (env var, or any
-    /// IConfiguration source) to a source checkout mounted into the container to
-    /// make indexing work outside local dev. Unset in production today because
-    /// no such checkout is mounted (see auto-deploy-ghcr.sh — the VPS only
-    /// receives compose/deploy files, not a full repo clone); wiring it up needs
-    /// a deploy-time source sync plus a volume mount, which is a separate infra
-    /// decision, not made here.
+    /// Resolves the source tree to scan, using the ONE shared definition
+    /// (<see cref="RepoRootResolver"/>) rather than a second copy of the heuristic.
+    ///
+    /// <para>
+    /// The duplicated resolver was the root cause of two contradictory behaviours: the filesystem
+    /// tools fell back to the current directory and "worked" against the publish output while this
+    /// returned null and the index silently never built. Both are now the same answer, and the
+    /// reason is available for the status endpoint and the startup log.
+    /// </para>
+    ///
+    /// <para>
+    /// In production the source tree is mounted read-only at <c>/srv/source</c> and
+    /// <c>CODEBASE_INDEX_ROOT</c> points at it. Without that mount this returns null and the
+    /// indexing tools report that source is unavailable rather than pretending to be empty.
+    /// </para>
     /// </summary>
-    private string? FindRepositoryRoot()
-    {
-        var configuredRoot = _configuration["CODEBASE_INDEX_ROOT"];
-        if (!string.IsNullOrWhiteSpace(configuredRoot))
-        {
-            if (Directory.Exists(configuredRoot))
-                return configuredRoot;
-            _logger.LogWarning(
-                "CODEBASE_INDEX_ROOT is set to {ConfiguredRoot} but that directory does not exist — falling back to .git discovery.",
-                configuredRoot);
-        }
+    private RepoRootResolution ResolveRepositoryRoot()
+        => RepoRootResolver.Resolve(_configuration);
 
-        // Local dev fallback: walk up from the current directory looking for .git
-        var dir = AppContext.BaseDirectory;
-        while (dir != null)
-        {
-            if (Directory.Exists(Path.Combine(dir, ".git")))
-                return dir;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-
-        var cwd = Directory.GetCurrentDirectory();
-        while (cwd != null)
-        {
-            if (Directory.Exists(Path.Combine(cwd, ".git")))
-                return cwd;
-            cwd = Directory.GetParent(cwd)?.FullName;
-        }
-
-        return null;
-    }
-
-    /// <summary>Warns once per process lifetime instead of every indexing
-    /// cycle (every 6h, per CodebaseIndexerHostedService) when no root can be
-    /// resolved — see FindRepositoryRoot for why this is expected in production
-    /// today rather than a transient failure.</summary>
-    private void LogMissingRepositoryRootOnce()
+    /// <summary>
+    /// Warns once per process lifetime instead of every indexing cycle (every 6h, per
+    /// CodebaseIndexerHostedService) when no source tree can be resolved. The reason is now the
+    /// resolver's own, so the log says WHICH candidate failed rather than asserting that no
+    /// CODEBASE_INDEX_ROOT and no .git ancestor exist — which was not the whole story.
+    /// </summary>
+    private void LogMissingRepositoryRootOnce(string reason)
     {
         if (Interlocked.Exchange(ref _missingRootWarned, 1) == 0)
         {
             _logger.LogWarning(
-                "Could not locate a codebase repository root for indexing (no CODEBASE_INDEX_ROOT configured and no .git ancestor found). " +
-                "This is expected in the production image, which ships compiled output only — the admin codebase-search index will stay empty " +
-                "until CODEBASE_INDEX_ROOT points at a mounted source checkout. This warning will not repeat.");
+                "Codebase indexing is unavailable — no project source could be resolved. {Reason} " +
+                "Mount a source checkout read-only and set CODEBASE_INDEX_ROOT to make the admin " +
+                "codebase-search tools work. Until then they will report that source is unavailable " +
+                "rather than returning empty results. This warning will not repeat.",
+                reason);
         }
     }
 

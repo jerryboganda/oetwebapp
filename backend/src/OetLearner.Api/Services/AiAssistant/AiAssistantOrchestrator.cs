@@ -226,6 +226,11 @@ public sealed class AiAssistantOrchestrator(
             string? finalMessageId = null;
             var iterationsExhausted = true;
 
+            // Tool accounting for the grounding guard. Reset per turn, and deliberately counts a
+            // Success carrying no usable content as a failure (see IsEmptyToolResult).
+            var toolCallsMade = 0;
+            var failedToolCalls = 0;
+
             for (int iteration = 0; iteration < maxReActIterations + (isAdminTask ? 1 : 0); iteration++)
             {
                 turnCts.Token.ThrowIfCancellationRequested();
@@ -296,9 +301,40 @@ public sealed class AiAssistantOrchestrator(
                     yield break;
                 }
 
-                // If no tool calls, we're done — this is the final response
-                if (toolCalls.Count == 0)
+            var toolsAllFailed = toolCallsMade > 0 && failedToolCalls == toolCallsMade;
+
+            // If no tool calls, we're done — this is the final response
+            if (toolCalls.Count == 0)
                 {
+                    // Grounding guard, LEARNER and EXPERT/TUTOR only (owner directive 2026-10-09).
+                    //
+                    // `isError` was previously computed for every tool result and then used for
+                    // exactly one thing: the stream event. It was never branched on, so a turn whose
+                    // tools all failed still persisted whatever text the model produced. That is how
+                    // an assistant answers a question about this codebase with confidence after five
+                    // consecutive empty searches — the model was not wrong to try, the loop simply
+                    // never told it that nothing had actually been learned.
+                    //
+                    // The ADMIN assistant is deliberately EXEMPT (owner decision, same date): it is
+                    // the operator's own tool, and restricting it was judged more harmful than the
+                    // occasional ungrounded answer. This guard covers the two surfaces that reach
+                    // learners and staff who did not choose the tooling.
+                    if (toolsAllFailed
+                        && featureCode is AiFeatureCodes.AiAssistantLearner or AiFeatureCodes.AiAssistantExpert)
+                    {
+                        var groundingNote =
+                            "\n\n[System note: every tool you called in this turn failed or returned nothing. "
+                            + "You have no retrieved information for this question. State plainly what you "
+                            + "could not find and why, and do not assert specifics you could not verify. "
+                            + "Do not answer as though the tools had returned results.]";
+
+                        logger.LogInformation(
+                            "Grounding guard applied to {FeatureCode}: all {ToolCalls} tool call(s) failed or returned empty.",
+                            featureCode, failedToolCalls);
+
+                        responseText.Append(groundingNote);
+                    }
+
                     // D-SAMI-001 (SAMI UAT, 2026-10-07): the stream can end with zero
                     // events (provider-level failure that produced neither text nor an
                     // error chunk). Persisting that as a silent empty answer looks to
@@ -372,6 +408,13 @@ public sealed class AiAssistantOrchestrator(
                         : JsonSerializer.Serialize(new { error = result.ErrorMessage ?? "Tool execution failed" });
 
                     var isError = result.Outcome != AiToolOutcome.Success;
+
+                    // Per-turn tool accounting for the grounding guard below. A tool that "succeeded"
+                    // while returning an empty result set counts as failed on purpose: the whole point
+                    // is that a zero-result answer and a real answer must not look the same to the
+                    // model, and a Success carrying nothing usable is exactly that case.
+                    toolCallsMade++;
+                    if (isError || IsEmptyToolResult(resultJson)) failedToolCalls++;
 
                     // Persist tool result message
                     var toolResultMsg = new AiAssistantMessage
@@ -628,6 +671,57 @@ public sealed class AiAssistantOrchestrator(
         ApplicationUserRoles.Expert => AiFeatureCodes.AiAssistantExpert,
         _ => AiFeatureCodes.AiAssistantLearner,
     };
+
+    /// <summary>
+    /// Did this tool result carry nothing usable?
+    ///
+    /// <para>
+    /// Several tools report success while handing back nothing: <c>search_codebase</c> with zero
+    /// matches, <c>retrieve_codebase</c> with an empty result array, <c>query_database</c> with no
+    /// rows. For the grounding guard those are failures — the model has learned nothing, and treating
+    /// them as successes is precisely how an assistant answers authoritatively with no evidence.
+    /// </para>
+    ///
+    /// <para>
+    /// Deliberately conservative: an unparseable result is NOT treated as empty, so a tool whose
+    /// output shape is unrecognised cannot silently disable the guard.
+    /// </para>
+    /// </summary>
+    private static bool IsEmptyToolResult(string? resultJson)
+    {
+        if (string.IsNullOrWhiteSpace(resultJson)) return true;
+        try
+        {
+            using var doc = JsonDocument.Parse(resultJson);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return false;
+
+            // totalMatches: 0 — search_codebase
+            if (root.TryGetProperty("totalMatches", out var matches)
+                && matches.ValueKind == JsonValueKind.Number
+                && matches.GetInt32() == 0) return true;
+
+            // matches / results / rows all present but empty
+            foreach (var name in new[] { "matches", "results", "rows" })
+            {
+                if (root.TryGetProperty(name, out var arr)
+                    && arr.ValueKind == JsonValueKind.Array
+                    && arr.GetArrayLength() == 0) return true;
+            }
+
+            // rowCount: 0 — query_database
+            if (root.TryGetProperty("rowCount", out var rowCount)
+                && rowCount.ValueKind == JsonValueKind.Number
+                && rowCount.GetInt32() == 0) return true;
+
+            return false;
+        }
+        catch (JsonException)
+        {
+            // Unknown shape: assume it carried something. Failing open here is the lesser risk.
+            return false;
+        }
+    }
 
     /// <summary>
     /// The shared companion access decision for a learner turn, or null when the

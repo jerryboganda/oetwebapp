@@ -556,6 +556,12 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
   never invent a `TO VERIFY` value. Load `SAMI-RUN-STATE.md` for gate status.
 - `agent-console/etc/MANUAL.md` — operating manual appended to every Owner Agent Console session;
   load `docs/ops/OWNER-AGENT-CONSOLE.md` + `agent-console/CONTRACT.md` before touching `agent-console/**`.
+- `docs/ops/ADMIN-ASSISTANT-CODEBASE-TOOLS.md` — the admin assistant's source-reading tools: the
+  admin-only boundary (`AdminOnlyToolGuard`), the ONE source-root rule and why "no source" must never
+  look like "no matches", the read-only deploy-time source mount and
+  `GET|POST /v1/admin/ai/codebase/{status,reindex}`, the `real[]`→`vector(1536)` fix, and the
+  grounding guard that covers **learner + expert only** (admin is exempt by owner decision).
+  **Load it before touching `Services/AiAssistant/Tools/**` or `Services/AiAssistant/Indexing/**`.**
 - `docs/ops/FLEET.md` — Owner Fleet runbook (SSH-tunnel access, enrollment, credential custody and rotation,
   host-key verification, removal, rollback skew, failure states, capacity, what is and is not automatic);
   `docs/adr/0005-fleet-manager-and-remote-workers.md` — the decision record;

@@ -35,3 +35,28 @@ docker-compose*.yml text eol=lf
 # (built-in driver, no per-machine config). SESSION_STATE.md / TASKS.json are single-writer per run:
 # on a conflict keep the side with the newer "Updated:" wholesale (scripts/agent/README.md).
 VERIFICATION.md merge=union
+
+# ── `git archive` exclusions (owner directive 2026-10-09) ──────────────────────────────────
+# production-deploy.yml runs `git archive` over the released SHA to produce the source checkout the
+# admin assistant's codebase tools search on the VPS. That archive must carry source and nothing
+# else. These rules apply to `git archive` ONLY — they do not affect checkout, clone, or `git
+# status`, so a developer still sees these files locally.
+#
+# Secrets: .env files are gitignored and therefore never tracked, so `git archive` cannot include
+# them. These rules are defence in depth in case one is ever force-added by mistake. Note that
+# `!` negative patterns are IGNORED in .gitattributes (unlike .gitignore), so the `*.example`
+# files are also excluded from the archive — harmless, since examples are not needed on the VPS.
+.env            export-ignore
+.env.*          export-ignore
+*.pfx           export-ignore
+*.key           export-ignore
+
+# Build output and caches: never useful to search, and large.
+/node_modules/  export-ignore
+**/node_modules/ export-ignore
+**/bin/         export-ignore
+**/obj/         export-ignore
+**/.next/       export-ignore
+**/dist/        export-ignore
+**/coverage/    export-ignore
+**/*.user       export-ignore

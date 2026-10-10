@@ -1540,6 +1540,10 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // W11 — encrypted raw provider payloads with retention.
         OnModelCreatingAiRawResponses(modelBuilder);
 
+        // AI-assistant codebase index. The embedding column must be vector(1536) to match
+        // pgvector; it was real[] and silently disabled the vector half of hybrid retrieval.
+        OnModelCreatingAiAssistantIndexing(modelBuilder);
+
         // Free Mocks — per-profession free-sample designation + once-only claim.
         OnModelCreatingFreeSamples(modelBuilder);
 

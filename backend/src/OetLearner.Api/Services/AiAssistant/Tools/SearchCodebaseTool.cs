@@ -26,13 +26,8 @@ public sealed class SearchCodebaseTool : IAiToolExecutor
     }
     """;
 
-    private static readonly string[] AllowedPrefixes = {
-        "app/", "components/", "lib/", "hooks/", "contexts/", "types/",
-        "backend/", "tests/", "docs/", "rulebooks/", "scripts/",
-        "messages/", "config/", "public/", "agent-gateway/",
-        "android/", "ios/", "capacitor-web/", "tools/", "ops/", "agents/"
-    };
-    private static readonly string[] BlockedSegments = { ".env", "secrets", "node_modules", ".git", "bin", "obj", ".next", "dist", "coverage" };
+    private static readonly string[] AllowedPrefixes = RepoRootResolver.AllowedPrefixes;
+    private static readonly string[] BlockedSegments = RepoRootResolver.BlockedSegments;
     private const int DefaultMaxResults = 20;
     private const int AbsoluteMaxResults = 50;
     private const int ContextLines = 2;
@@ -54,18 +49,39 @@ public sealed class SearchCodebaseTool : IAiToolExecutor
         if (maxResults > AbsoluteMaxResults) maxResults = AbsoluteMaxResults;
         if (maxResults < 1) maxResults = 1;
 
+        // Source tree is admin-only, enforced here and not only by the grant table.
+        var refusal = AdminOnlyToolGuard.Refusal(ctx, Code);
+        if (refusal is not null) return Task.FromResult(refusal);
+
         if (string.IsNullOrWhiteSpace(query))
         {
             return Task.FromResult(new AiToolExecutionResult(
                 AiToolOutcome.ArgsInvalid, null, "empty_query", "Query cannot be empty."));
         }
 
-        var repoRoot = RepoRootResolver.Resolve(_configuration);
+        var resolution = RepoRootResolver.Resolve(_configuration);
+
+        // "I searched and found nothing" and "there is nothing here to search" must never look alike
+        // (owner directive 2026-10-09). The old code skipped every missing prefix and returned
+        // totalMatches: 0 as a SUCCESS, which in production - where the image ships compiled output
+        // and no source - produced confident answers to codebase questions built on five consecutive
+        // empty searches.
+        if (!resolution.HasSource)
+        {
+            _logger.LogWarning(
+                "search_codebase refused: no project source available. {Reason}", resolution.Reason);
+            return Task.FromResult(new AiToolExecutionResult(
+                AiToolOutcome.ProviderError, null, "codebase_source_unavailable",
+                "Codebase search is unavailable in this deployment: " + resolution.Reason
+                + " Do not answer codebase questions from this result - say the source is not available here."));
+        }
+
+        var repoRoot = resolution.Root!;
         var matches = new List<object>();
 
         try
         {
-            foreach (var prefix in AllowedPrefixes)
+            foreach (var prefix in resolution.SearchablePrefixes)
             {
                 if (ct.IsCancellationRequested) break;
                 if (matches.Count >= maxResults) break;
@@ -78,7 +94,14 @@ public sealed class SearchCodebaseTool : IAiToolExecutor
 
             return Task.FromResult(new AiToolExecutionResult(
                 AiToolOutcome.Success,
-                ToJson(new { query, totalMatches = matches.Count, matches })));
+                ToJson(new
+                {
+                    query,
+                    totalMatches = matches.Count,
+                    matches,
+                    searchedRoot = repoRoot,
+                    searchedPrefixes = resolution.SearchablePrefixes,
+                })));
         }
         catch (OperationCanceledException)
         {
