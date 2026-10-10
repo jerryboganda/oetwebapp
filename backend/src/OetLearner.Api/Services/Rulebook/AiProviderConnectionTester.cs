@@ -812,7 +812,7 @@ public sealed class AiProviderConnectionTester(
             new { role = "system", content = "Reply with the single word OK." },
             new { role = "user", content = fullPipeline ? "ping — reply with a single word." : "ping" },
         };
-        if (RequiresThinkingBudget(baseUrl))
+        if (RequiresThinkingBudget(baseUrl) || AiProviderPayloadBuilder.IsOpenAiReasoningModel(model))
         {
             // Reasoning-model gateways: the same identity headers a real call sends (so the probe
             // predicts runtime), and none of the UBAG/Azure extras below — a third-party gateway gets
@@ -822,6 +822,11 @@ public sealed class AiProviderConnectionTester(
             // same failure with a worse symptom: GLM-5.x thinking is FORCED and cannot be disabled, so
             // a 1-token probe returns empty content against a perfectly valid key — the admin reads
             // "failed", concludes the key is bad, and is simply wrong.
+            //
+            // First-party OpenAI reasoning models (gpt-5/6, o-series — e.g. the openai-platform row
+            // pinned to gpt-6.1-sol) hit the identical wall through max_completion_tokens instead:
+            // the whole 1-token budget is spent reasoning, the API answers
+            // "max_tokens or model output limit was reached", and a valid key reads as unknown.
             //
             // The probe here tests connectivity/auth/availability, so it grants a real thinking budget.
             maxTokens = 512;
