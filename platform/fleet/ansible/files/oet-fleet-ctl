@@ -501,7 +501,9 @@ def verb_ubag_reconcile(args):
         with open(private_path, "w") as handle: handle.write(private.strip())
         os.chmod(private_path, 0o600)
     with open(private_path) as handle: private = handle.read().strip()
-    tunnel = "[Interface]\nAddress = %s/32\nListenPort = 443\nPrivateKey = %s\n[Peer]\nPublicKey = %s\nAllowedIPs = %s/32\nEndpoint = %s\nPersistentKeepalive = 25\n" % (value["address"], private, value["primary_public_key"], value["primary_address"], value["primary_endpoint"])
+    # The helper initiates this stateful UDP tunnel. A high local port avoids
+    # Ubuntu's wg-quick AppArmor denial of net_bind_service at interface-up.
+    tunnel = "[Interface]\nAddress = %s/32\nListenPort = 51822\nPrivateKey = %s\n[Peer]\nPublicKey = %s\nAllowedIPs = %s/32\nEndpoint = %s\nPersistentKeepalive = 25\n" % (value["address"], private, value["primary_public_key"], value["primary_address"], value["primary_endpoint"])
     wg_path = "/etc/wireguard/ubagwg.conf"
     old = open(wg_path).read() if os.path.exists(wg_path) else ""
     if old != tunnel:
