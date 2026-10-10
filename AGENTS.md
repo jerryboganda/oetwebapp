@@ -357,7 +357,7 @@ Before ANY Writing task, Model Answer, or Writing validator work, load
 - **Source precedence: CASE NOTES / SOURCE PDF > MODEL ANSWER (9 Oct 2026, owner; permanent; `docs/WRITING-MODEL-ANSWER-RULES.md` §4A items 8-9):** a candidate is graded against the case notes only; the Model Answer is display-only after grading and is never given to a grader or reviewer, so a wrong answer cannot penalise anyone. An answer that disagrees with the notes on identity/DOB/age, a date, the recipient, a medicine frequency, a completed-vs-planned action or an unplanned request is held for admin review (`model_answer_source_conflict`: refused at approve, held and hidden when a task's case notes change) until repaired and re-imported. The grader and reviewer must search the whole extracted source before any "invented" or "not in the notes" finding (`WritingSourcePresence`; DOB and 90-degree knee flexion are probes of the Validator self-check).
 - Targeted repair only; never regenerate a good letter for one small defect. Do not expand to further professions/cells without explicit owner approval. STOP after the Medicine owner-review pack — Nursing/Track B/224 need owner say-so.
 
-## Claude Max is never switched off AUTOMATICALLY — COMPULSORY (owner directive 2026-10-02; amended 2026-10-09 on the owner's explicit say-so, Choice B; HARD ENFORCED)
+## Claude Max is never switched off AUTOMATICALLY — COMPULSORY (owner directive 2026-10-02; amended 2026-10-09 on the owner's explicit say-so, Choice B; amended 2026-10-10: the promotional-credit runtime guard is owner-approved — see the AiCreditGuard carve-out below; HARD ENFORCED)
 
 The Claude Max subscription route (provider code `writing-claude-sub`, model `claude-opus-5-5`) is the owner's paid primary for
 Writing and Speaking grading BY DEFAULT. The purpose of the rule is unchanged: no code, config, probe, counter, timer, marker or
@@ -394,12 +394,21 @@ voice) on the admin Pipeline page (`/v1/admin/ai/pipelines`). Rules:
   list stays the narrow curated catalog (`IsLearnerSelectable`) — unpinning is about who serves the turn, not
   access. Spend is alert-only, never blocking. See `docs/ops/ZAI-PROVIDER.md`.
 
-**Still forbidden, no exception:** any automatic, computed or code-written state that skips or reorders a provider — markers
-(`WritingAiClaudeQuotaExceededUntil` is retired, never assign it), utilisation, weekly-estimate, allowance or CREDIT-BALANCE
-thresholds and auto-revert, readiness/health probes, an open Max circuit, forced-Codex/forced-API modes set by code or environment,
-a sidecar that persistently refuses work. Low credit or low allowance may be shown and alerted; it never changes the order.
-The Speaking built-in default pin (`SpeakingGradingOptions`, blank resolves to Max) is unchanged and is overridden only by a saved
-Speaking order.
+**Still forbidden (one owner-approved exception, next paragraph):** any automatic, computed or code-written state that skips or
+reorders a provider — markers (`WritingAiClaudeQuotaExceededUntil` is retired, never assign it), utilisation, weekly-estimate,
+allowance thresholds, readiness/health probes, an open Max circuit, forced-Codex/forced-API modes set by code or environment,
+a sidecar that persistently refuses work. Low allowance may be shown and alerted; it never changes the order. The Speaking
+built-in default pin (`SpeakingGradingOptions`, blank resolves to Max) is unchanged and is overridden only by a saved Speaking order.
+
+**AiCreditGuard carve-out (owner directive 2026-10-10 — do not remove).** The promotional-credit runtime guard
+`Services/AiPipeline/AiCreditGuard.cs` is the ONE permitted credit-balance rule. While an operator-entered grant (the $200
+Anthropic promo balance) has meaningful remaining credit, grading runs the saved order with the paid API first — the promo credits
+burn before Claude Max. At or below the reserve ($20) it demotes the API hop behind the Max subscription; at or below the floor
+($5) it leaves the hop out of the runtime plan. It never writes or reorders `AiPipelineStages` (exactly-one-writer stands; the
+saved order is untouched), the dashboard surfaces the runtime demotion (`creditGuard` on `GET /v1/admin/ai/pipelines`, Pipeline
+self-check `credit_guard` check), alerts reuse the 50/75/90/100% ladder with the `ai_credit_grant` scope, and an actually-exhausted
+account still fails over through the normal typed-error path, so a ledger miss can never block a candidate or cause a charge. Any
+OTHER credit-balance threshold, auto-revert or reorder mechanism remains forbidden.
 
 - Enforced by the static source scans in `pipeline:check` (`maxRouteFailures` in `scripts/deploy/verify-pipeline-contract.mjs`): the
   retired marker is never written, the Writing selector never routes on utilisation, the Speaking default pin stays on Max, the saved
